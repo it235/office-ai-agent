@@ -1,0 +1,57 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.13.35806.99
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{F184B08F-C81C-45F6-A57F-5ABD9991F28F}") = "ShareRibbon", "ShareRibbon\ShareRibbon.vbproj", "{006508C7-FB9F-4484-A22A-9AA9487ACD0B}"
+EndProject
+Project("{F184B08F-C81C-45F6-A57F-5ABD9991F28F}") = "WordAi", "WordAi\WordAi.vbproj", "{70EF4924-292B-44AF-BF95-6FE523D33466}"
+EndProject
+Project("{F184B08F-C81C-45F6-A57F-5ABD9991F28F}") = "PowerPointAi", "PowerPointAi\PowerPointAi.vbproj", "{5303EE71-F689-4E0D-BB62-54E467BFC39D}"
+EndProject
+Project("{F184B08F-C81C-45F6-A57F-5ABD9991F28F}") = "ExcelAi", "ExcelAi\ExcelAi.vbproj", "{D884A844-33D4-4C7E-87A9-A575C5E63657}"
+EndProject
+Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "OfficeAgent", "OfficeAgent\OfficeAgent.vdproj", "{617BD1BB-2F68-A174-EB3B-8B9542681A32}"
+EndProject
+Project("{F184B08F-C81C-45F6-A57F-5ABD9991F28F}") = "OfficeAgentSetupCustomActions", "OfficeAgentSetupCustomActions\OfficeAgentSetupCustomActions.vbproj", "{FECCBE46-1959-44C5-91AE-9F6E3474AF04}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{72BFBA8A-829F-48E5-87E9-1384C4F3FF19}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{72BFBA8A-829F-48E5-87E9-1384C4F3FF19}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{72BFBA8A-829F-48E5-87E9-1384C4F3FF19}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{72BFBA8A-829F-48E5-87E9-1384C4F3FF19}.Release|Any CPU.Build.0 = Release|Any CPU
+		{006508C7-FB9F-4484-A22A-9AA9487ACD0B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{006508C7-FB9F-4484-A22A-9AA9487ACD0B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{006508C7-FB9F-4484-A22A-9AA9487ACD0B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{006508C7-FB9F-4484-A22A-9AA9487ACD0B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{70EF4924-292B-44AF-BF95-6FE523D33466}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{70EF4924-292B-44AF-BF95-6FE523D33466}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{70EF4924-292B-44AF-BF95-6FE523D33466}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{70EF4924-292B-44AF-BF95-6FE523D33466}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5303EE71-F689-4E0D-BB62-54E467BFC39D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5303EE71-F689-4E0D-BB62-54E467BFC39D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5303EE71-F689-4E0D-BB62-54E467BFC39D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5303EE71-F689-4E0D-BB62-54E467BFC39D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D884A844-33D4-4C7E-87A9-A575C5E63657}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D884A844-33D4-4C7E-87A9-A575C5E63657}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D884A844-33D4-4C7E-87A9-A575C5E63657}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D884A844-33D4-4C7E-87A9-A575C5E63657}.Release|Any CPU.Build.0 = Release|Any CPU
+		{617BD1BB-2F68-A174-EB3B-8B9542681A32}.Debug|Any CPU.ActiveCfg = Debug
+		{617BD1BB-2F68-A174-EB3B-8B9542681A32}.Release|Any CPU.ActiveCfg = Release
+		{FECCBE46-1959-44C5-91AE-9F6E3474AF04}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FECCBE46-1959-44C5-91AE-9F6E3474AF04}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FECCBE46-1959-44C5-91AE-9F6E3474AF04}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FECCBE46-1959-44C5-91AE-9F6E3474AF04}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {DC7E46C8-BEAD-4E3F-95D9-F8180EEEB120}
+	EndGlobalSection
+EndGlobal
