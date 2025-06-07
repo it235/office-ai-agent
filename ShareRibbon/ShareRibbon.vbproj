@@ -115,6 +115,7 @@
     <Import Include="System.Threading.Tasks" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ApplicationInfo.vb" />
     <Compile Include="Config\ConfigApiForm.vb">
       <SubType>Form</SubType>
     </Compile>

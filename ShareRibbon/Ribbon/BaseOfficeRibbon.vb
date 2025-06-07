@@ -21,7 +21,7 @@ Public MustInherit Class BaseOfficeRibbon
     Private Sub Ribbon1_Load(ByVal sender As System.Object, ByVal e As RibbonUIEventArgs) Handles MyBase.Load
         Dim apiConfig As New ConfigManager()
         apiConfig.LoadConfig()
-        Dim promptConfig As New ConfigPromptForm()
+        Dim promptConfig As New ConfigPromptForm(GetApplication())
         promptConfig.LoadConfig()
         InitializeBaseRibbon()
     End Sub
@@ -29,7 +29,6 @@ Public MustInherit Class BaseOfficeRibbon
     Protected Overridable Sub InitializeBaseRibbon()
         ' 设置基础的事件处理程序
         'AddHandler ChatButton.Click, AddressOf ChatButton_Click
-        'AddHandler PromptConfigButton.Click, AddressOf PromptConfigButton_Click
         'AddHandler ClearCacheButton.Click, AddressOf ClearCacheButton_Click
         'AddHandler AboutButton.Click, AddressOf AboutButton_Click
         'AddHandler DataAnalysisButton.Click, AddressOf DataAnalysisButton_Click
@@ -185,7 +184,7 @@ Public MustInherit Class BaseOfficeRibbon
     End Sub
     Private Sub PromptConfigButton_Click(sender As Object, e As RibbonControlEventArgs) Handles PromptConfigButton.Click
         ' 创建并显示配置 API 的对话框
-        Dim configForm As New ConfigPromptForm()
+        Dim configForm As New ConfigPromptForm(GetApplication())
         If configForm.ShowDialog() = DialogResult.OK Then
         End If
     End Sub
@@ -253,5 +252,5 @@ Public MustInherit Class BaseOfficeRibbon
 
     Protected MustOverride Sub ChatButton_Click(sender As Object, e As RibbonControlEventArgs) Handles ChatButton.Click
     Protected MustOverride Sub DataAnalysisButton_Click(sender As Object, e As RibbonControlEventArgs) Handles DataAnalysisButton.Click
-    Protected MustOverride Function GetApplication() As Object
+    Protected MustOverride Function GetApplication() As ApplicationInfo
 End Class

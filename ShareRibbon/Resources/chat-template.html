@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8">
+    <meta charset="GBK">
     <title>Excel Ai Chat Content</title>
 <!-- 先加载核心库 -->
 <script src="https://officeai.local/js/highlight.min.js"></script>
@@ -297,6 +297,38 @@
         code {
             font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
             font-size: 0.9em;
+        }
+
+        .code-toggle-label {
+            cursor: pointer;
+            color: #4a6fa5;
+            padding: 4px 8px;
+            font-size: 12px;
+            background: #edf2f7;
+            border-radius: 4px 4px 0 0;
+            border: 1px solid #e0e5eb;
+            border-bottom: none;
+            margin-top: 10px;
+        }
+
+        .code-toggle-label:hover {
+            background: #e3eaf3;
+        }
+
+        pre.collapsible {
+            margin-top: 0;
+            transition: max-height 0.3s ease-out;
+            max-height: 500px;
+            overflow: hidden;
+        }
+
+        pre.collapsible.collapsed {
+            max-height: 0;
+            margin-bottom: 10px;
+        }
+
+        .code-block {
+            margin-top: -1px; /* 确保和toggle-label无缝衔接 */
         }
 
         /* 动画效果 */
@@ -657,6 +689,25 @@
             margin-bottom: 4px;
             color: #2b4a8a;
         }
+        #chatMode {
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 13px;
+            background: #fafbfc;
+            color: #555;
+            cursor: pointer;
+            outline: none;
+        }
+
+        #chatMode:hover {
+            border-color: #4a6fa5;
+        }
+
+        #chatMode:focus {
+            border-color: #4a6fa5;
+            box-shadow: 0 0 0 2px rgba(74, 111, 165, 0.1);
+        }
     </style>
 </head>
 <body>
@@ -704,8 +755,10 @@
                         选中辅助
                     </label>
                     <label class="input-option">
-                        <input type="checkbox" id="autoExecute">
-                        自动执行
+                        <select id="chatMode" onchange="chatModeChanged(this)">
+                            <option value="chat">Chat模式</option>
+                            <option value="agent">Agent模式</option>
+                        </select>
                     </label>
 
                     <button id="send-button" title="send">
@@ -1095,12 +1148,52 @@
 
         //消息接收完成的通知
         function processStreamComplete(uuid) {
-            if (document.getElementById("autoExecute").checked) {
+            //折叠代码块区域
+            // 首先获取对应uuid的内容区域
+            const contentDiv = document.getElementById('content-' + uuid);
+            if (contentDiv) {
+                // 找到所有代码块
+                const codeBlocks = contentDiv.querySelectorAll('pre code');
+                codeBlocks.forEach(codeBlock => {
+                    // 获取代码块的父元素
+                    const preElement = codeBlock.parentElement;
+                    if (preElement) {
+                        // 如果父元素还没有折叠样式，添加折叠相关的样式和功能
+                        if (!preElement.classList.contains('collapsible')) {
+                            // 添加折叠样式类
+                            preElement.classList.add('collapsible', 'collapsed');
+
+                            // 创建展开/折叠标签
+                            const toggleLabel = document.createElement('div');
+                            toggleLabel.className = 'code-toggle-label';
+                            toggleLabel.innerHTML = '点击展开代码';
+                            toggleLabel.onclick = function (e) {
+                                e.stopPropagation();
+                                preElement.classList.toggle('collapsed');
+                                toggleLabel.innerHTML = preElement.classList.contains('collapsed') ? '点击展开代码' : '点击折叠代码';
+                            };
+
+                            // 将标签插入到代码块前面
+                            preElement.parentNode.insertBefore(toggleLabel, preElement);
+                        }
+                    }
+                });
+            }
+
+            if (document.getElementById("chatMode").value === 'agent') {
                 let executeBtns = document.getElementById("content-" + uuid).querySelector(".execute-button");
                 if (executeBtns) {
                     executeBtns.click();
                 }
             }
+        }
+
+        function chatModeChanged(select) {
+            const isAgentMode = select.value === 'agent';
+            //// 通知 VSTO
+            //if (window.vsto) {
+            //    window.vsto.checkedChange('autoExecute', isAgentMode.toString());
+            //}
         }
 
         // 生成UUID
@@ -1292,7 +1385,18 @@
         function sendChatMessage() {
             const text = chatInput.value.trim();
             if (!text) return;
-            window.vsto.sendMessage(text)
+
+			if (window.chrome && window.chrome.webview) {
+				window.chrome.webview.postMessage({
+					type: 'sendMessage',
+					value: text
+				});
+			} else if (window.vsto) {
+				// user inject vsto object
+				window.vsto.sendMessage(text);
+			} else {
+				alert('无法执行代码：未检测到支持的通信接口');
+			}
 
             const uuid = generateUUID();
             const now = new Date();
@@ -1357,7 +1461,8 @@
             // 先清空该sheet下的所有address
             window.selectedContentMap[sheetName].clear();
             // 添加address
-            window.selectedContentMap[sheetName].add(address);
+            //帮我去除address最后空格或者换行符
+            window.selectedContentMap[sheetName].add(address.trim());
 
             renderSelectedContentList();
         };
@@ -1395,7 +1500,7 @@
                     item.className = 'selected-content-item';
                     item.innerHTML = `
                             <span title="${sheet}[${address}]">${address}</span>
-                            <button class="selected-content-remove" title="移除" onclick="window.removeSelectedContentItem('${sheet}','${address}')">
+                            <button class="selected-content-remove" title="移除" onclick="removeSelectedContentItem('${sheet}','${address}')">
                                 <svg viewBox="0 0 20 20"><line x1="5" y1="5" x2="15" y2="15" stroke="currentColor" stroke-width="2"/><line x1="15" y1="5" x2="5" y2="15" stroke="currentColor" stroke-width="2"/></svg>
                             </button>
                         `;

@@ -150,7 +150,7 @@ Public Class Ribbon1
         Return ws
     End Function
 
-    Protected Overrides Function GetApplication() As Object
-        Return Globals.ThisAddIn.Application
+    Protected Overrides Function GetApplication() As ApplicationInfo
+        Return New ApplicationInfo("Excel", OfficeApplicationType.Excel)
     End Function
 End Class

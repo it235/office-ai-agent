@@ -7,12 +7,14 @@ Imports AiHelper.ConfigManager
 ' 大模型提示词配置
 Public Class ConfigPromptForm
     Inherits Form
+    Private ReadOnly _applicationInfo As ApplicationInfo
+
     Public Shared Property ConfigPromptData As List(Of PromptConfigItem)
 
-    ' 默认配置文件在当前用户，我的文档下
-    Private Shared configFileName As String = "office_ai_prompt_config.json"
-    Private Shared configFilePath As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-        ConfigSettings.OfficeAiAppDataFolder, configFileName)
+    '' 默认配置文件在当前用户，我的文档下
+    'Private Shared configFileName As String = "office_ai_prompt_config.json"
+    'Private Shared configFilePath As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+    '    ConfigSettings.OfficeAiAppDataFolder, configFileName)
 
     Private descriptionLabel1 As Label
 
@@ -35,6 +37,18 @@ Public Class ConfigPromptForm
     Public Sub LoadConfig()
         ' 初始化配置数据
         ConfigPromptData = New List(Of PromptConfigItem)()
+
+        ' 根据应用类型设置默认提示词
+        Dim defaultPrompt = GetDefaultPrompt()
+
+        ' 添加默认配置
+        If Not File.Exists(configFilePath) Then
+            ConfigPromptData.Add(defaultPrompt)
+        Else
+            ' 加载自定义配置
+            Dim json As String = File.ReadAllText(configFilePath)
+            ConfigPromptData = JsonConvert.DeserializeObject(Of List(Of PromptConfigItem))(json)
+        End If
 
         Dim vbap = New PromptConfigItem() With {
                 .name = "VBA专家身份",
@@ -66,8 +80,37 @@ Public Class ConfigPromptForm
         Next
     End Sub
 
+    Private Function GetDefaultPrompt() As PromptConfigItem
+        Select Case _applicationInfo.Type
+            Case OfficeApplicationType.Word
+                Return New PromptConfigItem() With {
+                    .name = "Word文档专家",
+                    .content = "你是一名Word文档处理专家，擅长处理各种文档相关的问题。",
+                    .selected = True
+                }
+            Case OfficeApplicationType.Excel
+                Return New PromptConfigItem() With {
+                    .name = "Excel VBA专家",
+                    .content = VBA_Q,
+                    .selected = True
+                }
+            Case OfficeApplicationType.PowerPoint
+                Return New PromptConfigItem() With {
+                    .name = "PPT制作专家",
+                    .content = "你是一名PowerPoint演示文稿制作专家，擅长处理各种PPT相关的问题。",
+                    .selected = True
+                }
+            Case Else
+                Return New PromptConfigItem() With {
+                    .name = "Office助手",
+                    .content = "你是一名Office办公专家。",
+                    .selected = True
+                }
+        End Select
+    End Function
 
-    Public Sub New()
+    Public Sub New(applicationInfo As ApplicationInfo)
+        _applicationInfo = applicationInfo
         LoadConfig()
 
         ' 初始化表单
@@ -196,6 +239,13 @@ Public Class ConfigPromptForm
     End Sub
 
 
+    ' 修改配置文件路径获取方式
+    Private ReadOnly Property configFilePath As String
+        Get
+            Return _applicationInfo.GetPromptConfigFilePath()
+        End Get
+    End Property
+
     Private Sub EditConfigButton_Click(sender As Object, e As EventArgs)
         ' 获取选中的模型提示词
         Dim selectedPlatform As PromptConfigItem = CType(currentPromptComboBox.SelectedItem, PromptConfigItem)
@@ -246,7 +296,7 @@ Public Class ConfigPromptForm
     End Sub
 
 
-    Public Shared Sub SaveConfig()
+    Public Sub SaveConfig()
         Dim json As String = JsonConvert.SerializeObject(ConfigPromptData, Formatting.Indented)
         ' 如果configFilePath的目录不存在就创建
         Dim dir = Path.GetDirectoryName(configFilePath)

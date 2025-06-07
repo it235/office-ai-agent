@@ -16,7 +16,7 @@ Public Class Ribbon1
         MessageBox.Show("Word数据分析功能正在开发中...")
     End Sub
 
-    Protected Overrides Function GetApplication() As Object
-        Return Globals.ThisAddIn.Application
+    Protected Overrides Function GetApplication() As ApplicationInfo
+        Return New ApplicationInfo("PowerPoint", OfficeApplicationType.PowerPoint)
     End Function
 End Class
