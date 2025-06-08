@@ -80,6 +80,7 @@ Public Class ChatControl
         ' 初始化 WebView2
         Await InitializeWebView2()
         InitializeWebView2Script()
+        InitializeSettings()
     End Sub
 
 
@@ -173,11 +174,9 @@ Public Class ChatControl
         End Try
     End Function
 
-
-    Protected Overrides Function GetApplication() As Object
-        Throw New NotImplementedException()
+    Protected Overrides Function GetApplication() As ApplicationInfo
+        Return New ApplicationInfo("Excel", OfficeApplicationType.Excel)
     End Function
-
     Protected Overrides Sub SendChatMessage(message As String)
         ' 这里可以实现word的特殊逻辑
 

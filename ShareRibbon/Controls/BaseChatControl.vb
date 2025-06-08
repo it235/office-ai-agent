@@ -27,11 +27,14 @@ Imports Newtonsoft.Json.Linq
 Public MustInherit Class BaseChatControl
     Inherits UserControl
 
-    'Protected WithEvents ChatBrowser As WebView2
-    'Protected WithEvents SelectedContentFlowPanel As FlowLayoutPanel
+    'settings
+    Protected topicRandomness As Double
+    Protected contextLimit As Integer
     Protected selectedCellChecked As Boolean = False
-    'Protected _currentMarkdownBuffer As New StringBuilder()
-    'Protected allMarkdownBuffer As New StringBuilder()
+    Protected settingsScrollChecked As Boolean = False
+
+    Protected stopReaderStream As Boolean = False
+
 
     ' ai的历史回复
     Protected historyMessageData As New List(Of HistoryMessage)
@@ -92,23 +95,15 @@ Public MustInherit Class BaseChatControl
 
                 ' 替换模板中的 {wwwroot} 占位符
                 Dim htmlContent As String = My.Resources.chat_template
-                'htmlContent = htmlContent.Replace("{wwwroot}", wwwRoot.Replace("\", "/"))
-
-                ' 修改HTML模板中的资源引用
-                'Dim htmlContent As String = My.Resources.chat_template
-                'htmlContent = htmlContent.Replace(
-                '    "href=""css/",
-                '    "href=""//officeai.local/css/"
-                ').Replace(
-                '    "src=""js/",
-                '    "src=""//officeai.local/js/"
-                ')
 
                 ' 加载 HTML 模板
                 ChatBrowser.CoreWebView2.NavigateToString(htmlContent)
 
                 ' 配置 Marked 和代码高亮
                 ConfigureMarked()
+                ' 添加导航完成事件处理，确保在页面加载完成后初始化设置
+                AddHandler ChatBrowser.CoreWebView2.NavigationCompleted, AddressOf OnWebViewNavigationCompleted
+
             Else
                 MessageBox.Show("WebView2 初始化失败，CoreWebView2 不可用。", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
             End If
@@ -117,82 +112,6 @@ Public MustInherit Class BaseChatControl
             MessageBox.Show(errorMessage, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Function
-
-    'Protected Async Function InitializeWebView2() As Task
-    '    Try
-    '        ' 检查 WebView2 是否已经初始化
-    '        If ChatBrowser.CoreWebView2 IsNot Nothing Then
-    '            Debug.WriteLine("WebView2 已经初始化，跳过创建过程")
-    '            Return
-    '        End If
-
-    '        Debug.WriteLine("开始初始化 WebView2...")
-
-    '        ' 自定义用户数据目录
-    '        Dim userDataFolder As String = Path.Combine(
-    '        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-    '        "MyAppWebView2Cache"
-    '    )
-
-    '        ' 确保目录存在
-    '        If Not Directory.Exists(userDataFolder) Then
-    '            Directory.CreateDirectory(userDataFolder)
-    '        End If
-
-    '        ' 在UI线程上设置 CreationProperties
-    '        If ChatBrowser.InvokeRequired Then
-    '            Await ChatBrowser.Invoke(Sub()
-    '                                         ' 创建新的 Environment 配置
-    '                                         Dim envOptions = New CoreWebView2EnvironmentOptions()
-    '                                         ChatBrowser.CreationProperties = New CoreWebView2CreationProperties With {
-    '                .UserDataFolder = userDataFolder
-    '            }
-    '                                     End Sub)
-    '        Else
-    '            ' 创建新的 Environment 配置
-    '            Dim envOptions = New CoreWebView2EnvironmentOptions()
-    '            ChatBrowser.CreationProperties = New CoreWebView2CreationProperties With {
-    '            .UserDataFolder = userDataFolder
-    '        }
-    '        End If
-
-    '        Debug.WriteLine("正在初始化 CoreWebView2...")
-
-    '        ' 确保在UI线程上初始化 WebView2
-    '        If ChatBrowser.InvokeRequired Then
-    '            Await ChatBrowser.Invoke(Async Function()
-    '                                         Await ChatBrowser.EnsureCoreWebView2Async(Nothing)
-    '                                     End Function)
-    '        Else
-    '            Await ChatBrowser.EnsureCoreWebView2Async(Nothing)
-    '        End If
-
-    '        ' 确保 CoreWebView2 已初始化
-    '        If ChatBrowser.CoreWebView2 IsNot Nothing Then
-    '            Debug.WriteLine("CoreWebView2 初始化成功，正在加载模板...")
-
-    '            ' 加载 HTML 模板
-    '            If ChatBrowser.InvokeRequired Then
-    '                ChatBrowser.Invoke(Sub() ChatBrowser.CoreWebView2.NavigateToString(My.Resources.chat_template))
-    '            Else
-    '                ChatBrowser.CoreWebView2.NavigateToString(My.Resources.chat_template)
-    '            End If
-
-    '            ' 配置 Marked 和代码高亮
-    '            Await ConfigureMarked()
-
-    '            Debug.WriteLine("模板加载完成")
-    '        Else
-    '            Throw New Exception("WebView2 初始化失败，CoreWebView2 不可用。")
-    '        End If
-
-    '    Catch ex As Exception
-    '        Debug.WriteLine($"WebView2初始化失败: {ex.Message}")
-    '        Debug.WriteLine($"堆栈跟踪: {ex.StackTrace}")
-    '        Throw
-    '    End Try
-    'End Function
-
     Private Async Sub InjectScript(scriptContent As String)
         If ChatBrowser.CoreWebView2 IsNot Nothing Then
             Dim escapedScript = JsonConvert.SerializeObject(scriptContent)
@@ -228,29 +147,64 @@ Public MustInherit Class BaseChatControl
         $"saved_chat_{DateTime.Now:yyyyMMdd_HHmmss}.html"
     )
 
+    Private Sub OnWebViewNavigationCompleted(sender As Object, e As CoreWebView2NavigationCompletedEventArgs) Handles ChatBrowser.NavigationCompleted
+        If e.IsSuccess Then
+            Try
+                If ChatBrowser.InvokeRequired Then
+                    ' 使用同步的 Invoke 而不是异步的
+                    ChatBrowser.Invoke(Sub()
+                                           Task.Delay(100).Wait() ' 同步等待
+                                           InitializeSettings()
 
-    'Protected Async Sub InitializeWebView2()
-    '    Try
-    '        Dim userDataFolder As String = Path.Combine(
-    '            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-    '            "OfficeAiWebView2Cache"
-    '        )
+                                           ' 直接在UI线程移除事件处理器
+                                           If ChatBrowser IsNot Nothing AndAlso ChatBrowser.CoreWebView2 IsNot Nothing Then
+                                               RemoveHandler ChatBrowser.CoreWebView2.NavigationCompleted, AddressOf OnWebViewNavigationCompleted
+                                           End If
+                                       End Sub)
+                Else
+                    Task.Delay(100).Wait() ' 同步等待
+                    InitializeSettings()
 
-    '        Directory.CreateDirectory(userDataFolder)
+                    ' 直接在UI线程移除事件处理器
+                    If ChatBrowser IsNot Nothing AndAlso ChatBrowser.CoreWebView2 IsNot Nothing Then
+                        RemoveHandler ChatBrowser.CoreWebView2.NavigationCompleted, AddressOf OnWebViewNavigationCompleted
+                    End If
+                End If
+            Catch ex As Exception
+                Debug.WriteLine($"导航完成事件处理中出错: {ex.Message}")
+                Debug.WriteLine(ex.StackTrace)
+            End Try
+        End If
+    End Sub
 
-    '        ChatBrowser.CreationProperties = New CoreWebView2CreationProperties With {
-    '            .UserDataFolder = userDataFolder
-    '        }
+    Protected Sub InitializeSettings()
+        Try
+            ' 加载设置
+            Dim chatSettings As New ChatSettings(GetApplication())
 
-    '        Await ChatBrowser.EnsureCoreWebView2Async()
-    '        AddHandler ChatBrowser.WebMessageReceived, AddressOf WebView2_WebMessageReceived
-
-    '        ' 加载HTML模板
-    '        Await LoadLocalHtmlFile()
-    '    Catch ex As Exception
-    '        MessageBox.Show($"WebView2初始化失败: {ex.Message}")
-    '    End Try
-    'End Sub
+            ' 将设置发送到前端
+            Dim js As String = $"
+            document.getElementById('topic-randomness').value = '{ChatSettings.topicRandomness}';
+            document.getElementById('topic-randomness-value').textContent = '{ChatSettings.topicRandomness}';
+            document.getElementById('context-limit').value = '{ChatSettings.contextLimit}';
+            document.getElementById('context-limit-value').textContent = '{ChatSettings.contextLimit}';
+            document.getElementById('settings-scroll-checked').checked = {ChatSettings.settingsScrollChecked.ToString().ToLower()};
+            document.getElementById('settings-selected-cell').checked = {ChatSettings.selectedCellChecked.ToString().ToLower()};
+            
+            var selectElement = document.getElementById('chatMode');
+            if (selectElement) {{
+                selectElement.value = '{chatSettings.chatMode}';
+            }}
+            
+            // 同步到主界面的checkbox
+            document.getElementById('scrollChecked').checked = {ChatSettings.settingsScrollChecked.ToString().ToLower()};
+            document.getElementById('selectedCell').checked = {ChatSettings.selectedCellChecked.ToString().ToLower()};
+        "
+            ExecuteJavaScriptAsyncJS(js)
+        Catch ex As Exception
+            Debug.WriteLine($"初始化设置失败: {ex.Message}")
+        End Try
+    End Sub
 
     Protected Sub WebView2_WebMessageReceived(sender As Object, e As CoreWebView2WebMessageReceivedEventArgs)
         Try
@@ -264,6 +218,9 @@ Public MustInherit Class BaseChatControl
                     HandleSendMessage(jsonDoc)
                 Case "executeCode"
                     HandleExecuteCode(jsonDoc)
+                Case "saveSettings"
+                    Debug.Print("保存设置")
+                    HandleSaveSettings(jsonDoc)
                 Case Else
                     Debug.WriteLine($"未知消息类型: {messageType}")
             End Select
@@ -280,8 +237,25 @@ Public MustInherit Class BaseChatControl
         End If
     End Sub
 
+    Protected Overridable Sub HandleSaveSettings(jsonDoc As JObject)
+        topicRandomness = jsonDoc("topicRandomness")
+        contextLimit = jsonDoc("contextLimit")
+        selectedCellChecked = jsonDoc("selectedCell")
+        settingsScrollChecked = jsonDoc("settingsScroll")
+        Dim chatMode As String = jsonDoc("chatMode")
+        Dim chatSettings As New ChatSettings(GetApplication())
+        ' 保存设置到配置文件
+        chatSettings.SaveSettings(topicRandomness, contextLimit, selectedCellChecked,
+                                  settingsScrollChecked, chatMode)
+    End Sub
+
     Protected Overridable Sub HandleSendMessage(jsonDoc As JObject)
         Dim question As String = jsonDoc("value").ToString()
+        If (question = "InnerStopBtn_#") Then
+            ' 停止当前请求渲染流
+            stopReaderStream = True
+            Return
+        End If
         SendChatMessage(question)
     End Sub
 
@@ -291,7 +265,7 @@ Public MustInherit Class BaseChatControl
         ExecuteCode(code, language)
     End Sub
 
-    Protected MustOverride Function GetApplication() As Object
+    Protected MustOverride Function GetApplication() As ApplicationInfo
     Protected MustOverride Function GetVBProject() As VBProject
     Protected MustOverride Function RunCode(vbaCode As String)
     Protected MustOverride Sub SendChatMessage(message As String)
@@ -437,6 +411,16 @@ Public MustInherit Class BaseChatControl
 
     End Function
 
+    Private Sub ManageHistoryMessageSize()
+        ' 如果历史消息数超过限制，有一条system，所以+1
+        While historyMessageData.Count > contextLimit + 1
+            ' 保留系统消息（第一条消息）
+            If historyMessageData.Count > 1 Then
+                ' 移除第二条消息（最早的非系统消息）
+                historyMessageData.RemoveAt(1)
+            End If
+        End While
+    End Sub
 
     Private Function CreateRequestBody(question As String) As String
         Dim result As String = question.Replace("\", "\\").Replace("""", "\""").
@@ -464,6 +448,9 @@ Public MustInherit Class BaseChatControl
             }
         historyMessageData.Add(q)
 
+        ' 管理历史消息大小
+        ManageHistoryMessageSize()
+
         ' 添加历史消息
         For Each message In historyMessageData
             messages.Add($"{{""role"": ""{message.role}"", ""content"": ""{message.content}""}}")
@@ -474,12 +461,22 @@ Public MustInherit Class BaseChatControl
         Dim requestBody = $"{{""model"": ""{ConfigSettings.ModelName}"", ""messages"": [{messagesJson}], ""stream"": true}}"
 
         Return requestBody
-        ' 使用从 ConfigSettings 中获取的模型名称
-        'Return "{""model"": """ & ConfigSettings.ModelName & """, ""messages"": [{""role"": ""system"", ""content"": """ & ConfigSettings.propmtContent & """},{""role"": ""user"", ""content"": """ & result & """}],""stream"":true}"
     End Function
 
 
+    ' 添加一个结构来存储token信息
+    Private Structure TokenInfo
+        Public PromptTokens As Integer
+        Public CompletionTokens As Integer
+        Public TotalTokens As Integer
+    End Structure
+
+    Private totalTokens As Integer = 0
+    Private lastTokenInfo As Nullable(Of TokenInfo)
     Private Async Function SendHttpRequestStream(apiUrl As String, apiKey As String, requestBody As String) As Task
+
+        ' 组装ai答复头部
+        Dim uuid As String = Guid.NewGuid().ToString()
         Try
 
             ' 强制使用 TLS 1.2
@@ -497,8 +494,6 @@ Public MustInherit Class BaseChatControl
                 Debug.WriteLine("[HTTP] 开始发送流式请求...")
                 Debug.WriteLine($"[HTTP] Request Body: {requestBody}")
 
-                ' 组装ai答复头部
-                Dim uuid As String = Guid.NewGuid().ToString()
 
                 Dim aiName As String = ConfigSettings.platform & " " & ConfigSettings.ModelName
 
@@ -518,14 +513,22 @@ Public MustInherit Class BaseChatControl
                     Dim stringBuilder As New StringBuilder()
                     Using responseStream As Stream = Await response.Content.ReadAsStreamAsync()
                         Using reader As New StreamReader(responseStream, Encoding.UTF8)
-                            Dim buffer(10230) As Char
+                            Dim buffer(102300) As Char
                             Dim readCount As Integer
                             Do
+                                ' 检查是否需要停止读取
+                                If stopReaderStream Then
+                                    Debug.WriteLine("[Stream] 用户手动停止流读取")
+                                    ' 清空当前缓冲区
+                                    _currentMarkdownBuffer.Clear()
+                                    allMarkdownBuffer.Clear()
+                                    ' 停止读取并退出循环
+                                    Exit Do
+                                End If
                                 readCount = Await reader.ReadAsync(buffer, 0, buffer.Length)
                                 If readCount = 0 Then Exit Do
                                 Dim chunk As String = New String(buffer, 0, readCount)
                                 ' 如果chunk不是以data开头，则跳过
-                                'If Not chunk.StartsWith("data:") Then Continue Do
                                 chunk = chunk.Replace("data:", "")
                                 stringBuilder.Append(chunk)
                                 'Debug.WriteLine($"[Stream] 接收到块:{stringBuilder}")
@@ -534,15 +537,8 @@ Public MustInherit Class BaseChatControl
                                     ProcessStreamChunk(stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}), uuid)
                                     stringBuilder.Clear()
                                 End If
-
-                                'If Not line.StartsWith("{") OrElse Not line.EndsWith("}") Then
-                                '    _currentMarkdownBuffer.Append(line)
-                                '    Continue For
-                                'End If
-
                             Loop
                             Debug.WriteLine("[Stream] 流接收完成")
-                            Await ExecuteJavaScriptAsyncJS($"processStreamComplete('{uuid}');")
                         End Using
                     End Using
                 End Using
@@ -551,13 +547,23 @@ Public MustInherit Class BaseChatControl
             Debug.WriteLine($"[ERROR] 请求过程中出错: {ex.ToString()}")
             MessageBox.Show("请求失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         Finally
+            ' 使用最后一个响应块中的total_tokens
+            Dim finalTokens As Integer = If(lastTokenInfo.HasValue, lastTokenInfo.Value.TotalTokens, 0)
+            Debug.WriteLine($"finally {finalTokens}")
+            ExecuteJavaScriptAsyncJS($"processStreamComplete('{uuid}',{finalTokens});")
+
             ' 记录全局上下文中，方便后续使用
             Dim answer = New HistoryMessage() With {
                 .role = "assistant",
                 .content = allMarkdownBuffer.ToString()
             }
             historyMessageData.Add(answer)
+            ' 管理历史消息大小
+            ManageHistoryMessageSize()
+
             allMarkdownBuffer.Clear()
+            ' 重置token信息
+            lastTokenInfo = Nothing
         End Try
     End Function
 
@@ -570,9 +576,10 @@ Public MustInherit Class BaseChatControl
     Private _currentMarkdownBuffer As New StringBuilder()
     Private allMarkdownBuffer As New StringBuilder()
 
+
+
     Private Sub ProcessStreamChunk(rawChunk As String, uuid As String)
         Try
-            'Dim lines As String() = rawChunk.Split({"data:"}, StringSplitOptions.RemoveEmptyEntries)
             Dim lines As String() = rawChunk.Split({vbCr, vbLf}, StringSplitOptions.RemoveEmptyEntries)
 
             For Each line In lines
@@ -587,6 +594,17 @@ Public MustInherit Class BaseChatControl
 
                 Debug.Print(line)
                 Dim jsonObj As JObject = JObject.Parse(line)
+
+                ' 获取token信息 - 只保存最后一个响应块的usage信息
+                Dim usage = jsonObj("usage")
+                If usage IsNot Nothing Then
+                    lastTokenInfo = New TokenInfo With {
+                    .PromptTokens = CInt(usage("prompt_tokens")),
+                    .CompletionTokens = CInt(usage("completion_tokens")),
+                    .TotalTokens = CInt(usage("total_tokens"))
+                }
+                End If
+
                 Dim reasoning_content As String = jsonObj("choices")(0)("delta")("reasoning_content")?.ToString()
                 If Not String.IsNullOrEmpty(reasoning_content) Then
                     _currentMarkdownBuffer.Append(reasoning_content)
@@ -809,6 +827,14 @@ Public MustInherit Class BaseChatControl
                 return window.chrome.webview.postMessage({
                     type: 'sendMessage',
                     value: question
+                });
+            },
+            saveSettings: function(settingsObject){
+                return window.chrome.webview.postMessage({
+                    type: 'saveSettings',
+                    topicRandomness: settingsObject.topicRandomness,
+                    contextLimit: settingsObject.contextLimit,
+                    selectedCell: settingsObject.selectedCell,
                 });
             }
         };

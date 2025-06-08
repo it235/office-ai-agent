@@ -94,20 +94,35 @@ Namespace My.Resources
         '''  查找类似 &lt;!DOCTYPE html&gt;
         '''&lt;html&gt;
         '''&lt;head&gt;
-        '''    &lt;meta charset=&quot;utf-8&quot;&gt;
+        '''    &lt;meta charset=&quot;GBK&quot;&gt;
         '''    &lt;title&gt;Excel Ai Chat Content&lt;/title&gt;
-        '''
-        '''    &lt;script src=&quot;http://officeai.local/marked.min.js&quot;&gt;&lt;/script&gt;
-        '''    &lt;script src=&quot;http://officeai.local/highlight.min.js&quot;&gt;&lt;/script&gt;
-        '''	&lt;!--
-        '''    &lt;script src=&quot;https://cdn.jsdelivr.net/npm/marked/marked.min.js&quot;&gt;&lt;/script&gt;
-        '''    &lt;script src=&quot;https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js&quot;&gt;&lt;/script&gt;
-        '''	--&gt;
-        '''    &lt;link rel=&quot;stylesheet&quot; href=&quot;https://cdnjs.cloudflare.com/ajax/libs/highl [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''&lt;!-- 先加载核心库 --&gt;
+        '''&lt;script src=&quot;https://officeai.local/js/highlight.min.js&quot;&gt;&lt;/script&gt;
+        '''&lt;link rel=&quot;stylesheet&quot; href=&quot;https://officeai.local/css/github.min.css&quot;&gt;
+        '''&lt;!-- 确保核心库加载完成后再加载语言包 --&gt;
+        '''&lt;script&gt;
+        '''    // 添加调试日志
+        '''    console.log(&apos;Initializing scripts...&apos;);
+        '''    
+        '''    // 检查 highlight.js 是否加载
+        '''    if (typeof hljs !== &apos;undefined&apos;) {
+        '''        console.log(&apos;highlight.js loaded successfully&apos;);
+        '''    } else {
+        '''         [字符串的其余部分被截断]&quot;; 的本地化字符串。
         '''</summary>
         Public ReadOnly Property chat_template() As String
             Get
                 Return ResourceManager.GetString("chat_template", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找 System.Drawing.Bitmap 类型的本地化资源。
+        '''</summary>
+        Public ReadOnly Property clear() As System.Drawing.Bitmap
+            Get
+                Dim obj As Object = ResourceManager.GetObject("clear", resourceCulture)
+                Return CType(obj,System.Drawing.Bitmap)
             End Get
         End Property
         
@@ -130,8 +145,18 @@ Namespace My.Resources
         End Property
         
         '''<summary>
-        '''  查找类似 /*! highlight.js v9.12.0 | BSD3 License | git.io/hljslicense */
-        '''!function(e){var t=&quot;object&quot;==typeof window&amp;&amp;window||&quot;object&quot;==typeof self&amp;&amp;self;&quot;undefined&quot;!=typeof exports?e(exports):t&amp;&amp;(t.hljs=e({}),&quot;function&quot;==typeof define&amp;&amp;define.amd&amp;&amp;define([],function(){return t.hljs}))}(function(e){function t(e){return e.replace(/&amp;/g,&quot;&amp;amp;&quot;).replace(/&lt;/g,&quot;&amp;lt;&quot;).replace(/&gt;/g,&quot;&amp;gt;&quot;)}function r(e){return e.nodeName.toLowerCase()}function a(e,t){var r=e&amp;&amp;e.exec(t);return r&amp;&amp;0===r.index}function n(e){return E.test(e)}f [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''  查找类似 /*!
+        '''  Highlight.js v11.7.0 (git: 82688fad18)
+        '''  (c) 2006-2022 undefined and other contributors
+        '''  License: BSD-3-Clause
+        ''' */
+        '''var hljs=function(){&quot;use strict&quot;;var e={exports:{}};function n(e){
+        '''return e instanceof Map?e.clear=e.delete=e.set=()=&gt;{
+        '''throw Error(&quot;map is read-only&quot;)}:e instanceof Set&amp;&amp;(e.add=e.clear=e.delete=()=&gt;{
+        '''throw Error(&quot;set is read-only&quot;)
+        '''}),Object.freeze(e),Object.getOwnPropertyNames(e).forEach((t=&gt;{var a=e[t]
+        ''';&quot;object&quot;!=typeof a||Object.isFrozen(a)||n(a)})),e}
+        '''e.exports=n,e.exports.default=n [字符串的其余部分被截断]&quot;; 的本地化字符串。
         '''</summary>
         Public ReadOnly Property highlight_min() As String
             Get

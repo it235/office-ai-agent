@@ -51,7 +51,7 @@ Partial Class Ribbon1
         Me.PromptConfigButton.Image = ShareRibbon.SharedResources.Send32
         Me.ChatButton.Image = ShareRibbon.SharedResources.Chat
         Me.AboutButton.Image = ShareRibbon.SharedResources.About
-        Me.ClearCacheButton.Image = ShareRibbon.SharedResources.About
+        Me.ClearCacheButton.Image = ShareRibbon.SharedResources.Clear
 
         ' 设置 Excel 特定的提示
         Me.DataAnalysisButton.SuperTip = "可选中提出的问题和数据后AI帮你整理到另外一个sheet中"

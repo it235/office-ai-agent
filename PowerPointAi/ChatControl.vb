@@ -187,8 +187,8 @@ Public Class ChatControl
         End Try
     End Function
 
-    Protected Overrides Function GetApplication() As Object
-        Throw New NotImplementedException()
+    Protected Overrides Function GetApplication() As ApplicationInfo
+        Return New ApplicationInfo("PowerPoint", OfficeApplicationType.PowerPoint)
     End Function
 
     Protected Overrides Sub SendChatMessage(message As String)

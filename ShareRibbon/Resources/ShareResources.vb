@@ -30,4 +30,10 @@ Public Class SharedResources
             Return CType(_resourceManager.GetObject("about"), System.Drawing.Image)
         End Get
     End Property
+
+    Public Shared ReadOnly Property Clear() As System.Drawing.Image
+        Get
+            Return CType(_resourceManager.GetObject("clear"), System.Drawing.Image)
+        End Get
+    End Property
 End Class

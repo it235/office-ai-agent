@@ -708,6 +708,191 @@
             border-color: #4a6fa5;
             box-shadow: 0 0 0 2px rgba(74, 111, 165, 0.1);
         }
+
+        #stop-button {
+            background: #e9525f;
+            border: none;
+            border-radius: 6px;
+            padding: 6px; /* 调整padding使按钮更紧凑 */
+            cursor: pointer;
+            display: none;   
+            align-items: center;
+            justify-content: center; /* 居中显示方块 */
+            transition: background-color 0.2s;
+        }
+
+        #stop-button:hover {
+            background: #c82333;
+        }
+
+        .message-footer {
+            margin-left: 42px;
+            margin-top: 8px;
+            font-size: 12px;
+            color: #888;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .token-count {
+            background: #f0f4f8;
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #4a6fa5;
+        }
+
+        /* 设置按钮样式 */
+        #settings-button {
+            background: none;
+            border: none;
+            padding: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            transition: color 0.2s;
+        }
+
+            #settings-button:hover {
+                color: #4a6fa5;
+            }
+
+        /* 设置dialog对话框样式 */
+        .settings-dialog {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            width: 300px;
+            z-index: 1000;
+        }
+
+        .settings-title {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .setting-item {
+            margin-bottom: 20px;
+        }
+
+        .setting-item.checkbox-item {
+            display: block; /* 改为块级显示而不是 flex */
+        }
+
+        .setting-item.checkbox-item .setting-label {
+            display: inline-block;
+            margin-bottom: 4px;
+        }
+
+        .setting-item.checkbox-item .setting-tip {
+            display: block;
+            margin-top: 4px;
+            color: #666;
+            font-size: 12px;
+        }
+
+        .setting-label {
+            display: block;
+            font-weight: 500;
+/*            margin-bottom: 4px;*/
+            color: #333;
+        }
+
+        .setting-tip {
+            font-size: 12px;
+            color: #666;
+/*            margin-bottom: 8px;*/
+        }
+
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .slider {
+            flex-grow: 1;
+            height: 4px;
+            -webkit-appearance: none;
+            background: #e0e0e0;
+            border-radius: 2px;
+            outline: none;
+        }
+
+            .slider::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                width: 16px;
+                height: 16px;
+                border-radius: 50%;
+                background: #4a6fa5;
+                cursor: pointer;
+                transition: background .15s ease-in-out;
+            }
+
+                .slider::-webkit-slider-thumb:hover {
+                    background: #3d5a7c;
+                }
+
+        .slider-value {
+            min-width: 40px;
+            text-align: center;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .settings-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .settings-button {
+            padding: 6px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+
+        .cancel-button {
+            background: #f5f5f5;
+            color: #333;
+        }
+
+            .cancel-button:hover {
+                background: #e0e0e0;
+            }
+
+        .save-button {
+            background: #4a6fa5;
+            color: white;
+        }
+
+            .save-button:hover {
+                background: #3d5a7c;
+            }
+
+        .overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 999;
+        }
     </style>
 </head>
 <body>
@@ -725,7 +910,7 @@
                 <p>4.配置大模型提示词能够更快，更准确的得到你想要的答案</p>
                 <p>5.如果没解决你的痛点，<a href="https://jsj.top/f/OZJDfa" target="_blank">点击此处提出需求</a>，下个版本见</p>
                 <p>6.聊天记录存放在“当前用户/文档/ExcelAiAppData”目录下</p>
-                <p>7.当前版本:<span id="version">2.4.0</span>，<a href="https://excel.it235.com" target="_blank">每周都上新功能哦</a></p>
+                <p>7.当前版本:<span id="version">2.4.0</span>，<a href="https://www.officeso.cn" target="_blank">每月发布新功能</a></p>
             </div>
         </div>
     </div>
@@ -746,14 +931,14 @@
             <div id="chat-input-inner">
                 <textarea id="chat-input" placeholder="请在此输入您的问题... 按Enter键直接发送，Shift+Enter换行" rows="2"></textarea>
                 <div id="chat-input-actions">
-                    <label class="input-option">
-                        <input type="checkbox" id="scrollChecked">
-                        实时滚动
-                    </label>
-                    <label class="input-option">
-                        <input type="checkbox" id="selectedCell" onchange="selectedCellChecked(this)">
-                        选中辅助
-                    </label>
+
+                    <button id="settings-button" title="设置" onclick="settingsButton()">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                        </svg>
+                    </button>
+
                     <label class="input-option">
                         <select id="chatMode" onchange="chatModeChanged(this)">
                             <option value="chat">Chat模式</option>
@@ -761,14 +946,65 @@
                         </select>
                     </label>
 
-                    <button id="send-button" title="send">
+                    <button id="send-button" title="发送">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 20px; height: 20px;">
                             <line x1="22" y1="2" x2="11" y2="13"></line>
                             <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                         </svg>
                     </button>
+                    <!--style="display: none;"-->
+                    <!-- 修改后 -->
+                    <button id="stop-button" title="取消" onclick="stopButton()">
+                        <div style="width: 14px; height: 12px;  border-radius: 2px;"></div>
+                    </button>
                 </div>
             </div>
+        </div>
+    </div>
+
+
+    <!-- 添加设置对话框 -->
+    <div class="overlay" id="settings-overlay"></div>
+    <div class="settings-dialog" id="settings-dialog">
+        <div class="settings-title">聊天设置</div>
+
+        <div class="setting-item checkbox-item">
+            <div>
+                <label class="setting-label">实时滚动</label>
+                <input type="checkbox" id="settings-scroll-checked">
+            </div>
+            <div class="setting-tip">开启后会自动滚动到最新的对话内容</div>
+        </div>
+
+        <div class="setting-item checkbox-item">
+            <div>
+                <label class="setting-label">选中辅助</label>
+                <input type="checkbox" id="settings-selected-cell">
+            </div>
+            <div class="setting-tip">开启后可以选择并引用工作表内容</div>
+        </div>
+
+        <div class="setting-item">
+            <label class="setting-label">话题随机性</label>
+            <div class="setting-tip">较高的数值会使同问题每次输出的结果更随机</div>
+            <div class="slider-container">
+                <input type="range" class="slider" id="topic-randomness" min="0.1" max="1.6" step="0.1" value="0.8">
+                <span class="slider-value" id="topic-randomness-value">0.8</span>
+            </div>
+        </div>
+
+        <div class="setting-item">
+            <label class="setting-label">上下文数量限制</label>
+            <div class="setting-tip">单条回复记录对话数，每次想让ai记住历史多少条对话</div>
+            <div class="slider-container">
+                <input type="range" class="slider" id="context-limit" min="1" max="10" value="5">
+                <span class="slider-value" id="context-limit-value">5</span>
+            </div>
+        </div>
+
+        <div class="settings-buttons">
+            <button class="settings-button cancel-button" id="settings-cancel" onclick="settingsCancel()">取消</button>
+            <button class="settings-button save-button" id="settings-save" onclick="settingsSave()">保存</button>
         </div>
     </div>
 
@@ -794,32 +1030,32 @@
 
             // add button
             return `
-                                                    <div class="code-block">
-                                                        ${codeHtml}
-                                                        <div class="code-buttons">
-                                                            <button class="code-button copy-button" onclick="copyCode(this)">
-                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                                                                </svg>
-                                                                复制
-                                                            </button>
-                                                            <button class="code-button edit-button" onclick="editCode(this)">
-                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                                                                </svg>
-                                                                编辑
-                                                            </button>
-                                                            <button class="code-button execute-button" onclick="executeCode(this)">
-                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                                                                </svg>
-                                                                执行
-                                                            </button>
+                                                        <div class="code-block">
+                                                            ${codeHtml}
+                                                            <div class="code-buttons">
+                                                                <button class="code-button copy-button" onclick="copyCode(this)">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                                                    </svg>
+                                                                    复制
+                                                                </button>
+                                                                <button class="code-button edit-button" onclick="editCode(this)">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                                                    </svg>
+                                                                    编辑
+                                                                </button>
+                                                                <button class="code-button execute-button" onclick="executeCode(this)">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                                                    </svg>
+                                                                    执行
+                                                                </button>
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                `;
+                                                    `;
         };
 
         marked.use({ renderer });
@@ -843,11 +1079,11 @@
 
                 const originalText = button.innerHTML;
                 button.innerHTML = `
-                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                            <polyline points="20 6 9 17 4 12"></polyline>
-                                                        </svg>
-                                                        已复制
-                                                    `;
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                <polyline points="20 6 9 17 4 12"></polyline>
+                                                            </svg>
+                                                            已复制
+                                                        `;
                 setTimeout(() => {
                     button.innerHTML = originalText;
                 }, 2000);
@@ -869,7 +1105,7 @@
             try {
                 // check env is WebView2
                 if (window.chrome && window.chrome.webview) {
-                    // ues WebView2 
+                    // ues WebView2
                     window.chrome.webview.postMessage({
                         type: 'executeCode',
                         code: code,
@@ -884,11 +1120,11 @@
 
                 const originalText = button.innerHTML;
                 button.innerHTML = `
-                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                                                        </svg>
-                                                        已执行
-                                                    `;
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                                            </svg>
+                                                            已执行
+                                                        `;
                 setTimeout(() => {
                     button.innerHTML = originalText;
                 }, 2000);
@@ -969,6 +1205,12 @@
             contentContainer.id = 'content-' + uuid;
             chatContainer.appendChild(contentContainer);
 
+            // 添加footer区域
+            const footerContainer = document.createElement('div');
+            footerContainer.className = 'message-footer';
+            footerContainer.id = 'footer-' + uuid;
+            chatContainer.appendChild(footerContainer);
+
             // 将聊天容器添加到聊天容器
             const chatHistoryContainer = document.getElementById('chat-container');
             if (chatHistoryContainer) {
@@ -1013,18 +1255,18 @@
             const reasoningHeader = document.createElement('div');
             reasoningHeader.className = 'reasoning-header';
             reasoningHeader.innerHTML = `
-                                                    <span class="reasoning-title">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
-                                                        </svg>
-                                                        思考过程
-                                                    </span>
-                                                    <span class="reasoning-toggle">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                                                            <path d="M7 10l5 5 5-5z"/>
-                                                        </svg>
-                                                    </span>
-                                                `;
+                                                        <span class="reasoning-title">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                                                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
+                                                            </svg>
+                                                            思考过程
+                                                        </span>
+                                                        <span class="reasoning-toggle">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                                                                <path d="M7 10l5 5 5-5z"/>
+                                                            </svg>
+                                                        </span>
+                                                    `;
 
             // 添加点击事件以展开/折叠推理内容
             reasoningHeader.addEventListener('click', function () {
@@ -1069,7 +1311,7 @@
 
             const renderer = window.rendererMap[uuid];
             if (renderer) {
-            // 记录添加内容前的文档高度
+                // 记录添加内容前的文档高度
 
                 renderer.append(text);
 
@@ -1120,7 +1362,7 @@
 
         //下拉滚动条
         window.contentScroll = function () {
-            if (document.getElementById("scrollChecked").checked) {
+            if (document.getElementById("settings-scroll-checked").checked) {
                 window.scrollTo(0, document.body.scrollHeight);
             }
         }
@@ -1134,7 +1376,7 @@
 
             const reasoningContainer = document.getElementById('reasoning-' + uuid);
             if (reasoningContainer) {
-            // 添加一个短暂的延迟，让用户看到最终的推理结果
+                // 添加一个短暂的延迟，让用户看到最终的推理结果
                 setTimeout(() => {
                     reasoningContainer.classList.add('collapsed');
                 }, 1000);
@@ -1144,10 +1386,27 @@
                 return false;
             }
         };
-
+        // 添加停止按钮点击处理函数
+        function stopButton() {
+            sendMessageToServer('InnerStopBtn_#');
+            //// 切换回发送按钮
+            //document.getElementById('send-button').style.display = 'flex';
+            //document.getElementById('stop-button').style.display = 'none';
+        };
 
         //消息接收完成的通知
-        function processStreamComplete(uuid) {
+        function processStreamComplete(uuid, totalTokens) {
+
+            // 添加token展示
+            const footerDiv = document.getElementById('footer-' + uuid);
+            if (footerDiv) {
+                footerDiv.innerHTML = `<span class="token-count">消耗token：${totalTokens}</span>`;
+            }
+
+            // 切换回发送按钮
+            document.getElementById('send-button').style.display = 'flex';
+            document.getElementById('stop-button').style.display = 'none';
+
             //折叠代码块区域
             // 首先获取对应uuid的内容区域
             const contentDiv = document.getElementById('content-' + uuid);
@@ -1189,11 +1448,7 @@
         }
 
         function chatModeChanged(select) {
-            const isAgentMode = select.value === 'agent';
-            //// 通知 VSTO
-            //if (window.vsto) {
-            //    window.vsto.checkedChange('autoExecute', isAgentMode.toString());
-            //}
+            settingsSave()
         }
 
         // 生成UUID
@@ -1266,7 +1521,7 @@
             cancelButton.style.backgroundColor = '#f44336';
             cancelButton.innerHTML = '取消';
             cancelButton.onclick = function () {
-            // 移除编辑区域，恢复代码块
+                // 移除编辑区域，恢复代码块
                 codeBlock.style.display = 'block';
                 editorContainer.remove();
             };
@@ -1382,22 +1637,28 @@
             }
         }
 
+        function sendMessageToServer(text) {
+            if (window.chrome && window.chrome.webview) {
+                window.chrome.webview.postMessage({
+                    type: 'sendMessage',
+                    value: text
+                });
+            } else if (window.vsto) {
+                // user inject vsto object
+                window.vsto.sendMessage(text);
+            } else {
+                alert('无法执行代码：未检测到支持的通信接口');
+            }
+        }
         function sendChatMessage() {
             const text = chatInput.value.trim();
             if (!text) return;
 
-			if (window.chrome && window.chrome.webview) {
-				window.chrome.webview.postMessage({
-					type: 'sendMessage',
-					value: text
-				});
-			} else if (window.vsto) {
-				// user inject vsto object
-				window.vsto.sendMessage(text);
-			} else {
-				alert('无法执行代码：未检测到支持的通信接口');
-			}
+            // 切换按钮显示状态
+            document.getElementById('send-button').style.display = 'none';
+            document.getElementById('stop-button').style.display = 'flex';
 
+            sendMessageToServer(text);
             const uuid = generateUUID();
             const now = new Date();
             const timestamp = formatDateTime(now);
@@ -1412,14 +1673,14 @@
                 refDiv.className = 'reference-container collapsed';
                 refDiv.id = 'reference-' + uuid;
                 refDiv.innerHTML = `
-                    <div class="reference-header" onclick="toggleReference('${uuid}')">
-                        <span class="reference-arrow">&#9654;</span>
-                        <span class="reference-label">引用内容(${refs.length})</span>
-                    </div>
-                    <div class="reference-content">
-                        ${refs.map(r => `<div class="reference-item">${r.sheetName} [${r.address}]</div>`).join('')}
-                    </div>
-                `;
+                        <div class="reference-header" onclick="toggleReference('${uuid}')">
+                            <span class="reference-arrow">&#9654;</span>
+                            <span class="reference-label">引用内容(${refs.length})</span>
+                        </div>
+                        <div class="reference-content">
+                            ${refs.map(r => `<div class="reference-item">${r.sheetName} [${r.address}]</div>`).join('')}
+                        </div>
+                    `;
                 chatDiv.appendChild(refDiv);
             }
             // 清空引用区
@@ -1442,10 +1703,6 @@
             }
         });
 
-        //选中单元格补充内容
-        function selectedCellChecked(obj) {
-            window.vsto.checkedChange('selectedCell', obj.checked + "");
-        }
 
         window.selectedContentMap = {}; // { sheetName: Set(address1, address2, ...) }
 
@@ -1499,11 +1756,11 @@
                     const item = document.createElement('div');
                     item.className = 'selected-content-item';
                     item.innerHTML = `
-                            <span title="${sheet}[${address}]">${address}</span>
-                            <button class="selected-content-remove" title="移除" onclick="removeSelectedContentItem('${sheet}','${address}')">
-                                <svg viewBox="0 0 20 20"><line x1="5" y1="5" x2="15" y2="15" stroke="currentColor" stroke-width="2"/><line x1="15" y1="5" x2="5" y2="15" stroke="currentColor" stroke-width="2"/></svg>
-                            </button>
-                        `;
+                                <span title="${sheet}[${address}]">${address}</span>
+                                <button class="selected-content-remove" title="移除" onclick="removeSelectedContentItem('${sheet}','${address}')">
+                                    <svg viewBox="0 0 20 20"><line x1="5" y1="5" x2="15" y2="15" stroke="currentColor" stroke-width="2"/><line x1="15" y1="5" x2="5" y2="15" stroke="currentColor" stroke-width="2"/></svg>
+                                </button>
+                            `;
                     row.appendChild(item);
                 }
                 list.appendChild(row);
@@ -1520,6 +1777,70 @@
                 }
             }
             return arr;
+        };
+
+        function settingsButton() {
+            // 显示遮罩和对话框
+            document.getElementById('settings-overlay').style.display = 'block';
+            document.getElementById('settings-dialog').style.display = 'block';
+        }
+
+        function settingsCancel() {
+            document.getElementById('settings-overlay').style.display = 'none';
+            document.getElementById('settings-dialog').style.display = 'none';
+        }
+
+        function settingsSave() {
+            let topicRandomness = document.getElementById('topic-randomness').value
+            let contextLimit = document.getElementById('context-limit').value
+            let settingsScroll = document.getElementById('settings-scroll-checked').checked
+            let selectedCell = document.getElementById('settings-selected-cell').checked
+            let chatMode = document.getElementById("chatMode").value
+
+            // 保存随机性和上下文限制的设置
+            if (window.chrome && window.chrome.webview) {
+                // ues WebView2
+                window.chrome.webview.postMessage({
+                    type: 'saveSettings',
+                    topicRandomness: topicRandomness,
+                    contextLimit: contextLimit,
+                    selectedCell: selectedCell,
+                    settingsScroll: settingsScroll,
+                    chatMode: chatMode,
+                });
+            } else if (window.vsto) {
+                // user inject vsto object
+                window.vsto.saveSettings({
+                    topicRandomness: topicRandomness,
+                    contextLimit: contextLimit,
+                    selectedCell: selectedCell,
+                    settingsScroll: settingsScroll,
+                    chatMode: chatMode,
+                });
+            } else {
+                alert('无法执行代码：未检测到支持的通信接口');
+            }
+
+            // 关闭对话框
+            document.getElementById('settings-overlay').style.display = 'none';
+            document.getElementById('settings-dialog').style.display = 'none';
+        }
+
+
+        // 滑块值实时更新
+        document.getElementById('topic-randomness').oninput = function () {
+            document.getElementById('topic-randomness-value').textContent =
+                Number(this.value).toFixed(1);
+        };
+
+        document.getElementById('context-limit').oninput = function () {
+            document.getElementById('context-limit-value').textContent = this.value;
+        };
+
+        // 点击遮罩关闭对话框
+        document.getElementById('settings-overlay').onclick = function () {
+            document.getElementById('settings-overlay').style.display = 'none';
+            document.getElementById('settings-dialog').style.display = 'none';
         };
     </script>
 </body>

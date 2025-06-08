@@ -16,6 +16,15 @@ Public Class ApplicationInfo
             ConfigSettings.OfficeAiAppDataFolder,
             fileName)
     End Function
+
+    Public Function GetChatSettingsFilePath() As String
+        'Dim fileName As String = $"office_ai_chat_settings_{Me.Name.ToLower()}.json"
+        Dim fileName As String = $"office_ai_chat_settings.json"
+        Return System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            ConfigSettings.OfficeAiAppDataFolder,
+            fileName)
+    End Function
 End Class
 
 Public Enum OfficeApplicationType
