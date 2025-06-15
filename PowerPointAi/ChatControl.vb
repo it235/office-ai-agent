@@ -196,6 +196,577 @@ Public Class ChatControl
         Send(message)
     End Sub
 
+    Protected Overrides Function ParseFile(filePath As String) As FileContentResult
 
+    End Function
+    Protected Overrides Function AppendCurrentSelectedContent(message As String) As String
+        Try
+            ' 检查是否启用了选择功能
+            If Not selectedCellChecked Then
+                Return message
+            End If
+
+            ' 获取当前 PowerPoint 中的选择
+            Dim selection = Globals.ThisAddIn.Application.ActiveWindow.Selection
+            If selection Is Nothing Then
+                Return message
+            End If
+
+            ' 创建内容构建器，格式化选中内容
+            Dim contentBuilder As New StringBuilder()
+            contentBuilder.AppendLine(vbCrLf & "--- 用户选中的 PowerPoint 内容 ---")
+
+            ' 添加演示文稿信息
+            Dim activePresentation = Globals.ThisAddIn.Application.ActivePresentation
+            If activePresentation IsNot Nothing Then
+                contentBuilder.AppendLine($"演示文稿: {Path.GetFileName(activePresentation.FullName)}")
+                contentBuilder.AppendLine($"当前幻灯片: {Globals.ThisAddIn.Application.ActiveWindow.View.Slide.SlideIndex}")
+            End If
+
+            ' 根据选择类型处理内容
+            Select Case selection.Type
+                Case Microsoft.Office.Interop.PowerPoint.PpSelectionType.ppSelectionShapes
+                    ' 处理形状选择（包括表格）
+                    Dim shapeRange = selection.ShapeRange
+                    contentBuilder.AppendLine($"选择类型: 形状 (共 {shapeRange.Count} 个)")
+
+                    For i = 1 To shapeRange.Count
+                        contentBuilder.AppendLine($"形状 {i}:")
+
+                        ' 检查是否是表格
+                        If shapeRange(i).HasTable = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                            Dim table = shapeRange(i).Table
+                            contentBuilder.AppendLine($"  表格: {table.Rows.Count} 行 × {table.Columns.Count} 列")
+
+                            ' 添加表格内容
+                            Dim maxRows As Integer = Math.Min(table.Rows.Count, 20)
+                            Dim maxCols As Integer = Math.Min(table.Columns.Count, 10)
+
+                            ' 处理表格头部
+                            Dim headerBuilder As New StringBuilder("  ")
+                            Dim separatorBuilder As New StringBuilder("  ")
+
+                            For col = 1 To maxCols
+                                Try
+                                    Dim cellText = table.Cell(1, col).Shape.TextFrame.TextRange.Text.Trim()
+                                    ' 限制单元格文本长度
+                                    If cellText.Length > 20 Then
+                                        cellText = cellText.Substring(0, 17) & "..."
+                                    End If
+
+                                    If col > 1 Then
+                                        headerBuilder.Append(" | ")
+                                        separatorBuilder.Append("-+-")
+                                    End If
+                                    headerBuilder.Append(cellText)
+                                    separatorBuilder.Append(New String("-"c, Math.Max(cellText.Length, 3)))
+                                Catch ex As Exception
+                                    If col > 1 Then
+                                        headerBuilder.Append(" | ")
+                                        separatorBuilder.Append("-+-")
+                                    End If
+                                    headerBuilder.Append("N/A")
+                                    separatorBuilder.Append("---")
+                                End Try
+                            Next
+
+                            contentBuilder.AppendLine(headerBuilder.ToString())
+                            contentBuilder.AppendLine(separatorBuilder.ToString())
+
+                            ' 处理表格数据行
+                            For row = 2 To maxRows
+                                Dim rowBuilder As New StringBuilder("  ")
+
+                                For col = 1 To maxCols
+                                    Try
+                                        Dim cellText = table.Cell(row, col).Shape.TextFrame.TextRange.Text.Trim()
+                                        ' 限制单元格文本长度
+                                        If cellText.Length > 20 Then
+                                            cellText = cellText.Substring(0, 17) & "..."
+                                        End If
+
+                                        If col > 1 Then
+                                            rowBuilder.Append(" | ")
+                                        End If
+                                        rowBuilder.Append(cellText)
+                                    Catch ex As Exception
+                                        If col > 1 Then
+                                            rowBuilder.Append(" | ")
+                                        End If
+                                        rowBuilder.Append("N/A")
+                                    End Try
+                                Next
+
+                                contentBuilder.AppendLine(rowBuilder.ToString())
+                            Next
+
+                            ' 添加表格说明
+                            If table.Rows.Count > maxRows Then
+                                contentBuilder.AppendLine($"  ... 共有 {table.Rows.Count} 行，仅显示前 {maxRows} 行")
+                            End If
+
+                            If table.Columns.Count > maxCols Then
+                                contentBuilder.AppendLine($"  ... 共有 {table.Columns.Count} 列，仅显示前 {maxCols} 列")
+                            End If
+                        ElseIf shapeRange(i).HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                            ' 处理文本框
+                            Dim textFrame = shapeRange(i).TextFrame
+                            If textFrame.HasText = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                                Dim text = textFrame.TextRange.Text.Trim()
+                                ' 限制文本长度
+                                If text.Length > 500 Then
+                                    contentBuilder.AppendLine($"  文本: {text.Substring(0, 500)}...")
+                                    contentBuilder.AppendLine($"  [文本太长，仅显示前500个字符，总计: {text.Length}个字符]")
+                                Else
+                                    contentBuilder.AppendLine($"  文本: {text}")
+                                End If
+                            Else
+                                contentBuilder.AppendLine("  [空文本框]")
+                            End If
+                        ElseIf shapeRange(i).Type = Microsoft.Office.Core.MsoShapeType.msoPicture Then
+                            ' 处理图片
+                            contentBuilder.AppendLine("  [图片]")
+                            If shapeRange(i).AlternativeText <> "" Then
+                                contentBuilder.AppendLine($"  替代文本: {shapeRange(i).AlternativeText}")
+                            End If
+                        Else
+                            ' 其他类型的形状
+                            contentBuilder.AppendLine($"  [形状类型: {shapeRange(i).Type}]")
+                        End If
+
+                        ' 在形状之间添加分隔线
+                        contentBuilder.AppendLine("  ---")
+                    Next
+
+                Case Microsoft.Office.Interop.PowerPoint.PpSelectionType.ppSelectionText
+                    ' 处理文本选择
+                    contentBuilder.AppendLine("选择类型: 文本")
+
+                    Dim textRange = selection.TextRange
+                    If textRange IsNot Nothing Then
+                        Dim text = textRange.Text.Trim()
+                        ' 限制文本长度
+                        If text.Length > 1000 Then
+                            contentBuilder.AppendLine(text.Substring(0, 1000) & "...")
+                            contentBuilder.AppendLine($"[文本太长，仅显示前1000个字符，总计: {text.Length}个字符]")
+                        Else
+                            contentBuilder.AppendLine(text)
+                        End If
+                    Else
+                        contentBuilder.AppendLine("[无法获取文本内容]")
+                    End If
+
+                Case Microsoft.Office.Interop.PowerPoint.PpSelectionType.ppSelectionSlides
+                    ' 处理幻灯片选择
+                    Dim slideRange = selection.SlideRange
+                    contentBuilder.AppendLine($"选择类型: 幻灯片 (共 {slideRange.Count} 张)")
+
+                    ' 限制处理的幻灯片数量
+                    Dim maxSlides = Math.Min(slideRange.Count, 5)
+
+                    For i = 1 To maxSlides
+                        Dim slide = slideRange(i)
+                        contentBuilder.AppendLine($"幻灯片 {slide.SlideIndex}:")
+
+                        ' 获取幻灯片标题
+                        Dim title As String = ""
+                        For Each shape In slide.Shapes
+                            If shape.Type = Microsoft.Office.Core.MsoShapeType.msoPlaceholder Then
+                                If shape.PlaceholderFormat.Type = Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderTitle Then
+                                    If shape.HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                                        title = shape.TextFrame.TextRange.Text.Trim()
+                                        Exit For
+                                    End If
+                                End If
+                            End If
+                        Next
+
+                        If title <> "" Then
+                            contentBuilder.AppendLine($"  标题: {title}")
+                        Else
+                            contentBuilder.AppendLine("  [无标题]")
+                        End If
+
+                        ' 获取幻灯片上的内容
+                        Dim textShapesCount = 0
+
+                        For Each shape In slide.Shapes
+                            ' 跳过标题形状
+                            If shape.Type = Microsoft.Office.Core.MsoShapeType.msoPlaceholder AndAlso
+                           shape.PlaceholderFormat.Type = Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderTitle Then
+                                Continue For
+                            End If
+
+                            ' 处理文本形状
+                            If shape.HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue AndAlso
+                           shape.TextFrame.HasText = Microsoft.Office.Core.MsoTriState.msoTrue Then
+
+                                textShapesCount += 1
+                                If textShapesCount > 3 Then Continue For ' 每张幻灯片最多处理3个文本框
+
+                                Dim text = shape.TextFrame.TextRange.Text.Trim()
+                                If text.Length > 0 Then
+                                    ' 限制文本长度
+                                    If text.Length > 200 Then
+                                        contentBuilder.AppendLine($"  文本: {text.Substring(0, 200)}...")
+                                    Else
+                                        contentBuilder.AppendLine($"  文本: {text}")
+                                    End If
+                                End If
+                            ElseIf shape.HasTable = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                                contentBuilder.AppendLine("  [包含表格]")
+                            ElseIf shape.Type = Microsoft.Office.Core.MsoShapeType.msoPicture Then
+                                contentBuilder.AppendLine("  [包含图片]")
+                            End If
+                        Next
+
+                        contentBuilder.AppendLine("  ---")
+                    Next
+
+                    ' 如果有更多幻灯片未显示，添加提示
+                    If slideRange.Count > maxSlides Then
+                        contentBuilder.AppendLine($"[共选中 {slideRange.Count} 张幻灯片，仅显示前 {maxSlides} 张]")
+                    End If
+
+                Case Else
+                    contentBuilder.AppendLine($"选择类型: 未知 ({selection.Type})")
+                    contentBuilder.AppendLine("[无法识别的选择类型]")
+            End Select
+
+            contentBuilder.AppendLine("--- 选中内容结束 ---" & vbCrLf)
+
+            ' 返回原始消息加上选中内容
+            Return message & contentBuilder.ToString()
+
+        Catch ex As Exception
+            Debug.WriteLine($"处理PowerPoint选中内容时出错: {ex.Message}")
+            Return message ' 出错时返回原始消息
+        End Try
+    End Function
+
+    ' 处理形状选择（包括表格）
+    Private Sub ProcessShapeSelection(builder As StringBuilder, selection As Microsoft.Office.Interop.PowerPoint.Selection)
+        Try
+            Dim shapeRange = selection.ShapeRange
+            builder.AppendLine($"形状数量: {shapeRange.Count}")
+
+            ' 遍历选中的形状
+            For i = 1 To shapeRange.Count
+                builder.AppendLine($"形状 {i}:")
+
+                ' 检查是否是表格
+                If shapeRange(i).HasTable = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                    ProcessTable(builder, shapeRange(i).Table)
+                ElseIf shapeRange(i).HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                    ' 处理包含文本的形状
+                    Dim textFrame = shapeRange(i).TextFrame
+                    If textFrame.HasText = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                        Dim text = textFrame.TextRange.Text.Trim()
+                        ' 限制文本长度
+                        If text.Length > 1000 Then
+                            builder.AppendLine(text.Substring(0, 1000) & "...")
+                            builder.AppendLine($"[文本太长，仅显示前1000个字符，总计: {text.Length}个字符]")
+                        Else
+                            builder.AppendLine(text)
+                        End If
+                    Else
+                        builder.AppendLine("[空文本框]")
+                    End If
+                ElseIf shapeRange(i).Type = Microsoft.Office.Core.MsoShapeType.msoPicture Then
+                    ' 处理图片
+                    builder.AppendLine("[图片]")
+                    ' 尝试获取图片的替代文本（如果有）
+                    If shapeRange(i).AlternativeText <> "" Then
+                        builder.AppendLine($"替代文本: {shapeRange(i).AlternativeText}")
+                    End If
+                ElseIf shapeRange(i).Type = Microsoft.Office.Core.MsoShapeType.msoChart Then
+                    ' 处理图表
+                    builder.AppendLine("[图表]")
+                    If shapeRange(i).AlternativeText <> "" Then
+                        builder.AppendLine($"图表说明: {shapeRange(i).AlternativeText}")
+                    End If
+                ElseIf shapeRange(i).Type = Microsoft.Office.Core.MsoShapeType.msoSmartArt Then
+                    ' 处理SmartArt
+                    builder.AppendLine("[SmartArt图形]")
+                Else
+                    ' 其他类型的形状
+                    builder.AppendLine($"[形状类型: {shapeRange(i).Type}]")
+                End If
+
+                ' 形状之间添加分隔线
+                builder.AppendLine("---")
+            Next
+
+        Catch ex As Exception
+            builder.AppendLine($"[处理形状时出错: {ex.Message}]")
+        End Try
+    End Sub
+
+    ' 处理表格内容
+    Private Sub ProcessTable(builder As StringBuilder, table As Microsoft.Office.Interop.PowerPoint.Table)
+        Try
+            builder.AppendLine($"表格: {table.Rows.Count}行 × {table.Columns.Count}列")
+
+            ' 限制显示的行列数
+            Dim maxRows As Integer = Math.Min(table.Rows.Count, 20)
+            Dim maxCols As Integer = Math.Min(table.Columns.Count, 10)
+
+            ' 处理表格头部（表格第一行）
+            If table.Rows.Count > 0 Then
+                ' 构建表头和分隔线
+                Dim headerBuilder As New StringBuilder()
+                Dim separatorBuilder As New StringBuilder()
+
+                For col As Integer = 1 To maxCols
+                    Try
+                        Dim cellText As String = table.Cell(1, col).Shape.TextFrame.TextRange.Text.Trim()
+
+                        ' 限制单元格文本长度
+                        If cellText.Length > 20 Then
+                            cellText = cellText.Substring(0, 17) & "..."
+                        End If
+
+                        ' 填充表头
+                        If col > 1 Then
+                            headerBuilder.Append(" | ")
+                            separatorBuilder.Append("-+-")
+                        End If
+                        headerBuilder.Append(cellText)
+                        separatorBuilder.Append(New String("-"c, Math.Max(cellText.Length, 3)))
+                    Catch ex As Exception
+                        ' 忽略单元格处理错误
+                        If col > 1 Then
+                            headerBuilder.Append(" | ")
+                            separatorBuilder.Append("-+-")
+                        End If
+                        headerBuilder.Append("N/A")
+                        separatorBuilder.Append("---")
+                    End Try
+                Next
+
+                ' 添加表头和分隔线
+                builder.AppendLine(headerBuilder.ToString())
+                builder.AppendLine(separatorBuilder.ToString())
+            End If
+
+            ' 处理表格数据行
+            For row As Integer = 2 To maxRows ' 从第2行开始（跳过表头）
+                Dim rowBuilder As New StringBuilder()
+
+                For col As Integer = 1 To maxCols
+                    Try
+                        Dim cellText As String = table.Cell(row, col).Shape.TextFrame.TextRange.Text.Trim()
+
+                        ' 限制单元格文本长度
+                        If cellText.Length > 20 Then
+                            cellText = cellText.Substring(0, 17) & "..."
+                        End If
+
+                        ' 填充行数据
+                        If col > 1 Then
+                            rowBuilder.Append(" | ")
+                        End If
+                        rowBuilder.Append(cellText)
+                    Catch ex As Exception
+                        ' 忽略单元格处理错误
+                        If col > 1 Then
+                            rowBuilder.Append(" | ")
+                        End If
+                        rowBuilder.Append("N/A")
+                    End Try
+                Next
+
+                ' 添加行数据
+                builder.AppendLine(rowBuilder.ToString())
+            Next
+
+            ' 如果有更多行未显示，添加提示
+            If table.Rows.Count > maxRows Then
+                builder.AppendLine($"... [表格共有 {table.Rows.Count} 行，仅显示前 {maxRows} 行]")
+            End If
+
+            ' 如果有更多列未显示，添加提示
+            If table.Columns.Count > maxCols Then
+                builder.AppendLine($"... [表格共有 {table.Columns.Count} 列，仅显示前 {maxCols} 列]")
+            End If
+
+        Catch ex As Exception
+            builder.AppendLine($"[处理表格内容时出错: {ex.Message}]")
+        End Try
+    End Sub
+
+    ' 处理文本选择
+    Private Sub ProcessTextSelection(builder As StringBuilder, selection As Microsoft.Office.Interop.PowerPoint.Selection)
+        Try
+            Dim textRange = selection.TextRange
+
+            If textRange IsNot Nothing Then
+                builder.AppendLine($"文本长度: {textRange.Length} 个字符")
+
+                ' 获取文本内容并限制长度
+                Dim text = textRange.Text.Trim()
+                Dim maxLength As Integer = 2000
+
+                If text.Length > maxLength Then
+                    builder.AppendLine(text.Substring(0, maxLength) & "...")
+                    builder.AppendLine($"[文本太长，仅显示前{maxLength}个字符，总计: {text.Length}个字符]")
+                Else
+                    builder.AppendLine(text)
+                End If
+            Else
+                builder.AppendLine("[无法获取文本内容]")
+            End If
+
+        Catch ex As Exception
+            builder.AppendLine($"[处理文本选择时出错: {ex.Message}]")
+        End Try
+    End Sub
+
+    ' 处理幻灯片选择
+    Private Sub ProcessSlideSelection(builder As StringBuilder, selection As Microsoft.Office.Interop.PowerPoint.Selection)
+        Try
+            Dim slideRange = selection.SlideRange
+            builder.AppendLine($"选中幻灯片数: {slideRange.Count}")
+
+            ' 限制处理的幻灯片数量
+            Dim maxSlides As Integer = Math.Min(slideRange.Count, 10)
+
+            For i = 1 To maxSlides
+                Dim slide = slideRange(i)
+                builder.AppendLine($"幻灯片 {slide.SlideIndex}:")
+
+                ' 获取幻灯片标题
+                Dim title As String = GetSlideTitle(slide)
+                If Not String.IsNullOrEmpty(title) Then
+                    builder.AppendLine($"标题: {title}")
+                End If
+
+                ' 获取幻灯片上的内容
+                builder.AppendLine("内容:")
+                Dim slideContent = GetSlideContent(slide)
+                builder.AppendLine(slideContent)
+
+                ' 添加分隔线
+                builder.AppendLine("---")
+            Next
+
+            ' 如果有更多幻灯片未显示，添加提示
+            If slideRange.Count > maxSlides Then
+                builder.AppendLine($"... [共选中 {slideRange.Count} 张幻灯片，仅显示前 {maxSlides} 张]")
+            End If
+
+        Catch ex As Exception
+            builder.AppendLine($"[处理幻灯片选择时出错: {ex.Message}]")
+        End Try
+    End Sub
+
+    ' 获取幻灯片标题
+    Private Function GetSlideTitle(slide As Microsoft.Office.Interop.PowerPoint.Slide) As String
+        Try
+            ' 检查幻灯片是否有标题占位符
+            For Each shape In slide.Shapes
+                If shape.Type = Microsoft.Office.Core.MsoShapeType.msoPlaceholder Then
+                    If shape.PlaceholderFormat.Type = Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderTitle Then
+                        If shape.HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                            Return shape.TextFrame.TextRange.Text.Trim()
+                        End If
+                    End If
+                End If
+            Next
+
+            ' 如果没有找到标题占位符，尝试查找任何可能的标题
+            For Each shape In slide.Shapes
+                If shape.HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                    Dim text = shape.TextFrame.TextRange.Text.Trim()
+                    If Not String.IsNullOrEmpty(text) AndAlso text.Length < 100 Then
+                        Return text ' 假设第一个简短文本是标题
+                    End If
+                End If
+            Next
+
+            Return "[无标题]"
+        Catch ex As Exception
+            Debug.WriteLine($"获取幻灯片标题时出错: {ex.Message}")
+            Return "[获取标题出错]"
+        End Try
+    End Function
+
+    ' 获取幻灯片内容
+    Private Function GetSlideContent(slide As Microsoft.Office.Interop.PowerPoint.Slide) As String
+        Try
+            Dim contentBuilder As New StringBuilder()
+            Dim processedTextShapes As Integer = 0
+            Dim maxTextShapes As Integer = 5 ' 限制每张幻灯片处理的文本形状数量
+
+            ' 处理幻灯片上的形状
+            For Each shape In slide.Shapes
+                ' 跳过标题形状，因为已经单独处理过了
+                If shape.Type = Microsoft.Office.Core.MsoShapeType.msoPlaceholder AndAlso
+               shape.PlaceholderFormat.Type = Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderTitle Then
+                    Continue For
+                End If
+
+                ' 处理文本形状
+                If shape.HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue AndAlso
+               shape.TextFrame.HasText = Microsoft.Office.Core.MsoTriState.msoTrue Then
+
+                    If processedTextShapes >= maxTextShapes Then
+                        contentBuilder.AppendLine("  [更多文本内容未显示...]")
+                        Exit For
+                    End If
+
+                    Dim text = shape.TextFrame.TextRange.Text.Trim()
+                    If Not String.IsNullOrEmpty(text) Then
+                        ' 限制文本长度
+                        If text.Length > 200 Then
+                            contentBuilder.AppendLine($"  文本: {text.Substring(0, 200)}...")
+                        Else
+                            contentBuilder.AppendLine($"  文本: {text}")
+                        End If
+                        processedTextShapes += 1
+                    End If
+                    ' 处理表格形状
+                ElseIf shape.HasTable = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                    contentBuilder.AppendLine("  [包含表格]")
+                    ' 处理图片形状
+                ElseIf shape.Type = Microsoft.Office.Core.MsoShapeType.msoPicture Then
+                    contentBuilder.AppendLine("  [包含图片]")
+                    If shape.AlternativeText <> "" Then
+                        contentBuilder.AppendLine($"  图片说明: {shape.AlternativeText}")
+                    End If
+                    ' 处理图表形状
+                ElseIf shape.Type = Microsoft.Office.Core.MsoShapeType.msoChart Then
+                    contentBuilder.AppendLine("  [包含图表]")
+                    ' 处理SmartArt形状
+                ElseIf shape.Type = Microsoft.Office.Core.MsoShapeType.msoSmartArt Then
+                    contentBuilder.AppendLine("  [包含SmartArt图形]")
+                End If
+            Next
+
+            ' 如果没有找到任何内容
+            If contentBuilder.Length = 0 Then
+                Return "  [幻灯片无可提取的文本内容]"
+            End If
+
+            Return contentBuilder.ToString()
+        Catch ex As Exception
+            Debug.WriteLine($"获取幻灯片内容时出错: {ex.Message}")
+            Return $"  [获取内容出错: {ex.Message}]"
+        End Try
+    End Function
+
+    Protected Overrides Function GetCurrentWorkingDirectory() As String
+        Try
+            ' 获取当前活动工作簿的路径
+            If Globals.ThisAddIn.Application.ActiveWorkbook IsNot Nothing Then
+                Return Globals.ThisAddIn.Application.ActiveWorkbook.Path
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"获取当前工作目录时出错: {ex.Message}")
+        End Try
+
+        ' 如果无法获取工作簿路径，则返回应用程序目录
+        Return System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)
+    End Function
 End Class
 

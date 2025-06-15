@@ -318,7 +318,7 @@
         pre.collapsible {
             margin-top: 0;
             transition: max-height 0.3s ease-out;
-            max-height: 500px;
+/*            max-height: 500px;*/
             overflow: hidden;
         }
 
@@ -580,85 +580,75 @@
                 padding-right: 0;
             }
         }
-
-        #selected-content-wrapper {
-            position: sticky;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 120;
-            background: #f8fafc;
-            border-radius: 10px;
-            box-shadow: 0 2px 8px rgba(80,120,200,0.06);
-            display: flex;
-            align-items: flex-start;
-            gap: 8px;
-            min-height: 32px;
-            max-height: 80px;
-            overflow-x: auto;
-            overflow-y: auto;
-            padding: 8px 12px 1px 12px;
-            padding-left: 0;
-            padding-right: 0;
+        #references-wrapper {
+            width: 100%;
+            background: #f8f9fa; /* 浅灰色背景，使其与输入区域略有区分 */
+            border-radius: 8px; /* 圆角与输入框协调 */
+            padding: 8px 12px; /* 内部留白 */
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05); /* 轻微阴影增加层次感 */
+            margin-bottom: 8px; /* 与下方元素的间距 */
             box-sizing: border-box;
         }
 
-        .selected-content-list {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            width: 100%;
-        }
-
-        .selected-sheet-row {
-            display: flex;
-            align-items: flex-start;
-            gap: 8px;
-            margin-bottom: 2px;
-            flex-wrap: wrap;
-        }
-
-        .selected-sheet-label {
-            color: #2b4a8a;
+        /* 引用区域标题 ("引用:") */
+        .reference-section-title { /* 此类名已在HTML中指定给新的 span#references-title */
+            font-size: 13px; /* 稍微增大字号 */
+            color: #333; /* 深灰色，更清晰 */
+            margin-bottom: 8px; /* 标题与芯片之间的间距 */
+            display: block;
             font-weight: 500;
-            font-size: 13px;
-            margin-right: 6px;
-            min-width: 60px;
-            flex-shrink: 0;
         }
-        .selected-content-item {
+
+        /* 包含所有引用项 (chips) 的容器 */
+        .reference-chips-container { /* 此类名已在HTML中指定给新的 div#reference-chips-list */
+            max-height: 70px; /* 调整最大高度以适应内容 */
+            overflow-y: auto;
+            width: 100%;
+            line-height: 0;
+            padding-top: 2px;
+        }
+
+        /* 单个引用项 (chip) */
+        .reference-chip {
+            display: inline-block;
+            vertical-align: top;
+            background-color: #e9ecef; /* 调整chip背景色 */
+            border: 1px solid #ced4da; /* 调整chip边框色 */
+            border-radius: 16px;
+            padding: 4px 10px 5px 10px; /* 微调内边距 */
+            font-size: 12px; /* 调整字体大小 */
+            color: #212529; /* 调整文字颜色 */
+            box-shadow: none; /* 移除单个chip的阴影，由外部wrapper统一处理 */
+            transition: background-color 0.2s, border-color 0.2s;
+            margin-right: 6px;
+            margin-bottom: 6px;
+            line-height: normal;
+            max-width: 230px; /* 限制单个chip的最大宽度 */
+            cursor: default; /* 默认光标 */
+        }
+
+        .reference-chip:hover {
+            background-color: #dee2e6; /* hover时颜色加深 */
+            border-color: #adb5bd;
+        }
+
+        .reference-chip-content-wrapper {
             display: flex;
             align-items: center;
-            background: #f0f4fa;
-            border: 1px solid #d0d8e8;
-            border-radius: 16px;
-            padding: 0px 12px 3px 10px;
-            margin-top: 2px;
-            font-size: 11px;
-            color: #3a4a6b;
-            box-shadow: 0 1px 2px rgba(80,120,200,0.04);
-            transition: background 0.2s;
-            max-width: 220px;
         }
 
-        /* 新增或修改：为 selected-content-item 内的 span 元素添加样式 */
-        .selected-content-item > span {
-            flex-grow: 1; /* 允许 span 占据多余空间 */
-            flex-shrink: 1; /* 允许 span 在空间不足时收缩 */
-            overflow: hidden; /* 隐藏超出部分 */
-            text-overflow: ellipsis; /* 超出部分显示省略号 */
-            white-space: nowrap; /* 文本不换行 */
-            min-width: 0; /* 允许 flex item 收缩至小于其内容尺寸 */
+        .reference-chip-name {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-right: 8px;
+            flex-grow: 1; /* Allows name to take space if content-wrapper is flex */
+            min-width: 0; /* Helps with ellipsis in flex item */
         }
 
-        .selected-content-item:hover {
-            background: #e6eefc;
-        }
-
-        .selected-content-remove {
-            margin-left: 6px;
+        .reference-chip-remove {
             cursor: pointer;
-            color: #b71c1c;
+            color: #6c757d; /* 移除按钮颜色调整 */
             font-size: 15px;
             border: none;
             background: none;
@@ -666,13 +656,17 @@
             display: flex;
             align-items: center;
             padding: 0;
-            flex-shrink: 0; /* 防止按钮收缩 */
+            flex-shrink: 0;
+            transition: color 0.2s;
         }
 
-        .selected-content-remove svg {
+        .reference-chip-remove:hover {
+            color: #343a40; /* hover时移除按钮颜色加深 */
+        }
+        .reference-chip-remove svg {
             width: 16px;
             height: 16px;
-            fill: #b71c1c;
+            fill: currentColor; /* 使SVG颜色随父元素color属性变化 */
         }
 
         .reference-container {
@@ -924,6 +918,153 @@
             background: rgba(0,0,0,0.5);
             z-index: 999;
         }
+
+        /**附件显示区域*/
+        #chat-input-actions button {
+            background: none;
+            border: none;
+            padding: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            transition: color 0.2s, background-color 0.2s;
+        }
+
+        #chat-input-actions button:hover {
+            color: #4a6fa5;
+            background-color: #f0f0f0;
+        }
+
+        #send-button { /* Specific override if needed, or adjust general style */
+            background: rgb(175 184 191);
+            border-radius: 6px;
+            padding: 2px 8px; /* Keep your original send button padding */
+            color: white; /* Assuming send button icon was white */
+        }
+
+        #send-button:hover {
+            background: #688ec5;
+        }
+
+        #stop-button {
+            background: #e9525f;
+            padding: 6px; 
+            border-radius: 6px;
+            color: white; 
+        }
+
+        #stop-button:hover {
+            background: #c82333;
+        }
+
+        #chat-input-actions button#attach-file-button {
+            padding: 4px;
+        }
+
+        /* 附件显示区域样式 */
+        #attached-files-list .attached-file-item {
+            display: none !important;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #f0f4fa;
+            border: 1px solid #d0d8e8;
+            border-radius: 4px;
+            padding: 3px 8px;
+            font-size: 12px;
+            color: #3a4a6b;
+        }
+
+        #attached-files-list .attached-file-name {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-right: 8px;
+        }
+
+        #attached-files-list .remove-attached-file {
+            cursor: pointer;
+            color: #b71c1c;
+            font-size: 14px;
+            background: none;
+            border: none;
+            padding: 0;
+        }
+
+        #attached-files-list .remove-attached-file svg {
+            width: 14px;
+            height: 14px;
+            fill: #b71c1c;
+        }
+
+        /**聊天内容引用的逻辑*/
+        .chat-message-references {
+            margin-top: 10px;
+            border: 1px solid #e0e5eb;
+            border-radius: 6px;
+            background-color: #f8f9fa;
+            overflow: hidden;
+        }
+
+        .chat-message-reference-header {
+            display: flex;
+            align-items: center;
+            padding: 6px 10px;
+            cursor: pointer;
+            background-color: #edf2f7;
+            user-select: none;
+            border-bottom: 1px solid #e0e5eb;
+        }
+
+        .chat-message-references.collapsed .chat-message-reference-header {
+            border-bottom: none; /* No bottom border when collapsed */
+        }
+
+        .chat-message-reference-arrow {
+            display: inline-block;
+            transition: transform 0.2s ease-in-out;
+            margin-right: 8px;
+            font-size: 10px; /* Smaller arrow */
+            color: #4a6fa5;
+        }
+
+        .chat-message-references.collapsed .chat-message-reference-arrow {
+            transform: rotate(-90deg);
+        }
+
+        .chat-message-references:not(.collapsed) .chat-message-reference-arrow {
+            transform: rotate(0deg); /* Pointing down when expanded */
+        }
+
+
+        .chat-message-reference-label {
+            font-weight: 500;
+            font-size: 13px;
+            color: #4a6fa5;
+        }
+
+        .chat-message-reference-content {
+            padding: 8px 12px;
+            font-size: 12px;
+            color: #333;
+            line-height: 1.5;
+            max-height: 200px; /* Limit height when expanded */
+            overflow-y: auto;
+        }
+
+        .chat-message-references.collapsed .chat-message-reference-content {
+            display: none;
+        }
+
+        .chat-message-reference-content div { /* Each item in the content */
+            margin-bottom: 4px;
+            word-break: break-all; /* Break long file names or paths */
+        }
+
+        .chat-message-reference-content div:last-child {
+            margin-bottom: 0;
+        }
     </style>
 </head>
 <body>
@@ -952,14 +1093,18 @@
 
     <!-- message chat input bottom -->
     <div id="chat-bottom-bar">
-        <div id="selected-content-wrapper" style="display:none;">
-            <span id="elected-content-label" style="font-size: 11px; color: #4a6fa5; margin-right: 8px; flex-shrink: 0; padding-top:3px;">引用内容</span>
-            <div id="selected-content-list" class="selected-content-list"></div>
-        </div>
 
         <!-- message input -->
         <div id="chat-input-card">
             <div id="chat-input-inner">
+                <!-- 合并后的引用区域 -->
+                <div id="references-wrapper" style="display:none;">
+                    <span id="references-title" class="reference-section-title">引用:</span>
+                    <div id="reference-chips-list" class="reference-chips-container">
+                        <!-- 所有引用项（工作表内容和文件）将在此处动态添加 -->
+                    </div>
+                </div>
+
                 <div id="prompt-suggestions" style="display: none;">
                     <!-- 提示词项将在此处动态添加 -->
                 </div>
@@ -979,6 +1124,14 @@
                             <option value="agent">Agent模式</option>
                         </select>
                     </label>
+
+                    <!-- 新增：附件按钮 -->
+                    <button id="attach-file-button" title="添加附件" style="padding: 4px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+                        </svg>
+                    </button>
+                    <input type="file" id="file-input" multiple style="display: none;" accept=".xls,.xlsx,.xlsm,.xlsb,.csv,.doc,.docx,.ppt,.pptx">
 
                     <button id="send-button" title="发送">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 20px; height: 20px;">
@@ -1493,6 +1646,12 @@
                 return v.toString(16);
             });
         }
+        function toggleChatMessageReference(headerElement) {
+            const container = headerElement.closest('.chat-message-references');
+            if (container) {
+                container.classList.toggle('collapsed');
+            }
+        }
 
         // 格式化日期时间
         function formatDateTime(date) {
@@ -1667,60 +1826,129 @@
             }
         }
 
-        function sendMessageToServer(text) {
+        function sendMessageToServer(messagePayload) { // Modified to accept a payload
             if (window.chrome && window.chrome.webview) {
-                window.chrome.webview.postMessage({
-                    type: 'sendMessage',
-                    value: text
-                });
+                window.chrome.webview.postMessage(messagePayload); // Send the whole payload
             } else if (window.vsto) {
-                // user inject vsto object
-                window.vsto.sendMessage(text);
+                if (typeof window.vsto.sendMessage === 'function') {
+                    if (messagePayload.type === 'sendMessage' && typeof messagePayload.value === 'object') {
+                        window.vsto.sendMessage(JSON.stringify(messagePayload.value));
+                    } else {
+                        window.vsto.sendMessage(messagePayload); // Or adjust as per vsto.sendMessage signature
+                    }
+                } else if (typeof window.vsto.postMessage === 'function') { // Fallback if postMessage exists on vsto
+                    window.vsto.postMessage(messagePayload);
+                }
             } else {
                 alert('无法执行代码：未检测到支持的通信接口');
             }
         }
         function sendChatMessage() {
-            const text = chatInput.value.trim();
-            if (!text) return;
+            const userTypedText = chatInput.value.trim(); // 用户的原始输入
+            const attachedFileObjects = window.attachedFiles; // 保持 File 对象数组
+            const selectedSheetContent = window.getAllSelectedContent(); // 获取选中的工作表内容
 
-            // 切换按钮显示状态
+            // 检查是否有任何内容发送
+            if (!userTypedText && attachedFileObjects.length === 0 && selectedSheetContent.length === 0) return;
+
             document.getElementById('send-button').style.display = 'none';
             document.getElementById('stop-button').style.display = 'flex';
 
-            sendMessageToServer(text);
+            // 准备发送到后端的数据
+            const messagePayloadValue = {
+                text: userTypedText,
+                filePaths: attachedFileObjects.map(file => (file && typeof file.path === 'string' && file.path) ? file.path : file.name),
+                selectedContent: selectedSheetContent
+            };
+
+            sendMessageToServer({
+                type: 'sendMessage',
+                value: messagePayloadValue
+            });
+
             const uuid = generateUUID();
             const now = new Date();
             const timestamp = formatDateTime(now);
+
+            // 1. 创建基本的聊天节（头像、名称、时间戳、空的 message-content div）
             createChatSection('Me', timestamp, uuid);
-            appendRenderer(uuid, text);
 
-
-            const refs = window.getAllSelectedContent();
-            if (refs.length > 0) {
-                const chatDiv = document.getElementById('chat-' + uuid);
-                const refDiv = document.createElement('div');
-                refDiv.className = 'reference-container collapsed';
-                refDiv.id = 'reference-' + uuid;
-                refDiv.innerHTML = `
-                        <div class="reference-header" onclick="toggleReference('${uuid}')">
-                            <span class="reference-arrow">&#9654;</span>
-                            <span class="reference-label">引用内容(${refs.length})</span>
-                        </div>
-                        <div class="reference-content">
-                            ${refs.map(r => `<div class="reference-item">${r.sheetName} [${r.address}]</div>`).join('')}
-                        </div>
-                    `;
-                chatDiv.appendChild(refDiv);
+            // 2. 获取刚创建的 message-content div
+            const messageContentDiv = document.getElementById('content-' + uuid);
+            if (!messageContentDiv) {
+                console.error('Could not find message content div for ' + uuid);
+                return;
             }
-            // 清空引用区
+
+            // 3. 构建并设置 message-content div 的 innerHTML
+            let htmlContent = '';
+
+            // 3a. 添加用户输入的文本 (Markdown 解析)
+            if (userTypedText) {
+                htmlContent += marked.parse(userTypedText);
+            }
+
+            // 3b. 添加可折叠的 "引用内容"
+            if (selectedSheetContent.length > 0) {
+                let itemsHtml = selectedSheetContent.map(item => `<div>${item.sheetName}: ${item.address}</div>`).join('');
+                htmlContent += `
+                    <div class="chat-message-references collapsed" id="msg-ref-sel-${uuid}">
+                        <div class="chat-message-reference-header" onclick="toggleChatMessageReference(this)">
+                            <span class="chat-message-reference-arrow">&#9658;</span>
+                            <span class="chat-message-reference-label">引用内容 (${selectedSheetContent.length})</span>
+                        </div>
+                        <div class="chat-message-reference-content">
+                            ${itemsHtml}
+                        </div>
+                    </div>`;
+            }
+
+            // 3c. 添加可折叠的 "引用文件"
+            if (attachedFileObjects.length > 0) {
+                let displayItemsHtml = attachedFileObjects.map(file => `<div>${escapeHtml(file.name)}</div>`).join('');
+                htmlContent += `
+        <div class="chat-message-references collapsed" id="msg-ref-file-${uuid}">
+            <div class="chat-message-reference-header" onclick="toggleChatMessageReference(this)">
+                <span class="chat-message-reference-arrow">&#9658;</span>
+                <span class="chat-message-reference-label">引用文件 (${attachedFileObjects.length})</span>
+            </div>
+            <div class="chat-message-reference-content">
+                ${displayItemsHtml}
+            </div>
+        </div>`;
+            }
+
+            messageContentDiv.innerHTML = htmlContent;
+
+            // 3d. 如果用户文本中包含代码块，需要重新高亮
+            messageContentDiv.querySelectorAll('pre code').forEach((block) => {
+                hljs.highlightElement(block);
+                // 如果需要，这里也可以重新附加代码块的复制/编辑/执行按钮逻辑
+                // 但由于 marked.parse 已经处理了按钮，可能不需要重复
+            });
+
+            // 4. 清空输入区域的引用和文本框
             window.selectedContentMap = {};
-            renderSelectedContentList();
+            window.attachedFiles = []; // 清空 File 对象数组
+            renderReferences(); // 更新输入区域的引用显示
 
             chatInput.value = '';
-            chatInput.style.height = 'auto';
+            chatInput.style.height = 'auto'; // 重置输入框高度
+            hidePromptSuggestions();
+
+            // 5. 滚动到最新消息
+            //contentScroll();
         }
 
+        function escapeHtml(unsafe) {
+            if (typeof unsafe !== 'string') return '';
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
         // 发送按钮点击
         document.getElementById('send-button').onclick = sendChatMessage;
 
@@ -1741,20 +1969,16 @@
             if (!address || address.trim() === '') {
                 return;
             }
-            const newItemId = generateUUID(); // 使用现有的UUID生成函数
+            const newItemId = generateUUID();
             const newItem = { id: newItemId, address: address.trim() };
 
             if (!ctrlKey) {
-                // 如果没有按下Ctrl键，则清空所有先前的选择，并添加当前这一个。
-                // 这意味着selectedContentMap中只有一个sheetName键，其值为newItem。
-                window.selectedContentMap = {};
+                //window.selectedContentMap = {};
                 window.selectedContentMap[sheetName] = newItem;
             } else {
-                // 如果按下了Ctrl键，则为指定的sheetName添加或替换选择。
-                // 这维持了每个工作表只有一个选中项的行为。
                 window.selectedContentMap[sheetName] = newItem;
             }
-            renderSelectedContentList();
+            renderReferences(); // <--- 更新调用
         };
 
         // 移除单个内容
@@ -1762,57 +1986,15 @@
         window.removeSelectedContentItem = function (itemIdToRemove) {
             for (const sheetName in window.selectedContentMap) {
                 if (window.selectedContentMap.hasOwnProperty(sheetName)) {
-                    // 检查当前工作表的选中项ID是否与要移除的ID匹配
                     if (window.selectedContentMap[sheetName] && window.selectedContentMap[sheetName].id === itemIdToRemove) {
-                        delete window.selectedContentMap[sheetName]; // 从映射中删除该工作表的条目
-                        break; // 找到并移除了项目，可以退出循环
+                        delete window.selectedContentMap[sheetName];
+                        break;
                     }
                 }
             }
-            renderSelectedContentList(); // 重新渲染列表
+            renderReferences(); // <--- 更新调用
         };
 
-        // 渲染选中内容区域
-        // 修改后：适配新的selectedContentMap结构，并使用itemId进行移除
-        function renderSelectedContentList() {
-            const wrapper = document.getElementById('selected-content-wrapper');
-            const list = document.getElementById('selected-content-list');
-            list.innerHTML = ''; // 清空现有列表
-            let hasContent = false;
-
-            for (const sheetName in window.selectedContentMap) {
-                if (window.selectedContentMap.hasOwnProperty(sheetName)) {
-                    const selectedItem = window.selectedContentMap[sheetName]; // 获取 { id, address } 对象
-
-                    // 如果selectedItem为null或undefined（理论上不应发生，因为delete会移除key），则跳过
-                    if (!selectedItem) continue;
-
-                    hasContent = true;
-                    const row = document.createElement('div');
-                    row.className = 'selected-sheet-row';
-
-                    // 工作表标签
-                    const sheetLabel = document.createElement('span');
-                    sheetLabel.className = 'selected-sheet-label';
-                    sheetLabel.textContent = sheetName;
-                    row.appendChild(sheetLabel);
-
-                    // 地址标签和移除按钮 (每个工作表只有一个选中项)
-                    const itemElement = document.createElement('div');
-                    itemElement.className = 'selected-content-item';
-                    // onclick现在传递selectedItem.id
-                    itemElement.innerHTML = `
-                        <span title="${sheetName}[${selectedItem.address}]">${selectedItem.address}</span>
-                        <button class="selected-content-remove" title="移除" onclick="removeSelectedContentItem('${selectedItem.id}')">
-                            <svg viewBox="0 0 20 20"><line x1="5" y1="5" x2="15" y2="15" stroke="currentColor" stroke-width="2"/><line x1="15" y1="5" x2="5" y2="15" stroke="currentColor" stroke-width="2"/></svg>
-                        </button>
-                    `;
-                    row.appendChild(itemElement);
-                    list.appendChild(row);
-                }
-            }
-            wrapper.style.display = hasContent ? 'flex' : 'none'; // 根据是否有内容显示或隐藏包装器
-        }
 
         // 获取所有选中内容
         // 修改后：适配新的selectedContentMap结构
@@ -1831,8 +2013,18 @@
         };
 
         // 自适应textarea高度 和 提示词建议逻辑
-        //const chatInput = document.getElementById('chat-input');
         const promptSuggestionsDiv = document.getElementById('prompt-suggestions');
+        const attachFileButton = document.getElementById('attach-file-button');
+        const fileInput = document.getElementById('file-input');
+
+        // 获取新的统一引用区域的元素
+        const referencesWrapper = document.getElementById('references-wrapper');
+        const referencesTitle = document.getElementById('references-title'); // 应该已在HTML中设置为 "引用:"
+        const referenceChipsList = document.getElementById('reference-chips-list');
+
+
+        window.attachedFiles = []; // Array to store selected File objects
+        window.selectedContentMap = {}; 
 
         // 预定义的提示词列表
         const predefinedPrompts = [
@@ -1866,6 +2058,117 @@
             promptSuggestionsDiv.style.display = 'none';
         }
 
+
+        // --- 新的统一渲染函数 ---
+        function renderReferences() {
+            if (!referencesWrapper || !referenceChipsList || !referencesTitle) {
+                console.error("Reference display elements not found!");
+                return;
+            }
+
+            referenceChipsList.innerHTML = ''; // 清空所有现有的chips
+            let hasAnyReferences = false;
+
+            // 1. 渲染选中的工作表内容
+            for (const sheetName in window.selectedContentMap) {
+                if (window.selectedContentMap.hasOwnProperty(sheetName)) {
+                    const selectedItem = window.selectedContentMap[sheetName];
+                    if (!selectedItem) continue;
+                    hasAnyReferences = true;
+
+                    const itemChip = document.createElement('div');
+                    itemChip.className = 'reference-chip';
+                    itemChip.title = `${sheetName} [${selectedItem.address}]`;
+
+                    const chipContentWrapper = document.createElement('div');
+                    chipContentWrapper.className = 'reference-chip-content-wrapper';
+
+                    const itemNameSpan = document.createElement('span');
+                    itemNameSpan.className = 'reference-chip-name';
+                    itemNameSpan.textContent = `${sheetName}: ${selectedItem.address}`;
+                    chipContentWrapper.appendChild(itemNameSpan);
+
+                    const removeBtn = document.createElement('button');
+                    removeBtn.className = 'reference-chip-remove';
+                    removeBtn.title = '移除此引用';
+                    removeBtn.innerHTML = `<svg viewBox="0 0 20 20"><line x1="5" y1="5" x2="15" y2="15" stroke="currentColor" stroke-width="2"/><line x1="15" y1="5" x2="5" y2="15" stroke="currentColor" stroke-width="2"/></svg>`;
+                    removeBtn.onclick = function () {
+                        removeSelectedContentItem(selectedItem.id); // 调用已有的移除函数
+                    };
+                    chipContentWrapper.appendChild(removeBtn);
+                    itemChip.appendChild(chipContentWrapper);
+                    referenceChipsList.appendChild(itemChip);
+                }
+            }
+
+            // 2. 渲染附加的文件
+            window.attachedFiles.forEach((file, index) => {
+                hasAnyReferences = true;
+                const itemChip = document.createElement('div');
+                itemChip.className = 'reference-chip';
+                itemChip.title = file.name;
+
+                const chipContentWrapper = document.createElement('div');
+                chipContentWrapper.className = 'reference-chip-content-wrapper';
+
+                const fileNameSpan = document.createElement('span');
+                fileNameSpan.className = 'reference-chip-name';
+                fileNameSpan.textContent = file.name;
+                chipContentWrapper.appendChild(fileNameSpan);
+
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'reference-chip-remove';
+                removeBtn.title = '移除此文件';
+                removeBtn.innerHTML = `<svg viewBox="0 0 20 20"><line x1="5" y1="5" x2="15" y2="15" stroke="currentColor" stroke-width="2"/><line x1="15" y1="5" x2="5" y2="15" stroke="currentColor" stroke-width="2"/></svg>`;
+                removeBtn.onclick = function () {
+                    window.attachedFiles.splice(index, 1);
+                    renderReferences(); // 重新渲染整个引用区域
+                };
+                chipContentWrapper.appendChild(removeBtn);
+                itemChip.appendChild(chipContentWrapper);
+                referenceChipsList.appendChild(itemChip);
+            });
+
+            // 3. 控制整个引用区域的显示/隐藏
+            if (hasAnyReferences) {
+                referencesWrapper.style.display = 'block'; // 或者 'flex' 如果 #references-wrapper 本身是flex容器
+            } else {
+                referencesWrapper.style.display = 'none';
+            }
+        }
+
+        // --- Attachment Logic ---
+        attachFileButton.addEventListener('click', () => {
+            fileInput.value = ''; // Clear previous selection from file input
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', function (event) {
+            const files = event.target.files;
+            if (!files) return;
+            const allowedExtensions = /(\.xls|\.xlsx|\.xlsm|\.xlsb|\.csv|\.doc|\.docx|\.ppt|\.pptx)$/i;
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                if (!allowedExtensions.exec(file.name)) {
+                    alert(`文件类型不支持: ${file.name}`);
+                    continue;
+                }
+                const isDuplicate = window.attachedFiles.some(
+                    existingFile => existingFile.name === file.name && existingFile.size === file.size
+                );
+                if (isDuplicate) {
+                    console.log(`文件已添加: ${file.name}`);
+                    continue;
+                }
+                window.attachedFiles.push(file);
+            }
+            renderReferences(); // <--- 更新调用
+            fileInput.value = '';
+        });
+
+        // --- End Attachment Logic ---
+
+
         chatInput.addEventListener('input', function () {
             // 自适应高度
             this.style.height = 'auto';
@@ -1875,18 +2178,20 @@
             const value = this.value;
             if (value === '#') {
                 showPromptSuggestions();
-            } else {
-                // 如果输入不是'#'，或者在'#'后有其他字符，则隐藏
+            } else if (!value.startsWith('#') || value.length > 1) {
                 hidePromptSuggestions();
             }
         });
 
         // 如果用户点击textarea外部，也隐藏提示词
         document.addEventListener('click', function (event) {
-            if (!chatInput.contains(event.target) && !promptSuggestionsDiv.contains(event.target)) {
-                hidePromptSuggestions();
+            if (!chatInput.contains(event.target) && !promptSuggestionsDiv.contains(event.target) && !attachFileButton.contains(event.target)) {
+                if (!event.target.closest('.reference-chip-remove')) { // Don't hide if clicking remove on a chip
+                    hidePromptSuggestions();
+                }
             }
         });
+
         function settingsButton() {
             // 显示遮罩和对话框
             document.getElementById('settings-overlay').style.display = 'block';

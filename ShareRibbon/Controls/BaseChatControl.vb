@@ -253,14 +253,146 @@ Public MustInherit Class BaseChatControl
                                   settingsScrollChecked, chatMode)
     End Sub
 
+    Public Class SendMessageReferenceContentItem
+        Public Property id As String
+        Public Property sheetName As String
+        Public Property address As String
+    End Class
+
+    ' 定义文件内容解析结果的类
+    Public Class FileContentResult
+        Public Property FileName As String
+        Public Property FileType As String  ' "Excel", "Word", "Text", 等
+        Public Property ParsedContent As String  ' 格式化的内容字符串
+        Public Property RawData As Object  ' 原始数据，可用于进一步处理
+    End Class
+
+    ' 在 HandleSendMessage 方法中添加文件内容解析逻辑
     Protected Overridable Sub HandleSendMessage(jsonDoc As JObject)
-        Dim question As String = jsonDoc("value").ToString()
-        If (question = "InnerStopBtn_#") Then
-            ' 停止当前请求渲染流
-            stopReaderStream = True
+        Dim messageValue As JToken = jsonDoc("value")
+        Dim question As String
+        Dim filePaths As List(Of String) = New List(Of String)()
+        Dim selectedContents As List(Of SendMessageReferenceContentItem) = New List(Of SendMessageReferenceContentItem)()
+
+        If messageValue.Type = JTokenType.String Then
+            ' Legacy format or simple text message
+            question = messageValue.ToString()
+            If question = "InnerStopBtn_#" Then
+                stopReaderStream = True
+                Return
+            End If
+        ElseIf messageValue.Type = JTokenType.Object Then
+            ' New format with text, potentially filePaths, and selectedContent
+            question = messageValue("text")?.ToString()
+
+            If messageValue("filePaths") IsNot Nothing AndAlso messageValue("filePaths").Type = JTokenType.Array Then
+                filePaths = messageValue("filePaths").ToObject(Of List(Of String))()
+            End If
+
+            ' 解析 selectedContent
+            If messageValue("selectedContent") IsNot Nothing AndAlso messageValue("selectedContent").Type = JTokenType.Array Then
+                Try
+                    selectedContents = messageValue("selectedContent").ToObject(Of List(Of SendMessageReferenceContentItem))()
+                Catch ex As Exception
+                    Debug.WriteLine($"Error deserializing selectedContent: {ex.Message}")
+                End Try
+            End If
+        Else
+            Debug.WriteLine("HandleSendMessage: Invalid message format for 'value'.")
             Return
         End If
-        SendChatMessage(question)
+
+        If String.IsNullOrEmpty(question) AndAlso
+       (filePaths Is Nothing OrElse filePaths.Count = 0) AndAlso
+       (selectedContents Is Nothing OrElse selectedContents.Count = 0) Then
+            Debug.WriteLine("HandleSendMessage: Empty question, no files, and no selected content.")
+            Return ' Nothing to send
+        End If
+
+        ' --- 处理选中的内容 ---
+        question = AppendCurrentSelectedContent("--- 用户的问题：" & question & " 。用户提问结束，后续引用的文件都在同一目录下所以可以放心读取。 ---")
+
+        ' --- 文件内容解析逻辑 ---
+        Dim fileContentBuilder As New StringBuilder()
+        Dim parsedFiles As New List(Of FileContentResult)()
+
+        If filePaths IsNot Nothing AndAlso filePaths.Count > 0 Then
+            fileContentBuilder.AppendLine(vbCrLf & "--- 以下是用户引用的其他文件内容 ---")
+
+            ' 获取当前工作目录
+            Dim currentWorkingDir As String = GetCurrentWorkingDirectory()
+            If String.IsNullOrEmpty(currentWorkingDir) Then
+                GlobalStatusStrip.ShowWarning("请保存当前文件，并且把引用文件和当前文件放在同一目录下后重试: ")
+                Return
+            End If
+
+            For Each filePath As String In filePaths
+                Try
+                    ' 检查文件是否为绝对路径
+                    Dim fullFilePath As String = filePath
+
+                    ' 如果不是绝对路径，则尝试在当前工作目录下查找
+                    If Not Path.IsPathRooted(filePath) AndAlso Not String.IsNullOrEmpty(currentWorkingDir) Then
+                        fullFilePath = Path.Combine(currentWorkingDir, Path.GetFileName(filePath))
+                        Debug.WriteLine($"尝试在工作目录查找文件: {fullFilePath}")
+                    End If
+
+                    If File.Exists(fullFilePath) Then
+                        ' 根据文件扩展名选择合适的解析方法
+                        Dim fileExtension As String = Path.GetExtension(fullFilePath).ToLower()
+                        Dim fileContentResult As FileContentResult = Nothing
+
+                        Select Case fileExtension
+                            Case ".xlsx", ".xls", ".xlsm", ".xlsb"
+                                fileContentResult = ParseFile(fullFilePath)
+                            Case ".docx", ".doc"
+                                fileContentResult = ParseFile(fullFilePath)
+                            Case ".csv", ".txt"
+                                fileContentResult = ParseTextFile(fullFilePath)
+                            Case Else
+                                fileContentResult = New FileContentResult With {
+                            .FileName = Path.GetFileName(fullFilePath),
+                            .FileType = "Unknown",
+                            .ParsedContent = $"[不支持的文件类型: {fileExtension}]"
+                        }
+                        End Select
+
+                        If fileContentResult IsNot Nothing Then
+                            parsedFiles.Add(fileContentResult)
+                            fileContentBuilder.AppendLine($"文件名: {fileContentResult.FileName}")
+                            fileContentBuilder.AppendLine($"文件内容:")
+                            fileContentBuilder.AppendLine(fileContentResult.ParsedContent)
+                            fileContentBuilder.AppendLine("---")
+                        End If
+                    Else
+                        fileContentBuilder.AppendLine($"文件 '{Path.GetFileName(filePath)}' 未找到或路径无效")
+                        Debug.WriteLine($"文件未找到: {fullFilePath}")
+                        ' 尝试列出当前目录中的文件，用于调试
+                        If Directory.Exists(currentWorkingDir) Then
+                            Dim filesInDir = Directory.GetFiles(currentWorkingDir)
+                            Debug.WriteLine($"当前目录中的文件: {String.Join(", ", filesInDir.Select(Function(f) Path.GetFileName(f)))}")
+                        End If
+                    End If
+                Catch ex As Exception
+                    Debug.WriteLine($"Error processing file '{filePath}': {ex.Message}")
+                    fileContentBuilder.AppendLine($"处理文件 '{Path.GetFileName(filePath)}' 时出错: {ex.Message}")
+                    fileContentBuilder.AppendLine("---")
+                End Try
+            Next
+
+            fileContentBuilder.AppendLine("--- 文件内容结束 ---" & vbCrLf)
+        End If
+
+        ' 构建最终发送给 LLM 的消息
+        Dim finalMessageToLLM As String = question
+
+        ' 然后添加文件内容（如果有）
+        If fileContentBuilder.Length > 0 Then
+            finalMessageToLLM &= fileContentBuilder.ToString()
+        End If
+
+        stopReaderStream = False ' Reset stop flag before sending new message
+        SendChatMessage(finalMessageToLLM)
     End Sub
 
     Protected Overridable Sub HandleExecuteCode(jsonDoc As JObject)
@@ -268,6 +400,258 @@ Public MustInherit Class BaseChatControl
         Dim language As String = jsonDoc("language").ToString()
         ExecuteCode(code, language)
     End Sub
+
+
+    ' 抽象方法，由子类实现
+    Protected MustOverride Function ParseFile(filePath As String) As FileContentResult
+    Protected MustOverride Function GetCurrentWorkingDirectory() As String
+    Protected MustOverride Function AppendCurrentSelectedContent(message As String) As String
+
+    ' 通用的文本文件解析方法
+    ' 通用的文本文件解析方法
+    Protected Function ParseTextFile(filePath As String) As FileContentResult
+        Try
+            Dim extension As String = Path.GetExtension(filePath).ToLower()
+
+            ' 对 CSV 文件使用专门的处理逻辑
+            If extension = ".csv" Then
+                Return ParseCsvFile(filePath)
+            End If
+
+            ' 对普通文本文件进行编码检测
+            Dim encoding As Encoding = DetectFileEncoding(filePath)
+            Dim content As String = File.ReadAllText(filePath, encoding)
+
+            Dim result As New FileContentResult With {
+            .FileName = Path.GetFileName(filePath),
+            .FileType = "Text",
+            .ParsedContent = content,
+            .RawData = content
+        }
+            Return result
+        Catch ex As Exception
+            Debug.WriteLine($"Error parsing text file: {ex.Message}")
+            Return New FileContentResult With {
+            .FileName = Path.GetFileName(filePath),
+            .FileType = "Text",
+            .ParsedContent = $"[解析文本文件时出错: {ex.Message}]"
+        }
+        End Try
+    End Function
+
+    ' 专门用于解析 CSV 文件的方法
+    Protected Function ParseCsvFile(filePath As String) As FileContentResult
+        Try
+            ' 检测文件编码
+            Dim encoding As Encoding = DetectFileEncoding(filePath)
+
+            ' 用检测到的编码读取内容
+            Dim csvContent As String = File.ReadAllText(filePath, encoding)
+
+            ' 创建一个格式化的 CSV 内容
+            Dim formattedContent As New StringBuilder()
+            formattedContent.AppendLine($"CSV 文件: {Path.GetFileName(filePath)} (编码: {encoding.EncodingName})")
+            formattedContent.AppendLine()
+
+            ' 分析 CSV 数据结构
+            Dim rows As String() = csvContent.Split({vbCr, vbLf}, StringSplitOptions.RemoveEmptyEntries)
+
+            If rows.Length > 0 Then
+                ' 检测分隔符，可能是逗号、分号、制表符等
+                Dim delimiter As Char = DetectCsvDelimiter(rows(0))
+
+                ' 获取列数，用于后续限制数据量
+                Dim columns As String() = rows(0).Split(delimiter)
+                Dim columnCount As Integer = columns.Length
+
+                ' 添加表头（如果存在）
+                formattedContent.AppendLine("表头:")
+                formattedContent.AppendLine(FormatCsvRow(rows(0), delimiter))
+                formattedContent.AppendLine()
+
+                ' 添加数据行（限制行数，避免数据太多）
+                Dim maxRows As Integer = Math.Min(rows.Length, 25) ' 最多显示25行
+                formattedContent.AppendLine("数据:")
+
+                For i As Integer = 1 To maxRows - 1
+                    formattedContent.AppendLine(FormatCsvRow(rows(i), delimiter))
+                Next
+
+                ' 如果有更多行，添加提示
+                If rows.Length > maxRows Then
+                    formattedContent.AppendLine("...")
+                    formattedContent.AppendLine($"[文件包含 {rows.Length} 行，仅显示前 {maxRows - 1} 行数据]")
+                End If
+            Else
+                formattedContent.AppendLine("[CSV 文件为空]")
+            End If
+
+            Return New FileContentResult With {
+            .FileName = Path.GetFileName(filePath),
+            .FileType = "CSV",
+            .ParsedContent = formattedContent.ToString(),
+            .RawData = csvContent
+        }
+        Catch ex As Exception
+            Debug.WriteLine($"Error parsing CSV file: {ex.Message}")
+            Return New FileContentResult With {
+            .FileName = Path.GetFileName(filePath),
+            .FileType = "CSV",
+            .ParsedContent = $"[解析 CSV 文件时出错: {ex.Message}]"
+        }
+        End Try
+    End Function
+
+    ' 格式化 CSV 行数据，使其更易读
+    Private Function FormatCsvRow(row As String, delimiter As Char) As String
+        Dim fields As String() = row.Split(delimiter)
+        Dim formattedRow As New StringBuilder()
+
+        For i As Integer = 0 To fields.Length - 1
+            Dim field As String = fields(i).Trim(""""c) ' 移除引号
+            If i < fields.Length - 1 Then
+                formattedRow.Append($"{field} | ")
+            Else
+                formattedRow.Append(field)
+            End If
+        Next
+
+        Return formattedRow.ToString()
+    End Function
+
+    ' 检测 CSV 文件的分隔符
+    Private Function DetectCsvDelimiter(sampleLine As String) As Char
+        ' 常见的 CSV 分隔符
+        Dim possibleDelimiters As Char() = {","c, ";"c, vbTab, "|"c}
+        Dim bestDelimiter As Char = ","c ' 默认使用逗号
+        Dim maxCount As Integer = 0
+
+        ' 检查每个可能的分隔符
+        For Each delimiter In possibleDelimiters
+            Dim count As Integer = sampleLine.Count(Function(c) c = delimiter)
+            If count > maxCount Then
+                maxCount = count
+                bestDelimiter = delimiter
+            End If
+        Next
+
+        Return bestDelimiter
+    End Function
+
+    ' 检测文件编码
+    Private Function DetectFileEncoding(filePath As String) As Encoding
+        ' 首先，我们尝试从 BOM (Byte Order Mark) 检测编码
+        Try
+            Using fs As New FileStream(filePath, FileMode.Open, FileAccess.Read)
+                ' 读取前几个字节来检测 BOM
+                Dim bom(3) As Byte
+                Dim bytesRead As Integer = fs.Read(bom, 0, bom.Length)
+
+                ' 检查是否有 BOM
+                If bytesRead >= 3 AndAlso bom(0) = &HEF AndAlso bom(1) = &HBB AndAlso bom(2) = &HBF Then
+                    ' UTF-8 with BOM
+                    Return New UTF8Encoding(True)
+                ElseIf bytesRead >= 2 AndAlso bom(0) = &HFE AndAlso bom(1) = &HFF Then
+                    ' UTF-16 (Big Endian)
+                    Return Encoding.BigEndianUnicode
+                ElseIf bytesRead >= 2 AndAlso bom(0) = &HFF AndAlso bom(1) = &HFE Then
+                    ' UTF-16 (Little Endian)
+                    If bytesRead >= 4 AndAlso bom(2) = 0 AndAlso bom(3) = 0 Then
+                        ' UTF-32 (Little Endian)
+                        Return Encoding.UTF32
+                    Else
+                        ' UTF-16 (Little Endian)
+                        Return Encoding.Unicode
+                    End If
+                ElseIf bytesRead >= 4 AndAlso bom(0) = 0 AndAlso bom(1) = 0 AndAlso bom(2) = &HFE AndAlso bom(3) = &HFF Then
+                    ' UTF-32 (Big Endian)
+                    Return New UTF32Encoding(True, True)
+                End If
+            End Using
+
+            ' 定义Unicode替换字符，用于检测无效字符
+            Dim unicodeReplacementChar As Char = ChrW(&HFFFD) ' Unicode 替换字符 U+FFFD
+
+            ' 针对中文文件，优先尝试 GB18030/GBK 编码
+            Dim fileExtension As String = Path.GetExtension(filePath).ToLower()
+            If fileExtension = ".csv" Then
+                ' 首先尝试 GB18030/GBK 编码，这在中文环境下非常常见
+                Try
+                    ' 读取部分文件内容
+                    Dim csvSampleBytes As Byte() = New Byte(4095) {}  ' 读取前 4KB
+                    Using fs As New FileStream(filePath, FileMode.Open, FileAccess.Read)
+                        fs.Read(csvSampleBytes, 0, csvSampleBytes.Length)
+                    End Using
+
+                    ' 尝试用 GB18030 解码
+                    Dim gbkEncoding As Encoding = Encoding.GetEncoding("GB18030")
+                    Dim gbkText As String = gbkEncoding.GetString(csvSampleBytes)
+
+                    ' 检查解码后的文本是否符合 CSV 格式的特征（包含逗号和换行符）
+                    If gbkText.Contains(",") AndAlso (gbkText.Contains(vbCr) OrElse gbkText.Contains(vbLf)) Then
+                        ' 如果包含逗号和换行符，可能是有效的 CSV
+                        Dim invalidCharCount As Integer = gbkText.Count(Function(c) c = "?"c Or c = unicodeReplacementChar)
+                        Dim totalCharCount As Integer = gbkText.Length
+
+                        ' 允许有少量不可识别字符
+                        If invalidCharCount <= totalCharCount * 0.05 Then ' 允许5%的不可识别字符
+                            Return gbkEncoding
+                        End If
+                    End If
+                Catch ex As Exception
+                    ' 忽略错误，继续尝试其他编码
+                    Debug.WriteLine($"尝试 GB18030 编码时出错: {ex.Message}")
+                End Try
+            End If
+
+            ' 尝试几种常见的编码
+            Dim encodingsToTry As Encoding() = {
+            New UTF8Encoding(False),        ' UTF-8 without BOM
+            Encoding.GetEncoding("GB18030"), ' 中文编码，涵盖简体中文
+            Encoding.Default                ' 系统默认编码
+        }
+
+            ' 读取文件的前几行样本
+            Dim generalSampleBytes As Byte() = New Byte(4095) {}  ' 读取前 4KB
+            Using fs As New FileStream(filePath, FileMode.Open, FileAccess.Read)
+                fs.Read(generalSampleBytes, 0, generalSampleBytes.Length)
+            End Using
+
+            Dim bestEncoding As Encoding = encodingsToTry(0) ' 默认使用第一个编码
+            Dim leastInvalidCharCount As Integer = Integer.MaxValue
+
+            ' 尝试每种编码，选择产生最少无效字符的编码
+            For Each enc In encodingsToTry
+                Try
+                    Dim sample As String = enc.GetString(generalSampleBytes)
+                    ' 计算问号和替换字符的数量作为无效字符的指标
+                    Dim invalidCharCount As Integer = sample.Count(Function(c) c = "?"c Or c = unicodeReplacementChar)
+
+                    ' 如果这个编码产生的无效字符更少
+                    If invalidCharCount < leastInvalidCharCount Then
+                        leastInvalidCharCount = invalidCharCount
+                        bestEncoding = enc
+
+                        ' 如果没有无效字符，立即使用这个编码
+                        If invalidCharCount = 0 Then
+                            Exit For
+                        End If
+                    End If
+                Catch ex As Exception
+                    ' 忽略解码错误，尝试下一个编码
+                    Continue For
+                End Try
+            Next
+
+            ' 使用产生最少无效字符的编码
+            Return bestEncoding
+
+        Catch ex As Exception
+            Debug.WriteLine($"检测文件编码时出错: {ex.Message}")
+            ' 出错时使用系统默认编码
+            Return Encoding.Default
+        End Try
+    End Function
 
     Protected MustOverride Function GetApplication() As ApplicationInfo
     Protected MustOverride Function GetVBProject() As VBProject
@@ -802,12 +1186,11 @@ Public MustInherit Class BaseChatControl
         ' 设置 Web 消息处理器
         AddHandler ChatBrowser.WebMessageReceived, AddressOf WebView2_WebMessageReceived
 
-        ' 检查本地HTML文件是否存在
-        Dim htmlFilePath As String = ChatHtmlFilePath
-        If File.Exists(htmlFilePath) Then
-            ' 加载本地HTML文件
-            LoadLocalHtmlFile()
-        End If
+        ' 检查本地HTML文件是否存在 加载本地HTML文件
+        'Dim htmlFilePath As String = ChatHtmlFilePath
+        'If File.Exists(htmlFilePath) Then
+        '    LoadLocalHtmlFile()
+        'End If
 
         ' 注入辅助脚本
         Dim script As String = "
@@ -827,11 +1210,15 @@ Public MustInherit Class BaseChatControl
                     property: thisProperty
                 });
             },
-            sendMessage: function(question) {
-                return window.chrome.webview.postMessage({
-                    type: 'sendMessage',
-                    value: question
-                });
+            sendMessage: function(payload) {
+                let messageToSend;
+                if (typeof payload === 'string') {
+                    messageToSend = { type: 'sendMessage', value: payload };
+                } else {
+                    messageToSend = payload;
+                }
+                window.chrome.webview.postMessage(messageToSend);
+                return true;
             },
             saveSettings: function(settingsObject){
                 return window.chrome.webview.postMessage({

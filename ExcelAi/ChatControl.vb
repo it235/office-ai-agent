@@ -179,18 +179,207 @@ Public Class ChatControl
     End Function
     Protected Overrides Sub SendChatMessage(message As String)
         ' 这里可以实现word的特殊逻辑
-
-        If selectedCellChecked Then
-            ' 获取 sheetContentItems 的内容
-            Dim selectedContents As String = String.Join(", ", sheetContentItems.Values.Select(Function(item) item.Item1.Text))
-            ' 将 selectedContents 加入到 message 中
-            If Not String.IsNullOrEmpty(selectedContents) Then
-                message &= " 我能提供我选中的数据作为参考：" & selectedContents
-            End If
-        End If
+        Debug.Print(message)
         Send(message)
     End Sub
 
+    Protected Overrides Function AppendCurrentSelectedContent(message As String) As String
+        Try
+            ' 获取当前活动工作表和选择区域
+            Dim activeWorkbook = Globals.ThisAddIn.Application.ActiveWorkbook
+            Dim selection = Globals.ThisAddIn.Application.Selection
 
+            ' 如果有选择区域且为 Range 类型
+            If selection IsNot Nothing AndAlso TypeOf selection Is Microsoft.Office.Interop.Excel.Range Then
+                Dim selectedRange As Microsoft.Office.Interop.Excel.Range = DirectCast(selection, Microsoft.Office.Interop.Excel.Range)
+
+                ' 创建内容构建器，按照 ParseFile 的结构
+                Dim contentBuilder As New StringBuilder()
+                contentBuilder.AppendLine(vbCrLf & "--- 用户选中的WorkbookSheet参考内容如下 ---")
+
+                ' 添加活动工作簿信息
+                contentBuilder.AppendLine($"工作簿: {Path.GetFileName(activeWorkbook.FullName)}")
+
+                ' 获取选择的工作表信息
+                Dim worksheet As Microsoft.Office.Interop.Excel.Worksheet = selectedRange.Worksheet
+                Dim sheetName As String = worksheet.Name
+
+                ' 添加工作表信息
+                contentBuilder.AppendLine($"工作表: {sheetName}")
+
+                ' 获取选择区域的范围地址
+                Dim address As String = selectedRange.Address(False, False)
+                contentBuilder.AppendLine($"  使用范围: {address}")
+
+                ' 读取选择区域中的单元格内容
+                Dim usedRange As Microsoft.Office.Interop.Excel.Range = selectedRange
+
+                ' 获取区域的行列信息
+                Dim firstRow As Integer = usedRange.Row
+                Dim firstCol As Integer = usedRange.Column
+                Dim lastRow As Integer = firstRow + usedRange.Rows.Count - 1
+                Dim lastCol As Integer = firstCol + usedRange.Columns.Count - 1
+
+                ' 限制读取的单元格数量（防止数据过大）
+                Dim maxRows As Integer = Math.Min(lastRow, firstRow + 30)
+                Dim maxCols As Integer = Math.Min(lastCol, firstCol + 10)
+
+                ' 逐个单元格读取内容
+                For rowIndex As Integer = firstRow To maxRows
+                    For colIndex As Integer = firstCol To maxCols
+                        Try
+                            Dim cell As Microsoft.Office.Interop.Excel.Range = worksheet.Cells(rowIndex, colIndex)
+                            Dim cellValue As Object = cell.Value
+
+                            If cellValue IsNot Nothing Then
+                                Dim cellAddress As String = $"{GetExcelColumnName(colIndex)}{rowIndex}"
+                                contentBuilder.AppendLine($"  {cellAddress}: {cellValue}")
+                            End If
+                        Catch cellEx As Exception
+                            Debug.WriteLine($"读取单元格时出错: {cellEx.Message}")
+                            ' 继续处理下一个单元格
+                        End Try
+                    Next
+                Next
+
+                ' 如果有更多行或列未显示，添加提示
+                If lastRow > maxRows Then
+                    contentBuilder.AppendLine($"  ... 共有 {lastRow - firstRow + 1} 行，仅显示前 {maxRows - firstRow + 1} 行")
+                End If
+                If lastCol > maxCols Then
+                    contentBuilder.AppendLine($"  ... 共有 {lastCol - firstCol + 1} 列，仅显示前 {maxCols - firstCol + 1} 列")
+                End If
+
+                contentBuilder.AppendLine("--- WorkbookSheet参考内容到这结束 ---" & vbCrLf)
+
+                ' 将选中内容添加到消息中
+                message &= contentBuilder.ToString()
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"获取选中单元格内容时出错: {ex.Message}")
+            ' 出错时不添加选中内容，继续发送原始消息
+        End Try
+        Return message
+    End Function
+
+    Protected Overrides Function ParseFile(filePath As String) As FileContentResult
+        Try
+            ' 创建一个新的 Excel 应用程序实例（为避免影响当前工作簿）
+            Dim excelApp As New Microsoft.Office.Interop.Excel.Application
+            excelApp.Visible = False
+            excelApp.DisplayAlerts = False
+
+            Dim workbook As Microsoft.Office.Interop.Excel.Workbook = Nothing
+            Try
+                workbook = excelApp.Workbooks.Open(filePath, ReadOnly:=True)
+                Dim contentBuilder As New StringBuilder()
+
+                contentBuilder.AppendLine($"文件: {Path.GetFileName(filePath)} 包含以下内容:")
+
+                ' 处理每个工作表
+                For Each worksheet As Microsoft.Office.Interop.Excel.Worksheet In workbook.Worksheets
+                    Dim sheetName As String = worksheet.Name
+                    contentBuilder.AppendLine($"工作表: {sheetName}")
+
+                    ' 获取使用范围
+                    Dim usedRange As Microsoft.Office.Interop.Excel.Range = worksheet.UsedRange
+                    If usedRange IsNot Nothing Then
+                        Dim lastRow As Integer = usedRange.Row + usedRange.Rows.Count - 1
+                        Dim lastCol As Integer = usedRange.Column + usedRange.Columns.Count - 1
+
+                        ' 限制读取的单元格数量（防止文件过大）
+                        Dim maxRows As Integer = Math.Min(lastRow, 30)
+                        Dim maxCols As Integer = Math.Min(lastCol, 10)
+
+                        contentBuilder.AppendLine($"  使用范围: {GetExcelColumnName(usedRange.Column)}{usedRange.Row}:{GetExcelColumnName(lastCol)}{lastRow}")
+
+                        ' 读取单元格内容
+                        For rowIndex As Integer = usedRange.Row To maxRows
+                            For colIndex As Integer = usedRange.Column To maxCols
+                                Try
+                                    Dim cell As Microsoft.Office.Interop.Excel.Range = worksheet.Cells(rowIndex, colIndex)
+                                    Dim cellValue As Object = cell.Value
+
+                                    If cellValue IsNot Nothing Then
+                                        Dim cellAddress As String = $"{GetExcelColumnName(colIndex)}{rowIndex}"
+                                        contentBuilder.AppendLine($"  {cellAddress}: {cellValue}")
+                                    End If
+                                Catch cellEx As Exception
+                                    Debug.WriteLine($"读取单元格时出错: {cellEx.Message}")
+                                    ' 继续处理下一个单元格
+                                End Try
+                            Next
+                        Next
+
+                        ' 如果有更多行或列未显示，添加提示
+                        If lastRow > maxRows Then
+                            contentBuilder.AppendLine($"  ... 共有 {lastRow - usedRange.Row + 1} 行，仅显示前 {maxRows - usedRange.Row + 1} 行")
+                        End If
+                        If lastCol > maxCols Then
+                            contentBuilder.AppendLine($"  ... 共有 {lastCol - usedRange.Column + 1} 列，仅显示前 {maxCols - usedRange.Column + 1} 列")
+                        End If
+                    End If
+
+                    contentBuilder.AppendLine()
+                Next
+
+                Return New FileContentResult With {
+                .FileName = Path.GetFileName(filePath),
+                .FileType = "Excel",
+                .ParsedContent = contentBuilder.ToString(),
+                .RawData = Nothing ' 可以选择存储更多数据供后续处理
+            }
+
+            Finally
+                ' 清理资源
+                If workbook IsNot Nothing Then
+                    workbook.Close(SaveChanges:=False)
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(workbook)
+                End If
+
+                excelApp.Quit()
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(excelApp)
+                GC.Collect()
+                GC.WaitForPendingFinalizers()
+            End Try
+        Catch ex As Exception
+            Debug.WriteLine($"解析 Excel 文件时出错: {ex.Message}")
+            Return New FileContentResult With {
+            .FileName = Path.GetFileName(filePath),
+            .FileType = "Excel",
+            .ParsedContent = $"[解析 Excel 文件时出错: {ex.Message}]"
+        }
+        End Try
+    End Function
+
+    ' 辅助方法：将列索引转换为 Excel 列名（如 1->A, 27->AA）
+    Private Function GetExcelColumnName(columnIndex As Integer) As String
+        Dim dividend As Integer = columnIndex
+        Dim columnName As String = String.Empty
+        Dim modulo As Integer
+
+        While dividend > 0
+            modulo = (dividend - 1) Mod 26
+            columnName = Chr(65 + modulo) & columnName
+            dividend = CInt((dividend - modulo) / 26)
+        End While
+
+        Return columnName
+    End Function
+
+    ' 实现获取当前 Excel 工作目录的方法
+    Protected Overrides Function GetCurrentWorkingDirectory() As String
+        Try
+            ' 获取当前活动工作簿的路径
+            If Globals.ThisAddIn.Application.ActiveWorkbook IsNot Nothing Then
+                Return Globals.ThisAddIn.Application.ActiveWorkbook.Path
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"获取当前工作目录时出错: {ex.Message}")
+        End Try
+
+        ' 如果无法获取工作簿路径，则返回应用程序目录
+        Return System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)
+    End Function
 End Class
 
