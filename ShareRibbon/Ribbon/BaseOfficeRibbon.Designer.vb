@@ -38,12 +38,20 @@ Partial Class BaseOfficeRibbon
         Me.AboutButton = Me.Factory.CreateRibbonButton
         Me.ClearCacheButton = Me.Factory.CreateRibbonButton
 
+        ' 第二个Group和按钮
+        Me.GroupTools = Me.Factory.CreateRibbonGroup
+        Me.WebCaptureButton = Me.Factory.CreateRibbonButton
+        Me.ImageToTextButton = Me.Factory.CreateRibbonButton
+
+
         Me.TabAI.SuspendLayout()
         Me.GroupAI.SuspendLayout()
         Me.SuspendLayout()
 
         ' TabAI
         Me.TabAI.Groups.Add(Me.GroupAI)
+        Me.TabAI.Groups.Add(Me.GroupTools)
+
         Me.TabAI.Label = "AI助手"
         Me.TabAI.Name = "TabAI"
 
@@ -94,6 +102,26 @@ Partial Class BaseOfficeRibbon
         Me.Separator1.Name = "Separator1"
         Me.Separator2.Name = "Separator2"
 
+        ' 第二个Group
+        ' GroupTools
+        Me.GroupTools.Items.Add(Me.WebCaptureButton)
+        Me.GroupTools.Items.Add(Me.ImageToTextButton)
+        Me.GroupTools.Label = "工具箱"
+        Me.GroupTools.Name = "GroupTools"
+
+        ' WebCaptureButton
+        Me.WebCaptureButton.Label = "抓取网页"
+        Me.WebCaptureButton.Name = "WebCaptureButton"
+        Me.WebCaptureButton.ShowImage = True
+        Me.WebCaptureButton.SuperTip = "打开网页捕获工具"
+
+        ' ImageToTextButton
+        Me.ImageToTextButton.Label = "MCPAgent"
+        Me.ImageToTextButton.Name = "ImageToTextButton"
+        Me.ImageToTextButton.ShowImage = True
+        Me.ImageToTextButton.SuperTip = "MCP"
+
+
         ' BaseOfficeRibbon
         Me.Name = "BaseOfficeRibbon"
         Me.Tabs.Add(Me.TabAI)
@@ -115,4 +143,9 @@ Partial Class BaseOfficeRibbon
     Protected WithEvents ClearCacheButton As Microsoft.Office.Tools.Ribbon.RibbonButton
     Protected WithEvents Separator1 As Microsoft.Office.Tools.Ribbon.RibbonSeparator
     Protected WithEvents Separator2 As Microsoft.Office.Tools.Ribbon.RibbonSeparator
+
+    ' 在 Class BaseOfficeRibbon 的底部添加这些控件声明
+    Protected WithEvents GroupTools As Microsoft.Office.Tools.Ribbon.RibbonGroup
+    Protected WithEvents WebCaptureButton As Microsoft.Office.Tools.Ribbon.RibbonButton
+    Protected WithEvents ImageToTextButton As Microsoft.Office.Tools.Ribbon.RibbonButton
 End Class

@@ -265,6 +265,12 @@
     <Compile Include="ThisAddIn.vb">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="WebDataCapturePane.Designer.vb">
+      <DependentUpon>WebDataCapturePane.vb</DependentUpon>
+    </Compile>
+    <Compile Include="WebDataCapturePane.vb">
+      <SubType>UserControl</SubType>
+    </Compile>
     <EmbeddedResource Include="ChatControl.resx">
       <DependentUpon>ChatControl.vb</DependentUpon>
     </EmbeddedResource>

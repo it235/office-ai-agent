@@ -99,6 +99,7 @@ Public Class ChatControl
         End Try
     End Sub
 
+
     ' 获取选中内容的详细信息
     Private Function GetSelectionDetails(selection As Microsoft.Office.Interop.Word.Selection) As String
         Dim details As New StringBuilder()

@@ -11,6 +11,13 @@ Public Class Ribbon1
         Globals.ThisAddIn.ShowChatTaskPane()
     End Sub
 
+    Protected Overrides Async Sub WebResearchButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Globals.ThisAddIn.ShowChatTaskPane()
+    End Sub
+
+    Protected Overrides Async Sub ImageToTextButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Globals.ThisAddIn.ShowChatTaskPane()
+    End Sub
     Protected Overrides Sub DataAnalysisButton_Click(sender As Object, e As RibbonControlEventArgs)
         ' Word 特定的数据分析逻辑
         MessageBox.Show("Word数据分析功能正在开发中...")

@@ -7,8 +7,11 @@ Imports Microsoft.Office.Core
 Imports ShareRibbon
 Public Class ThisAddIn
 
-    Private chatTaskPane As Microsoft.Office.Tools.CustomTaskPane
+    Public Shared chatTaskPane As Microsoft.Office.Tools.CustomTaskPane
     Public Shared chatControl As ChatControl
+
+    Private captureTaskPane As Microsoft.Office.Tools.CustomTaskPane
+    Public Shared dataCapturePane As WebDataCapturePane
 
     Private Sub WordAi_Startup() Handles Me.Startup
 
@@ -57,6 +60,19 @@ Public Class ThisAddIn
         Catch ex As Exception
             MessageBox.Show($"初始化新建工作簿任务窗格失败: {ex.Message}")
         End Try
+
+        Try
+            ' 为新工作簿创建任务窗格
+            dataCapturePane = New WebDataCapturePane()
+            captureTaskPane = Me.CustomTaskPanes.Add(dataCapturePane, "Word爬虫")
+            captureTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
+            captureTaskPane.Width = 420
+            'AddHandler captureTaskPane.VisibleChanged, AddressOf ChatTaskPane_VisibleChanged
+            captureTaskPane.Visible = False
+
+        Catch ex As Exception
+            MessageBox.Show($"初始化新建工作簿任务窗格失败: {ex.Message}")
+        End Try
     End Sub
 
     Private widthTimer As Timer
@@ -82,6 +98,7 @@ Public Class ThisAddIn
     End Sub
 
     Dim loadChatHtml As Boolean = True
+    Dim loadDataCaptureHtml As Boolean = True
 
     Public Async Sub ShowChatTaskPane()
         chatTaskPane.Visible = True
@@ -89,5 +106,9 @@ Public Class ThisAddIn
             loadChatHtml = False
             Await chatControl.LoadLocalHtmlFile()
         End If
+    End Sub
+
+    Public Async Sub ShowDataCaptureTaskPane()
+        captureTaskPane.Visible = True
     End Sub
 End Class

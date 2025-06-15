@@ -9,6 +9,7 @@ Imports Microsoft.Office.Tools.Excel
 Imports Microsoft.Office.Tools.Ribbon
 Imports Newtonsoft.Json.Linq
 
+
 Public MustInherit Class BaseOfficeRibbon
     Inherits Microsoft.Office.Tools.Ribbon.RibbonBase
 
@@ -63,85 +64,6 @@ Public MustInherit Class BaseOfficeRibbon
             MsgBox("缓存目录不存在！")
         End If
     End Sub
-
-
-    'Private Async Sub DataAnalysisButton_Click_1(sender As Object, e As RibbonControlEventArgs) Handles DataAnalysisButton.Click
-    '    If String.IsNullOrWhiteSpace(ConfigSettings.ApiKey) Then
-    '        MsgBox("请输入ApiKey！")
-    '        Return
-    '    End If
-
-    '    If String.IsNullOrWhiteSpace(ConfigSettings.ApiUrl) Then
-    '        MsgBox("请选择大模型！")
-    '        Return
-    '    End If
-
-    '    ' 获取选中的单元格区域
-    '    Dim selection As Excel.Range = TryCast(Globals.ThisAddIn.Application.Selection, Excel.Range)
-    '    If selection IsNot Nothing Then
-    '        Dim cellValues As New StringBuilder()
-
-    '        Dim cellIndices As New StringBuilder()
-    '        Dim cellList As New List(Of String)
-
-    '        ' 按列遍历，每列用局部变量记录连续空行数
-    '        For col As Integer = selection.Column To selection.Column + selection.Columns.Count
-    '            Dim emptyCount As Integer = 0
-    '            For row As Integer = selection.Row To selection.Row + selection.Rows.Count - 1
-    '                Dim cell As Excel.Range = selection.Worksheet.Cells(row, col)
-    '                ' 如果存在非空内容，则处理，并重置空计数
-    '                If cell.Value IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(cell.Value.ToString()) Then
-    '                    cellValues.AppendLine(cell.Value.ToString())
-    '                    cellList.Add(cell.Address(False, False))
-    '                    emptyCount = 0
-    '                Else
-    '                    emptyCount += 1
-    '                    If emptyCount >= 50 Then
-    '                        Exit For  ' 本列连续50行为空，退出当前列循环
-    '                    End If
-    '                End If
-    '            Next
-    '        Next
-
-
-    '        ' 按照矩阵展开方式显示单元格索引
-    '        Dim groupedCells = cellList.GroupBy(Function(c) Regex.Replace(c, "\d", ""))
-    '        For Each group In groupedCells
-    '            cellIndices.AppendLine(String.Join(",", group))
-    '        Next
-
-    '        ' 显示所有单元格的值
-    '        If cellValues.Length > 0 Then
-    '            Dim previewForm As New TextPreviewForm(cellIndices.ToString())
-    '            previewForm.ShowDialog()
-
-    '            If previewForm.IsConfirmed Then
-    '                ' 获取查询内容和数据
-    '                Dim question As String = cellValues.ToString
-    '                question = previewForm.InputText & “。你只需要返回markdown格式的表格即可，别的什么都不要说，不要任何其他多余的文字。原始数据如下：“ & question
-
-    '                Dim requestBody As String = CreateRequestBody(question)
-
-    '                ' 发送 HTTP 请求并获取响应
-    '                Dim response As String = Await SendHttpRequest(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody)
-
-    '                ' 如果响应为空，则终止执行
-    '                If String.IsNullOrEmpty(response) Then
-    '                    Return
-    '                End If
-
-    '                ' 解析并写入响应数据
-    '                WriteResponseToSheet(response)
-    '            End If
-    '        Else
-    '            MsgBox("选中的单元格无文本内容！")
-    '        End If
-    '    Else
-    '        MsgBox("请选择一个单元格区域！")
-
-    '    End If
-
-    'End Sub
 
     ' 创建请求体
     Protected Function CreateRequestBody(question As String) As String
@@ -250,7 +172,16 @@ Public MustInherit Class BaseOfficeRibbon
         )
     End Sub
 
+    ' AI聊天实现
     Protected MustOverride Sub ChatButton_Click(sender As Object, e As RibbonControlEventArgs) Handles ChatButton.Click
+
+    ' web爬虫实现
+    Protected MustOverride Sub WebResearchButton_Click(sender As Object, e As RibbonControlEventArgs) Handles WebCaptureButton.Click
+
+    ' 图片转文本实现
+    Protected MustOverride Sub ImageToTextButton_Click(sender As Object, e As RibbonControlEventArgs) Handles ImageToTextButton.Click
+
+    ' 数据魔法分析实现
     Protected MustOverride Sub DataAnalysisButton_Click(sender As Object, e As RibbonControlEventArgs) Handles DataAnalysisButton.Click
     Protected MustOverride Function GetApplication() As ApplicationInfo
 End Class

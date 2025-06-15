@@ -461,7 +461,31 @@
             flex-direction: column;
             gap: 6px;
         }
+        /* 提示词建议样式 */
+        #prompt-suggestions {
+            border: 1px solid #e0e0e0;
+            border-bottom: none; /* 避免与textarea上边框重复 */
+            border-radius: 6px 6px 0 0;
+            max-height: 150px;
+            overflow-y: auto;
+            background-color: #fff;
+        }
 
+        .prompt-suggestion-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #333;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .prompt-suggestion-item:last-child {
+            border-bottom: none;
+        }
+
+        .prompt-suggestion-item:hover {
+            background-color: #f9f9f9;
+        }
         #chat-input {
             width: 100%;
             min-height: 38px;
@@ -602,7 +626,6 @@
             min-width: 60px;
             flex-shrink: 0;
         }
-
         .selected-content-item {
             display: flex;
             align-items: center;
@@ -616,14 +639,21 @@
             box-shadow: 0 1px 2px rgba(80,120,200,0.04);
             transition: background 0.2s;
             max-width: 220px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
         }
 
-            .selected-content-item:hover {
-                background: #e6eefc;
-            }
+        /* 新增或修改：为 selected-content-item 内的 span 元素添加样式 */
+        .selected-content-item > span {
+            flex-grow: 1; /* 允许 span 占据多余空间 */
+            flex-shrink: 1; /* 允许 span 在空间不足时收缩 */
+            overflow: hidden; /* 隐藏超出部分 */
+            text-overflow: ellipsis; /* 超出部分显示省略号 */
+            white-space: nowrap; /* 文本不换行 */
+            min-width: 0; /* 允许 flex item 收缩至小于其内容尺寸 */
+        }
+
+        .selected-content-item:hover {
+            background: #e6eefc;
+        }
 
         .selected-content-remove {
             margin-left: 6px;
@@ -636,13 +666,14 @@
             display: flex;
             align-items: center;
             padding: 0;
+            flex-shrink: 0; /* 防止按钮收缩 */
         }
 
-            .selected-content-remove svg {
-                width: 16px;
-                height: 16px;
-                fill: #b71c1c;
-            }
+        .selected-content-remove svg {
+            width: 16px;
+            height: 16px;
+            fill: #b71c1c;
+        }
 
         .reference-container {
             margin: 8px 0 0 42px;
@@ -922,13 +953,16 @@
     <!-- message chat input bottom -->
     <div id="chat-bottom-bar">
         <div id="selected-content-wrapper" style="display:none;">
-            <span id="elected-content-label" style="font-size: 11px; color: #4a6fa5; margin-right: 8px; flex-shrink: 0; padding-top:3px;">已选内容</span>
+            <span id="elected-content-label" style="font-size: 11px; color: #4a6fa5; margin-right: 8px; flex-shrink: 0; padding-top:3px;">引用内容</span>
             <div id="selected-content-list" class="selected-content-list"></div>
         </div>
 
         <!-- message input -->
         <div id="chat-input-card">
             <div id="chat-input-inner">
+                <div id="prompt-suggestions" style="display: none;">
+                    <!-- 提示词项将在此处动态添加 -->
+                </div>
                 <textarea id="chat-input" placeholder="请在此输入您的问题... 按Enter键直接发送，Shift+Enter换行" rows="2"></textarea>
                 <div id="chat-input-actions">
 
@@ -1624,10 +1658,6 @@
 
         // 自适应textarea高度
         const chatInput = document.getElementById('chat-input');
-        chatInput.addEventListener('input', function () {
-            this.style.height = 'auto';
-            this.style.height = (this.scrollHeight) + 'px';
-        });
 
         // 展开/折叠引用区
         function toggleReference(uuid) {
@@ -1708,77 +1738,155 @@
 
         // 添加选中内容（支持Ctrl多选，否则单选）
         window.addSelectedContentItem = function (sheetName, address, ctrlKey) {
-            if (!ctrlKey) {
-                window.selectedContentMap = {};
+            if (!address || address.trim() === '') {
+                return;
             }
-            // sheetName不存在则新建
-            if (!window.selectedContentMap[sheetName]) {
-                window.selectedContentMap[sheetName] = new Set();
-            }
-            // 先清空该sheet下的所有address
-            window.selectedContentMap[sheetName].clear();
-            // 添加address
-            //帮我去除address最后空格或者换行符
-            window.selectedContentMap[sheetName].add(address.trim());
+            const newItemId = generateUUID(); // 使用现有的UUID生成函数
+            const newItem = { id: newItemId, address: address.trim() };
 
+            if (!ctrlKey) {
+                // 如果没有按下Ctrl键，则清空所有先前的选择，并添加当前这一个。
+                // 这意味着selectedContentMap中只有一个sheetName键，其值为newItem。
+                window.selectedContentMap = {};
+                window.selectedContentMap[sheetName] = newItem;
+            } else {
+                // 如果按下了Ctrl键，则为指定的sheetName添加或替换选择。
+                // 这维持了每个工作表只有一个选中项的行为。
+                window.selectedContentMap[sheetName] = newItem;
+            }
             renderSelectedContentList();
         };
 
         // 移除单个内容
-        window.removeSelectedContentItem = function (sheetName, address) {
-            if (window.selectedContentMap[sheetName]) {
-                window.selectedContentMap[sheetName].delete(address);
-                if (window.selectedContentMap[sheetName].size === 0) {
-                    delete window.selectedContentMap[sheetName];
+        // 修改后：通过itemId移除
+        window.removeSelectedContentItem = function (itemIdToRemove) {
+            for (const sheetName in window.selectedContentMap) {
+                if (window.selectedContentMap.hasOwnProperty(sheetName)) {
+                    // 检查当前工作表的选中项ID是否与要移除的ID匹配
+                    if (window.selectedContentMap[sheetName] && window.selectedContentMap[sheetName].id === itemIdToRemove) {
+                        delete window.selectedContentMap[sheetName]; // 从映射中删除该工作表的条目
+                        break; // 找到并移除了项目，可以退出循环
+                    }
                 }
             }
-            renderSelectedContentList();
+            renderSelectedContentList(); // 重新渲染列表
         };
 
         // 渲染选中内容区域
+        // 修改后：适配新的selectedContentMap结构，并使用itemId进行移除
         function renderSelectedContentList() {
             const wrapper = document.getElementById('selected-content-wrapper');
             const list = document.getElementById('selected-content-list');
-            list.innerHTML = '';
+            list.innerHTML = ''; // 清空现有列表
             let hasContent = false;
-            for (const sheet in window.selectedContentMap) {
-                if (window.selectedContentMap[sheet].size === 0) continue;
-                hasContent = true;
-                const row = document.createElement('div');
-                row.className = 'selected-sheet-row';
-                // sheet标签
-                const sheetLabel = document.createElement('span');
-                sheetLabel.className = 'selected-sheet-label';
-                sheetLabel.textContent = sheet;
-                row.appendChild(sheetLabel);
-                // address标签
-                for (const address of window.selectedContentMap[sheet]) {
-                    const item = document.createElement('div');
-                    item.className = 'selected-content-item';
-                    item.innerHTML = `
-                                <span title="${sheet}[${address}]">${address}</span>
-                                <button class="selected-content-remove" title="移除" onclick="removeSelectedContentItem('${sheet}','${address}')">
-                                    <svg viewBox="0 0 20 20"><line x1="5" y1="5" x2="15" y2="15" stroke="currentColor" stroke-width="2"/><line x1="15" y1="5" x2="5" y2="15" stroke="currentColor" stroke-width="2"/></svg>
-                                </button>
-                            `;
-                    row.appendChild(item);
+
+            for (const sheetName in window.selectedContentMap) {
+                if (window.selectedContentMap.hasOwnProperty(sheetName)) {
+                    const selectedItem = window.selectedContentMap[sheetName]; // 获取 { id, address } 对象
+
+                    // 如果selectedItem为null或undefined（理论上不应发生，因为delete会移除key），则跳过
+                    if (!selectedItem) continue;
+
+                    hasContent = true;
+                    const row = document.createElement('div');
+                    row.className = 'selected-sheet-row';
+
+                    // 工作表标签
+                    const sheetLabel = document.createElement('span');
+                    sheetLabel.className = 'selected-sheet-label';
+                    sheetLabel.textContent = sheetName;
+                    row.appendChild(sheetLabel);
+
+                    // 地址标签和移除按钮 (每个工作表只有一个选中项)
+                    const itemElement = document.createElement('div');
+                    itemElement.className = 'selected-content-item';
+                    // onclick现在传递selectedItem.id
+                    itemElement.innerHTML = `
+                        <span title="${sheetName}[${selectedItem.address}]">${selectedItem.address}</span>
+                        <button class="selected-content-remove" title="移除" onclick="removeSelectedContentItem('${selectedItem.id}')">
+                            <svg viewBox="0 0 20 20"><line x1="5" y1="5" x2="15" y2="15" stroke="currentColor" stroke-width="2"/><line x1="15" y1="5" x2="5" y2="15" stroke="currentColor" stroke-width="2"/></svg>
+                        </button>
+                    `;
+                    row.appendChild(itemElement);
+                    list.appendChild(row);
                 }
-                list.appendChild(row);
             }
-            wrapper.style.display = hasContent ? 'flex' : 'none';
+            wrapper.style.display = hasContent ? 'flex' : 'none'; // 根据是否有内容显示或隐藏包装器
         }
 
         // 获取所有选中内容
+        // 修改后：适配新的selectedContentMap结构
         window.getAllSelectedContent = function () {
             const arr = [];
-            for (const sheet in window.selectedContentMap) {
-                for (const address of window.selectedContentMap[sheet]) {
-                    arr.push({ sheetName: sheet, address });
+            for (const sheetName in window.selectedContentMap) {
+                if (window.selectedContentMap.hasOwnProperty(sheetName)) {
+                    const selectedItem = window.selectedContentMap[sheetName];
+                    if (selectedItem) {
+                        // 可以选择是否也返回id，取决于其他地方是否需要
+                        arr.push({ sheetName: sheetName, address: selectedItem.address, id: selectedItem.id });
+                    }
                 }
             }
             return arr;
         };
 
+        // 自适应textarea高度 和 提示词建议逻辑
+        //const chatInput = document.getElementById('chat-input');
+        const promptSuggestionsDiv = document.getElementById('prompt-suggestions');
+
+        // 预定义的提示词列表
+        const predefinedPrompts = [
+            "你好，帮我把A列加B列的值写入C列",
+            "如何提高我们团队的工作效率？",
+            "请帮我写一个关于市场趋势的报告摘要。",
+            "解释一下什么是人工智能。",
+            "给我一些关于项目管理的建议。"
+        ];
+
+        function showPromptSuggestions() {
+            promptSuggestionsDiv.innerHTML = ''; // 清空旧建议
+            predefinedPrompts.forEach(promptText => {
+                const item = document.createElement('div');
+                item.className = 'prompt-suggestion-item';
+                item.textContent = promptText;
+                item.onclick = function () {
+                    chatInput.value = promptText;
+                    hidePromptSuggestions();
+                    chatInput.focus();
+                    // 触发input事件以调整高度
+                    const event = new Event('input', { bubbles: true, cancelable: true });
+                    chatInput.dispatchEvent(event);
+                };
+                promptSuggestionsDiv.appendChild(item);
+            });
+            promptSuggestionsDiv.style.display = 'block';
+        }
+
+        function hidePromptSuggestions() {
+            promptSuggestionsDiv.style.display = 'none';
+        }
+
+        chatInput.addEventListener('input', function () {
+            // 自适应高度
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
+
+            // 提示词逻辑
+            const value = this.value;
+            if (value === '#') {
+                showPromptSuggestions();
+            } else {
+                // 如果输入不是'#'，或者在'#'后有其他字符，则隐藏
+                hidePromptSuggestions();
+            }
+        });
+
+        // 如果用户点击textarea外部，也隐藏提示词
+        document.addEventListener('click', function (event) {
+            if (!chatInput.contains(event.target) && !promptSuggestionsDiv.contains(event.target)) {
+                hidePromptSuggestions();
+            }
+        });
         function settingsButton() {
             // 显示遮罩和对话框
             document.getElementById('settings-overlay').style.display = 'block';

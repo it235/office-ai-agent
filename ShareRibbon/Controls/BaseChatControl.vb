@@ -181,6 +181,10 @@ Public MustInherit Class BaseChatControl
         Try
             ' 加载设置
             Dim chatSettings As New ChatSettings(GetApplication())
+            selectedCellChecked = ChatSettings.selectedCellChecked
+            contextLimit = ChatSettings.contextLimit
+            topicRandomness = ChatSettings.topicRandomness
+            settingsScrollChecked = ChatSettings.settingsScrollChecked
 
             ' 将设置发送到前端
             Dim js As String = $"
@@ -843,7 +847,7 @@ Public MustInherit Class BaseChatControl
     End Sub
 
     ' 选中内容发送到聊天区
-    Protected Async Sub AddSelectedContentItem(sheetName As String, address As String)
+    Public Async Sub AddSelectedContentItem(sheetName As String, address As String)
         Dim ctrlKey As Boolean = (Control.ModifierKeys And Keys.Control) = Keys.Control
         Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(
     $"addSelectedContentItem({JsonConvert.SerializeObject(sheetName)}, {JsonConvert.SerializeObject(address)}, {ctrlKey.ToString().ToLower()})"

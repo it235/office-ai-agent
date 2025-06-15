@@ -133,6 +133,15 @@
     <Compile Include="Controls\BaseChatControl.vb">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Include="Controls\BaseDataCapturePane.Designer.vb">
+      <DependentUpon>BaseDataCapturePane.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Controls\BaseDataCapturePane.vb">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="Controls\WebSiteContentConfirmDialog.vb">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="My Project\AssemblyInfo.vb" />
     <Compile Include="My Project\Application.Designer.vb">
       <AutoGen>True</AutoGen>
@@ -160,6 +169,9 @@
   <ItemGroup>
     <EmbeddedResource Include="Controls\BaseChatControl.resx">
       <DependentUpon>BaseChatControl.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Controls\BaseDataCapturePane.resx">
+      <DependentUpon>BaseDataCapturePane.vb</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="My Project\Resources.resx">
       <Generator>PublicVbMyResourcesResXFileCodeGenerator</Generator>

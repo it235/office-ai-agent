@@ -13,7 +13,13 @@ Public Class Ribbon1
     Protected Overrides Async Sub ChatButton_Click(sender As Object, e As RibbonControlEventArgs)
         Globals.ThisAddIn.ShowChatTaskPane()
     End Sub
+    Protected Overrides Async Sub WebResearchButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Globals.ThisAddIn.ShowChatTaskPane()
+    End Sub
 
+    Protected Overrides Async Sub ImageToTextButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Globals.ThisAddIn.ShowChatTaskPane()
+    End Sub
     Protected Overrides Async Sub DataAnalysisButton_Click(sender As Object, e As RibbonControlEventArgs)
         If String.IsNullOrWhiteSpace(ConfigSettings.ApiKey) Then
             MsgBox("«Î ‰»ÎApiKey£°")
