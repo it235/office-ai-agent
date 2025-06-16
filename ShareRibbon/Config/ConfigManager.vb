@@ -13,6 +13,21 @@ Public Class ConfigManager
         ' 初始化配置数据
         ConfigData = New List(Of ConfigItem)()
 
+        Dim ollama = New ConfigItem() With {
+                .pltform = "Ollama本地模型",
+                .url = "http://localhost:11434/v1/chat/completions",
+                .model = New List(Of ConfigItemModel) From {
+                    New ConfigItemModel() With {.modelName = "deepseek-r1:1.5b", .selected = True},
+                    New ConfigItemModel() With {.modelName = "deepseek-r1:7b", .selected = False},
+                    New ConfigItemModel() With {.modelName = "deepseek-r1:8b", .selected = False},
+                    New ConfigItemModel() With {.modelName = "deepseek-r1:14b", .selected = False},
+                    New ConfigItemModel() With {.modelName = "deepseek-r1:32b", .selected = False},
+                    New ConfigItemModel() With {.modelName = "deepseek-r1:70b", .selected = False},
+                    New ConfigItemModel() With {.modelName = "deepseek-r1:671b", .selected = False}
+                },
+                .key = "",
+                .selected = False
+            }
 
         Dim ds = New ConfigItem() With {
                 .pltform = "深度求索",
@@ -61,6 +76,7 @@ Public Class ConfigManager
             ConfigData.Add(ds)
             ConfigData.Add(siliconflow)
             ConfigData.Add(aliyun)
+            ConfigData.Add(ollama)
             ConfigData.Add(volces)
         Else
             ' 加载自定义配置
