@@ -41,7 +41,7 @@ Partial Class BaseOfficeRibbon
         ' 第二个Group和按钮
         Me.GroupTools = Me.Factory.CreateRibbonGroup
         Me.WebCaptureButton = Me.Factory.CreateRibbonButton
-        Me.ImageToTextButton = Me.Factory.CreateRibbonButton
+        Me.SpotlightButton = Me.Factory.CreateRibbonButton
 
 
         Me.TabAI.SuspendLayout()
@@ -105,7 +105,7 @@ Partial Class BaseOfficeRibbon
         ' 第二个Group
         ' GroupTools
         Me.GroupTools.Items.Add(Me.WebCaptureButton)
-        Me.GroupTools.Items.Add(Me.ImageToTextButton)
+        Me.GroupTools.Items.Add(Me.SpotlightButton)
         Me.GroupTools.Label = "工具箱"
         Me.GroupTools.Name = "GroupTools"
 
@@ -115,11 +115,11 @@ Partial Class BaseOfficeRibbon
         Me.WebCaptureButton.ShowImage = True
         Me.WebCaptureButton.SuperTip = "打开网页捕获工具"
 
-        ' ImageToTextButton
-        Me.ImageToTextButton.Label = "MCPAgent"
-        Me.ImageToTextButton.Name = "ImageToTextButton"
-        Me.ImageToTextButton.ShowImage = True
-        Me.ImageToTextButton.SuperTip = "MCP"
+        ' SpotlightButton
+        Me.SpotlightButton.Label = "聚光灯"
+        Me.SpotlightButton.Name = "SpotlightButton"
+        Me.SpotlightButton.ShowImage = True
+        Me.SpotlightButton.SuperTip = "高亮选中单元格所在的行和列"
 
 
         ' BaseOfficeRibbon
@@ -147,5 +147,5 @@ Partial Class BaseOfficeRibbon
     ' 在 Class BaseOfficeRibbon 的底部添加这些控件声明
     Protected WithEvents GroupTools As Microsoft.Office.Tools.Ribbon.RibbonGroup
     Protected WithEvents WebCaptureButton As Microsoft.Office.Tools.Ribbon.RibbonButton
-    Protected WithEvents ImageToTextButton As Microsoft.Office.Tools.Ribbon.RibbonButton
+    Protected WithEvents SpotlightButton As Microsoft.Office.Tools.Ribbon.RibbonButton
 End Class

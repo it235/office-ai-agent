@@ -239,6 +239,7 @@
     <Compile Include="Ribbon1.vb">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Include="Spotlight.vb" />
     <Compile Include="TextPreviewForm.vb">
       <SubType>Form</SubType>
     </Compile>

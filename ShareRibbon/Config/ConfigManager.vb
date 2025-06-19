@@ -19,11 +19,7 @@ Public Class ConfigManager
                 .model = New List(Of ConfigItemModel) From {
                     New ConfigItemModel() With {.modelName = "deepseek-r1:1.5b", .selected = True},
                     New ConfigItemModel() With {.modelName = "deepseek-r1:7b", .selected = False},
-                    New ConfigItemModel() With {.modelName = "deepseek-r1:8b", .selected = False},
-                    New ConfigItemModel() With {.modelName = "deepseek-r1:14b", .selected = False},
-                    New ConfigItemModel() With {.modelName = "deepseek-r1:32b", .selected = False},
-                    New ConfigItemModel() With {.modelName = "deepseek-r1:70b", .selected = False},
-                    New ConfigItemModel() With {.modelName = "deepseek-r1:671b", .selected = False}
+                    New ConfigItemModel() With {.modelName = "deepseek-r1:14b", .selected = False}
                 },
                 .key = "",
                 .selected = False

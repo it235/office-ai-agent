@@ -178,8 +178,8 @@ Public MustInherit Class BaseOfficeRibbon
     ' web爬虫实现
     Protected MustOverride Sub WebResearchButton_Click(sender As Object, e As RibbonControlEventArgs) Handles WebCaptureButton.Click
 
-    ' 图片转文本实现
-    Protected MustOverride Sub ImageToTextButton_Click(sender As Object, e As RibbonControlEventArgs) Handles ImageToTextButton.Click
+    ' 聚光灯实现（跟随鼠标选中整行和整列并高亮）
+    Protected MustOverride Sub SpotlightButton_Click(sender As Object, e As RibbonControlEventArgs) Handles SpotlightButton.Click
 
     ' 数据魔法分析实现
     Protected MustOverride Sub DataAnalysisButton_Click(sender As Object, e As RibbonControlEventArgs) Handles DataAnalysisButton.Click

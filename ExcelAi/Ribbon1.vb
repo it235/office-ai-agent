@@ -15,11 +15,47 @@ Public Class Ribbon1
     End Sub
     Protected Overrides Async Sub WebResearchButton_Click(sender As Object, e As RibbonControlEventArgs)
         Globals.ThisAddIn.ShowChatTaskPane()
+    End Sub ' 修改 SpotlightButton_Click 方法处理单击和双击
+    Protected Overrides Sub SpotlightButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Try
+            ' 获取聚光灯实例
+            Dim spotlight As Spotlight = Spotlight.GetInstance()
+
+            ' 判断是否是双击
+            Dim button As RibbonButton = TryCast(sender, RibbonButton)
+
+            ' 检查是否双击 (用时间间隔判断双击)
+            If IsDoubleClick() Then
+                ' 双击 - 显示颜色选择对话框
+                spotlight.ShowColorDialog()
+            Else
+                ' 单击 - 切换聚光灯状态
+                spotlight.Toggle()
+            End If
+        Catch ex As Exception
+            MsgBox("激活聚光灯功能时出错：" & ex.Message, vbCritical)
+        End Try
     End Sub
 
-    Protected Overrides Async Sub ImageToTextButton_Click(sender As Object, e As RibbonControlEventArgs)
-        Globals.ThisAddIn.ShowChatTaskPane()
-    End Sub
+    ' 用于检测双击的变量
+    Private _lastClickTime As DateTime = DateTime.MinValue
+
+    ' 检查是否为双击（如果两次点击间隔小于300毫秒，则视为双击）
+    Private Function IsDoubleClick() As Boolean
+        Dim currentTime As DateTime = DateTime.Now
+        Dim isDouble As Boolean = (currentTime - _lastClickTime).TotalMilliseconds < 300
+
+        ' 如果不是双击，则更新最后点击时间
+        If Not isDouble Then
+            _lastClickTime = currentTime
+        Else
+            ' 如果是双击，则重置时间，以免连续多次点击被误判为多次双击
+            _lastClickTime = DateTime.MinValue
+        End If
+
+        Return isDouble
+    End Function
+
     Protected Overrides Async Sub DataAnalysisButton_Click(sender As Object, e As RibbonControlEventArgs)
         If String.IsNullOrWhiteSpace(ConfigSettings.ApiKey) Then
             MsgBox("请输入ApiKey！")

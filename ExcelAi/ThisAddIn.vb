@@ -11,7 +11,18 @@ Public Class ThisAddIn
     Public Shared chatControl As ChatControl
 
     Private Sub WordAi_Startup() Handles Me.Startup
+        ' 初始化 GlobalStatusStrip
+        Try
+            Debug.WriteLine("正在初始化GlobalStatusStrip...")
+            GlobalStatusStripAll.InitializeApplication(Me.Application)
+            Debug.WriteLine("GlobalStatusStrip初始化完成")
 
+            ' 测试状态栏是否正常工作
+            'GlobalStatusStripAll.ShowWarning("Excel加载项已启动")
+        Catch ex As Exception
+            Debug.WriteLine("初始化GlobalStatusStrip时出错: " & ex.Message)
+            MessageBox.Show("初始化状态栏时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
         Try
             WebView2Loader.EnsureWebView2Loader()
         Catch ex As Exception

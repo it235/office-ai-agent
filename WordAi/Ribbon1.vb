@@ -13,8 +13,7 @@ Public Class Ribbon1
     Protected Overrides Async Sub WebResearchButton_Click(sender As Object, e As RibbonControlEventArgs)
         Globals.ThisAddIn.ShowDataCaptureTaskPane()
     End Sub
-
-    Protected Overrides Async Sub ImageToTextButton_Click(sender As Object, e As RibbonControlEventArgs)
+    Protected Overrides Sub SpotlightButton_Click(sender As Object, e As RibbonControlEventArgs)
         'Globals.ThisAddIn.ShowChatTaskPane()
     End Sub
     Protected Overrides Sub DataAnalysisButton_Click(sender As Object, e As RibbonControlEventArgs)
