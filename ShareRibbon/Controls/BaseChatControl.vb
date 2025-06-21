@@ -666,7 +666,8 @@ Public MustInherit Class BaseChatControl
         Select Case language.ToLower()
             Case "vba", "vb", "vbscript", "language-vba", "language-vbscript", "language-vba hljs language-vbscript", "vba hljs language-vbscript"
                 ' 执行 VBA 代码
-                ExecuteVBACode(code)
+                'ExecuteVBACode(code)
+                RunCode(code)
             Case Else
                 'MessageBox.Show("不支持的语言类型: " & language)
                 GlobalStatusStrip.ShowWarning("不支持的语言类型: " & language)
@@ -674,72 +675,17 @@ Public MustInherit Class BaseChatControl
     End Sub
 
 
-    ' 执行前端传来的 VBA 代码片段
-    Private Sub ExecuteVBACode(vbaCode As String)
-        ' 获取 VBA 项目
-        Dim vbProj As VBProject = GetVBProject()
-
-        ' 添加空值检查
-        If vbProj Is Nothing Then
-            Return
-        End If
-
-        Dim vbComp As VBComponent = Nothing
-        Dim tempModuleName As String = "TempMod" & DateTime.Now.Ticks.ToString().Substring(0, 8)
-
-        Try
-            ' 创建临时模块
-            vbComp = vbProj.VBComponents.Add(vbext_ComponentType.vbext_ct_StdModule)
-            vbComp.Name = tempModuleName
-
-            ' 检查代码是否已包含 Sub/Function 声明
-            If ContainsProcedureDeclaration(vbaCode) Then
-                ' 代码已包含过程声明，直接添加
-                vbComp.CodeModule.AddFromString(vbaCode)
-
-                ' 查找第一个过程名并执行
-                Dim procName As String = FindFirstProcedureName(vbComp)
-                If Not String.IsNullOrEmpty(procName) Then
-                    RunCode(tempModuleName & "." & procName)
-                Else
-                    'MessageBox.Show("无法在代码中找到可执行的过程")
-                    GlobalStatusStrip.ShowWarning("无法在代码中找到可执行的过程")
-                End If
-            Else
-                ' 代码不包含过程声明，将其包装在 Auto_Run 过程中
-                Dim wrappedCode As String = "Sub Auto_Run()" & vbNewLine &
-                                           vbaCode & vbNewLine &
-                                           "End Sub"
-                vbComp.CodeModule.AddFromString(wrappedCode)
-
-                ' 执行 Auto_Run 过程
-                RunCode(tempModuleName & ".Auto_Run")
-            End If
-
-        Catch ex As Exception
-            MessageBox.Show("执行 VBA 代码时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-        Finally
-            ' 无论成功还是失败，都删除临时模块
-            Try
-                If vbProj IsNot Nothing AndAlso vbComp IsNot Nothing Then
-                    vbProj.VBComponents.Remove(vbComp)
-                End If
-            Catch
-                ' 忽略清理错误
-            End Try
-        End Try
-    End Sub
 
 
     ' 检查代码是否包含过程声明
-    Private Function ContainsProcedureDeclaration(code As String) As Boolean
+    Public Function ContainsProcedureDeclaration(code As String) As Boolean
         ' 使用简单的正则表达式检查是否包含 Sub 或 Function 声明
         Return Regex.IsMatch(code, "^\s*(Sub|Function)\s+\w+", RegexOptions.Multiline Or RegexOptions.IgnoreCase)
     End Function
 
 
     ' 查找模块中的第一个过程名
-    Private Function FindFirstProcedureName(comp As VBComponent) As String
+    Public Function FindFirstProcedureName(comp As VBComponent) As String
         Try
             Dim codeModule As CodeModule = comp.CodeModule
             Dim lineCount As Integer = codeModule.CountOfLines

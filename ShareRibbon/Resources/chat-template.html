@@ -1981,6 +1981,16 @@
             renderReferences(); // <--- 更新调用
         };
 
+        // 清除指定 sheetName 的选中内容
+        window.clearSelectedContentBySheetName = function (sheetName) {
+            if (window.selectedContentMap && window.selectedContentMap.hasOwnProperty(sheetName)) {
+                // 删除该 sheetName 对应的引用内容
+                delete window.selectedContentMap[sheetName];
+                // 更新页面上的引用显示
+                renderReferences();
+            }
+        };
+
         // 移除单个内容
         // 修改后：通过itemId移除
         window.removeSelectedContentItem = function (itemIdToRemove) {
