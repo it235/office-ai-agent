@@ -17,6 +17,7 @@ Imports System.Web
 Imports System.Web.UI.WebControls
 Imports System.Windows.Forms
 Imports System.Windows.Forms.ListBox
+Imports System.Windows.Forms.VisualStyles.VisualStyleElement.StartPanel
 Imports Markdig
 Imports Microsoft.Vbe.Interop
 Imports Microsoft.Web.WebView2.Core
@@ -194,10 +195,11 @@ Public MustInherit Class BaseChatControl
             document.getElementById('context-limit-value').textContent = '{ChatSettings.contextLimit}';
             document.getElementById('settings-scroll-checked').checked = {ChatSettings.settingsScrollChecked.ToString().ToLower()};
             document.getElementById('settings-selected-cell').checked = {ChatSettings.selectedCellChecked.ToString().ToLower()};
+            document.getElementById('settings-executecode-preview').checked = {chatSettings.executecodePreviewChecked.ToString().ToLower()};
             
             var selectElement = document.getElementById('chatMode');
             if (selectElement) {{
-                selectElement.value = '{chatSettings.chatMode}';
+                selectElement.value = '{ChatSettings.chatMode}';
             }}
             
             // 同步到主界面的checkbox
@@ -247,10 +249,11 @@ Public MustInherit Class BaseChatControl
         selectedCellChecked = jsonDoc("selectedCell")
         settingsScrollChecked = jsonDoc("settingsScroll")
         Dim chatMode As String = jsonDoc("chatMode")
+        Dim executeCodePreview As Boolean = jsonDoc("executeCodePreview")
         Dim chatSettings As New ChatSettings(GetApplication())
         ' 保存设置到配置文件
         chatSettings.SaveSettings(topicRandomness, contextLimit, selectedCellChecked,
-                                  settingsScrollChecked, chatMode)
+                                  settingsScrollChecked, executeCodePreview, chatMode)
     End Sub
 
     Public Class SendMessageReferenceContentItem
@@ -397,8 +400,9 @@ Public MustInherit Class BaseChatControl
 
     Protected Overridable Sub HandleExecuteCode(jsonDoc As JObject)
         Dim code As String = jsonDoc("code").ToString()
+        Dim preview As Boolean = Boolean.Parse(jsonDoc("executecodePreview"))
         Dim language As String = jsonDoc("language").ToString()
-        ExecuteCode(code, language)
+        ExecuteCode(code, language, preview)
     End Sub
 
 
@@ -655,19 +659,21 @@ Public MustInherit Class BaseChatControl
 
     Protected MustOverride Function GetApplication() As ApplicationInfo
     Protected MustOverride Function GetVBProject() As VBProject
+    Protected MustOverride Function RunCodePreview(vbaCode As String, preview As Boolean)
     Protected MustOverride Function RunCode(vbaCode As String)
+
     Protected MustOverride Sub SendChatMessage(message As String)
     Protected MustOverride Sub GetSelectionContent(target As Object)
 
 
     ' 执行代码的方法
-    Private Sub ExecuteCode(code As String, language As String)
+    Private Sub ExecuteCode(code As String, language As String, preview As Boolean)
         ' 根据语言类型执行不同的操作
         Select Case language.ToLower()
             Case "vba", "vb", "vbscript", "language-vba", "language-vbscript", "language-vba hljs language-vbscript", "vba hljs language-vbscript"
                 ' 执行 VBA 代码
-                'ExecuteVBACode(code)
-                RunCode(code)
+                ExecuteVBACode(code, preview)
+                'RunCode(code, preview)
             Case Else
                 'MessageBox.Show("不支持的语言类型: " & language)
                 GlobalStatusStrip.ShowWarning("不支持的语言类型: " & language)
@@ -675,6 +681,71 @@ Public MustInherit Class BaseChatControl
     End Sub
 
 
+    ' 执行前端传来的 VBA 代码片段
+    Protected Function ExecuteVBACode(vbaCode As String, preview As Boolean)
+
+        If preview Then
+            ' 返回是否需要执行，accept-True，reject-False
+            If Not RunCodePreview(vbaCode, preview) Then
+                Return True
+            End If
+            ' 如果预览模式，直接返回
+        End If
+
+        ' 获取 VBA 项目
+        Dim vbProj As VBProject = GetVBProject()
+
+        ' 添加空值检查
+        If vbProj Is Nothing Then
+            Return False
+        End If
+
+        Dim vbComp As VBComponent = Nothing
+        Dim tempModuleName As String = "TempMod" & DateTime.Now.Ticks.ToString().Substring(0, 8)
+
+        Try
+            ' 创建临时模块
+            vbComp = vbProj.VBComponents.Add(vbext_ComponentType.vbext_ct_StdModule)
+            vbComp.Name = tempModuleName
+
+            ' 检查代码是否已包含 Sub/Function 声明
+            If ContainsProcedureDeclaration(vbaCode) Then
+                ' 代码已包含过程声明，直接添加
+                vbComp.CodeModule.AddFromString(vbaCode)
+
+                ' 查找第一个过程名并执行
+                Dim procName As String = FindFirstProcedureName(vbComp)
+                If Not String.IsNullOrEmpty(procName) Then
+                    RunCode(tempModuleName & "." & procName)
+                Else
+                    'MessageBox.Show("无法在代码中找到可执行的过程")
+                    GlobalStatusStrip.ShowWarning("无法在代码中找到可执行的过程")
+                End If
+            Else
+                ' 代码不包含过程声明，将其包装在 Auto_Run 过程中
+                Dim wrappedCode As String = "Sub Auto_Run()" & vbNewLine &
+                                           vbaCode & vbNewLine &
+                                           "End Sub"
+                vbComp.CodeModule.AddFromString(wrappedCode)
+
+                ' 执行 Auto_Run 过程
+                RunCode(tempModuleName & ".Auto_Run")
+
+            End If
+
+        Catch ex As Exception
+            MessageBox.Show("执行 VBA 代码时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        Finally
+            ' 无论成功还是失败，都删除临时模块
+            Try
+                If vbProj IsNot Nothing AndAlso vbComp IsNot Nothing Then
+                    vbProj.VBComponents.Remove(vbComp)
+                End If
+            Catch
+                ' 忽略清理错误
+            End Try
+        End Try
+    End Function
 
 
     ' 检查代码是否包含过程声明
@@ -1141,11 +1212,12 @@ Public MustInherit Class BaseChatControl
         ' 注入辅助脚本
         Dim script As String = "
         window.vsto = {
-            executeCode: function(code, language) {
+            executeCode: function(code, language,preview) {
                 window.chrome.webview.postMessage({
                     type: 'executeCode',
                     code: code,
-                    language: language
+                    language: language,
+                    executecodePreview: preview
                 });
                 return true;
             },
@@ -1172,6 +1244,7 @@ Public MustInherit Class BaseChatControl
                     topicRandomness: settingsObject.topicRandomness,
                     contextLimit: settingsObject.contextLimit,
                     selectedCell: settingsObject.selectedCell,
+                    executeCodePreview: settingsObject.executeCodePreview,
                 });
             }
         };

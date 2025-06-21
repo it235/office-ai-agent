@@ -799,14 +799,14 @@
         }
 
         .settings-title {
-            font-size: 16px;
+            font-size: 18px;
             font-weight: 500;
-            margin-bottom: 20px;
+            margin-bottom: 2px;
             color: #333;
         }
 
         .setting-item {
-            margin-bottom: 20px;
+            margin-bottom: 6px;
         }
 
         .setting-item.checkbox-item {
@@ -815,12 +815,12 @@
 
         .setting-item.checkbox-item .setting-label {
             display: inline-block;
-            margin-bottom: 4px;
+/*            margin-bottom: 4px;*/
         }
 
         .setting-item.checkbox-item .setting-tip {
             display: block;
-            margin-top: 4px;
+/*            margin-top: 4px;*/
             color: #666;
             font-size: 12px;
         }
@@ -835,7 +835,7 @@
         .setting-tip {
             font-size: 12px;
             color: #666;
-/*            margin-bottom: 8px;*/
+            margin-bottom: 4px;
         }
 
         .slider-container {
@@ -1153,11 +1153,11 @@
     <!-- 添加设置对话框 -->
     <div class="overlay" id="settings-overlay"></div>
     <div class="settings-dialog" id="settings-dialog">
-        <div class="settings-title">聊天设置</div>
+        <div class="settings-title">AI对话设置</div>
 
         <div class="setting-item checkbox-item">
             <div>
-                <label class="setting-label">实时滚动</label>
+                <label class="setting-label">实时滚动对话内容</label>
                 <input type="checkbox" id="settings-scroll-checked">
             </div>
             <div class="setting-tip">开启后会自动滚动到最新的对话内容</div>
@@ -1165,28 +1165,36 @@
 
         <div class="setting-item checkbox-item">
             <div>
-                <label class="setting-label">选中辅助</label>
+                <label class="setting-label">引用选中内容</label>
                 <input type="checkbox" id="settings-selected-cell">
             </div>
             <div class="setting-tip">开启后可以选择并引用工作表内容</div>
         </div>
 
+        <div class="setting-item checkbox-item">
+            <div>
+                <label class="setting-label">工作表变更预览</label>
+                <input type="checkbox" id="settings-executecode-preview">
+            </div>
+            <div class="setting-tip">开启后，Agent模式下可提前预览变更点，对比差异</div>
+        </div>
+
         <div class="setting-item">
             <label class="setting-label">话题随机性</label>
-            <div class="setting-tip">较高的数值会使同问题每次输出的结果更随机</div>
             <div class="slider-container">
                 <input type="range" class="slider" id="topic-randomness" min="0.1" max="1.6" step="0.1" value="0.8">
                 <span class="slider-value" id="topic-randomness-value">0.8</span>
             </div>
+            <div class="setting-tip">较高的数值会使同问题每次输出的结果更随机</div>
         </div>
 
         <div class="setting-item">
             <label class="setting-label">上下文数量限制</label>
-            <div class="setting-tip">单条回复记录对话数，每次想让ai记住历史多少条对话</div>
             <div class="slider-container">
                 <input type="range" class="slider" id="context-limit" min="1" max="10" value="5">
                 <span class="slider-value" id="context-limit-value">5</span>
             </div>
+            <div class="setting-tip">单条回复记录对话数，每次想让ai记住历史多少条对话</div>
         </div>
 
         <div class="settings-buttons">
@@ -1288,6 +1296,7 @@
             const codeElement = codeBlock.querySelector('code');
             const code = codeElement.textContent;
             const language = codeElement.className.replace('language-', '');
+            let preview = document.getElementById('settings-executecode-preview').checked
 
             try {
                 // check env is WebView2
@@ -1296,11 +1305,12 @@
                     window.chrome.webview.postMessage({
                         type: 'executeCode',
                         code: code,
-                        language: language
+                        language: language,
+                        executecodePreview: preview
                     });
                 } else if (window.vsto) {
                     // user inject vsto object
-                    window.vsto.executeCode(code, language);
+                    window.vsto.executeCode(code, language, preview);
                 } else {
                     alert('无法执行代码：未检测到支持的通信接口');
                 }
@@ -2218,6 +2228,7 @@
             let contextLimit = document.getElementById('context-limit').value
             let settingsScroll = document.getElementById('settings-scroll-checked').checked
             let selectedCell = document.getElementById('settings-selected-cell').checked
+            let executeCodePreview = document.getElementById('settings-executecode-preview').checked
             let chatMode = document.getElementById("chatMode").value
 
             // 保存随机性和上下文限制的设置
@@ -2230,6 +2241,7 @@
                     selectedCell: selectedCell,
                     settingsScroll: settingsScroll,
                     chatMode: chatMode,
+                    executeCodePreview: executeCodePreview,
                 });
             } else if (window.vsto) {
                 // user inject vsto object
@@ -2239,6 +2251,7 @@
                     selectedCell: selectedCell,
                     settingsScroll: settingsScroll,
                     chatMode: chatMode,
+                    executeCodePreview: executeCodePreview,
                 });
             } else {
                 alert('无法执行代码：未检测到支持的通信接口');

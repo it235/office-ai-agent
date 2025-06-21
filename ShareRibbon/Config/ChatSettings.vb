@@ -11,12 +11,13 @@ Public Class ChatSettings
     Public Shared Property topicRandomness As Double = 0.8  ' 默认值改为 Double
     Public Shared Property contextLimit As Integer = 5     ' 默认值改为 Integer
     Public Shared Property selectedCellChecked As Boolean = False
+    Public Shared Property executecodePreviewChecked As Boolean = True ' 执行代码前预览的默认选项
     Public Shared Property settingsScrollChecked As Boolean = True
     Public Shared Property chatMode As String = "chat"
 
     ' 修改方法签名，参数类型改为 Double 和 Integer
     Public Sub SaveSettings(topicRandomness As Double, contextLimit As Integer,
-                          selectedCell As Boolean, settingsScroll As Boolean, chatMode As String)
+                          selectedCell As Boolean, settingsScroll As Boolean, executecodePreview As Boolean, chatMode As String)
         Try
             ' 创建设置对象
             Dim settings As New Dictionary(Of String, Object) From {
@@ -24,6 +25,7 @@ Public Class ChatSettings
                 {"contextLimit", contextLimit},
                 {"selectedCellChecked", selectedCell},
                 {"settingsScrollChecked", settingsScroll},
+                {"executecodePreviewChecked", executecodePreview},
                 {"chatMode", chatMode}
             }
 
@@ -41,6 +43,7 @@ Public Class ChatSettings
             ChatSettings.contextLimit = contextLimit
             ChatSettings.selectedCellChecked = selectedCell
             ChatSettings.settingsScrollChecked = settingsScroll
+            ChatSettings.executecodePreviewChecked = executecodePreview
             ChatSettings.chatMode = chatMode
 
         Catch ex As Exception
@@ -70,6 +73,9 @@ Public Class ChatSettings
                 End If
                 If settings.ContainsKey("settingsScrollChecked") Then
                     settingsScrollChecked = CBool(settings("settingsScrollChecked"))
+                End If
+                If settings.ContainsKey("executecodePreviewChecked") Then
+                    executecodePreviewChecked = CBool(settings("executecodePreviewChecked"))
                 End If
                 If settings.ContainsKey("chatMode") Then
                     chatMode = Convert.ToString(settings("chatMode"))
