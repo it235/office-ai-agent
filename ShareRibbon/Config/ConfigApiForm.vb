@@ -1,9 +1,14 @@
 Imports System.Drawing
-Imports System.Windows.Forms
 Imports System.IO
+Imports System.Net
+Imports System.Security.Policy
+Imports System.Windows.Forms
 Imports Newtonsoft.Json
 Imports ShareRibbon.ConfigManager
-
+Imports System.Net.Http
+Imports System.Net.Http.Headers
+Imports System.Threading.Tasks
+Imports System.Diagnostics
 Public Class ConfigApiForm
     Inherits Form
 
@@ -19,6 +24,7 @@ Public Class ConfigApiForm
     Private newModelNameTextBoxes As List(Of TextBox)
     Private addModelNameButton As Button
     Private saveConfigButton As Button
+    Private getApiKeyButton As Button
 
 
     Public Property platform As String
@@ -30,7 +36,7 @@ Public Class ConfigApiForm
     Public Sub New()
         ' 初始化表单
         Me.Text = "配置大模型API"
-        Me.Size = New Size(350, 350)
+        Me.Size = New Size(450, 350)
         Me.StartPosition = FormStartPosition.CenterScreen ' 设置表单居中显示
 
         ' 初始化模型选择 ComboBox
@@ -47,9 +53,19 @@ Public Class ConfigApiForm
         editConfigButton.Text = "修改"
         editConfigButton.Font = New Font(editConfigButton.Font.FontFamily, 8) ' 设置字体大小
         editConfigButton.Location = New Point(280, 10)
-        editConfigButton.Size = New Size(40, modelComboBox.Height + 2)
+        editConfigButton.Size = New Size(80, modelComboBox.Height + 2)
         AddHandler editConfigButton.Click, AddressOf EditConfigButton_Click
         Me.Controls.Add(editConfigButton)
+
+        ' 初始化获取ApiKey按钮
+        getApiKeyButton = New Button()
+        getApiKeyButton.Text = "获取ApiKey"
+        getApiKeyButton.Font = New Font(getApiKeyButton.Font.FontFamily, 8) ' 设置字体大小
+        getApiKeyButton.Location = New Point(280, 90) ' 位置
+        getApiKeyButton.Size = New Size(80, modelComboBox.Height + 2) ' 按钮大小
+        'getApiKeyButton.ForeColor = Color.Blue ' 使用蓝色字体以表示这是一个链接
+        AddHandler getApiKeyButton.Click, AddressOf GetApiKeyButton_Click
+        Me.Controls.Add(getApiKeyButton)
 
         ' 初始化模型名称选择 ComboBox
         modelNameComboBox = New ComboBox()
@@ -222,7 +238,7 @@ Public Class ConfigApiForm
         Next
 
         ' 显示新配置控件
-        Me.Size = New Size(350, 500)
+        Me.Size = New Size(450, 500)
         newModelPlatformTextBox.Visible = True
         newApiUrlTextBox.Visible = True
         For Each textBox In newModelNameTextBoxes
@@ -232,49 +248,169 @@ Public Class ConfigApiForm
         saveConfigButton.Visible = True
     End Sub
 
+    ' 处理获取ApiKey按钮点击事件
+    Private Sub GetApiKeyButton_Click(sender As Object, e As EventArgs)
+        ' 指定URL
+        Dim urll As String = "https://cloud.siliconflow.cn/i/PGhr3knx"
+        Try
+            ' 尝试使用Edge浏览器打开URL
+            Process.Start("microsoft-edge:" & urll)
+        Catch ex As Exception
+            ' 如果无法使用Edge，则使用默认浏览器
+            Try
+                Process.Start(urll)
+            Catch ex2 As Exception
+                MessageBox.Show("无法打开浏览器。请手动访问: " & urll, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            End Try
+        End Try
+    End Sub
 
     ' 切换大模型后的确认按钮
-    Private Sub ConfirmButton_Click(sender As Object, e As EventArgs)
-
-        ' 获取选中的模型和 API Key
+    Private Async Sub ConfirmButton_Click(sender As Object, e As EventArgs)
+        ' 获取选中的模型和API Key
         Dim selectedPlatform As ConfigManager.ConfigItem = CType(modelComboBox.SelectedItem, ConfigManager.ConfigItem)
         Dim apiUrl As String = selectedPlatform.url
         Dim selectedModelName As String = If(modelNameComboBox.SelectedItem IsNot Nothing, modelNameComboBox.SelectedItem.ToString(), modelNameComboBox.Text)
         Dim inputApiKey As String = apiKeyTextBox.Text
 
+        ' 检查API Key是否有效
+        If inputApiKey = "输入 API Key" OrElse String.IsNullOrWhiteSpace(inputApiKey) Then
+            MessageBox.Show("请输入有效的API Key", "验证失败", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End If
 
-        ' 更新选中的模型的 API Key
-        'selectedItem.key = inputApiKey
+        ' 判断是否需要验证：
+        ' 1. 如果之前已验证过且API Key未变更，则无需再次验证
+        ' 2. 如果之前未验证过或API Key已变更，则需要验证
+        Dim needValidation As Boolean = True
 
-        ' 重置选择后的selected属性和key
-        For Each config In ConfigData
-            config.selected = False
-            If selectedPlatform.pltform = config.pltform Then
-                config.selected = True
-                config.key = inputApiKey
-                For Each item_m In config.model
-                    item_m.selected = False
-                    If item_m.modelName = selectedModelName Then
-                        item_m.selected = True
+        ' 检查是否已验证过且API Key未变更
+        If selectedPlatform.validated AndAlso selectedPlatform.key = inputApiKey Then
+            needValidation = False
+        End If
+
+        ' 如果不需要验证，直接保存并退出
+        If Not needValidation Then
+            ' 重置选择后的selected属性
+            For Each config In ConfigData
+                config.selected = False
+                If selectedPlatform.pltform = config.pltform Then
+                    config.selected = True
+                    For Each item_m In config.model
+                        item_m.selected = False
+                        If item_m.modelName = selectedModelName Then
+                            item_m.selected = True
+                        End If
+                    Next
+                End If
+            Next
+
+            ' 保存到文件
+            SaveConfig()
+
+            ' 刷新内存中的api配置
+            ConfigSettings.ApiUrl = apiUrl
+            ConfigSettings.ApiKey = inputApiKey
+            ConfigSettings.platform = selectedPlatform.pltform
+            ConfigSettings.ModelName = selectedModelName
+
+            ' 关闭对话框
+            Me.DialogResult = DialogResult.OK
+            Me.Close()
+            Return
+        End If
+
+        ' 需要验证，显示加载提示
+        Cursor = Cursors.WaitCursor
+        confirmButton.Enabled = False
+        confirmButton.Text = "验证中..."
+
+        Try
+            ' 构建一个简单的请求体
+            Dim requestBody As String = $"{{""model"": ""{selectedModelName}"", ""messages"": [{{""role"": ""user"", ""content"": ""hi""}}]}}"
+
+            ' 调用API验证
+            Dim response As String = Await SendHttpRequestForValidation(apiUrl, inputApiKey, requestBody)
+
+            ' 检查响应是否有效
+            Dim validationSuccess As Boolean = Not String.IsNullOrEmpty(response) AndAlso
+                                         (response.Contains("content") OrElse response.Contains("message"))
+
+            If validationSuccess Then
+                ' 验证成功，更新配置并保存
+
+                ' 重置选择后的selected属性和key，设置validated为true
+                For Each config In ConfigData
+                    config.selected = False
+                    If selectedPlatform.pltform = config.pltform Then
+                        config.selected = True
+                        config.key = inputApiKey
+                        config.validated = True ' 标记为已验证
+                        For Each item_m In config.model
+                            item_m.selected = False
+                            If item_m.modelName = selectedModelName Then
+                                item_m.selected = True
+                            End If
+                        Next
                     End If
                 Next
+
+                ' 保存到文件
+                SaveConfig()
+
+                ' 刷新内存中的api配置
+                ConfigSettings.ApiUrl = apiUrl
+                ConfigSettings.ApiKey = inputApiKey
+                ConfigSettings.platform = selectedPlatform.pltform
+                ConfigSettings.ModelName = selectedModelName
+
+                ' 关闭对话框
+                Me.DialogResult = DialogResult.OK
+                Me.Close()
+            Else
+                ' 验证失败，提示用户修改
+                MessageBox.Show("API验证失败。请检查API URL、模型名称和API Key是否正确。", "验证失败",
+                          MessageBoxButtons.OK, MessageBoxIcon.Warning)
+
+                ' 标记为未验证
+                selectedPlatform.validated = False
             End If
+        Catch ex As Exception
+            ' 处理异常
+            MessageBox.Show($"验证过程中出错: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
 
-        Next
-
-        ' 保存到文件
-        SaveConfig()
-
-        ' 刷新内存中的api配置
-        ConfigSettings.ApiUrl = apiUrl
-        ConfigSettings.ApiKey = inputApiKey
-        ConfigSettings.platform = selectedPlatform.pltform
-        ConfigSettings.ModelName = selectedModelName
-
-        ' 关闭对话框
-        Me.DialogResult = DialogResult.OK
-        Me.Close()
+            ' 标记为未验证
+            selectedPlatform.validated = False
+        Finally
+            ' 恢复按钮状态
+            confirmButton.Enabled = True
+            confirmButton.Text = "确认"
+            Cursor = Cursors.Default
+        End Try
     End Sub
+
+    ' 用于验证的API请求方法
+    Private Async Function SendHttpRequestForValidation(apiUrl As String, apiKey As String, requestBody As String) As Task(Of String)
+        Try
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
+            Using client As New Net.Http.HttpClient()
+                client.Timeout = TimeSpan.FromSeconds(15) ' 较短的超时时间，只用于验证
+                client.DefaultRequestHeaders.Add("Authorization", "Bearer " & apiKey)
+                Dim content As New Net.Http.StringContent(requestBody, System.Text.Encoding.UTF8, "application/json")
+                Dim response As Net.Http.HttpResponseMessage = Await client.PostAsync(apiUrl, content)
+
+                ' 如果服务器返回错误状态码，这里会抛出异常
+                response.EnsureSuccessStatusCode()
+
+                ' 读取并返回响应内容
+                Return Await response.Content.ReadAsStringAsync()
+            End Using
+        Catch ex As Exception
+            ' 在这里处理异常但不显示消息框，因为我们会在调用方法中显示
+            Debug.WriteLine($"API验证请求失败: {ex.Message}")
+            Return String.Empty
+        End Try
+    End Function
 
     Private Sub ModelComboBox_SelectedIndexChanged(sender As Object, e As EventArgs)
         ' 根据选中的模型更新模型名称选择 ComboBox
@@ -294,7 +430,7 @@ Public Class ConfigApiForm
 
     Private Sub AddConfigButton_Click(sender As Object, e As EventArgs)
         ' 显示新配置控件
-        Me.Size = New Size(350, 500)
+        Me.Size = New Size(450, 500)
         newModelPlatformTextBox.Visible = True
         newApiUrlTextBox.Visible = True
         For Each textBox In newModelNameTextBoxes
@@ -404,7 +540,7 @@ Public Class ConfigApiForm
             textBox.ForeColor = Color.Gray
         Next
 
-        Me.Size = New Size(350, 300)
+        Me.Size = New Size(450, 300)
         newModelPlatformTextBox.Visible = False
         newApiUrlTextBox.Visible = False
         For Each textBox In newModelNameTextBoxes

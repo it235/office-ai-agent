@@ -104,6 +104,9 @@ Public Class ChatControl
                 "PowerPoint幻灯片",  ' 使用文档名称作为标识
                 content.Substring(0, Math.Min(content.Length, 50)) & If(content.Length > 50, "...", "")
             )
+            Else
+                ' 选中没有内容，清除相同 sheetName 的引用
+                ClearSelectedContentBySheetName("PowerPoint幻灯片")
             End If
 
         Catch ex As Exception
@@ -194,6 +197,11 @@ Public Class ChatControl
 
     Protected Overrides Function GetApplication() As ApplicationInfo
         Return New ApplicationInfo("PowerPoint", OfficeApplicationType.PowerPoint)
+    End Function
+
+    ' 提供PowerPoint应用程序对象
+    Protected Overrides Function GetOfficeApplicationObject() As Object
+        Return Globals.ThisAddIn.Application
     End Function
 
     Protected Overrides Sub SendChatMessage(message As String)

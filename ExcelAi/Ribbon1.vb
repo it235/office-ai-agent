@@ -174,7 +174,7 @@ Public Class Ribbon1
             Globals.ThisAddIn.Application.Calculation = XlCalculation.xlCalculationAutomatic
 
             ' 提示完成
-            MsgBox("数据已成功写入 AI结果！", vbInformation)
+            GlobalStatusStripAll.ShowWarning("数据已成功写入 AI结果！")
         Catch ex As Exception
             MsgBox("解析响应时出错：" & ex.Message, vbCritical)
         End Try

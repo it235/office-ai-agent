@@ -57,6 +57,13 @@ Public Class ChatControl
                 Return
             End If
 
+            ' 检查是否有实际选中内容（通过比较Start和End位置）
+            If selection.Start = selection.End Then
+                ' 光标在单一位置，没有选中内容，清除之前的选中显示
+                ClearSelectedContentBySheetName("Word文档")
+                Return
+            End If
+
             ' 获取选中内容的详细信息
             Dim content As String = String.Empty
 
@@ -92,6 +99,8 @@ Public Class ChatControl
                    "[表格内容]",
                    content.Substring(0, Math.Min(content.Length, 50)) & If(content.Length > 50, "...", ""))
             )
+            Else
+                ClearSelectedContentBySheetName("Word文档")
             End If
 
         Catch ex As Exception
@@ -158,6 +167,11 @@ Public Class ChatControl
 
     Protected Overrides Function GetApplication() As ApplicationInfo
         Return New ApplicationInfo("Word", OfficeApplicationType.Word)
+    End Function
+
+    ' 提供Word应用程序对象
+    Protected Overrides Function GetOfficeApplicationObject() As Object
+        Return Globals.ThisAddIn.Application
     End Function
 
     Protected Overrides Sub SendChatMessage(message As String)

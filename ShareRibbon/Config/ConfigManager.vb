@@ -121,6 +121,9 @@ Public Class ConfigManager
         Public Property key As String
         Public Property selected As Boolean
 
+        ' 是否通过了API验证
+        Public Property validated As Boolean
+
         Public Overrides Function ToString() As String
             Return pltform
         End Function

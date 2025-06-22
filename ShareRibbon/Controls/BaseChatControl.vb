@@ -666,6 +666,20 @@ Public MustInherit Class BaseChatControl
     Protected MustOverride Sub GetSelectionContent(target As Object)
 
 
+    '' 执行代码的方法
+    'Private Sub ExecuteCode(code As String, language As String, preview As Boolean)
+    '    ' 根据语言类型执行不同的操作
+    '    Select Case language.ToLower()
+    '        Case "vba", "vb", "vbscript", "language-vba", "language-vbscript", "language-vba hljs language-vbscript", "vba hljs language-vbscript"
+    '            ' 执行 VBA 代码
+    '            ExecuteVBACode(code, preview)
+    '            'RunCode(code, preview)
+    '        Case Else
+    '            'MessageBox.Show("不支持的语言类型: " & language)
+    '            GlobalStatusStrip.ShowWarning("不支持的语言类型: " & language)
+    '    End Select
+    'End Sub
+
     ' 执行代码的方法
     Private Sub ExecuteCode(code As String, language As String, preview As Boolean)
         ' 根据语言类型执行不同的操作
@@ -673,13 +687,222 @@ Public MustInherit Class BaseChatControl
             Case "vba", "vb", "vbscript", "language-vba", "language-vbscript", "language-vba hljs language-vbscript", "vba hljs language-vbscript"
                 ' 执行 VBA 代码
                 ExecuteVBACode(code, preview)
-                'RunCode(code, preview)
+            Case "js", "javascript", "javascript hljs", "jscript", "language-js", "language-javascript"
+                ' 执行 JavaScript 代码
+                ExecuteJavaScript(code, preview)
+            Case "excel", "formula", "function", "language-excel"
+                ' 执行 Excel 函数/公式
+                ExecuteExcelFormula(code, preview)
+                'Case "sql", "language-sql"
+                '    ' 执行 SQL 查询
+                '    ExecuteSqlQuery(code, preview)
+                'Case "powerquery", "m", "language-powerquery", "language-m"
+                '    ' 执行 PowerQuery/M 语言
+                '    ExecutePowerQuery(code, preview)
+                'Case "python", "py", "language-python"
+                '    ' 执行 Python 代码
+                '    ExecutePython(code, preview)
             Case Else
-                'MessageBox.Show("不支持的语言类型: " & language)
                 GlobalStatusStrip.ShowWarning("不支持的语言类型: " & language)
         End Select
     End Sub
 
+    ' 执行JavaScript代码 - 专注于操作Office/WPS对象模型，支持Office JS API风格代码
+    Protected Function ExecuteJavaScript(jsCode As String, preview As Boolean) As Boolean
+        Try
+            ' 获取Office应用对象
+            Dim appObject As Object = GetOfficeApplicationObject()
+            If appObject Is Nothing Then
+                GlobalStatusStrip.ShowWarning("无法获取Office应用程序对象")
+                Return False
+            End If
+
+            ' 检测是否是Office JS API风格的代码
+            Dim isOfficeJsApiStyle As Boolean = jsCode.Contains("getActiveWorksheet") OrElse
+                                            jsCode.Contains("getUsedRange") OrElse
+                                            jsCode.Contains("getValues") OrElse
+                                            jsCode.Contains("setValues")
+
+            ' 创建脚本控制引擎
+            Dim scriptEngine As Object = CreateObject("MSScriptControl.ScriptControl")
+            scriptEngine.Language = "JScript"
+
+            ' 判断是WPS还是Microsoft Office
+            Dim isWPS As Boolean = False
+            Try
+                Dim appName As String = appObject.Name
+                isWPS = appName.Contains("WPS")
+            Catch ex As Exception
+                isWPS = False
+            End Try
+
+            ' 将Office应用对象暴露给脚本环境
+            scriptEngine.AddObject("app", appObject, True)
+
+            ' 添加适配层代码
+            Dim adapterCode As String = "
+        // Office JS API 适配层
+        var Office = {
+            isWPS: " & isWPS.ToString().ToLower() & ",
+            app: app,
+            context: {
+                workbook: {
+                    // 适配 Office JS API 方法到 COM 对象
+                    getActiveWorksheet: function() {
+                        return {
+                            sheet: app.ActiveSheet,
+                            getUsedRange: function() {
+                                var usedRange = this.sheet.UsedRange;
+                                return {
+                                    range: usedRange,
+                                    getValues: function() {
+                                        var values = [];
+                                        var rows = this.range.Rows.Count;
+                                        var cols = this.range.Columns.Count;
+                                        
+                                        for(var i = 1; i <= rows; i++) {
+                                            var rowValues = [];
+                                            for(var j = 1; j <= cols; j++) {
+                                                var cellValue = this.range.Cells(i, j).Value;
+                                                rowValues.push(cellValue);
+                                            }
+                                            values.push(rowValues);
+                                        }
+                                        return values;
+                                    },
+                                    setValues: function(values) {
+                                        if(!values || values.length === 0) return;
+                                        
+                                        for(var i = 0; i < values.length; i++) {
+                                            var row = values[i];
+                                            for(var j = 0; j < row.length; j++) {
+                                                try {
+                                                    this.range.Cells(i+1, j+1).Value = row[j];
+                                                } catch(e) {
+                                                    // 忽略单元格设置错误
+                                                }
+                                            }
+                                        }
+                                    }
+                                };
+                            }
+                        };
+                    }
+                }
+            },
+            // 日志函数
+            log: function(message) { 
+                return '输出: ' + message; 
+            }
+        };
+        
+        // Office JS API 主函数适配器
+        function executeOfficeJsApi(codeFunc) {
+            var workbook = Office.context.workbook;
+            if(typeof codeFunc === 'function') {
+                try {
+                    return codeFunc(workbook);
+                } catch(e) {
+                    return 'Office JS API 执行错误: ' + e.message;
+                }
+            }
+            return 'Invalid function';
+        }
+        "
+
+            ' 预执行适配层代码
+            scriptEngine.ExecuteStatement(adapterCode)
+
+            ' 构建执行代码，根据代码类型选择不同的执行方式
+            Dim wrappedCode As String
+
+            If isOfficeJsApiStyle Then
+                ' 如果是Office JS API风格，使用适配层执行
+                wrappedCode = "
+            try {
+                // 将用户代码包装为函数
+                var userFunc = function(workbook) {
+                    " & jsCode & "
+                };
+                
+                // 使用适配器执行
+                executeOfficeJsApi(userFunc);
+                return 'Office JS API 代码执行成功';
+            } catch(e) {
+                return 'Office JS API 执行错误: ' + e.message;
+            }
+            "
+            Else
+                ' 普通JavaScript代码
+                wrappedCode = "
+            try {
+                // 用户代码开始
+                " & jsCode & "
+                // 用户代码结束
+                return '代码执行成功';
+            } catch(e) {
+                return '执行错误: ' + e.message;
+            }
+            "
+            End If
+
+            ' 执行JavaScript代码并获取结果
+            Dim result As String = scriptEngine.Eval(wrappedCode)
+            GlobalStatusStrip.ShowInfo(result)
+
+            Return True
+        Catch ex As Exception
+            MessageBox.Show("执行JavaScript代码时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Return False
+        End Try
+    End Function
+
+
+
+    ' 添加清除特定 sheetName 的方法
+    Public Async Sub ClearSelectedContentBySheetName(sheetName As String)
+        Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(
+        $"clearSelectedContentBySheetName({JsonConvert.SerializeObject(sheetName)})"
+    )
+    End Sub
+
+
+    ' 抽象方法 - 获取Office应用程序对象
+    Protected MustOverride Function GetOfficeApplicationObject() As Object
+
+    ' 执行Excel公式或函数 - 基类通用实现
+    Protected Function ExecuteExcelFormula(formulaCode As String, preview As Boolean) As Boolean
+        Try
+            ' 获取应用程序信息
+            Dim appInfo As ApplicationInfo = GetApplication()
+
+            ' 去除可能的等号前缀
+            If formulaCode.StartsWith("=") Then
+                formulaCode = formulaCode.Substring(1)
+            End If
+
+            ' 根据应用类型处理
+            If appInfo.Type = OfficeApplicationType.Excel Then
+                ' 对于Excel，使用Evaluate方法
+                Dim result As Boolean = EvaluateFormula(formulaCode, preview)
+                GlobalStatusStrip.ShowInfo("公式执行结果: " & result.ToString())
+                Return True
+            Else
+                ' 其他应用不支持直接执行Excel公式
+                GlobalStatusStrip.ShowWarning("Excel公式执行仅支持Excel环境")
+                Return False
+            End If
+        Catch ex As Exception
+            MessageBox.Show("执行Excel公式时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Return False
+        End Try
+    End Function
+
+    ' 虚方法 - 评估Excel公式（只有Excel子类会实现）
+    Protected Overridable Function EvaluateFormula(formula As String, preview As Boolean) As Boolean
+        ' 默认实现返回Nothing
+        Return True
+    End Function
 
     ' 执行前端传来的 VBA 代码片段
     Protected Function ExecuteVBACode(vbaCode As String, preview As Boolean)

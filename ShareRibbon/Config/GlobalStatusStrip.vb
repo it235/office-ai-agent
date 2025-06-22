@@ -14,8 +14,14 @@ Public Module GlobalStatusStrip
     End Sub
 
     Public Sub ShowWarning(message As String)
-        ToolStripStatusLabel.Text = "提示：" & message
+        ToolStripStatusLabel.Text = "警告：" & message
         ToolStripStatusLabel.ForeColor = Color.Red
+        StatusStrip.Visible = True
+        Timer.Start()
+    End Sub
+    Public Sub ShowInfo(message As String)
+        ToolStripStatusLabel.Text = "提示：" & message
+        ToolStripStatusLabel.ForeColor = Color.Black
         StatusStrip.Visible = True
         Timer.Start()
     End Sub

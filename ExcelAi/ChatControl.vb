@@ -81,7 +81,7 @@ Public Class ChatControl
                     ' 选中单元格有内容，添加新的项
                     AddSelectedContentItem(key, address)
                 Else
-                    ' 选中单元格没有内容，清除相同 sheetName 的引用
+                    ' 选中没有内容，清除相同 sheetName 的引用
                     ClearSelectedContentBySheetName(key)
                 End If
             End If
@@ -97,12 +97,6 @@ Public Class ChatControl
 )
     End Sub
 
-    ' 添加清除特定 sheetName 的方法
-    Private Async Sub ClearSelectedContentBySheetName(sheetName As String)
-        Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(
-        $"clearSelectedContentBySheetName({JsonConvert.SerializeObject(sheetName)})"
-    )
-    End Sub
     ' 初始化时注入基础 HTML 结构
     Private Async Sub MainForm_Load(sender As Object, e As EventArgs) Handles MyBase.Load
         ' 初始化 WebView2
@@ -149,6 +143,303 @@ Public Class ChatControl
         End If
     End Function
 
+
+    ' 执行 JavaScript 代码，支持操作Excel对象
+    Protected Function ExecuteJavaScript(jsCode As String, preview As Boolean) As Boolean
+        Try
+            If preview Then
+                If Not RunCodePreview(jsCode, preview) Then
+                    Return False
+                End If
+            End If
+
+            ' 检查代码类型 - 普通JS还是Excel操作JS
+            Dim isExcelJS As Boolean = jsCode.Contains("Excel.") OrElse
+                                  jsCode.Contains("ActiveXObject") OrElse
+                                  jsCode.Contains("Application") OrElse
+                                  jsCode.Contains("Workbook")
+
+            If isExcelJS Then
+                ' 创建脚本控制引擎来执行操作Excel的JavaScript
+                Dim scriptEngine As Object = CreateObject("MSScriptControl.ScriptControl")
+                scriptEngine.Language = "JScript"
+
+                ' 设置对Excel应用程序的引用
+                scriptEngine.AddObject("excelApp", Globals.ThisAddIn.Application, True)
+
+                ' 构建执行代码
+                Dim scriptCode As String =
+                "function executeExcelJS() {" & vbCrLf &
+                "  try {" & vbCrLf &
+                "    // Excel已作为excelApp对象提供" & vbCrLf &
+                "    " & jsCode & vbCrLf &
+                "    return 'JS代码执行成功';" & vbCrLf &
+                "  } catch(e) {" & vbCrLf &
+                "    return 'JS执行错误: ' + e.message;" & vbCrLf &
+                "  }" & vbCrLf &
+                "}" & vbCrLf &
+                "executeExcelJS();"
+
+                ' 执行JavaScript代码
+                Dim result As String = scriptEngine.Eval(scriptCode)
+                GlobalStatusStrip.ShowInfo(result)
+                Return True
+            Else
+                ' 对于普通JavaScript，使用WebView2执行
+                Dim scriptResult As Task(Of String) = ChatBrowser.ExecuteScriptAsync(jsCode)
+                scriptResult.Wait() ' 等待执行完成
+
+                ' 显示结果
+                If Not String.IsNullOrEmpty(scriptResult.Result) Then
+                    Dim resultStr As String = scriptResult.Result.Trim(""""c) ' 移除JSON字符串引号
+                    GlobalStatusStrip.ShowInfo("JS执行结果: " + resultStr)
+                End If
+
+                Return True
+            End If
+        Catch ex As Exception
+            MessageBox.Show("执行JavaScript代码时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Return False
+        End Try
+    End Function
+
+    ' 提供Excel应用程序对象
+    Protected Overrides Function GetOfficeApplicationObject() As Object
+        Return Globals.ThisAddIn.Application
+    End Function
+
+    ' 实现Excel公式评估' 执行Excel公式或函数 - 增强版支持赋值和预览
+
+    Protected Overrides Function EvaluateFormula(formulaCode As String, preview As Boolean) As Boolean
+        Try
+            ' 检查是否是赋值语句 (例如 C1=A1+B1)
+            Dim isAssignment As Boolean = Regex.IsMatch(formulaCode, "^[A-Za-z]+[0-9]+\s*=")
+
+            If isAssignment Then
+                ' 解析赋值语句
+                Dim parts As String() = formulaCode.Split(New Char() {"="c}, 2)
+                Dim targetCell As String = parts(0).Trim()
+                Dim formula As String = parts(1).Trim()
+
+                ' 如果公式以=开头，则移除
+                If formula.StartsWith("=") Then
+                    formula = formula.Substring(1)
+                End If
+
+                ' 如果需要预览，显示预览对话框
+                If preview Then
+                    Dim excel As Object = Globals.ThisAddIn.Application
+                    Dim currentValue As Object = Nothing
+                    Try
+                        currentValue = excel.Range(targetCell).Value
+                    Catch ex As Exception
+                        ' 单元格可能不存在值
+                    End Try
+
+                    ' 计算新值
+                    Dim newValue As Object = excel.Evaluate(formula)
+
+                    ' 创建预览对话框
+                    Dim previewMsg As String = $"将要在单元格 {targetCell} 中应用公式:" & vbCrLf & vbCrLf &
+                                          $"={formula}" & vbCrLf & vbCrLf &
+                                          $"当前值: {If(currentValue Is Nothing, "(空)", currentValue)}" & vbCrLf &
+                                          $"新值: {If(newValue Is Nothing, "(空)", newValue)}"
+
+                    Dim result As DialogResult = MessageBox.Show(previewMsg, "Excel公式预览",
+                                                          MessageBoxButtons.OKCancel,
+                                                          MessageBoxIcon.Information)
+
+                    If result <> DialogResult.OK Then
+                        Return False
+                    End If
+                End If
+
+                ' 执行赋值
+                Dim range As Object = Globals.ThisAddIn.Application.Range(targetCell)
+                range.Formula = "=" & formula
+
+                GlobalStatusStrip.ShowInfo($"公式 '={formula}' 已应用到单元格 {targetCell}")
+                Return True
+            Else
+                ' 普通公式计算 (不包含赋值)
+                ' 去除可能的等号前缀
+                If formulaCode.StartsWith("=") Then
+                    formulaCode = formulaCode.Substring(1)
+                End If
+
+                ' 计算公式结果
+                Dim result As Object = Globals.ThisAddIn.Application.Evaluate(formulaCode)
+
+                ' 如果需要预览，显示计算结果
+                If preview Then
+                    Dim previewMsg As String = $"公式计算结果:" & vbCrLf & vbCrLf &
+                                         $"={formulaCode}" & vbCrLf & vbCrLf &
+                                         $"结果: {If(result Is Nothing, "(空)", result)}"
+
+                    MessageBox.Show(previewMsg, "Excel公式结果", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                Else
+                    ' 显示结果
+                    GlobalStatusStrip.ShowInfo($"公式 '={formulaCode}' 的计算结果: {result}")
+                End If
+
+                Return True
+            End If
+        Catch ex As Exception
+            MessageBox.Show("执行Excel公式时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Return False
+        End Try
+    End Function
+
+
+    ' 执行SQL查询
+    Protected Function ExecuteSqlQuery(sqlCode As String, preview As Boolean) As Boolean
+        Try
+            If preview Then
+                If Not RunCodePreview(sqlCode, preview) Then
+                    Return False
+                End If
+            End If
+
+            ' 获取应用程序信息
+            Dim appInfo As ApplicationInfo = GetApplication()
+
+            Dim activeWorkbook As Object = Globals.ThisAddIn.Application.ActiveWorkbook
+
+            ' 创建查询表
+            Dim activeSheet As Object = Globals.ThisAddIn.Application.ActiveSheet
+            Dim queryTable As Object = Nothing
+
+                ' 获取可用的单元格区域
+                Dim targetCell As Object = activeSheet.Range("A1")
+
+                ' 创建SQL连接字符串 (示例使用当前工作簿作为数据源)
+                Dim connString As String = "OLEDB;Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" &
+                                      activeWorkbook.FullName & ";Extended Properties='Excel 12.0 Xml;HDR=YES';"
+
+                ' 创建查询定义
+                queryTable = activeSheet.QueryTables.Add(connString, targetCell, sqlCode)
+
+                ' 设置查询属性
+                queryTable.RefreshStyle = 1 ' xlOverwriteCells
+                queryTable.BackgroundQuery = False
+
+                ' 执行查询
+                queryTable.Refresh(False)
+
+                GlobalStatusStrip.ShowWarning("SQL查询已执行")
+            Return True
+        Catch ex As Exception
+            MessageBox.Show("执行SQL查询时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Return False
+        End Try
+    End Function
+
+    ' 执行PowerQuery/M语言
+    Protected Function ExecutePowerQuery(mCode As String, preview As Boolean) As Boolean
+        Try
+            If preview Then
+                If Not RunCodePreview(mCode, preview) Then
+                    Return False
+                End If
+            End If
+
+            ' 获取应用程序信息
+            Dim appInfo As ApplicationInfo = GetApplication()
+
+            ' PowerQuery执行需要较复杂的实现，这里仅提供基本框架
+            Dim excelApp = Globals.ThisAddIn.Application
+                Dim wb As Object = excelApp.ActiveWorkbook
+
+                ' 检查Excel版本是否支持PowerQuery
+                Dim versionSupported As Boolean = excelApp.Version >= 15 ' Excel 2013及以上版本
+
+                If Not versionSupported Then
+                    GlobalStatusStrip.ShowWarning("PowerQuery需要Excel 2013或更高版本")
+                    Return False
+                End If
+
+                ' PowerQuery执行逻辑需要根据具体需求实现
+                GlobalStatusStrip.ShowWarning("PowerQuery代码执行功能正在开发中")
+            Return True
+        Catch ex As Exception
+            MessageBox.Show("执行PowerQuery代码时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Return False
+        End Try
+    End Function
+
+    ' 执行Python代码
+    Protected Function ExecutePython(pythonCode As String, preview As Boolean) As Boolean
+        Try
+            If preview Then
+                If Not RunCodePreview(pythonCode, preview) Then
+                    Return False
+                End If
+            End If
+
+            ' 获取应用程序信息
+            Dim appInfo As ApplicationInfo = GetApplication()
+
+            Dim excelApp = Globals.ThisAddIn.Application
+
+                ' 检查Excel版本是否支持Python (Excel 365)
+                Dim versionSupported As Boolean = False
+
+                Try
+                    ' 尝试访问Python对象，如果不支持会抛出异常
+                    Dim pythonObj As Object = excelApp.PythonExecute("print('test')")
+                    versionSupported = True
+                Catch
+                    versionSupported = False
+                End Try
+
+                If Not versionSupported Then
+                    ' 如果内置Python不可用，可以尝试通过外部Python解释器执行
+                    GlobalStatusStrip.ShowWarning("此Excel版本不支持内置Python，尝试使用外部Python...")
+
+                    ' 创建临时Python文件
+                    Dim tempFile As String = Path.Combine(Path.GetTempPath(), "excel_python_" & Guid.NewGuid().ToString() & ".py")
+                    File.WriteAllText(tempFile, pythonCode)
+
+                    ' 使用Process类执行Python脚本
+                    Dim startInfo As New ProcessStartInfo With {
+                    .FileName = "python", ' 假设Python已安装并在PATH中
+                    .Arguments = tempFile,
+                    .UseShellExecute = False,
+                    .RedirectStandardOutput = True,
+                    .RedirectStandardError = True,
+                    .CreateNoWindow = True
+                }
+
+                    Using process As Process = Process.Start(startInfo)
+                        Dim output As String = process.StandardOutput.ReadToEnd()
+                        Dim error1 As String = process.StandardError.ReadToEnd()
+                        process.WaitForExit()
+
+                        If Not String.IsNullOrEmpty(error1) Then
+                        GlobalStatusStrip.ShowWarning("Python执行错误: " & error1)
+                    Else
+                            GlobalStatusStrip.ShowWarning("Python执行结果: " & output)
+                        End If
+                    End Using
+
+                    ' 删除临时文件
+                    Try
+                        File.Delete(tempFile)
+                    Catch
+                        ' 忽略清理错误
+                    End Try
+                Else
+                    ' 使用Excel内置Python执行代码
+                    Dim result As Object = excelApp.PythonExecute(pythonCode)
+                    GlobalStatusStrip.ShowWarning("Python代码已执行")
+                End If
+
+            Return True
+        Catch ex As Exception
+            MessageBox.Show("执行Python代码时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Return False
+        End Try
+    End Function
 
     Private Function GetSelectedRangeContent() As String
         Try
