@@ -147,6 +147,16 @@ Public MustInherit Class BaseDataCapturePane
                 End If
             End Sub
 
+        ' 处理新窗口打开请求，重定向到当前窗口
+        AddHandler ChatBrowser.CoreWebView2.NewWindowRequested,
+            Sub(s, args)
+                ' 取消新窗口打开
+                args.Handled = True
+                ' 在当前窗口导航到目标URL
+                ChatBrowser.CoreWebView2.Navigate(args.Uri)
+                Debug.WriteLine($"拦截到新窗口请求，已重定向到当前窗口: {args.Uri}")
+            End Sub
+
         ' WebMessage事件
         AddHandler ChatBrowser.CoreWebView2.WebMessageReceived,
             AddressOf WebView2_MessageReceived
@@ -157,9 +167,70 @@ Public MustInherit Class BaseDataCapturePane
         AddHandler UrlTextBox.KeyPress, AddressOf UrlTextBox_KeyPress
         AddHandler SelectDomButton.Click, AddressOf SelectDomButton_Click
 
+        ' 添加前进后退按钮事件
+        AddHandler BackButton.Click, AddressOf BackButton_Click
+        AddHandler ForwardButton.Click, AddressOf ForwardButton_Click
+
+        ' 监听历史记录状态变化
+        AddHandler ChatBrowser.CoreWebView2.HistoryChanged,
+        Sub(s, args)
+            UpdateNavigationButtons()
+        End Sub
+
         Debug.WriteLine("Event handlers added successfully")
     End Sub
 
+    ' 移除事件处理程序时也需要移除新增的事件
+    Private Sub RemoveEventHandlers()
+        Try
+            If ChatBrowser?.CoreWebView2 IsNot Nothing Then
+                RemoveHandler ChatBrowser.CoreWebView2.WebMessageReceived,
+                AddressOf WebView2_MessageReceived
+                RemoveHandler ChatBrowser.CoreWebView2.NewWindowRequested,
+                Sub(s, args)
+                    args.Handled = True
+                    ChatBrowser.CoreWebView2.Navigate(args.Uri)
+                End Sub
+                RemoveHandler ChatBrowser.CoreWebView2.HistoryChanged,
+                Sub(s, args)
+                    UpdateNavigationButtons()
+                End Sub
+            End If
+
+            RemoveHandler NavigateButton.Click, AddressOf NavigateButton_Click
+            RemoveHandler CaptureButton.Click, AddressOf CaptureButton_Click
+            RemoveHandler UrlTextBox.KeyPress, AddressOf UrlTextBox_KeyPress
+            RemoveHandler SelectDomButton.Click, AddressOf SelectDomButton_Click
+            RemoveHandler BackButton.Click, AddressOf BackButton_Click
+            RemoveHandler ForwardButton.Click, AddressOf ForwardButton_Click
+        Catch ex As Exception
+            Debug.WriteLine($"Error removing event handlers: {ex.Message}")
+        End Try
+    End Sub
+
+    ' 添加前进后退按钮点击事件处理
+    Private Sub BackButton_Click(sender As Object, e As EventArgs)
+        If ChatBrowser?.CoreWebView2 IsNot Nothing AndAlso ChatBrowser.CoreWebView2.CanGoBack Then
+            ChatBrowser.CoreWebView2.GoBack()
+        End If
+    End Sub
+
+    Private Sub ForwardButton_Click(sender As Object, e As EventArgs)
+        If ChatBrowser?.CoreWebView2 IsNot Nothing AndAlso ChatBrowser.CoreWebView2.CanGoForward Then
+            ChatBrowser.CoreWebView2.GoForward()
+        End If
+    End Sub
+
+    ' 更新前进后退按钮状态
+    Private Sub UpdateNavigationButtons()
+        If ChatBrowser?.CoreWebView2 IsNot Nothing Then
+            BackButton.Enabled = ChatBrowser.CoreWebView2.CanGoBack
+            ForwardButton.Enabled = ChatBrowser.CoreWebView2.CanGoForward
+        Else
+            BackButton.Enabled = False
+            ForwardButton.Enabled = False
+        End If
+    End Sub
 
     ' 添加导航状态控制方法
     Private Sub SetNavigationState(isNavigating As Boolean)
@@ -192,22 +263,22 @@ Public MustInherit Class BaseDataCapturePane
         End If
     End Sub
 
-    ' 新增：移除事件处理程序方法
-    Private Sub RemoveEventHandlers()
-        Try
-            If ChatBrowser?.CoreWebView2 IsNot Nothing Then
-                RemoveHandler ChatBrowser.CoreWebView2.WebMessageReceived,
-                    AddressOf WebView2_MessageReceived
-            End If
+    '' 新增：移除事件处理程序方法
+    'Private Sub RemoveEventHandlers()
+    '    Try
+    '        If ChatBrowser?.CoreWebView2 IsNot Nothing Then
+    '            RemoveHandler ChatBrowser.CoreWebView2.WebMessageReceived,
+    '                AddressOf WebView2_MessageReceived
+    '        End If
 
-            RemoveHandler NavigateButton.Click, AddressOf NavigateButton_Click
-            RemoveHandler CaptureButton.Click, AddressOf CaptureButton_Click
-            RemoveHandler UrlTextBox.KeyPress, AddressOf UrlTextBox_KeyPress
-            RemoveHandler SelectDomButton.Click, AddressOf SelectDomButton_Click
-        Catch ex As Exception
-            Debug.WriteLine($"Error removing event handlers: {ex.Message}")
-        End Try
-    End Sub
+    '        RemoveHandler NavigateButton.Click, AddressOf NavigateButton_Click
+    '        RemoveHandler CaptureButton.Click, AddressOf CaptureButton_Click
+    '        RemoveHandler UrlTextBox.KeyPress, AddressOf UrlTextBox_KeyPress
+    '        RemoveHandler SelectDomButton.Click, AddressOf SelectDomButton_Click
+    '    Catch ex As Exception
+    '        Debug.WriteLine($"Error removing event handlers: {ex.Message}")
+    '    End Try
+    'End Sub
 
 
     Private Sub NavigateButton_Click(sender As Object, e As EventArgs)

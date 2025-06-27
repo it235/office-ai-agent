@@ -27,6 +27,8 @@ Partial Class BaseDataCapturePane
         Me.ChatBrowser = New Microsoft.Web.WebView2.WinForms.WebView2()
         Me.TopPanel = New System.Windows.Forms.Panel()
         Me.ButtonPanel = New System.Windows.Forms.FlowLayoutPanel()
+        Me.BackButton = New System.Windows.Forms.Button()
+        Me.ForwardButton = New System.Windows.Forms.Button()
         Me.NavigateButton = New System.Windows.Forms.Button()
         Me.CaptureButton = New System.Windows.Forms.Button()
         Me.SelectDomButton = New System.Windows.Forms.Button()
@@ -62,6 +64,8 @@ Partial Class BaseDataCapturePane
         '
         'ButtonPanel
         '
+        Me.ButtonPanel.Controls.Add(Me.BackButton)
+        Me.ButtonPanel.Controls.Add(Me.ForwardButton)
         Me.ButtonPanel.Controls.Add(Me.NavigateButton)
         Me.ButtonPanel.Controls.Add(Me.CaptureButton)
         Me.ButtonPanel.Controls.Add(Me.SelectDomButton)
@@ -73,34 +77,56 @@ Partial Class BaseDataCapturePane
         Me.ButtonPanel.TabIndex = 0
         Me.ButtonPanel.WrapContents = False
         '
+        'BackButton
+        '
+        Me.BackButton.AutoSize = True
+        Me.BackButton.Location = New System.Drawing.Point(5, 0)
+        Me.BackButton.Margin = New System.Windows.Forms.Padding(0, 0, 5, 0)
+        Me.BackButton.Name = "BackButton"
+        Me.BackButton.Size = New System.Drawing.Size(30, 24)
+        Me.BackButton.TabIndex = 0
+        Me.BackButton.Text = "←"
+        Me.BackButton.Enabled = False
+        '
+        'ForwardButton
+        '
+        Me.ForwardButton.AutoSize = True
+        Me.ForwardButton.Location = New System.Drawing.Point(40, 0)
+        Me.ForwardButton.Margin = New System.Windows.Forms.Padding(0, 0, 5, 0)
+        Me.ForwardButton.Name = "ForwardButton"
+        Me.ForwardButton.Size = New System.Drawing.Size(30, 24)
+        Me.ForwardButton.TabIndex = 1
+        Me.ForwardButton.Text = "→"
+        Me.ForwardButton.Enabled = False
+        '
         'NavigateButton
         '
         Me.NavigateButton.AutoSize = True
-        Me.NavigateButton.Location = New System.Drawing.Point(5, 0)
+        Me.NavigateButton.Location = New System.Drawing.Point(75, 0)
         Me.NavigateButton.Margin = New System.Windows.Forms.Padding(0, 0, 5, 0)
         Me.NavigateButton.Name = "NavigateButton"
-        Me.NavigateButton.Size = New System.Drawing.Size(75, 24)
-        Me.NavigateButton.TabIndex = 0
+        Me.NavigateButton.Size = New System.Drawing.Size(50, 24)
+        Me.NavigateButton.TabIndex = 2
         Me.NavigateButton.Text = "打开"
         '
         'CaptureButton
         '
         Me.CaptureButton.AutoSize = True
-        Me.CaptureButton.Location = New System.Drawing.Point(85, 0)
+        Me.CaptureButton.Location = New System.Drawing.Point(130, 0)
         Me.CaptureButton.Margin = New System.Windows.Forms.Padding(0, 0, 5, 0)
         Me.CaptureButton.Name = "CaptureButton"
         Me.CaptureButton.Size = New System.Drawing.Size(75, 24)
-        Me.CaptureButton.TabIndex = 1
+        Me.CaptureButton.TabIndex = 3
         Me.CaptureButton.Text = "抓取整页"
         '
         'SelectDomButton
         '
         Me.SelectDomButton.AutoSize = True
-        Me.SelectDomButton.Location = New System.Drawing.Point(165, 0)
+        Me.SelectDomButton.Location = New System.Drawing.Point(210, 0)
         Me.SelectDomButton.Margin = New System.Windows.Forms.Padding(0)
         Me.SelectDomButton.Name = "SelectDomButton"
         Me.SelectDomButton.Size = New System.Drawing.Size(75, 24)
-        Me.SelectDomButton.TabIndex = 2
+        Me.SelectDomButton.TabIndex = 4
         Me.SelectDomButton.Text = "选择元素"
         '
         'UrlTextBox
@@ -133,4 +159,6 @@ Partial Class BaseDataCapturePane
     Protected WithEvents NavigateButton As Button
     Protected WithEvents CaptureButton As Button
     Protected WithEvents SelectDomButton As Button
+    Protected WithEvents BackButton As Button
+    Protected WithEvents ForwardButton As Button
 End Class
