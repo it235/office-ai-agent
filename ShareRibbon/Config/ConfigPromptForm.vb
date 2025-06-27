@@ -2,7 +2,6 @@ Imports System.Drawing
 Imports System.Windows.Forms
 Imports System.IO
 Imports Newtonsoft.Json
-Imports AiHelper.ConfigManager
 
 ' 大模型提示词配置
 Public Class ConfigPromptForm

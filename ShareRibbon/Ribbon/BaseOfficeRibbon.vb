@@ -65,38 +65,6 @@ Public MustInherit Class BaseOfficeRibbon
         End If
     End Sub
 
-    ' 创建请求体
-    Protected Function CreateRequestBody(question As String) As String
-        Dim result As String = question.Replace("\", "\\").Replace("""", "\""").
-                                  Replace(vbCr, "\r").Replace(vbLf, "\n").
-                                  Replace(vbTab, "\t").Replace(vbBack, "\b").
-                                  Replace(Chr(12), "\f")
-        ' 使用从 ConfigSettings 中获取的模型名称
-        Return "{""model"": """ & ConfigSettings.ModelName & """, ""messages"": [{""role"": ""user"", ""content"": """ & result & """}]}"
-    End Function
-
-
-    ' 发送 HTTP 请求
-    Protected Async Function SendHttpRequest(apiUrl As String, apiKey As String, requestBody As String) As Task(Of String)
-        Try
-            ' 强制使用 TLS 1.2
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
-            Dim handler As New HttpClientHandler()
-            Using client As New HttpClient(handler)
-                client.Timeout = TimeSpan.FromSeconds(120) ' 设置超时时间为 120 秒
-                client.DefaultRequestHeaders.Add("Authorization", "Bearer " & apiKey)
-                Dim content As New StringContent(requestBody, Encoding.UTF8, "application/json")
-                Dim response As HttpResponseMessage = Await client.PostAsync(apiUrl, content)
-                response.EnsureSuccessStatusCode()
-                Return Await response.Content.ReadAsStringAsync()
-            End Using
-        Catch ex As HttpRequestException
-            MessageBox.Show("请求失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-            Return String.Empty
-        End Try
-    End Function
-
-
     ' 点击Ribbon区的配置API按钮后触发
     Private Sub ConfigApiButton_Click(sender As Object, e As RibbonControlEventArgs) Handles ConfigApiButton.Click
         ' 创建并显示配置 API 的对话框

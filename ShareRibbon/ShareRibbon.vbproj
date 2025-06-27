@@ -116,6 +116,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ApplicationInfo.vb" />
+    <Compile Include="Common\LLMUtil.vb" />
     <Compile Include="Config\ConfigApiForm.vb">
       <SubType>Form</SubType>
     </Compile>

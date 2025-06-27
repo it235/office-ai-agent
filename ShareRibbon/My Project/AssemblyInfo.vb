@@ -1,31 +1,31 @@
-О╩©Imports System
+Imports System
 Imports System.Reflection
 Imports System.Runtime.InteropServices
 
-' Ф°┴Е┘ЁГ╗▀Е╨▐И⌡├Г └Д╦─Х┬╛Д©║Ф│╞Г■╠Д╩╔Д╦▀
-' Ф▌╖Е┬╤Ц─┌Ф⌡╢Ф■╧Х©≥Д╨⌡Г┴╧Ф─╖Е─╪Е▐╞Д©╝Ф■╧
-' Д╦▌Г╗▀Е╨▐И⌡├Е┘ЁХ│■Г └Д©║Ф│╞Ц─┌
+' сп╧ьЁлпР╪╞╣др╩╟Цпео╒сиртоб
+' ©ьжф║ё╦Э╦дуБп╘льптж╣©ипч╦д
+' сКЁлпР╪╞╧ьа╙╣дпео╒║ё
 
-'Ф÷╔Г°▀Г╗▀Е╨▐И⌡├Г┴╧Ф─╖Г └Е─╪
+'╡И©╢ЁлпР╪╞льпт╣дж╣
 
 <Assembly: AssemblyTitle("ShareRibbon")>
 <Assembly: AssemblyDescription("")>
 <Assembly: AssemblyCompany("")>
 <Assembly: AssemblyProduct("ShareRibbon")>
-<Assembly: AssemblyCopyright("Copyright б╘  2025")>
+<Assembly: AssemblyCopyright("Copyright ?  2025")>
 <Assembly: AssemblyTrademark("")>
 
-<Assembly: ComVisible(False)>
+<Assembly: ComVisible(True)>
 
-'Е╕┌Ф·°Ф╜╓И║╧Г⌡╝Е░▒ COM Е┘╛Е╪─О╪▄Е┬≥Д╦▀Е┬≈ GUID Г■╗Д╨▌ typelib Г └ ID
+'хГ╧Ш╢коНд©оР COM ╧╚©╙ё╛тРобап GUID сцсз typelib ╣д ID
 <Assembly: Guid("d84abb1d-319e-40cc-9aee-c945590d87b7")>
 
-' Г╗▀Е╨▐И⌡├Г └Г┴┬Ф°╛Д©║Ф│╞Г■╠Д╦▀Е┬≈Е⌡⌡Д╦╙Е─╪Г╩└Ф┬░: 
+' ЁлпР╪╞╣д╟Ф╠╬пео╒сиобапкд╦Жж╣вИЁи: 
 '
-'      Д╦╩Г┴┬Ф°╛
-'      Ф╛║Г┴┬Ф°╛
-'      Г■÷Ф┬░Е▐╥
-'      Д©╝Х╝╒Е▐╥
+'      жВ╟Ф╠╬
+'      ╢н╟Ф╠╬
+'      иЗЁи╨е
+'      пч╤╘╨е
 '
 
 <Assembly: AssemblyVersion("1.0.0.0")>

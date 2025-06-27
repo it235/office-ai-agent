@@ -111,10 +111,10 @@ Public Class Ribbon1
                     Dim question As String = cellValues.ToString
                     question = previewForm.InputText & “。你只需要返回markdown格式的表格即可，别的什么都不要说，不要任何其他多余的文字。原始数据如下：“ & question
 
-                    Dim requestBody As String = CreateRequestBody(question)
+                    Dim requestBody As String = LLMUtil.CreateRequestBody(question)
 
                     ' 发送 HTTP 请求并获取响应
-                    Dim response As String = Await SendHttpRequest(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody)
+                    Dim response As String = Await LLMUtil.SendHttpRequest(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody)
 
                     ' 如果响应为空，则终止执行
                     If String.IsNullOrEmpty(response) Then

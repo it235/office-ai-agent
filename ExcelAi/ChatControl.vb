@@ -144,64 +144,6 @@ Public Class ChatControl
     End Function
 
 
-    ' 执行 JavaScript 代码，支持操作Excel对象
-    Protected Function ExecuteJavaScript(jsCode As String, preview As Boolean) As Boolean
-        Try
-            If preview Then
-                If Not RunCodePreview(jsCode, preview) Then
-                    Return False
-                End If
-            End If
-
-            ' 检查代码类型 - 普通JS还是Excel操作JS
-            Dim isExcelJS As Boolean = jsCode.Contains("Excel.") OrElse
-                                  jsCode.Contains("ActiveXObject") OrElse
-                                  jsCode.Contains("Application") OrElse
-                                  jsCode.Contains("Workbook")
-
-            If isExcelJS Then
-                ' 创建脚本控制引擎来执行操作Excel的JavaScript
-                Dim scriptEngine As Object = CreateObject("MSScriptControl.ScriptControl")
-                scriptEngine.Language = "JScript"
-
-                ' 设置对Excel应用程序的引用
-                scriptEngine.AddObject("excelApp", Globals.ThisAddIn.Application, True)
-
-                ' 构建执行代码
-                Dim scriptCode As String =
-                "function executeExcelJS() {" & vbCrLf &
-                "  try {" & vbCrLf &
-                "    // Excel已作为excelApp对象提供" & vbCrLf &
-                "    " & jsCode & vbCrLf &
-                "    return 'JS代码执行成功';" & vbCrLf &
-                "  } catch(e) {" & vbCrLf &
-                "    return 'JS执行错误: ' + e.message;" & vbCrLf &
-                "  }" & vbCrLf &
-                "}" & vbCrLf &
-                "executeExcelJS();"
-
-                ' 执行JavaScript代码
-                Dim result As String = scriptEngine.Eval(scriptCode)
-                GlobalStatusStrip.ShowInfo(result)
-                Return True
-            Else
-                ' 对于普通JavaScript，使用WebView2执行
-                Dim scriptResult As Task(Of String) = ChatBrowser.ExecuteScriptAsync(jsCode)
-                scriptResult.Wait() ' 等待执行完成
-
-                ' 显示结果
-                If Not String.IsNullOrEmpty(scriptResult.Result) Then
-                    Dim resultStr As String = scriptResult.Result.Trim(""""c) ' 移除JSON字符串引号
-                    GlobalStatusStrip.ShowInfo("JS执行结果: " + resultStr)
-                End If
-
-                Return True
-            End If
-        Catch ex As Exception
-            MessageBox.Show("执行JavaScript代码时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-            Return False
-        End Try
-    End Function
 
     ' 提供Excel应用程序对象
     Protected Overrides Function GetOfficeApplicationObject() As Object
@@ -558,6 +500,9 @@ Public Class ChatControl
                 Dim maxRows As Integer = Math.Min(lastRow, firstRow + 30)
                 Dim maxCols As Integer = Math.Min(lastCol, firstCol + 10)
 
+                ' 检查是否有实际内容的标志
+                Dim hasContent As Boolean = False
+
                 ' 逐个单元格读取内容
                 For rowIndex As Integer = firstRow To maxRows
                     For colIndex As Integer = firstCol To maxCols
@@ -568,6 +513,7 @@ Public Class ChatControl
                             If cellValue IsNot Nothing Then
                                 Dim cellAddress As String = $"{GetExcelColumnName(colIndex)}{rowIndex}"
                                 contentBuilder.AppendLine($"  {cellAddress}: {cellValue}")
+                                hasContent = True
                             End If
                         Catch cellEx As Exception
                             Debug.WriteLine($"读取单元格时出错: {cellEx.Message}")
@@ -586,8 +532,11 @@ Public Class ChatControl
 
                 contentBuilder.AppendLine("--- WorkbookSheet参考内容到这结束 ---" & vbCrLf)
 
-                ' 将选中内容添加到消息中
-                message &= contentBuilder.ToString()
+                ' 只有在有实际内容时才添加到消息中
+                If hasContent Then
+                    ' 将选中内容添加到消息中
+                    message &= contentBuilder.ToString()
+                End If
             End If
         Catch ex As Exception
             Debug.WriteLine($"获取选中单元格内容时出错: {ex.Message}")

@@ -1,38 +1,38 @@
-﻿Imports System
+Imports System
 Imports System.Reflection
 Imports System.Runtime.InteropServices
 Imports System.Security
 
-' 有关程序集的一般信息由以下
-' 控制。更改这些特性值可修改
-' 与程序集关联的信息。
+' �йس��򼯵�һ����Ϣ������
+' ���ơ�������Щ����ֵ���޸�
+' ����򼯹�������Ϣ��
 
-'查看程序集特性的值
+'�鿴�������Ե�ֵ
 
 <Assembly: AssemblyTitle("ExcelAi")> 
 <Assembly: AssemblyDescription("")> 
 <Assembly: AssemblyCompany("")> 
 <Assembly: AssemblyProduct("ExcelAi")> 
-<Assembly: AssemblyCopyright("Copyright ©  2025")> 
-<Assembly: AssemblyTrademark("")> 
+<Assembly: AssemblyCopyright("Copyright ?  2025")> 
+<Assembly: AssemblyTrademark("")>
 
-'将 ComVisible 设置为 false 将使此程序集中的类型
-'对 COM 组件不可见。  如果需要从 COM 访问此程序集中的类型，
-'请将此类型的 ComVisible 特性设置为 true。
-<Assembly: ComVisible(False)>
+'�� ComVisible ����Ϊ false ��ʹ�˳����е�����
+'�� COM ������ɼ���  �����Ҫ�� COM ���ʴ˳����е����ͣ�
+'�뽫�����͵� ComVisible ��������Ϊ true��
+<Assembly: ComVisible(True)>
 
-'如果此项目向 COM 公开，则下列 GUID 用于类型库的 ID
+'�������Ŀ�� COM ������������ GUID �������Ϳ�� ID
 <Assembly: Guid("9d7e14b7-cfa3-45df-90c3-43fc080611cf")> 
 
-' 程序集的版本信息由下列四个值组成:
+' ���򼯵İ汾��Ϣ�������ĸ�ֵ���:
 '
-'      主版本
-'      次版本
-'      生成号
-'      修订号
+'      ���汾
+'      �ΰ汾
+'      ���ɺ�
+'      �޶���
 '
-'可以指定所有这些值，也可以使用“生成号”和“修订号”的默认值，
-' 方法是按如下所示使用“*”: :
+'����ָ��������Щֵ��Ҳ����ʹ�á����ɺš��͡��޶��š���Ĭ��ֵ��
+' �����ǰ�������ʾʹ�á�*��: :
 ' <Assembly: AssemblyVersion("1.0.*")> 
 
 <Assembly: AssemblyVersion("1.0.0.0")> 
