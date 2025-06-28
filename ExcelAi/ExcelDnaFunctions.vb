@@ -16,28 +16,28 @@ Public Module ExcelDnaFunctions
             Debug.WriteLine("=== Excel-DNA AutoOpen 开始执行 ===")
             Console.WriteLine("=== Excel-DNA AutoOpen 开始执行 ===")
 
-            ' 在Excel-DNA域中初始化GlobalStatusStrip
-            Try
-                Dim excelApp As Object = ExcelDna.Integration.ExcelDnaUtil.Application
-                If excelApp IsNot Nothing Then
-                    GlobalStatusStripAll.InitializeApplication(excelApp)
-                    Debug.WriteLine("Excel-DNA域中GlobalStatusStrip初始化成功")
+            '' 在Excel-DNA域中初始化GlobalStatusBar
+            'Try
+            '    Dim excelApp As Object = ExcelDna.Integration.ExcelDnaUtil.Application
+            '    If excelApp IsNot Nothing Then
+            '        GlobalStatusBar.InitializeApplication(excelApp)
+            '        Debug.WriteLine("Excel-DNA域中GlobalStatusStrip初始化成功")
 
-                    ' 测试状态栏是否工作
-                    Try
-                        excelApp.StatusBar = "Excel-DNA已加载"
-                        Debug.WriteLine("Excel-DNA状态栏测试成功")
-                        Threading.Thread.Sleep(2000)
-                        excelApp.StatusBar = False
-                    Catch statusEx As Exception
-                        Debug.WriteLine($"Excel-DNA状态栏测试失败: {statusEx.Message}")
-                    End Try
-                Else
-                    Debug.WriteLine("Excel-DNA域中无法获取Excel应用程序对象")
-                End If
-            Catch ex As Exception
-                Debug.WriteLine($"Excel-DNA域中GlobalStatusStrip初始化失败: {ex.Message}")
-            End Try
+            '        ' 测试状态栏是否工作
+            '        Try
+            '            excelApp.StatusBar = "Excel-DNA已加载"
+            '            Debug.WriteLine("Excel-DNA状态栏测试成功")
+            '            Threading.Thread.Sleep(2000)
+            '            excelApp.StatusBar = False
+            '        Catch statusEx As Exception
+            '            Debug.WriteLine($"Excel-DNA状态栏测试失败: {statusEx.Message}")
+            '        End Try
+            '    Else
+            '        Debug.WriteLine("Excel-DNA域中无法获取Excel应用程序对象")
+            '    End If
+            'Catch ex As Exception
+            '    Debug.WriteLine($"Excel-DNA域中GlobalStatusStrip初始化失败: {ex.Message}")
+            'End Try
 
             ' 初始化配置管理器
             Try
@@ -146,7 +146,7 @@ Public Module ExcelDnaFunctions
             ' 使用指定的模型或默认模型
             Dim useModel As String = If(String.IsNullOrEmpty(model), GetDefaultModel(), model)
 
-            GlobalStatusStripAll.ShowWarning($"正在同步请求大模型中，请耐心等待")
+            'GlobalStatusBar.ShowWarning($"正在同步请求大模型中，请耐心等待")
 
             ' 创建请求体
             Dim requestBody As String = LLMUtil.CreateLlmRequestBody(prompt, useModel, systemPrompt, temperature, maxTokens)
@@ -190,7 +190,7 @@ Public Module ExcelDnaFunctions
         ' 使用Excel-DNA特有的线程安全方法设置状态栏
         Try
             Dim displayPrompt As String = If(prompt.Length > 25, prompt.Substring(0, 25) + "...", prompt)
-            SetExcelStatusBarDirectly($"正在思考「{displayPrompt}」...")
+            SetExcelStatusBarDirectly($"大模型正在思考：「{displayPrompt}」...")
         Catch ex As Exception
             Debug.WriteLine($"显示状态提示失败: {ex.Message}")
         End Try

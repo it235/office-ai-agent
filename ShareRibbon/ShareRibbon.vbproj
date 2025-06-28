@@ -126,7 +126,10 @@
     </Compile>
     <Compile Include="Config\ChatSettings.vb" />
     <Compile Include="Config\ConfigSettings.vb" />
-    <Compile Include="Config\GlobalStatusStripAll.vb" />
+    <Compile Include="Config\GlobalStatusBar.vb" />
+    <Compile Include="Config\GlobalStatusStripAll.vb">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Config\GlobalStatusStrip.vb" />
     <Compile Include="Config\WebView2Loader.vb" />
     <Compile Include="Controls\BaseChatControl.Designer.vb">

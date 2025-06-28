@@ -9,24 +9,16 @@ Imports Microsoft.Office.Interop.Excel
 Imports Microsoft.Win32
 Imports ShareRibbon
 
-'<ComVisible(True)>
-'<ClassInterface(ClassInterfaceType.AutoDual)>
 Public Class ThisAddIn
 
     Private chatTaskPane As Microsoft.Office.Tools.CustomTaskPane
     Public Shared chatControl As ChatControl
 
-
-
     Private Sub ExcelAi_Startup() Handles Me.Startup
-        ' 初始化 GlobalStatusStrip
         Try
             Debug.WriteLine("正在初始化GlobalStatusStrip...")
             GlobalStatusStripAll.InitializeApplication(Me.Application)
             Debug.WriteLine("GlobalStatusStrip初始化完成")
-
-            ' 测试状态栏是否正常工作
-            'GlobalStatusStripAll.ShowWarning("Excel加载项已启动")
         Catch ex As Exception
             Debug.WriteLine("初始化GlobalStatusStrip时出错: " & ex.Message)
             MessageBox.Show("初始化状态栏时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
@@ -37,9 +29,6 @@ Public Class ThisAddIn
             MessageBox.Show($"WebView2 初始化失败: {ex.Message}")
         End Try
 
-        ' 处理工作表和工作簿切换事件
-        'AddHandler Globals.ThisAddIn.Application.ActiveDocument, AddressOf Me.Application_WorkbookActivate
-        'Application_WorkbookActivate()
         ' 初始化 Timer，用于WPS中扩大聊天区域的宽度
         widthTimer = New Timer()
         AddHandler widthTimer.Tick, AddressOf WidthTimer_Tick
@@ -53,7 +42,7 @@ Public Class ThisAddIn
         CreateChatTaskPane()
 
         ' 确保有可用的工作簿
-        EnsureWorkbookAvailable()
+        'EnsureWorkbookAvailable()
 
         ' 加载 Excel-DNA XLL (添加这部分)
         Try
@@ -77,16 +66,55 @@ Public Class ThisAddIn
         End Try
     End Sub
 
-    ' 确保有可用的工作簿
+    ' 确保有可用的工作簿 - 增强版
     Private Sub EnsureWorkbookAvailable()
         Try
+            ' 记录所有当前工作簿
             Debug.WriteLine($"当前工作簿数量: {Application.Workbooks.Count}")
+            If Application.Workbooks.Count > 0 Then
+                Debug.WriteLine("工作簿列表:")
+                For i As Integer = 1 To Application.Workbooks.Count
+                    Dim wb As Workbook = Application.Workbooks(i)
+                    Debug.WriteLine($"  [{i}] 名称: {wb.Name}, 路径: {If(String.IsNullOrEmpty(wb.Path), "(未保存)", wb.Path)}")
+                Next
+            End If
 
-            ' 如果没有工作簿，创建一个新的
-            If Application.Workbooks.Count = 0 Then
-                Debug.WriteLine("没有工作簿，正在创建新工作簿...")
+            ' 关键修改: 只有在没有任何实际工作簿时才创建
+            ' 检查是否有任何非临时工作簿
+            Dim hasRealWorkbook As Boolean = False
+
+            If Application.Workbooks.Count > 0 Then
+                ' 检查是否所有工作簿都是新建的空白工作簿
+                For i As Integer = 1 To Application.Workbooks.Count
+                    Dim wb As Workbook = Application.Workbooks(i)
+                    ' 如果工作簿不是默认名称(如Book1)或已保存过，则视为有效工作簿
+                    If Not (wb.Name.StartsWith("Book") OrElse wb.Name.StartsWith("工作簿")) OrElse
+                   Not String.IsNullOrEmpty(wb.Path) OrElse
+                   wb.Saved = False Then
+                        hasRealWorkbook = True
+                        Debug.WriteLine($"找到有效工作簿: {wb.Name}")
+                        Exit For
+                    End If
+                Next
+            End If
+
+            ' 仅当没有工作簿或只有临时工作簿且数量=1时才创建新的
+            If Application.Workbooks.Count = 0 OrElse (Application.Workbooks.Count = 1 AndAlso Not hasRealWorkbook) Then
+                Debug.WriteLine("需要创建新工作簿...")
+
+                ' 如果已经有一个临时工作簿，先关闭它
+                If Application.Workbooks.Count = 1 AndAlso Not hasRealWorkbook Then
+                    Debug.WriteLine("关闭现有临时工作簿")
+                    ' 不保存关闭
+                    Application.DisplayAlerts = False
+                    Application.Workbooks(1).Close(SaveChanges:=False)
+                    Application.DisplayAlerts = True
+                End If
+
                 Application.Workbooks.Add()
                 Debug.WriteLine("已创建新工作簿")
+            Else
+                Debug.WriteLine("已存在有效工作簿，无需创建")
             End If
 
             ' 确保有活动工作簿
@@ -109,25 +137,6 @@ Public Class ThisAddIn
         End Try
     End Sub
 
-    Private Sub Application_WorkbookActivate(Optional Wb As Workbook = Nothing)
-        Try
-            Debug.WriteLine("工作簿激活事件触发")
-
-            ' 如果没有工作簿，尝试创建一个
-            If Application.Workbooks.Count = 0 Then
-                Debug.WriteLine("激活事件中没有工作簿，正在创建...")
-                Application.Workbooks.Add()
-            End If
-
-            ' 确保任务窗格正确初始化
-            If chatTaskPane Is Nothing Then
-                CreateChatTaskPane()
-            End If
-
-        Catch ex As Exception
-            Debug.WriteLine($"工作簿激活时出错: {ex.Message}")
-        End Try
-    End Sub
     Private Sub LoadExcelDnaAddIn()
         Try
             Debug.WriteLine("开始查找 XLL 文件...")
@@ -279,23 +288,10 @@ Public Class ThisAddIn
                 Try
                     Debug.WriteLine($"正在加载 Excel-DNA XLL: {foundXllPath}")
                     Dim result As Boolean = Application.RegisterXLL(foundXllPath)
-
-                    If result Then
-                        Debug.WriteLine($"成功加载 Excel-DNA XLL: {foundXllPath}")
-                        'GlobalStatusStripAll.ShowWarning($"Excel DNA 函数已加载，可以使用 =DLLM() 和 =ALLM() 函数")
-                    Else
-                        Debug.WriteLine($"RegisterXLL返回False: {foundXllPath}")
-                        'GlobalStatusStripAll.ShowWarning($"Excel DNA 注册失败，RegisterXLL返回False")
-                    End If
                 Catch ex As Exception
                     Debug.WriteLine($"加载 XLL 时出错: {ex.Message}")
-                    'GlobalStatusStripAll.ShowWarning($"Excel DNA 加载错误: {ex.Message}")
                 End Try
             Else
-                Debug.WriteLine("未找到任何XLL文件")
-
-                ' 输出调试信息：显示每个搜索路径的内容
-                Debug.WriteLine("搜索路径详细信息:")
                 For Each searchPath In uniquePaths
                     If Directory.Exists(searchPath) Then
                         Debug.WriteLine($"路径 {searchPath} 包含的文件:")
@@ -313,14 +309,11 @@ Public Class ThisAddIn
                         Debug.WriteLine($"路径不存在: {searchPath}")
                     End If
                 Next
-
-                GlobalStatusStripAll.ShowWarning("未找到 Excel DNA 文件，DLLM 和 ALLM 函数不可用")
             End If
 
         Catch ex As Exception
             Debug.WriteLine($"LoadExcelDnaAddIn 出错: {ex.Message}")
             Debug.WriteLine($"堆栈跟踪: {ex.StackTrace}")
-            GlobalStatusStripAll.ShowWarning($"Excel DNA 加载出错: {ex.Message}")
         End Try
     End Sub
 
