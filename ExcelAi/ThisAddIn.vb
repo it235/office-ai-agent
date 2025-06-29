@@ -1,4 +1,4 @@
-Imports System.Diagnostics
+ï»¿Imports System.Diagnostics
 Imports System.IO
 Imports System.Runtime.InteropServices
 Imports System.Threading.Tasks
@@ -11,150 +11,158 @@ Imports ShareRibbon
 
 Public Class ThisAddIn
 
+    ' åœ¨ç±»ä¸­æ·»åŠ ä»¥ä¸‹å˜é‡
+    Private _deepseekControl As DeepseekControl
+    Private _deepseekTaskPane As Microsoft.Office.Tools.CustomTaskPane
+
     Private chatTaskPane As Microsoft.Office.Tools.CustomTaskPane
     Public Shared chatControl As ChatControl
 
     Private Sub ExcelAi_Startup() Handles Me.Startup
         Try
-            Debug.WriteLine("ÕıÔÚ³õÊ¼»¯GlobalStatusStrip...")
+            Debug.WriteLine("æ­£åœ¨åˆå§‹åŒ–GlobalStatusStrip...")
             GlobalStatusStripAll.InitializeApplication(Me.Application)
-            Debug.WriteLine("GlobalStatusStrip³õÊ¼»¯Íê³É")
+            Debug.WriteLine("GlobalStatusStripåˆå§‹åŒ–å®Œæˆ")
         Catch ex As Exception
-            Debug.WriteLine("³õÊ¼»¯GlobalStatusStripÊ±³ö´í: " & ex.Message)
-            MessageBox.Show("³õÊ¼»¯×´Ì¬À¸Ê±³ö´í: " & ex.Message, "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Debug.WriteLine("åˆå§‹åŒ–GlobalStatusStripæ—¶å‡ºé”™: " & ex.Message)
+            MessageBox.Show("åˆå§‹åŒ–çŠ¶æ€æ æ—¶å‡ºé”™: " & ex.Message, "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
         Try
             WebView2Loader.EnsureWebView2Loader()
         Catch ex As Exception
-            MessageBox.Show($"WebView2 ³õÊ¼»¯Ê§°Ü: {ex.Message}")
+            MessageBox.Show($"WebView2 åˆå§‹åŒ–å¤±è´¥: {ex.Message}")
         End Try
 
-        ' ³õÊ¼»¯ Timer£¬ÓÃÓÚWPSÖĞÀ©´óÁÄÌìÇøÓòµÄ¿í¶È
+        ' åˆå§‹åŒ– Timerï¼Œç”¨äºWPSä¸­æ‰©å¤§èŠå¤©åŒºåŸŸçš„å®½åº¦
         widthTimer = New Timer()
         AddHandler widthTimer.Tick, AddressOf WidthTimer_Tick
-        widthTimer.Interval = 100 ' ÉèÖÃÑÓ³ÙÊ±¼ä£¬µ¥Î»ÎªºÁÃë
+        widthTimer.Interval = 100 ' è®¾ç½®å»¶è¿Ÿæ—¶é—´ï¼Œå•ä½ä¸ºæ¯«ç§’
 
+        widthTimer1 = New Timer()
+        AddHandler widthTimer1.Tick, AddressOf WidthTimer1_Tick
+        widthTimer1.Interval = 100 ' è®¾ç½®å»¶è¿Ÿæ—¶é—´ï¼Œå•ä½ä¸ºæ¯«ç§’
 
-        ' µÈ´ıExcelÍêÈ«Æô¶¯
+        ' ç­‰å¾…Excelå®Œå…¨å¯åŠ¨
         WaitForExcelReady()
 
-        ' ´´½¨ÈÎÎñ´°¸ñ
+        ' åˆ›å»ºä»»åŠ¡çª—æ ¼
         CreateChatTaskPane()
+        CreateDeepseekTaskPane()
 
-        ' È·±£ÓĞ¿ÉÓÃµÄ¹¤×÷²¾
+        ' ç¡®ä¿æœ‰å¯ç”¨çš„å·¥ä½œç°¿
         'EnsureWorkbookAvailable()
 
-        ' ¼ÓÔØ Excel-DNA XLL (Ìí¼ÓÕâ²¿·Ö)
+        ' åŠ è½½ Excel-DNA XLL (æ·»åŠ è¿™éƒ¨åˆ†)
         Try
             LoadExcelDnaAddIn()
         Catch ex As Exception
-            Debug.WriteLine($"¼ÓÔØ Excel-DNA Ê§°Ü: {ex.Message}")
-            ' ¼ÌĞøÖ´ĞĞ£¬²»ÒªÒòÎªÕâ¸ö´íÎó¶øÖĞ¶ÏÆô¶¯
+            Debug.WriteLine($"åŠ è½½ Excel-DNA å¤±è´¥: {ex.Message}")
+            ' ç»§ç»­æ‰§è¡Œï¼Œä¸è¦å› ä¸ºè¿™ä¸ªé”™è¯¯è€Œä¸­æ–­å¯åŠ¨
         End Try
     End Sub
 
-    ' Ìí¼ÓÕâ¸ö·½·¨À´µÈ´ıExcelÆô¶¯
+    ' æ·»åŠ è¿™ä¸ªæ–¹æ³•æ¥ç­‰å¾…Excelå¯åŠ¨
     Private Sub WaitForExcelReady()
         Try
             Dim startTime As DateTime = DateTime.Now
             While Not Application.Ready AndAlso DateTime.Now.Subtract(startTime).TotalSeconds < 10
                 System.Threading.Thread.Sleep(100)
             End While
-            Debug.WriteLine("Excel×¼±¸¾ÍĞ÷")
+            Debug.WriteLine("Excelå‡†å¤‡å°±ç»ª")
         Catch ex As Exception
-            Debug.WriteLine($"µÈ´ıExcel×¼±¸¾ÍĞ÷Ê±³ö´í: {ex.Message}")
+            Debug.WriteLine($"ç­‰å¾…Excelå‡†å¤‡å°±ç»ªæ—¶å‡ºé”™: {ex.Message}")
         End Try
     End Sub
 
-    ' È·±£ÓĞ¿ÉÓÃµÄ¹¤×÷²¾ - ÔöÇ¿°æ
+    ' ç¡®ä¿æœ‰å¯ç”¨çš„å·¥ä½œç°¿ - å¢å¼ºç‰ˆ
     Private Sub EnsureWorkbookAvailable()
         Try
-            ' ¼ÇÂ¼ËùÓĞµ±Ç°¹¤×÷²¾
-            Debug.WriteLine($"µ±Ç°¹¤×÷²¾ÊıÁ¿: {Application.Workbooks.Count}")
+            ' è®°å½•æ‰€æœ‰å½“å‰å·¥ä½œç°¿
+            Debug.WriteLine($"å½“å‰å·¥ä½œç°¿æ•°é‡: {Application.Workbooks.Count}")
             If Application.Workbooks.Count > 0 Then
-                Debug.WriteLine("¹¤×÷²¾ÁĞ±í:")
+                Debug.WriteLine("å·¥ä½œç°¿åˆ—è¡¨:")
                 For i As Integer = 1 To Application.Workbooks.Count
                     Dim wb As Workbook = Application.Workbooks(i)
-                    Debug.WriteLine($"  [{i}] Ãû³Æ: {wb.Name}, Â·¾¶: {If(String.IsNullOrEmpty(wb.Path), "(Î´±£´æ)", wb.Path)}")
+                    Debug.WriteLine($"  [{i}] åç§°: {wb.Name}, è·¯å¾„: {If(String.IsNullOrEmpty(wb.Path), "(æœªä¿å­˜)", wb.Path)}")
                 Next
             End If
 
-            ' ¹Ø¼üĞŞ¸Ä: Ö»ÓĞÔÚÃ»ÓĞÈÎºÎÊµ¼Ê¹¤×÷²¾Ê±²Å´´½¨
-            ' ¼ì²éÊÇ·ñÓĞÈÎºÎ·ÇÁÙÊ±¹¤×÷²¾
+            ' å…³é”®ä¿®æ”¹: åªæœ‰åœ¨æ²¡æœ‰ä»»ä½•å®é™…å·¥ä½œç°¿æ—¶æ‰åˆ›å»º
+            ' æ£€æŸ¥æ˜¯å¦æœ‰ä»»ä½•éä¸´æ—¶å·¥ä½œç°¿
             Dim hasRealWorkbook As Boolean = False
 
             If Application.Workbooks.Count > 0 Then
-                ' ¼ì²éÊÇ·ñËùÓĞ¹¤×÷²¾¶¼ÊÇĞÂ½¨µÄ¿Õ°×¹¤×÷²¾
+                ' æ£€æŸ¥æ˜¯å¦æ‰€æœ‰å·¥ä½œç°¿éƒ½æ˜¯æ–°å»ºçš„ç©ºç™½å·¥ä½œç°¿
                 For i As Integer = 1 To Application.Workbooks.Count
                     Dim wb As Workbook = Application.Workbooks(i)
-                    ' Èç¹û¹¤×÷²¾²»ÊÇÄ¬ÈÏÃû³Æ(ÈçBook1)»òÒÑ±£´æ¹ı£¬ÔòÊÓÎªÓĞĞ§¹¤×÷²¾
-                    If Not (wb.Name.StartsWith("Book") OrElse wb.Name.StartsWith("¹¤×÷²¾")) OrElse
+                    ' å¦‚æœå·¥ä½œç°¿ä¸æ˜¯é»˜è®¤åç§°(å¦‚Book1)æˆ–å·²ä¿å­˜è¿‡ï¼Œåˆ™è§†ä¸ºæœ‰æ•ˆå·¥ä½œç°¿
+                    If Not (wb.Name.StartsWith("Book") OrElse wb.Name.StartsWith("å·¥ä½œç°¿")) OrElse
                    Not String.IsNullOrEmpty(wb.Path) OrElse
                    wb.Saved = False Then
                         hasRealWorkbook = True
-                        Debug.WriteLine($"ÕÒµ½ÓĞĞ§¹¤×÷²¾: {wb.Name}")
+                        Debug.WriteLine($"æ‰¾åˆ°æœ‰æ•ˆå·¥ä½œç°¿: {wb.Name}")
                         Exit For
                     End If
                 Next
             End If
 
-            ' ½öµ±Ã»ÓĞ¹¤×÷²¾»òÖ»ÓĞÁÙÊ±¹¤×÷²¾ÇÒÊıÁ¿=1Ê±²Å´´½¨ĞÂµÄ
+            ' ä»…å½“æ²¡æœ‰å·¥ä½œç°¿æˆ–åªæœ‰ä¸´æ—¶å·¥ä½œç°¿ä¸”æ•°é‡=1æ—¶æ‰åˆ›å»ºæ–°çš„
             If Application.Workbooks.Count = 0 OrElse (Application.Workbooks.Count = 1 AndAlso Not hasRealWorkbook) Then
-                Debug.WriteLine("ĞèÒª´´½¨ĞÂ¹¤×÷²¾...")
+                Debug.WriteLine("éœ€è¦åˆ›å»ºæ–°å·¥ä½œç°¿...")
 
-                ' Èç¹ûÒÑ¾­ÓĞÒ»¸öÁÙÊ±¹¤×÷²¾£¬ÏÈ¹Ø±ÕËü
+                ' å¦‚æœå·²ç»æœ‰ä¸€ä¸ªä¸´æ—¶å·¥ä½œç°¿ï¼Œå…ˆå…³é—­å®ƒ
                 If Application.Workbooks.Count = 1 AndAlso Not hasRealWorkbook Then
-                    Debug.WriteLine("¹Ø±ÕÏÖÓĞÁÙÊ±¹¤×÷²¾")
-                    ' ²»±£´æ¹Ø±Õ
+                    Debug.WriteLine("å…³é—­ç°æœ‰ä¸´æ—¶å·¥ä½œç°¿")
+                    ' ä¸ä¿å­˜å…³é—­
                     Application.DisplayAlerts = False
                     Application.Workbooks(1).Close(SaveChanges:=False)
                     Application.DisplayAlerts = True
                 End If
 
                 Application.Workbooks.Add()
-                Debug.WriteLine("ÒÑ´´½¨ĞÂ¹¤×÷²¾")
+                Debug.WriteLine("å·²åˆ›å»ºæ–°å·¥ä½œç°¿")
             Else
-                Debug.WriteLine("ÒÑ´æÔÚÓĞĞ§¹¤×÷²¾£¬ÎŞĞè´´½¨")
+                Debug.WriteLine("å·²å­˜åœ¨æœ‰æ•ˆå·¥ä½œç°¿ï¼Œæ— éœ€åˆ›å»º")
             End If
 
-            ' È·±£ÓĞ»î¶¯¹¤×÷²¾
+            ' ç¡®ä¿æœ‰æ´»åŠ¨å·¥ä½œç°¿
             If Application.ActiveWorkbook Is Nothing AndAlso Application.Workbooks.Count > 0 Then
                 Application.Workbooks(1).Activate()
-                Debug.WriteLine("ÒÑ¼¤»îµÚÒ»¸ö¹¤×÷²¾")
+                Debug.WriteLine("å·²æ¿€æ´»ç¬¬ä¸€ä¸ªå·¥ä½œç°¿")
             End If
 
-            ' È·±£ExcelÊÇ¿É¼ûµÄ
+            ' ç¡®ä¿Excelæ˜¯å¯è§çš„
             If Not Application.Visible Then
                 Application.Visible = True
-                Debug.WriteLine("ÒÑÉèÖÃExcelÎª¿É¼û")
+                Debug.WriteLine("å·²è®¾ç½®Excelä¸ºå¯è§")
             End If
 
-            Debug.WriteLine("¹¤×÷²¾×´Ì¬¼ì²éÍê³É")
+            Debug.WriteLine("å·¥ä½œç°¿çŠ¶æ€æ£€æŸ¥å®Œæˆ")
 
         Catch ex As Exception
-            Debug.WriteLine($"È·±£¹¤×÷²¾¿ÉÓÃÊ±³ö´í: {ex.Message}")
-            MessageBox.Show($"³õÊ¼»¯Excel¹¤×÷²¾Ê±³ö´í: {ex.Message}", "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Debug.WriteLine($"ç¡®ä¿å·¥ä½œç°¿å¯ç”¨æ—¶å‡ºé”™: {ex.Message}")
+            MessageBox.Show($"åˆå§‹åŒ–Excelå·¥ä½œç°¿æ—¶å‡ºé”™: {ex.Message}", "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Warning)
         End Try
     End Sub
 
     Private Sub LoadExcelDnaAddIn()
         Try
-            Debug.WriteLine("¿ªÊ¼²éÕÒ XLL ÎÄ¼ş...")
+            Debug.WriteLine("å¼€å§‹æŸ¥æ‰¾ XLL æ–‡ä»¶...")
 
-            ' »ñÈ¡µ±Ç°³ÌĞò¼¯Â·¾¶
+            ' è·å–å½“å‰ç¨‹åºé›†è·¯å¾„
             Dim currentAssemblyPath As String = System.Reflection.Assembly.GetExecutingAssembly().Location
             Dim currentDir As String = Path.GetDirectoryName(currentAssemblyPath)
 
-            Debug.WriteLine($"µ±Ç°³ÌĞò¼¯Â·¾¶: {currentAssemblyPath}")
-            Debug.WriteLine($"µ±Ç°Ä¿Â¼: {currentDir}")
+            Debug.WriteLine($"å½“å‰ç¨‹åºé›†è·¯å¾„: {currentAssemblyPath}")
+            Debug.WriteLine($"å½“å‰ç›®å½•: {currentDir}")
 
-            ' ´´½¨ËÑË÷Â·¾¶ÁĞ±í
+            ' åˆ›å»ºæœç´¢è·¯å¾„åˆ—è¡¨
             Dim searchPaths As New List(Of String)
 
-            ' 1. ¿ª·¢»·¾³£º³¢ÊÔÕÒµ½ÕæÕıµÄÏîÄ¿Êä³öÄ¿Â¼
+            ' 1. å¼€å‘ç¯å¢ƒï¼šå°è¯•æ‰¾åˆ°çœŸæ­£çš„é¡¹ç›®è¾“å‡ºç›®å½•
             If currentDir.Contains("AppData\Local\assembly") Then
-                ' ÕâÊÇVSTOÁÙÊ±Ä¿Â¼£¬³¢ÊÔÕÒµ½ÕæÕıµÄÏîÄ¿Ä¿Â¼
-                ' ¸ù¾İÄúµÄÏîÄ¿½á¹¹£ºF:\ai\code\AiHelper\ExcelAi\bin\Debug
+                ' è¿™æ˜¯VSTOä¸´æ—¶ç›®å½•ï¼Œå°è¯•æ‰¾åˆ°çœŸæ­£çš„é¡¹ç›®ç›®å½•
+                ' æ ¹æ®æ‚¨çš„é¡¹ç›®ç»“æ„ï¼šF:\ai\code\AiHelper\ExcelAi\bin\Debug
                 Dim possibleDevPaths As String() = {
                 "F:\ai\code\AiHelper\ExcelAi\bin\Debug",
                 "F:\ai\code\AiHelper\ExcelAi\bin\Release",
@@ -165,38 +173,38 @@ Public Class ThisAddIn
                 For Each devPath In possibleDevPaths
                     If Directory.Exists(devPath) Then
                         searchPaths.Add(devPath)
-                        Debug.WriteLine($"Ìí¼Ó¿ª·¢Â·¾¶: {devPath}")
+                        Debug.WriteLine($"æ·»åŠ å¼€å‘è·¯å¾„: {devPath}")
                     End If
                 Next
             End If
 
-            ' 2. µ±Ç°Ä¿Â¼¼°ÆäÏà¹ØÄ¿Â¼
+            ' 2. å½“å‰ç›®å½•åŠå…¶ç›¸å…³ç›®å½•
             searchPaths.Add(currentDir)
             searchPaths.Add(Path.Combine(currentDir, ".."))
 
-            ' 3. °²×°»·¾³£º²éÕÒËùÓĞ¿ÉÄÜµÄ°²×°Â·¾¶
-            ' Ê×ÏÈ³¢ÊÔ´Óµ±Ç°Â·¾¶ÏòÉÏ²éÕÒOfficeAiAgentÄ¿Â¼
+            ' 3. å®‰è£…ç¯å¢ƒï¼šæŸ¥æ‰¾æ‰€æœ‰å¯èƒ½çš„å®‰è£…è·¯å¾„
+            ' é¦–å…ˆå°è¯•ä»å½“å‰è·¯å¾„å‘ä¸ŠæŸ¥æ‰¾OfficeAiAgentç›®å½•
             Dim currentDirInfo As New DirectoryInfo(currentDir)
             While currentDirInfo IsNot Nothing
-                ' ¼ì²éÊÇ·ñ°üº¬OfficeAiAgent
+                ' æ£€æŸ¥æ˜¯å¦åŒ…å«OfficeAiAgent
                 If currentDirInfo.Name.Equals("OfficeAiAgent", StringComparison.OrdinalIgnoreCase) OrElse
                currentDirInfo.FullName.Contains("OfficeAiAgent") Then
 
-                    ' ÕÒµ½OfficeAiAgentÄ¿Â¼£¬¼ì²éExcelAi×ÓÄ¿Â¼
+                    ' æ‰¾åˆ°OfficeAiAgentç›®å½•ï¼Œæ£€æŸ¥ExcelAiå­ç›®å½•
                     Dim excelAiPath As String = Path.Combine(currentDirInfo.FullName, "ExcelAi")
                     If Directory.Exists(excelAiPath) Then
                         searchPaths.Add(excelAiPath)
-                        Debug.WriteLine($"Ìí¼Ó°²×°Â·¾¶: {excelAiPath}")
+                        Debug.WriteLine($"æ·»åŠ å®‰è£…è·¯å¾„: {excelAiPath}")
                     End If
 
-                    ' Ò²¼ì²é¸ùÄ¿Â¼
+                    ' ä¹Ÿæ£€æŸ¥æ ¹ç›®å½•
                     searchPaths.Add(currentDirInfo.FullName)
                     Exit While
                 End If
                 currentDirInfo = currentDirInfo.Parent
             End While
 
-            ' 4. ±ê×¼°²×°Â·¾¶
+            ' 4. æ ‡å‡†å®‰è£…è·¯å¾„
             Dim standardInstallPaths As String() = {
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "it235", "OfficeAiAgent", "ExcelAi"),
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "it235", "OfficeAiAgent", "ExcelAi"),
@@ -207,11 +215,11 @@ Public Class ThisAddIn
             For Each installPath In standardInstallPaths
                 If Directory.Exists(installPath) Then
                     searchPaths.Add(installPath)
-                    Debug.WriteLine($"Ìí¼Ó±ê×¼°²×°Â·¾¶: {installPath}")
+                    Debug.WriteLine($"æ·»åŠ æ ‡å‡†å®‰è£…è·¯å¾„: {installPath}")
                 End If
             Next
 
-            ' 5. ÓÃ»§×Ô¶¨Òå°²×°Â·¾¶£ºËÑË÷ËùÓĞÇı¶¯Æ÷
+            ' 5. ç”¨æˆ·è‡ªå®šä¹‰å®‰è£…è·¯å¾„ï¼šæœç´¢æ‰€æœ‰é©±åŠ¨å™¨
             Try
                 For Each drive In DriveInfo.GetDrives()
                     If drive.IsReady AndAlso drive.DriveType = DriveType.Fixed Then
@@ -224,16 +232,16 @@ Public Class ThisAddIn
                         For Each customPath In customPaths
                             If Directory.Exists(customPath) Then
                                 searchPaths.Add(customPath)
-                                Debug.WriteLine($"Ìí¼Ó×Ô¶¨ÒåÂ·¾¶: {customPath}")
+                                Debug.WriteLine($"æ·»åŠ è‡ªå®šä¹‰è·¯å¾„: {customPath}")
                             End If
                         Next
                     End If
                 Next
             Catch ex As Exception
-                Debug.WriteLine($"ËÑË÷×Ô¶¨ÒåÂ·¾¶Ê±³ö´í: {ex.Message}")
+                Debug.WriteLine($"æœç´¢è‡ªå®šä¹‰è·¯å¾„æ—¶å‡ºé”™: {ex.Message}")
             End Try
 
-            ' 6. ´Ó×¢²á±í²éÕÒ°²×°Â·¾¶£¨Èç¹ûMSI°²×°Ê±Ğ´ÈëÁË×¢²á±í£©
+            ' 6. ä»æ³¨å†Œè¡¨æŸ¥æ‰¾å®‰è£…è·¯å¾„ï¼ˆå¦‚æœMSIå®‰è£…æ—¶å†™å…¥äº†æ³¨å†Œè¡¨ï¼‰
             Try
                 Using key As RegistryKey = Registry.LocalMachine.OpenSubKey("SOFTWARE\it235\OfficeAiAgent")
                     If key IsNot Nothing Then
@@ -242,107 +250,122 @@ Public Class ThisAddIn
                             Dim excelAiPath As String = Path.Combine(installPath, "ExcelAi")
                             If Directory.Exists(excelAiPath) Then
                                 searchPaths.Add(excelAiPath)
-                                Debug.WriteLine($"´Ó×¢²á±íÌí¼ÓÂ·¾¶: {excelAiPath}")
+                                Debug.WriteLine($"ä»æ³¨å†Œè¡¨æ·»åŠ è·¯å¾„: {excelAiPath}")
                             End If
                         End If
                     End If
                 End Using
             Catch ex As Exception
-                Debug.WriteLine($"´Ó×¢²á±í¶ÁÈ¡°²×°Â·¾¶Ê±³ö´í: {ex.Message}")
+                Debug.WriteLine($"ä»æ³¨å†Œè¡¨è¯»å–å®‰è£…è·¯å¾„æ—¶å‡ºé”™: {ex.Message}")
             End Try
 
-            ' È¥³ıÖØ¸´Â·¾¶
+            ' å»é™¤é‡å¤è·¯å¾„
             Dim uniquePaths As New HashSet(Of String)(searchPaths, StringComparer.OrdinalIgnoreCase)
 
-            ' ²éÕÒXLLÎÄ¼ş
+            ' æŸ¥æ‰¾XLLæ–‡ä»¶
             Dim xllFileName As String = If(IntPtr.Size = 8, "ExcelAi-AddIn64-packed.xll", "ExcelAi-AddIn-packed.xll")
             Dim foundXllPath As String = String.Empty
 
-            Debug.WriteLine($"ÕıÔÚ²éÕÒÎÄ¼ş: {xllFileName}")
-            Debug.WriteLine("ËÑË÷Â·¾¶ÁĞ±í:")
+            Debug.WriteLine($"æ­£åœ¨æŸ¥æ‰¾æ–‡ä»¶: {xllFileName}")
+            Debug.WriteLine("æœç´¢è·¯å¾„åˆ—è¡¨:")
 
             For Each searchPath In uniquePaths
-                Debug.WriteLine($"  ¼ì²é: {searchPath}")
+                Debug.WriteLine($"  æ£€æŸ¥: {searchPath}")
 
                 If Directory.Exists(searchPath) Then
                     Dim xllPath As String = Path.Combine(searchPath, xllFileName)
                     If File.Exists(xllPath) Then
                         foundXllPath = xllPath
-                        Debug.WriteLine($"ÕÒµ½XLLÎÄ¼ş: {xllPath}")
+                        Debug.WriteLine($"æ‰¾åˆ°XLLæ–‡ä»¶: {xllPath}")
                         Exit For
                     End If
 
-                    ' Ò²¼ì²éÎ´´ò°üµÄ°æ±¾
+                    ' ä¹Ÿæ£€æŸ¥æœªæ‰“åŒ…çš„ç‰ˆæœ¬
                     Dim unpackedXllFileName As String = If(IntPtr.Size = 8, "ExcelAi-AddIn64.xll", "ExcelAi-AddIn.xll")
                     Dim unpackedXllPath As String = Path.Combine(searchPath, unpackedXllFileName)
                     If File.Exists(unpackedXllPath) Then
                         foundXllPath = unpackedXllPath
-                        Debug.WriteLine($"ÕÒµ½Î´´ò°üXLLÎÄ¼ş: {unpackedXllPath}")
+                        Debug.WriteLine($"æ‰¾åˆ°æœªæ‰“åŒ…XLLæ–‡ä»¶: {unpackedXllPath}")
                         Exit For
                     End If
                 End If
             Next
 
-            ' ³¢ÊÔ¼ÓÔØXLLÎÄ¼ş
+            ' å°è¯•åŠ è½½XLLæ–‡ä»¶
             If Not String.IsNullOrEmpty(foundXllPath) Then
                 Try
-                    Debug.WriteLine($"ÕıÔÚ¼ÓÔØ Excel-DNA XLL: {foundXllPath}")
+                    Debug.WriteLine($"æ­£åœ¨åŠ è½½ Excel-DNA XLL: {foundXllPath}")
                     Dim result As Boolean = Application.RegisterXLL(foundXllPath)
                 Catch ex As Exception
-                    Debug.WriteLine($"¼ÓÔØ XLL Ê±³ö´í: {ex.Message}")
+                    Debug.WriteLine($"åŠ è½½ XLL æ—¶å‡ºé”™: {ex.Message}")
                 End Try
             Else
                 For Each searchPath In uniquePaths
                     If Directory.Exists(searchPath) Then
-                        Debug.WriteLine($"Â·¾¶ {searchPath} °üº¬µÄÎÄ¼ş:")
+                        Debug.WriteLine($"è·¯å¾„ {searchPath} åŒ…å«çš„æ–‡ä»¶:")
                         Try
                             For Each file In Directory.GetFiles(searchPath, "*.xll")
-                                Debug.WriteLine($"  XLLÎÄ¼ş: {Path.GetFileName(file)}")
+                                Debug.WriteLine($"  XLLæ–‡ä»¶: {Path.GetFileName(file)}")
                             Next
                             For Each file In Directory.GetFiles(searchPath, "ExcelAi*.*")
-                                Debug.WriteLine($"  ExcelAiÎÄ¼ş: {Path.GetFileName(file)}")
+                                Debug.WriteLine($"  ExcelAiæ–‡ä»¶: {Path.GetFileName(file)}")
                             Next
                         Catch ex As Exception
-                            Debug.WriteLine($"  ÎŞ·¨¶ÁÈ¡Ä¿Â¼ÄÚÈİ: {ex.Message}")
+                            Debug.WriteLine($"  æ— æ³•è¯»å–ç›®å½•å†…å®¹: {ex.Message}")
                         End Try
                     Else
-                        Debug.WriteLine($"Â·¾¶²»´æÔÚ: {searchPath}")
+                        Debug.WriteLine($"è·¯å¾„ä¸å­˜åœ¨: {searchPath}")
                     End If
                 Next
             End If
 
         Catch ex As Exception
-            Debug.WriteLine($"LoadExcelDnaAddIn ³ö´í: {ex.Message}")
-            Debug.WriteLine($"¶ÑÕ»¸ú×Ù: {ex.StackTrace}")
+            Debug.WriteLine($"LoadExcelDnaAddIn å‡ºé”™: {ex.Message}")
+            Debug.WriteLine($"å †æ ˆè·Ÿè¸ª: {ex.StackTrace}")
         End Try
     End Sub
 
-    ' ´´½¨ÁÄÌìÈÎÎñ´°¸ñ
+    ' åˆ›å»ºèŠå¤©ä»»åŠ¡çª—æ ¼
     Private Sub CreateChatTaskPane()
         Try
-            ' ÎªĞÂ¹¤×÷²¾´´½¨ÈÎÎñ´°¸ñ
+            ' ä¸ºæ–°å·¥ä½œç°¿åˆ›å»ºä»»åŠ¡çª—æ ¼
             chatControl = New ChatControl()
-            chatTaskPane = Me.CustomTaskPanes.Add(chatControl, "Excel AIÖÇÄÜÖúÊÖ")
+            chatTaskPane = Me.CustomTaskPanes.Add(chatControl, "Excel AIæ™ºèƒ½åŠ©æ‰‹")
             chatTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
             chatTaskPane.Width = 420
             AddHandler chatTaskPane.VisibleChanged, AddressOf ChatTaskPane_VisibleChanged
             chatTaskPane.Visible = False
         Catch ex As Exception
-            MessageBox.Show($"³õÊ¼»¯ÈÎÎñ´°¸ñÊ§°Ü: {ex.Message}")
+            MessageBox.Show($"åˆå§‹åŒ–ä»»åŠ¡çª—æ ¼å¤±è´¥: {ex.Message}")
         End Try
     End Sub
 
+    Private Sub CreateDeepseekTaskPane()
+        Try
+            If _deepseekControl Is Nothing Then
+                ' ä¸ºæ–°å·¥ä½œç°¿åˆ›å»ºä»»åŠ¡çª—æ ¼
+                _deepseekControl = New DeepseekControl()
+                _deepseekTaskPane = Me.CustomTaskPanes.Add(_deepseekControl, "Deepseek AIæ™ºèƒ½åŠ©æ‰‹")
+                _deepseekTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
+                _deepseekTaskPane.Width = 420
+                AddHandler _deepseekTaskPane.VisibleChanged, AddressOf DeepseekTaskPane_VisibleChanged
+                _deepseekTaskPane.Visible = False
+            End If
+        Catch ex As Exception
+            MessageBox.Show($"åˆå§‹åŒ–ä»»åŠ¡çª—æ ¼å¤±è´¥: {ex.Message}")
+        End Try
+    End Sub
 
-    ' ÏÔÊ¾VBAĞÅÈÎÖĞĞÄÉèÖÃËµÃ÷
+    ' æ˜¾ç¤ºVBAä¿¡ä»»ä¸­å¿ƒè®¾ç½®è¯´æ˜
     Private Sub ShowVbaTrustCenterInstructions()
         MessageBox.Show(
-        "ÒªÊ¹ÓÃ Excel AI º¯Êı£¬Çë°´ÒÔÏÂ²½ÖèÉèÖÃExcel°²È«Ñ¡Ïî:" & vbCrLf & vbCrLf &
-        "1. µã»÷'ÎÄ¼ş' > 'Ñ¡Ïî'" & vbCrLf &
-        "2. Ñ¡Ôñ'ĞÅÈÎÖĞĞÄ' > 'ĞÅÈÎÖĞĞÄÉèÖÃ'" & vbCrLf &
-        "3. Ñ¡Ôñ'ºêÉèÖÃ'" & vbCrLf &
-        "4. ¹´Ñ¡'ĞÅÈÎ·ÃÎÊ VBA ÏîÄ¿¶ÔÏóÄ£ĞÍ'" & vbCrLf &
-        "5. µã»÷'È·¶¨'²¢ÖØÆôExcel",
-        "Excel AI º¯Êı - °²È«ÉèÖÃ",
+        "è¦ä½¿ç”¨ Excel AI å‡½æ•°ï¼Œè¯·æŒ‰ä»¥ä¸‹æ­¥éª¤è®¾ç½®Excelå®‰å…¨é€‰é¡¹:" & vbCrLf & vbCrLf &
+        "1. ç‚¹å‡»'æ–‡ä»¶' > 'é€‰é¡¹'" & vbCrLf &
+        "2. é€‰æ‹©'ä¿¡ä»»ä¸­å¿ƒ' > 'ä¿¡ä»»ä¸­å¿ƒè®¾ç½®'" & vbCrLf &
+        "3. é€‰æ‹©'å®è®¾ç½®'" & vbCrLf &
+        "4. å‹¾é€‰'ä¿¡ä»»è®¿é—® VBA é¡¹ç›®å¯¹è±¡æ¨¡å‹'" & vbCrLf &
+        "5. ç‚¹å‡»'ç¡®å®š'å¹¶é‡å¯Excel",
+        "Excel AI å‡½æ•° - å®‰å…¨è®¾ç½®",
         MessageBoxButtons.OK,
         MessageBoxIcon.Information)
     End Sub
@@ -362,12 +385,23 @@ Public Class ThisAddIn
 
 
     Private widthTimer As Timer
-    ' ½â¾öWPSÖĞÎŞ·¨ÏÔÊ¾Õı³£¿í¶ÈµÄÎÊÌâ
+    Private widthTimer1 As Timer
+
+    ' è§£å†³WPSä¸­æ— æ³•æ˜¾ç¤ºæ­£å¸¸å®½åº¦çš„é—®é¢˜
     Private Sub ChatTaskPane_VisibleChanged(sender As Object, e As EventArgs)
         Dim taskPane As Microsoft.Office.Tools.CustomTaskPane = CType(sender, Microsoft.Office.Tools.CustomTaskPane)
         If taskPane.Visible Then
             If IsWpsActive() Then
                 widthTimer.Start()
+            End If
+        End If
+    End Sub
+
+    Private Sub DeepseekTaskPane_VisibleChanged(sender As Object, e As EventArgs)
+        Dim taskPane As Microsoft.Office.Tools.CustomTaskPane = CType(sender, Microsoft.Office.Tools.CustomTaskPane)
+        If taskPane.Visible Then
+            If IsWpsActive() Then
+                widthTimer1.Start()
             End If
         End If
     End Sub
@@ -378,8 +412,16 @@ Public Class ThisAddIn
             chatTaskPane.Width = 420
         End If
     End Sub
+
+    Private Sub WidthTimer1_Tick(sender As Object, e As EventArgs)
+        widthTimer1.Stop()
+        If IsWpsActive() AndAlso _deepseekTaskPane IsNot Nothing Then
+            _deepseekTaskPane.Width = 420
+        End If
+    End Sub
+
     Private Sub AiHelper_Shutdown() Handles Me.Shutdown
-        ' ÇåÀí×ÊÔ´
+        ' æ¸…ç†èµ„æº
         'RemoveHandler Globals.ThisAddIn.Application.WorkbookActivate, AddressOf Me.Application_WorkbookActivate
     End Sub
 
@@ -391,5 +433,9 @@ Public Class ThisAddIn
             loadChatHtml = False
             Await chatControl.LoadLocalHtmlFile()
         End If
+    End Sub
+
+    Public Async Sub ShowDeepseekTaskPane()
+        _deepseekTaskPane.Visible = True
     End Sub
 End Class

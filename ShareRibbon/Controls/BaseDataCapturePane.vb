@@ -1,4 +1,4 @@
-Imports System.Diagnostics
+ï»¿Imports System.Diagnostics
 Imports System.Drawing
 Imports System.IO
 Imports System.Linq
@@ -27,10 +27,10 @@ Imports HtmlDocument = HtmlAgilityPack.HtmlDocument
 Imports Timer = System.Windows.Forms.Timer
 Public MustInherit Class BaseDataCapturePane
     Inherits UserControl
-    ' Ìí¼Ó³ÉÔ±±äÁ¿
+    ' æ·»åŠ æˆå‘˜å˜é‡
     Private isNavigating As Boolean = False
     Private navigationTimer As Timer
-    Private Const NAVIGATION_TIMEOUT As Integer = 10000 ' 10Ãë³¬Ê±
+    Private Const NAVIGATION_TIMEOUT As Integer = 10000 ' 10ç§’è¶…æ—¶
 
     Private domSelectionMode As Boolean = False
     Private selectedDomPath As String = ""
@@ -41,7 +41,7 @@ Public MustInherit Class BaseDataCapturePane
 
     Private isCapturing As Boolean = False
 
-    ' ÔÚ¹¹Ôìº¯Êı»ò³õÊ¼»¯·½·¨ÖĞ³õÊ¼»¯¶¨Ê±Æ÷
+    ' åœ¨æ„é€ å‡½æ•°æˆ–åˆå§‹åŒ–æ–¹æ³•ä¸­åˆå§‹åŒ–å®šæ—¶å™¨
     Private Sub InitializeNavigationTimer()
         navigationTimer = New Timer With {
             .Interval = NAVIGATION_TIMEOUT,
@@ -60,10 +60,10 @@ Public MustInherit Class BaseDataCapturePane
         Try
             Debug.WriteLine("Starting WebView2 initialization...")
 
-            ' ³õÊ¼»¯µ¼º½¶¨Ê±Æ÷
+            ' åˆå§‹åŒ–å¯¼èˆªå®šæ—¶å™¨
             InitializeNavigationTimer()
 
-            ' ×Ô¶¨ÒåÓÃ»§Êı¾İÄ¿Â¼
+            ' è‡ªå®šä¹‰ç”¨æˆ·æ•°æ®ç›®å½•
             Dim userDataFolder As String = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "MyAppWebView2Cache")
@@ -72,18 +72,18 @@ Public MustInherit Class BaseDataCapturePane
                 Directory.CreateDirectory(userDataFolder)
             End If
 
-            ' ´´½¨ WebView2 »·¾³
+            ' åˆ›å»º WebView2 ç¯å¢ƒ
             Dim env = Await CoreWebView2Environment.CreateAsync(
                 Nothing, userDataFolder, New CoreWebView2EnvironmentOptions())
 
-            ' ³õÊ¼»¯ WebView2
+            ' åˆå§‹åŒ– WebView2
             Await ChatBrowser.EnsureCoreWebView2Async(env)
 
-            ' È·±£ CoreWebView2 ÒÑ³õÊ¼»¯
+            ' ç¡®ä¿ CoreWebView2 å·²åˆå§‹åŒ–
             If ChatBrowser.CoreWebView2 IsNot Nothing Then
                 Debug.WriteLine("CoreWebView2 initialized successfully")
 
-                ' ÉèÖÃ WebView2 µÄ°²È«Ñ¡Ïî
+                ' è®¾ç½® WebView2 çš„å®‰å…¨é€‰é¡¹
                 With ChatBrowser.CoreWebView2.Settings
                     .IsScriptEnabled = True
                     .AreDefaultScriptDialogsEnabled = True
@@ -91,16 +91,16 @@ Public MustInherit Class BaseDataCapturePane
                     .AreDevToolsEnabled = True
                 End With
 
-                ' ÒÆ³ıÏÖÓĞµÄÊÂ¼ş´¦Àí³ÌĞò£¨Èç¹ûÓĞ£©
+                ' ç§»é™¤ç°æœ‰çš„äº‹ä»¶å¤„ç†ç¨‹åºï¼ˆå¦‚æœæœ‰ï¼‰
                 RemoveEventHandlers()
 
-                ' Ìí¼ÓĞÂµÄÊÂ¼ş´¦Àí³ÌĞò
+                ' æ·»åŠ æ–°çš„äº‹ä»¶å¤„ç†ç¨‹åº
                 AddEventHandlers()
 
                 isWebViewInitialized = True
                 Debug.WriteLine("WebView2 initialization completed successfully")
 
-                ' ¼ÓÔØ³õÊ¼Ò³Ãæ
+                ' åŠ è½½åˆå§‹é¡µé¢
                 'NavigateToUrl("https://www.officeso.cn")
                 'NavigateToUrl("https://piaofang.maoyan.com/dashboard")
 
@@ -117,61 +117,61 @@ Public MustInherit Class BaseDataCapturePane
     End Function
 
 
-    ' ĞÂÔö£ºÊÂ¼ş´¦Àí³ÌĞò¹ÜÀí·½·¨
+    ' æ–°å¢ï¼šäº‹ä»¶å¤„ç†ç¨‹åºç®¡ç†æ–¹æ³•
     Private Sub AddEventHandlers()
         Debug.WriteLine("Adding event handlers...")
 
-        ' µ¼º½ÊÂ¼ş
+        ' å¯¼èˆªäº‹ä»¶
         AddHandler ChatBrowser.CoreWebView2.NavigationStarting,
             Sub(s, args)
                 Debug.WriteLine($"Navigation starting to: {args.Uri}")
                 UrlTextBox.Text = args.Uri
-                ' ½ûÓÃµ¼º½°´Å¥²¢Æô¶¯³¬Ê±¼ÆÊ±Æ÷
+                ' ç¦ç”¨å¯¼èˆªæŒ‰é’®å¹¶å¯åŠ¨è¶…æ—¶è®¡æ—¶å™¨
                 SetNavigationState(True)
             End Sub
 
         AddHandler ChatBrowser.CoreWebView2.NavigationCompleted,
             Sub(s, args)
                 Debug.WriteLine($"Navigation completed: {args.IsSuccess}")
-                ' Í£Ö¹¼ÆÊ±Æ÷²¢»Ö¸´°´Å¥×´Ì¬
+                ' åœæ­¢è®¡æ—¶å™¨å¹¶æ¢å¤æŒ‰é’®çŠ¶æ€
                 SetNavigationState(False)
                 If Not args.IsSuccess Then
-                    ' »ñÈ¡¸üÏêÏ¸µÄ´íÎóĞÅÏ¢
+                    ' è·å–æ›´è¯¦ç»†çš„é”™è¯¯ä¿¡æ¯
                     Dim errorStatus = ChatBrowser.CoreWebView2.GetDevToolsProtocolEventReceiver("Network.loadingFailed")
                     Debug.WriteLine($"Navigation failed with status: {errorStatus}")
-                    MessageBox.Show("Ò³Ãæ¼ÓÔØÊ§°Ü£¬Çë¼ì²éÍøÂçÁ¬½Ó»òÖØÊÔ", "¾¯¸æ",
+                    MessageBox.Show("é¡µé¢åŠ è½½å¤±è´¥ï¼Œè¯·æ£€æŸ¥ç½‘ç»œè¿æ¥æˆ–é‡è¯•", "è­¦å‘Š",
                                   MessageBoxButtons.OK, MessageBoxIcon.Warning)
                 Else
-                    Debug.WriteLine("Ò³Ãæ¼ÓÔØ³É¹¦")
-                    ' ¿ÉÒÔÔÚÕâÀïÌí¼Ó³É¹¦¼ÓÔØµÄ´¦ÀíÂß¼­
+                    Debug.WriteLine("é¡µé¢åŠ è½½æˆåŠŸ")
+                    ' å¯ä»¥åœ¨è¿™é‡Œæ·»åŠ æˆåŠŸåŠ è½½çš„å¤„ç†é€»è¾‘
                 End If
             End Sub
 
-        ' ´¦ÀíĞÂ´°¿Ú´ò¿ªÇëÇó£¬ÖØ¶¨Ïòµ½µ±Ç°´°¿Ú
+        ' å¤„ç†æ–°çª—å£æ‰“å¼€è¯·æ±‚ï¼Œé‡å®šå‘åˆ°å½“å‰çª—å£
         AddHandler ChatBrowser.CoreWebView2.NewWindowRequested,
             Sub(s, args)
-                ' È¡ÏûĞÂ´°¿Ú´ò¿ª
+                ' å–æ¶ˆæ–°çª—å£æ‰“å¼€
                 args.Handled = True
-                ' ÔÚµ±Ç°´°¿Úµ¼º½µ½Ä¿±êURL
+                ' åœ¨å½“å‰çª—å£å¯¼èˆªåˆ°ç›®æ ‡URL
                 ChatBrowser.CoreWebView2.Navigate(args.Uri)
-                Debug.WriteLine($"À¹½Øµ½ĞÂ´°¿ÚÇëÇó£¬ÒÑÖØ¶¨Ïòµ½µ±Ç°´°¿Ú: {args.Uri}")
+                Debug.WriteLine($"æ‹¦æˆªåˆ°æ–°çª—å£è¯·æ±‚ï¼Œå·²é‡å®šå‘åˆ°å½“å‰çª—å£: {args.Uri}")
             End Sub
 
-        ' WebMessageÊÂ¼ş
+        ' WebMessageäº‹ä»¶
         AddHandler ChatBrowser.CoreWebView2.WebMessageReceived,
             AddressOf WebView2_MessageReceived
 
-        ' °´Å¥ÊÂ¼ş
+        ' æŒ‰é’®äº‹ä»¶
         AddHandler NavigateButton.Click, AddressOf NavigateButton_Click
         AddHandler CaptureButton.Click, AddressOf CaptureButton_Click
         AddHandler UrlTextBox.KeyPress, AddressOf UrlTextBox_KeyPress
         AddHandler SelectDomButton.Click, AddressOf SelectDomButton_Click
 
-        ' Ìí¼ÓÇ°½øºóÍË°´Å¥ÊÂ¼ş
+        ' æ·»åŠ å‰è¿›åé€€æŒ‰é’®äº‹ä»¶
         AddHandler BackButton.Click, AddressOf BackButton_Click
         AddHandler ForwardButton.Click, AddressOf ForwardButton_Click
 
-        ' ¼àÌıÀúÊ·¼ÇÂ¼×´Ì¬±ä»¯
+        ' ç›‘å¬å†å²è®°å½•çŠ¶æ€å˜åŒ–
         AddHandler ChatBrowser.CoreWebView2.HistoryChanged,
         Sub(s, args)
             UpdateNavigationButtons()
@@ -180,7 +180,7 @@ Public MustInherit Class BaseDataCapturePane
         Debug.WriteLine("Event handlers added successfully")
     End Sub
 
-    ' ÒÆ³ıÊÂ¼ş´¦Àí³ÌĞòÊ±Ò²ĞèÒªÒÆ³ıĞÂÔöµÄÊÂ¼ş
+    ' ç§»é™¤äº‹ä»¶å¤„ç†ç¨‹åºæ—¶ä¹Ÿéœ€è¦ç§»é™¤æ–°å¢çš„äº‹ä»¶
     Private Sub RemoveEventHandlers()
         Try
             If ChatBrowser?.CoreWebView2 IsNot Nothing Then
@@ -208,7 +208,7 @@ Public MustInherit Class BaseDataCapturePane
         End Try
     End Sub
 
-    ' Ìí¼ÓÇ°½øºóÍË°´Å¥µã»÷ÊÂ¼ş´¦Àí
+    ' æ·»åŠ å‰è¿›åé€€æŒ‰é’®ç‚¹å‡»äº‹ä»¶å¤„ç†
     Private Sub BackButton_Click(sender As Object, e As EventArgs)
         If ChatBrowser?.CoreWebView2 IsNot Nothing AndAlso ChatBrowser.CoreWebView2.CanGoBack Then
             ChatBrowser.CoreWebView2.GoBack()
@@ -221,7 +221,7 @@ Public MustInherit Class BaseDataCapturePane
         End If
     End Sub
 
-    ' ¸üĞÂÇ°½øºóÍË°´Å¥×´Ì¬
+    ' æ›´æ–°å‰è¿›åé€€æŒ‰é’®çŠ¶æ€
     Private Sub UpdateNavigationButtons()
         If ChatBrowser?.CoreWebView2 IsNot Nothing Then
             BackButton.Enabled = ChatBrowser.CoreWebView2.CanGoBack
@@ -232,7 +232,7 @@ Public MustInherit Class BaseDataCapturePane
         End If
     End Sub
 
-    ' Ìí¼Óµ¼º½×´Ì¬¿ØÖÆ·½·¨
+    ' æ·»åŠ å¯¼èˆªçŠ¶æ€æ§åˆ¶æ–¹æ³•
     Private Sub SetNavigationState(isNavigating As Boolean)
         Me.isNavigating = isNavigating
         NavigateButton.Enabled = Not isNavigating
@@ -245,9 +245,9 @@ Public MustInherit Class BaseDataCapturePane
         End If
     End Sub
 
-    ' Ìí¼Ó³¬Ê±´¦Àí·½·¨
+    ' æ·»åŠ è¶…æ—¶å¤„ç†æ–¹æ³•
     Private Sub OnNavigationTimeout(sender As Object, e As EventArgs)
-        ' ÔÚUIÏß³ÌÖĞÖ´ĞĞ
+        ' åœ¨UIçº¿ç¨‹ä¸­æ‰§è¡Œ
         If Me.InvokeRequired Then
             Me.Invoke(Sub() OnNavigationTimeout(sender, e))
             Return
@@ -255,15 +255,15 @@ Public MustInherit Class BaseDataCapturePane
 
         navigationTimer.Stop()
         If isNavigating Then
-            ' Èç¹ûÈÔÔÚµ¼º½×´Ì¬£¬ÔòÇ¿ÖÆ»Ö¸´°´Å¥
+            ' å¦‚æœä»åœ¨å¯¼èˆªçŠ¶æ€ï¼Œåˆ™å¼ºåˆ¶æ¢å¤æŒ‰é’®
             SetNavigationState(False)
             Debug.WriteLine("Navigation timeout - restoring button state")
-            'MessageBox.Show("Ò³Ãæ¼ÓÔØ³¬Ê±£¬ÒÑ»Ö¸´µ¼º½°´Å¥", "ÌáÊ¾",
+            'MessageBox.Show("é¡µé¢åŠ è½½è¶…æ—¶ï¼Œå·²æ¢å¤å¯¼èˆªæŒ‰é’®", "æç¤º",
             '              MessageBoxButtons.OK, MessageBoxIcon.Information)
         End If
     End Sub
 
-    '' ĞÂÔö£ºÒÆ³ıÊÂ¼ş´¦Àí³ÌĞò·½·¨
+    '' æ–°å¢ï¼šç§»é™¤äº‹ä»¶å¤„ç†ç¨‹åºæ–¹æ³•
     'Private Sub RemoveEventHandlers()
     '    Try
     '        If ChatBrowser?.CoreWebView2 IsNot Nothing Then
@@ -292,21 +292,21 @@ Public MustInherit Class BaseDataCapturePane
         End If
     End Sub
 
-    ' ĞŞ¸Ä£ºµ¼º½·½·¨Ìí¼Ó¸ü¶àµ÷ÊÔĞÅÏ¢
+    ' ä¿®æ”¹ï¼šå¯¼èˆªæ–¹æ³•æ·»åŠ æ›´å¤šè°ƒè¯•ä¿¡æ¯
     Private Sub NavigateToUrl(url As String)
         If String.IsNullOrWhiteSpace(url) Then
             Debug.WriteLine("Navigation cancelled: Empty URL")
             Return
         End If
 
-        ' Èç¹ûÕıÔÚµ¼º½ÖĞ£¬ºöÂÔĞÂµÄµ¼º½ÇëÇó
+        ' å¦‚æœæ­£åœ¨å¯¼èˆªä¸­ï¼Œå¿½ç•¥æ–°çš„å¯¼èˆªè¯·æ±‚
         If isNavigating Then
             Debug.WriteLine("Navigation in progress, ignoring new request")
             Return
         End If
 
         Try
-            ' ±ê×¼»¯URL
+            ' æ ‡å‡†åŒ–URL
             If Not url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) AndAlso
                Not url.StartsWith("https://", StringComparison.OrdinalIgnoreCase) Then
                 url = "https://" & url
@@ -321,32 +321,32 @@ Public MustInherit Class BaseDataCapturePane
                 ChatBrowser.CoreWebView2.Navigate(url)
             Else
                 Debug.WriteLine("Navigation failed: CoreWebView2 is null")
-                MessageBox.Show("WebView2 ×é¼şÎ´¾ÍĞ÷", "´íÎó",
+                MessageBox.Show("WebView2 ç»„ä»¶æœªå°±ç»ª", "é”™è¯¯",
                               MessageBoxButtons.OK, MessageBoxIcon.Error)
             End If
 
         Catch ex As Exception
             Debug.WriteLine($"Navigation error: {ex.Message}")
-            MessageBox.Show($"µ¼º½Ê§°Ü: {ex.Message}", "´íÎó",
+            MessageBox.Show($"å¯¼èˆªå¤±è´¥: {ex.Message}", "é”™è¯¯",
                           MessageBoxButtons.OK, MessageBoxIcon.Error)
-            ' È·±£ÔÚ·¢Éú´íÎóÊ±»Ö¸´°´Å¥×´Ì¬
+            ' ç¡®ä¿åœ¨å‘ç”Ÿé”™è¯¯æ—¶æ¢å¤æŒ‰é’®çŠ¶æ€
             SetNavigationState(False)
         End Try
     End Sub
 
     Private Async Sub CaptureButton_Click(sender As Object, e As EventArgs)
         If isCapturing Then
-            MessageBox.Show("ÕıÔÚ×¥È¡ÖĞ£¬ÇëÉÔºò...", "ÌáÊ¾")
+            MessageBox.Show("æ­£åœ¨æŠ“å–ä¸­ï¼Œè¯·ç¨å€™...", "æç¤º")
             Return
         End If
 
         Try
             isCapturing = True
 
-            ' »ñÈ¡HTMLÄÚÈİ
+            ' è·å–HTMLå†…å®¹
             Dim script As String
             If Not String.IsNullOrEmpty(selectedDomPath) Then
-                ' Ê¹ÓÃÑ¡¶¨µÄDOMÂ·¾¶
+                ' ä½¿ç”¨é€‰å®šçš„DOMè·¯å¾„
                 script = $"
                 (function() {{
                     const element = document.querySelector('{selectedDomPath}');
@@ -354,7 +354,7 @@ Public MustInherit Class BaseDataCapturePane
                 }})();
             "
             Else
-                ' »ñÈ¡Õû¸öÒ³ÃæÄÚÈİ
+                ' è·å–æ•´ä¸ªé¡µé¢å†…å®¹
                 script = "document.documentElement.outerHTML;"
             End If
 
@@ -363,11 +363,11 @@ Public MustInherit Class BaseDataCapturePane
                 html = JsonConvert.DeserializeObject(Of String)(html)
                 HandleExtractedContent(html)
             Else
-                MessageBox.Show("Î´ÄÜ»ñÈ¡µ½ÄÚÈİ", "ÌáÊ¾")
+                MessageBox.Show("æœªèƒ½è·å–åˆ°å†…å®¹", "æç¤º")
             End If
 
         Catch ex As Exception
-            MessageBox.Show($"×¥È¡ÄÚÈİÊ±³ö´í: {ex.Message}", "´íÎó")
+            MessageBox.Show($"æŠ“å–å†…å®¹æ—¶å‡ºé”™: {ex.Message}", "é”™è¯¯")
         Finally
             isCapturing = False
         End Try
@@ -375,7 +375,7 @@ Public MustInherit Class BaseDataCapturePane
 
 
 
-    ' Ìí¼Ó±í¸ñÊı¾İÄ£ĞÍ
+    ' æ·»åŠ è¡¨æ ¼æ•°æ®æ¨¡å‹
     Protected Class TableData
         Public Property Rows As Integer
         Public Property Columns As Integer
@@ -391,19 +391,19 @@ Public MustInherit Class BaseDataCapturePane
     End Class
 
 
-    ' Ìí¼Ó³éÏó·½·¨
+    ' æ·»åŠ æŠ½è±¡æ–¹æ³•
     Protected MustOverride Function CreateTable(tableData As TableData) As String
 
-    ' ³éÏó·½·¨£º´¦ÀíÌáÈ¡µÄÄÚÈİ£¨ÓÉ¾ßÌåÊµÏÖÀàÊµÏÖ£©
+    ' æŠ½è±¡æ–¹æ³•ï¼šå¤„ç†æå–çš„å†…å®¹ï¼ˆç”±å…·ä½“å®ç°ç±»å®ç°ï¼‰
     Protected MustOverride Sub HandleExtractedContent(content As String)
 
 
-    ' Ñ¡ÔñDOMÔªËØ°´Å¥µã»÷ÊÂ¼ş´¦Àí³ÌĞò
+    ' é€‰æ‹©DOMå…ƒç´ æŒ‰é’®ç‚¹å‡»äº‹ä»¶å¤„ç†ç¨‹åº
     Private Async Sub SelectDomButton_Click(sender As Object, e As EventArgs)
         Try
             Dim selectScript As String = "
         (function() {
-            // ÒÆ³ı¾ÉµÄÑ¡ÔñÆ÷
+            // ç§»é™¤æ—§çš„é€‰æ‹©å™¨
             if(window._domSelector) {
                 document.removeEventListener('mouseover', window._domSelector.onMouseOver);
                 document.removeEventListener('mouseout', window._domSelector.onMouseOut);
@@ -411,16 +411,16 @@ Public MustInherit Class BaseDataCapturePane
                 if(window._domSelector.tip) window._domSelector.tip.remove();
             }
 
-            // ´´½¨ĞÂµÄÑ¡ÔñÆ÷
+            // åˆ›å»ºæ–°çš„é€‰æ‹©å™¨
             window._domSelector = {
                 lastHighlight: null,
                 lastParentHighlight: null,
                 isShiftKey: false,
                 _lastChildElement: null,
-                _currentTarget: null,  // ĞÂÔö£º¼ÇÂ¼µ±Ç°Ä¿±êÔªËØ
-                _highlightTimer: null, // ĞÂÔö£ºÓÃÓÚ·À¶¶¶¯µÄ¶¨Ê±Æ÷
+                _currentTarget: null,  // æ–°å¢ï¼šè®°å½•å½“å‰ç›®æ ‡å…ƒç´ 
+                _highlightTimer: null, // æ–°å¢ï¼šç”¨äºé˜²æŠ–åŠ¨çš„å®šæ—¶å™¨
                 
-                // ´´½¨ÌáÊ¾¿ò
+                // åˆ›å»ºæç¤ºæ¡†
                 createTip: function() {
                     const tip = document.createElement('div');
                     tip.style.cssText = `
@@ -437,16 +437,16 @@ Public MustInherit Class BaseDataCapturePane
                         z-index: 2147483647;
                         pointer-events: none;
                     `;
-                    tip.innerHTML = '°´×¡ Shift ¼ü¿ÉÑ¡Ôñ¸¸ÔªËØ<br>µã»÷Ñ¡ÔñÒª×¥È¡µÄÄÚÈİ';
+                    tip.innerHTML = 'æŒ‰ä½ Shift é”®å¯é€‰æ‹©çˆ¶å…ƒç´ <br>ç‚¹å‡»é€‰æ‹©è¦æŠ“å–çš„å†…å®¹';
                     document.body.appendChild(tip);
                     this.tip = tip;
                 },
 
-                // ¸ßÁÁÏÔÊ¾
+                // é«˜äº®æ˜¾ç¤º
                 highlight: function(element, isParent) {
         if (!element) return;
         
-        // Çå³ıÖ®Ç°µÄ¸ßÁÁ
+        // æ¸…é™¤ä¹‹å‰çš„é«˜äº®
         this.removeHighlight();
 
         const target = isParent ? this.findParentElement(element) : element;
@@ -454,33 +454,33 @@ Public MustInherit Class BaseDataCapturePane
 
         this._currentTarget = target;
         
-        // ÉèÖÃ¸ßÁÁÑùÊ½
+        // è®¾ç½®é«˜äº®æ ·å¼
         target.style.transition = 'outline 0.2s ease-in-out';
         target.style.outline = isParent ? '3px dashed #FF9800' : '3px solid #2196F3';
         target.style.outlineOffset = '2px';
         
-        // ±£´æµ±Ç°¸ßÁÁµÄÔªËØ
+        // ä¿å­˜å½“å‰é«˜äº®çš„å…ƒç´ 
         this.lastHighlight = target;
         
-        // ÏÔÊ¾ĞÅÏ¢¿ò
+        // æ˜¾ç¤ºä¿¡æ¯æ¡†
         this.showInfo(target, target.getBoundingClientRect(), isParent);
 
-        // Èç¹ûÊÇ°´×¡Shift¼ü£¬¼Ç×¡×ÓÔªËØ
+        // å¦‚æœæ˜¯æŒ‰ä½Shifté”®ï¼Œè®°ä½å­å…ƒç´ 
         if (isParent) {
             this._lastChildElement = element;
         }
     },
 
-                // ²éÕÒºÏÊÊµÄ¸¸ÔªËØ
+                // æŸ¥æ‰¾åˆé€‚çš„çˆ¶å…ƒç´ 
                 findParentElement: function(element) {
                     let parent = element;
                     while (parent && parent !== document.body) {
-                        // Èç¹ûÊÇ±í¸ñÏà¹ØÔªËØ£¬ÓÅÏÈÑ¡ÔñÕû¸ö±í¸ñ
+                        // å¦‚æœæ˜¯è¡¨æ ¼ç›¸å…³å…ƒç´ ï¼Œä¼˜å…ˆé€‰æ‹©æ•´ä¸ªè¡¨æ ¼
                         if (parent.tagName === 'TD' || parent.tagName === 'TH') {
                             parent = this.findClosest(parent, 'table');
                             if (parent) break;
                         }
-                        // ¶ÔÓÚÆäËûÔªËØ£¬²éÕÒÓĞÒâÒåµÄ¸¸ÈİÆ÷
+                        // å¯¹äºå…¶ä»–å…ƒç´ ï¼ŒæŸ¥æ‰¾æœ‰æ„ä¹‰çš„çˆ¶å®¹å™¨
                         if (this.isSignificantElement(parent)) {
                             break;
                         }
@@ -489,23 +489,23 @@ Public MustInherit Class BaseDataCapturePane
                     return parent;
                 },
 
-                // ÅĞ¶ÏÊÇ·ñÊÇÓĞÒâÒåµÄÔªËØ
+                // åˆ¤æ–­æ˜¯å¦æ˜¯æœ‰æ„ä¹‰çš„å…ƒç´ 
                 isSignificantElement: function(element) {
                     const tag = element.tagName.toLowerCase();
                     const significantTags = ['table', 'article', 'section', 'div', 'form', 'main'];
                     
                     if (significantTags.includes(tag)) {
-                        // ¼ì²éÊÇ·ñ°üº¬×ã¹»µÄÄÚÈİ
+                        // æ£€æŸ¥æ˜¯å¦åŒ…å«è¶³å¤Ÿçš„å†…å®¹
                         if (element.textContent.trim().length > 50) return true;
-                        // ¼ì²éÊÇ·ñÓĞÌØ¶¨µÄÀàÃû»òID
+                        // æ£€æŸ¥æ˜¯å¦æœ‰ç‰¹å®šçš„ç±»åæˆ–ID
                         if (element.id || element.className) return true;
-                        // ¼ì²éÊÇ·ñ°üº¬¶à¸ö×ÓÔªËØ
+                        // æ£€æŸ¥æ˜¯å¦åŒ…å«å¤šä¸ªå­å…ƒç´ 
                         if (element.children.length > 2) return true;
                     }
                     return false;
                 },
 
-                // ²éÕÒ×î½üµÄÖ¸¶¨±êÇ©×æÏÈÔªËØ
+                // æŸ¥æ‰¾æœ€è¿‘çš„æŒ‡å®šæ ‡ç­¾ç¥–å…ˆå…ƒç´ 
                 findClosest: function(element, tagName) {
                     while (element && element !== document.body) {
                         if (element.tagName.toLowerCase() === tagName.toLowerCase()) {
@@ -516,7 +516,7 @@ Public MustInherit Class BaseDataCapturePane
                     return null;
                 },
 
-                // ÒÆ³ı¸ßÁÁ
+                // ç§»é™¤é«˜äº®
                 removeHighlight: function() {
                     if (this.lastHighlight) {
                         this.lastHighlight.style.outline = '';
@@ -534,7 +534,7 @@ Public MustInherit Class BaseDataCapturePane
                     }
                 },
 
-                // ÏÔÊ¾ÔªËØĞÅÏ¢
+                // æ˜¾ç¤ºå…ƒç´ ä¿¡æ¯
                 showInfo: function(element, rect, isParent) {
                     if (this.infoBox) this.infoBox.remove();
     
@@ -563,23 +563,23 @@ Public MustInherit Class BaseDataCapturePane
     
                     info.innerHTML = `
                         <div style=""font-size: 16px; margin-bottom: 4px;"">
-                            <${tag}${id}${classes}> ${isParent ? '(»ñÈ¡¸¸ÔªËØ)' : ''}
+                            <${tag}${id}${classes}> ${isParent ? '(è·å–çˆ¶å…ƒç´ )' : ''}
                         </div>
                         <div style=""font-size: 13px; opacity: 0.9;"">
                             ${contentPreview}
                         </div>
                     `;
     
-                    // ¼ÆËãÎ»ÖÃ£¬ÏÔÊ¾ÔÚÔªËØÕıÉÏ·½ÖĞÑë
-                    const infoWidth = 400; // ¹Ì¶¨¿í¶È
-                    const verticalOffset = 10; // ÓëÔªËØµÄ´¹Ö±¾àÀë
+                    // è®¡ç®—ä½ç½®ï¼Œæ˜¾ç¤ºåœ¨å…ƒç´ æ­£ä¸Šæ–¹ä¸­å¤®
+                    const infoWidth = 400; // å›ºå®šå®½åº¦
+                    const verticalOffset = 10; // ä¸å…ƒç´ çš„å‚ç›´è·ç¦»
     
-                    // È·±£ĞÅÏ¢¿òÔÚ¿ÉÊÓÇøÓòÄÚ
+                    // ç¡®ä¿ä¿¡æ¯æ¡†åœ¨å¯è§†åŒºåŸŸå†…
                     let left = rect.left + (rect.width / 2);
                     left = Math.min(Math.max(infoWidth / 2, left), document.documentElement.clientWidth - infoWidth / 2);
     
                     let top = rect.top + window.scrollY - verticalOffset;
-                    top = Math.max(10, top); // È·±£²»»á³¬³ö¶¥²¿
+                    top = Math.max(10, top); // ç¡®ä¿ä¸ä¼šè¶…å‡ºé¡¶éƒ¨
     
                     info.style.left = left + 'px';
                     info.style.top = top - info.offsetHeight + 'px';
@@ -588,27 +588,27 @@ Public MustInherit Class BaseDataCapturePane
                     this.infoBox = info;
                 },
 
-                // ÊÂ¼ş´¦Àí³ÌĞò
+                // äº‹ä»¶å¤„ç†ç¨‹åº
                 onMouseOver: function(e) {
         if (window._domSelector) {
             e.stopPropagation();
             const target = e.target;
             
-            // Èç¹ûÄ¿±êÔªËØÏàÍ¬Ôò²»ÖØ¸´´¦Àí
+            // å¦‚æœç›®æ ‡å…ƒç´ ç›¸åŒåˆ™ä¸é‡å¤å¤„ç†
             if (target === window._domSelector._currentTarget) return;
             
             window._domSelector.highlight(target, window._domSelector.isShiftKey);
         }
     },
 
-                // ĞŞ¸ÄÊó±êÒÆ³öÊÂ¼ş´¦Àí
+                // ä¿®æ”¹é¼ æ ‡ç§»å‡ºäº‹ä»¶å¤„ç†
                 onMouseOut: function(e) {
-                    // Çå³ı¶¨Ê±Æ÷
+                    // æ¸…é™¤å®šæ—¶å™¨
                     if (window._domSelector._highlightTimer) {
                         clearTimeout(window._domSelector._highlightTimer);
                     }
 
-                    // ¼ì²éÊÇ·ñÕæµÄĞèÒªÒÆ³ı¸ßÁÁ
+                    // æ£€æŸ¥æ˜¯å¦çœŸçš„éœ€è¦ç§»é™¤é«˜äº®
                     const relatedTarget = e.relatedTarget;
                     if (!window._domSelector.lastHighlight || 
                         !window._domSelector.lastHighlight.contains(relatedTarget)) {
@@ -648,7 +648,7 @@ Public MustInherit Class BaseDataCapturePane
         if (e.key === 'Shift' && !window._domSelector.isShiftKey) {
             window._domSelector.isShiftKey = true;
             
-            // Èç¹ûµ±Ç°ÓĞ¸ßÁÁµÄÔªËØ£¬ÇĞ»»µ½Æä¸¸ÔªËØ
+            // å¦‚æœå½“å‰æœ‰é«˜äº®çš„å…ƒç´ ï¼Œåˆ‡æ¢åˆ°å…¶çˆ¶å…ƒç´ 
             if (window._domSelector._currentTarget) {
                 const parentElement = window._domSelector.findParentElement(window._domSelector._currentTarget);
                 if (parentElement) {
@@ -658,19 +658,19 @@ Public MustInherit Class BaseDataCapturePane
         }
     },
 
-                // ĞŞ¸Ä¼üÅÌÊÍ·ÅÊÂ¼ş
+                // ä¿®æ”¹é”®ç›˜é‡Šæ”¾äº‹ä»¶
     onKeyUp: function(e) {
         if (e.key === 'Shift') {
             window._domSelector.isShiftKey = false;
             
-            // »Ö¸´µ½×ÓÔªËØ
+            // æ¢å¤åˆ°å­å…ƒç´ 
             if (window._domSelector._lastChildElement) {
                 window._domSelector.highlight(window._domSelector._lastChildElement, false);
             }
         }
     },
 
-                // »ñÈ¡ÔªËØÂ·¾¶
+                // è·å–å…ƒç´ è·¯å¾„
                 getPath: function(element) {
                     const path = [];
                     while(element && element.nodeType === Node.ELEMENT_NODE) {
@@ -692,24 +692,24 @@ Public MustInherit Class BaseDataCapturePane
                     return path.join(' > ');
                 },
 
-                // ³õÊ¼»¯
-                // ĞŞ¸Ä³õÊ¼»¯·½·¨
+                // åˆå§‹åŒ–
+                // ä¿®æ”¹åˆå§‹åŒ–æ–¹æ³•
     init: function() {
-        // È·±£ÇåÀíÖ®Ç°µÄÊµÀı
+        // ç¡®ä¿æ¸…ç†ä¹‹å‰çš„å®ä¾‹
         if (window._domSelector) {
             window._domSelector.cleanup();
         }
         
         this.createTip();
         
-        // Ê¹ÓÃ bind È·±£ÊÂ¼ş´¦Àí³ÌĞòÖĞµÄ this Ö¸ÏòÕıÈ·
+        // ä½¿ç”¨ bind ç¡®ä¿äº‹ä»¶å¤„ç†ç¨‹åºä¸­çš„ this æŒ‡å‘æ­£ç¡®
         this.onMouseOver = this.onMouseOver.bind(this);
         this.onMouseOut = this.onMouseOut.bind(this);
         this.onClick = this.onClick.bind(this);
         this.onKeyDown = this.onKeyDown.bind(this);
         this.onKeyUp = this.onKeyUp.bind(this);
         
-        // Ìí¼ÓÊÂ¼ş¼àÌıÆ÷
+        // æ·»åŠ äº‹ä»¶ç›‘å¬å™¨
         document.addEventListener('mouseover', this.onMouseOver, true);
         document.addEventListener('mouseout', this.onMouseOut, true);
         document.addEventListener('click', this.onClick, true);
@@ -719,50 +719,50 @@ Public MustInherit Class BaseDataCapturePane
         document.body.style.cursor = 'pointer';
     },
 
-                // ĞŞ¸ÄÇåÀí·½·¨
+                // ä¿®æ”¹æ¸…ç†æ–¹æ³•
     cleanup: function() {
         this.removeHighlight();
         if (this.tip) this.tip.remove();
         
-        // ÒÆ³ıËùÓĞÊÂ¼ş¼àÌıÆ÷
+        // ç§»é™¤æ‰€æœ‰äº‹ä»¶ç›‘å¬å™¨
         document.removeEventListener('mouseover', this.onMouseOver, true);
         document.removeEventListener('mouseout', this.onMouseOut, true);
         document.removeEventListener('click', this.onClick, true);
         document.removeEventListener('keydown', this.onKeyDown, true);
         document.removeEventListener('keyup', this.onKeyUp, true);
         
-        // ÇåÀíËùÓĞ×´Ì¬
+        // æ¸…ç†æ‰€æœ‰çŠ¶æ€
         this._currentTarget = null;
         this._lastChildElement = null;
         this.lastHighlight = null;
         this.isShiftKey = false;
         
-        // »Ö¸´Êó±êÑùÊ½
+        // æ¢å¤é¼ æ ‡æ ·å¼
         document.body.style.cursor = '';
     }
             };
 
-            // ³õÊ¼»¯Ñ¡ÔñÆ÷
+            // åˆå§‹åŒ–é€‰æ‹©å™¨
             window._domSelector.init();
         })();
         "
             Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(selectScript)
 
         Catch ex As Exception
-            Debug.WriteLine($"DOMÑ¡ÔñÆ÷´íÎó: {ex.Message}")
-            MessageBox.Show($"³õÊ¼»¯Ñ¡ÔñÆ÷Ê§°Ü: {ex.Message}", "´íÎó")
+            Debug.WriteLine($"DOMé€‰æ‹©å™¨é”™è¯¯: {ex.Message}")
+            MessageBox.Show($"åˆå§‹åŒ–é€‰æ‹©å™¨å¤±è´¥: {ex.Message}", "é”™è¯¯")
         End Try
     End Sub
 
-    ' ĞŞ¸ÄÏûÏ¢´¦Àí³ÌĞò
-    ' ĞŞ¸ÄÏûÏ¢´¦Àí³ÌĞò
+    ' ä¿®æ”¹æ¶ˆæ¯å¤„ç†ç¨‹åº
+    ' ä¿®æ”¹æ¶ˆæ¯å¤„ç†ç¨‹åº
     Private Async Sub WebView2_MessageReceived(sender As Object, e As CoreWebView2WebMessageReceivedEventArgs)
         Try
-            Debug.WriteLine($"ÊÕµ½ÏûÏ¢: {e.WebMessageAsJson}")
+            Debug.WriteLine($"æ”¶åˆ°æ¶ˆæ¯: {e.WebMessageAsJson}")
 
             Dim message = JsonConvert.DeserializeObject(Of JObject)(e.WebMessageAsJson)
             If message("type")?.ToString() = "elementSelected" Then
-                ' »ñÈ¡ÍêÕûĞÅÏ¢
+                ' è·å–å®Œæ•´ä¿¡æ¯
                 selectedDomPath = message("path").ToString()
                 Dim html = message("html").ToString()
                 Dim text = message("text").ToString()
@@ -774,32 +774,32 @@ Public MustInherit Class BaseDataCapturePane
                                 window._domSelector = null;
                             }
                         ")
-                ' ÏÔÊ¾×Ô¶¨ÒåÈ·ÈÏ¶Ô»°¿ò
+                ' æ˜¾ç¤ºè‡ªå®šä¹‰ç¡®è®¤å¯¹è¯æ¡†
                 Using dialog As New WebSiteContentConfirmDialog(text, tag, selectedDomPath)
                     Dim result = dialog.ShowDialog()
                     Select Case result
                         Case DialogResult.Cancel
-                            ' È¡Ïû²Ù×÷£¬Çå³ıÂ·¾¶
+                            ' å–æ¶ˆæ“ä½œï¼Œæ¸…é™¤è·¯å¾„
                             selectedDomPath = ""
 
                         Case DialogResult.Yes
-                            ' Ö±½ÓÊ¹ÓÃÄÚÈİ
+                            ' ç›´æ¥ä½¿ç”¨å†…å®¹
                             HandleExtractedContent(text)
 
                         Case DialogResult.No
-                            ' µ÷ÓÃAIÁÄÌì
-                            ' ÔÚ×ÓÀà WebDataCapturePane ÖĞÊµÏÖÕâ¸ö·½·¨
+                            ' è°ƒç”¨AIèŠå¤©
+                            ' åœ¨å­ç±» WebDataCapturePane ä¸­å®ç°è¿™ä¸ªæ–¹æ³•
                             OnAiChatRequested(text)
                     End Select
                 End Using
             End If
         Catch ex As Exception
-            Debug.WriteLine($"´¦ÀíÏûÏ¢´íÎó: {ex.Message}")
-            MessageBox.Show($"´¦ÀíÑ¡ÔñÏûÏ¢Ê§°Ü: {ex.Message}", "´íÎó")
+            Debug.WriteLine($"å¤„ç†æ¶ˆæ¯é”™è¯¯: {ex.Message}")
+            MessageBox.Show($"å¤„ç†é€‰æ‹©æ¶ˆæ¯å¤±è´¥: {ex.Message}", "é”™è¯¯")
         End Try
     End Sub
 
-    ' Ìí¼ÓÊÂ¼şÒÔ¹©×ÓÀà´¦ÀíAIÁÄÌìÇëÇó
+    ' æ·»åŠ äº‹ä»¶ä»¥ä¾›å­ç±»å¤„ç†AIèŠå¤©è¯·æ±‚
     Protected Event AiChatRequested As EventHandler(Of String)
     Protected Sub OnAiChatRequested(content As String)
         RaiseEvent AiChatRequested(Me, content)

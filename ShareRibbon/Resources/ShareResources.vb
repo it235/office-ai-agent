@@ -1,4 +1,4 @@
-Public Class SharedResources
+﻿Public Class SharedResources
     Private Shared ReadOnly _resourceManager As New System.Resources.ResourceManager("ShareRibbon.Resources", GetType(SharedResources).Assembly)
 
     Public Shared ReadOnly Property AiApiConfig() As System.Drawing.Image
@@ -34,6 +34,16 @@ Public Class SharedResources
     Public Shared ReadOnly Property Clear() As System.Drawing.Image
         Get
             Return CType(_resourceManager.GetObject("clear"), System.Drawing.Image)
+        End Get
+    End Property
+    Public Shared ReadOnly Property Deepseek() As System.Drawing.Image
+        Get
+            Return CType(_resourceManager.GetObject("deepseek"), System.Drawing.Image)
+        End Get
+    End Property
+    Public Shared ReadOnly Property Wait() As System.Drawing.Image
+        Get
+            Return CType(_resourceManager.GetObject("wait"), System.Drawing.Image)
         End Get
     End Property
 End Class

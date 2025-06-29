@@ -1,5 +1,5 @@
-Imports Microsoft.Office.Tools.Ribbon
-Imports ShareRibbon  ' Ìí¼Ó´ËÒıÓÃ
+ï»¿Imports Microsoft.Office.Tools.Ribbon
+Imports ShareRibbon  ' æ·»åŠ æ­¤å¼•ç”¨
 Partial Class Ribbon1
     Inherits ShareRibbon.BaseOfficeRibbon
 
@@ -7,7 +7,7 @@ Partial Class Ribbon1
     Public Sub New(ByVal container As System.ComponentModel.IContainer)
         MyClass.New()
 
-        'Windows.Forms Àà×«Ğ´Éè¼ÆÆ÷Ö§³ÖËù±ØĞèµÄ
+        'Windows.Forms ç±»æ’°å†™è®¾è®¡å™¨æ”¯æŒæ‰€å¿…éœ€çš„
         If (container IsNot Nothing) Then
             container.Add(Me)
         End If
@@ -18,12 +18,12 @@ Partial Class Ribbon1
     Public Sub New()
         MyBase.New(Globals.Factory.GetRibbonFactory())
 
-        '×é¼şÉè¼ÆÆ÷ĞèÒª´Ëµ÷ÓÃ¡£
+        'ç»„ä»¶è®¾è®¡å™¨éœ€è¦æ­¤è°ƒç”¨ã€‚
         InitializeComponent()
 
     End Sub
 
-    '×é¼şÖØĞ´ÊÍ·ÅÒÔÇåÀí×é¼şÁĞ±í¡£
+    'ç»„ä»¶é‡å†™é‡Šæ”¾ä»¥æ¸…ç†ç»„ä»¶åˆ—è¡¨ã€‚
     <System.Diagnostics.DebuggerNonUserCode()>
     Protected Overrides Sub Dispose(ByVal disposing As Boolean)
         Try
@@ -35,17 +35,17 @@ Partial Class Ribbon1
         End Try
     End Sub
 
-    '×é¼şÉè¼ÆÆ÷Ëù±ØĞèµÄ
+    'ç»„ä»¶è®¾è®¡å™¨æ‰€å¿…éœ€çš„
     Private components As System.ComponentModel.IContainer
 
-    '×¢Òâ: ÒÔÏÂ¹ı³ÌÊÇ×é¼şÉè¼ÆÆ÷Ëù±ØĞèµÄ
-    '¿ÉÊ¹ÓÃ×é¼şÉè¼ÆÆ÷ĞŞ¸ÄËü¡£
-    '²»ÒªÊ¹ÓÃ´úÂë±à¼­Æ÷ĞŞ¸ÄËü¡£
+    'æ³¨æ„: ä»¥ä¸‹è¿‡ç¨‹æ˜¯ç»„ä»¶è®¾è®¡å™¨æ‰€å¿…éœ€çš„
+    'å¯ä½¿ç”¨ç»„ä»¶è®¾è®¡å™¨ä¿®æ”¹å®ƒã€‚
+    'ä¸è¦ä½¿ç”¨ä»£ç ç¼–è¾‘å™¨ä¿®æ”¹å®ƒã€‚
     <System.Diagnostics.DebuggerStepThrough()>
     Private Overloads Sub InitializeComponent()
         Me.TabAI.Label = "Excel AI"
 
-        ' ÉèÖÃÌØ¶¨µÄÍ¼±ê
+        ' è®¾ç½®ç‰¹å®šçš„å›¾æ ‡
         Me.ConfigApiButton.Image = ShareRibbon.SharedResources.AiApiConfig
         Me.DataAnalysisButton.Image = ShareRibbon.SharedResources.Magic
         Me.PromptConfigButton.Image = ShareRibbon.SharedResources.Send32
@@ -53,14 +53,20 @@ Partial Class Ribbon1
         Me.AboutButton.Image = ShareRibbon.SharedResources.About
         Me.ClearCacheButton.Image = ShareRibbon.SharedResources.Clear
 
-        ' ÉèÖÃ Excel ÌØ¶¨µÄÌáÊ¾
-        Me.DataAnalysisButton.SuperTip = "¿ÉÑ¡ÖĞÌá³öµÄÎÊÌâºÍÊı¾İºóAI°ïÄãÕûÀíµ½ÁíÍâÒ»¸ösheetÖĞ"
-        Me.PromptConfigButton.SuperTip = "ÓÅĞãµÄÌáÊ¾´Ê¿ÉÒÔ¸üºÃµÄ°ïAIÈ·¶¨×Ô¼ºµÄ¶¨Î»£¬ÈÃÊä³öÄÚÈİ¸ü·ûºÏÄãµÄÆÚÍû"
-        Me.ChatButton.SuperTip = "ÏñÊ¹ÓÃ¿Í»§¶ËÒ»ÑùÓëAI¶Ô»°£¬ÁÄÌì¸ü¼Ó±ã½İ"
+        ' è®¾ç½® Excel ç‰¹å®šçš„æç¤º
+        Me.DataAnalysisButton.SuperTip = "å¯é€‰ä¸­æå‡ºçš„é—®é¢˜å’Œæ•°æ®åAIå¸®ä½ æ•´ç†åˆ°å¦å¤–ä¸€ä¸ªsheetä¸­"
+        Me.PromptConfigButton.SuperTip = "ä¼˜ç§€çš„æç¤ºè¯å¯ä»¥æ›´å¥½çš„å¸®AIç¡®å®šè‡ªå·±çš„å®šä½ï¼Œè®©è¾“å‡ºå†…å®¹æ›´ç¬¦åˆä½ çš„æœŸæœ›"
+        Me.ChatButton.SuperTip = "åƒä½¿ç”¨å®¢æˆ·ç«¯ä¸€æ ·ä¸AIå¯¹è¯ï¼ŒèŠå¤©æ›´åŠ ä¾¿æ·"
 
-        ' ÉèÖÃ RibbonType
+        ' è®¾ç½® RibbonType
         Me.RibbonType = "Microsoft.Excel.Workbook"
 
+        Me.DeepseekButton.Image = ShareRibbon.SharedResources.Deepseek
+        Me.WebCaptureButton.Image = ShareRibbon.SharedResources.Send32
+        Me.SpotlightButton.Image = ShareRibbon.SharedResources.Wait
+        Me.MCPButton.Visible = False
+        Me.BatchDataGenButton.Visible = False
+        Me.WebCaptureButton.Visible = False
     End Sub
 
 End Class

@@ -127,6 +127,16 @@ Namespace My.Resources
         End Property
         
         '''<summary>
+        '''  查找 System.Drawing.Bitmap 类型的本地化资源。
+        '''</summary>
+        Public ReadOnly Property deepseek() As System.Drawing.Bitmap
+            Get
+                Dim obj As Object = ResourceManager.GetObject("deepseek", resourceCulture)
+                Return CType(obj,System.Drawing.Bitmap)
+            End Get
+        End Property
+        
+        '''<summary>
         '''  查找类似 pre code.hljs{display:block;overflow-x:auto;padding:1em}code.hljs{padding:3px 5px}/*!
         '''  Theme: GitHub
         '''  Description: Light theme as seen on github.com

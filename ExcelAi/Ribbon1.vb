@@ -1,9 +1,9 @@
-' WordAi\Ribbon1.vb
+ï»¿' WordAi\Ribbon1.vb
 Imports System.Diagnostics
 Imports System.Text.RegularExpressions
 Imports System.Windows.Forms
 Imports Microsoft.Office.Tools.Ribbon
-Imports ShareRibbon  ' Ìí¼Ó´ËÒıÓÃ
+Imports ShareRibbon  ' æ·»åŠ æ­¤å¼•ç”¨
 Imports Newtonsoft.Json.Linq
 Imports Microsoft.Office.Interop.Excel
 
@@ -15,41 +15,41 @@ Public Class Ribbon1
     End Sub
     Protected Overrides Async Sub WebResearchButton_Click(sender As Object, e As RibbonControlEventArgs)
         Globals.ThisAddIn.ShowChatTaskPane()
-    End Sub ' ĞŞ¸Ä SpotlightButton_Click ·½·¨´¦Àíµ¥»÷ºÍË«»÷
+    End Sub ' ä¿®æ”¹ SpotlightButton_Click æ–¹æ³•å¤„ç†å•å‡»å’ŒåŒå‡»
     Protected Overrides Sub SpotlightButton_Click(sender As Object, e As RibbonControlEventArgs)
         Try
-            ' »ñÈ¡¾Û¹âµÆÊµÀı
+            ' è·å–èšå…‰ç¯å®ä¾‹
             Dim spotlight As Spotlight = Spotlight.GetInstance()
 
-            ' ÅĞ¶ÏÊÇ·ñÊÇË«»÷
+            ' åˆ¤æ–­æ˜¯å¦æ˜¯åŒå‡»
             Dim button As RibbonButton = TryCast(sender, RibbonButton)
 
-            ' ¼ì²éÊÇ·ñË«»÷ (ÓÃÊ±¼ä¼ä¸ôÅĞ¶ÏË«»÷)
+            ' æ£€æŸ¥æ˜¯å¦åŒå‡» (ç”¨æ—¶é—´é—´éš”åˆ¤æ–­åŒå‡»)
             If IsDoubleClick() Then
-                ' Ë«»÷ - ÏÔÊ¾ÑÕÉ«Ñ¡Ôñ¶Ô»°¿ò
+                ' åŒå‡» - æ˜¾ç¤ºé¢œè‰²é€‰æ‹©å¯¹è¯æ¡†
                 spotlight.ShowColorDialog()
             Else
-                ' µ¥»÷ - ÇĞ»»¾Û¹âµÆ×´Ì¬
+                ' å•å‡» - åˆ‡æ¢èšå…‰ç¯çŠ¶æ€
                 spotlight.Toggle()
             End If
         Catch ex As Exception
-            MsgBox("¼¤»î¾Û¹âµÆ¹¦ÄÜÊ±³ö´í£º" & ex.Message, vbCritical)
+            MsgBox("æ¿€æ´»èšå…‰ç¯åŠŸèƒ½æ—¶å‡ºé”™ï¼š" & ex.Message, vbCritical)
         End Try
     End Sub
 
-    ' ÓÃÓÚ¼ì²âË«»÷µÄ±äÁ¿
+    ' ç”¨äºæ£€æµ‹åŒå‡»çš„å˜é‡
     Private _lastClickTime As DateTime = DateTime.MinValue
 
-    ' ¼ì²éÊÇ·ñÎªË«»÷£¨Èç¹ûÁ½´Îµã»÷¼ä¸ôĞ¡ÓÚ300ºÁÃë£¬ÔòÊÓÎªË«»÷£©
+    ' æ£€æŸ¥æ˜¯å¦ä¸ºåŒå‡»ï¼ˆå¦‚æœä¸¤æ¬¡ç‚¹å‡»é—´éš”å°äº300æ¯«ç§’ï¼Œåˆ™è§†ä¸ºåŒå‡»ï¼‰
     Private Function IsDoubleClick() As Boolean
         Dim currentTime As DateTime = DateTime.Now
         Dim isDouble As Boolean = (currentTime - _lastClickTime).TotalMilliseconds < 300
 
-        ' Èç¹û²»ÊÇË«»÷£¬Ôò¸üĞÂ×îºóµã»÷Ê±¼ä
+        ' å¦‚æœä¸æ˜¯åŒå‡»ï¼Œåˆ™æ›´æ–°æœ€åç‚¹å‡»æ—¶é—´
         If Not isDouble Then
             _lastClickTime = currentTime
         Else
-            ' Èç¹ûÊÇË«»÷£¬ÔòÖØÖÃÊ±¼ä£¬ÒÔÃâÁ¬Ğø¶à´Îµã»÷±»ÎóÅĞÎª¶à´ÎË«»÷
+            ' å¦‚æœæ˜¯åŒå‡»ï¼Œåˆ™é‡ç½®æ—¶é—´ï¼Œä»¥å…è¿ç»­å¤šæ¬¡ç‚¹å‡»è¢«è¯¯åˆ¤ä¸ºå¤šæ¬¡åŒå‡»
             _lastClickTime = DateTime.MinValue
         End If
 
@@ -58,16 +58,16 @@ Public Class Ribbon1
 
     Protected Overrides Async Sub DataAnalysisButton_Click(sender As Object, e As RibbonControlEventArgs)
         If String.IsNullOrWhiteSpace(ConfigSettings.ApiKey) Then
-            MsgBox("ÇëÊäÈëApiKey£¡")
+            MsgBox("è¯·è¾“å…¥ApiKeyï¼")
             Return
         End If
 
         If String.IsNullOrWhiteSpace(ConfigSettings.ApiUrl) Then
-            MsgBox("ÇëÑ¡Ôñ´óÄ£ĞÍ£¡")
+            MsgBox("è¯·é€‰æ‹©å¤§æ¨¡å‹ï¼")
             Return
         End If
 
-        ' »ñÈ¡Ñ¡ÖĞµÄµ¥Ôª¸ñÇøÓò
+        ' è·å–é€‰ä¸­çš„å•å…ƒæ ¼åŒºåŸŸ
         Dim selection As Excel.Range = TryCast(Globals.ThisAddIn.Application.Selection, Excel.Range)
         If selection IsNot Nothing Then
             Dim cellValues As New StringBuilder()
@@ -75,12 +75,12 @@ Public Class Ribbon1
             Dim cellIndices As New StringBuilder()
             Dim cellList As New List(Of String)
 
-            ' °´ÁĞ±éÀú£¬Ã¿ÁĞÓÃ¾Ö²¿±äÁ¿¼ÇÂ¼Á¬Ğø¿ÕĞĞÊı
+            ' æŒ‰åˆ—éå†ï¼Œæ¯åˆ—ç”¨å±€éƒ¨å˜é‡è®°å½•è¿ç»­ç©ºè¡Œæ•°
             For col As Integer = selection.Column To selection.Column + selection.Columns.Count
                 Dim emptyCount As Integer = 0
                 For row As Integer = selection.Row To selection.Row + selection.Rows.Count - 1
                     Dim cell As Excel.Range = selection.Worksheet.Cells(row, col)
-                    ' Èç¹û´æÔÚ·Ç¿ÕÄÚÈİ£¬Ôò´¦Àí£¬²¢ÖØÖÃ¿Õ¼ÆÊı
+                    ' å¦‚æœå­˜åœ¨éç©ºå†…å®¹ï¼Œåˆ™å¤„ç†ï¼Œå¹¶é‡ç½®ç©ºè®¡æ•°
                     If cell.Value IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(cell.Value.ToString()) Then
                         cellValues.AppendLine(cell.Value.ToString())
                         cellList.Add(cell.Address(False, False))
@@ -88,47 +88,47 @@ Public Class Ribbon1
                     Else
                         emptyCount += 1
                         If emptyCount >= 50 Then
-                            Exit For  ' ±¾ÁĞÁ¬Ğø50ĞĞÎª¿Õ£¬ÍË³öµ±Ç°ÁĞÑ­»·
+                            Exit For  ' æœ¬åˆ—è¿ç»­50è¡Œä¸ºç©ºï¼Œé€€å‡ºå½“å‰åˆ—å¾ªç¯
                         End If
                     End If
                 Next
             Next
 
 
-            ' °´ÕÕ¾ØÕóÕ¹¿ª·½Ê½ÏÔÊ¾µ¥Ôª¸ñË÷Òı
+            ' æŒ‰ç…§çŸ©é˜µå±•å¼€æ–¹å¼æ˜¾ç¤ºå•å…ƒæ ¼ç´¢å¼•
             Dim groupedCells = cellList.GroupBy(Function(c) Regex.Replace(c, "\d", ""))
             For Each group In groupedCells
                 cellIndices.AppendLine(String.Join(",", group))
             Next
 
-            ' ÏÔÊ¾ËùÓĞµ¥Ôª¸ñµÄÖµ
+            ' æ˜¾ç¤ºæ‰€æœ‰å•å…ƒæ ¼çš„å€¼
             If cellValues.Length > 0 Then
                 Dim previewForm As New TextPreviewForm(cellIndices.ToString())
                 previewForm.ShowDialog()
 
                 If previewForm.IsConfirmed Then
-                    ' »ñÈ¡²éÑ¯ÄÚÈİºÍÊı¾İ
+                    ' è·å–æŸ¥è¯¢å†…å®¹å’Œæ•°æ®
                     Dim question As String = cellValues.ToString
-                    question = previewForm.InputText & ¡°¡£ÄãÖ»ĞèÒª·µ»Ømarkdown¸ñÊ½µÄ±í¸ñ¼´¿É£¬±ğµÄÊ²Ã´¶¼²»ÒªËµ£¬²»ÒªÈÎºÎÆäËû¶àÓàµÄÎÄ×Ö¡£Ô­Ê¼Êı¾İÈçÏÂ£º¡° & question
+                    question = previewForm.InputText & â€œã€‚ä½ åªéœ€è¦è¿”å›markdownæ ¼å¼çš„è¡¨æ ¼å³å¯ï¼Œåˆ«çš„ä»€ä¹ˆéƒ½ä¸è¦è¯´ï¼Œä¸è¦ä»»ä½•å…¶ä»–å¤šä½™çš„æ–‡å­—ã€‚åŸå§‹æ•°æ®å¦‚ä¸‹ï¼šâ€œ & question
 
                     Dim requestBody As String = LLMUtil.CreateRequestBody(question)
 
-                    ' ·¢ËÍ HTTP ÇëÇó²¢»ñÈ¡ÏìÓ¦
+                    ' å‘é€ HTTP è¯·æ±‚å¹¶è·å–å“åº”
                     Dim response As String = Await LLMUtil.SendHttpRequest(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody)
 
-                    ' Èç¹ûÏìÓ¦Îª¿Õ£¬ÔòÖÕÖ¹Ö´ĞĞ
+                    ' å¦‚æœå“åº”ä¸ºç©ºï¼Œåˆ™ç»ˆæ­¢æ‰§è¡Œ
                     If String.IsNullOrEmpty(response) Then
                         Return
                     End If
 
-                    ' ½âÎö²¢Ğ´ÈëÏìÓ¦Êı¾İ
+                    ' è§£æå¹¶å†™å…¥å“åº”æ•°æ®
                     WriteResponseToSheet(response)
                 End If
             Else
-                MsgBox("Ñ¡ÖĞµÄµ¥Ôª¸ñÎŞÎÄ±¾ÄÚÈİ£¡")
+                MsgBox("é€‰ä¸­çš„å•å…ƒæ ¼æ— æ–‡æœ¬å†…å®¹ï¼")
             End If
         Else
-            MsgBox("ÇëÑ¡ÔñÒ»¸öµ¥Ôª¸ñÇøÓò£¡")
+            MsgBox("è¯·é€‰æ‹©ä¸€ä¸ªå•å…ƒæ ¼åŒºåŸŸï¼")
 
         End If
 
@@ -141,28 +141,28 @@ Public Class Ribbon1
 
             Dim lines() As String = Split(cellValue, vbLf)
 
-            Dim wsOutput As Worksheet = GetOrCreateSheet("AI½á¹û")
-            ' ¼¤»î¹¤×÷±í
+            Dim wsOutput As Worksheet = GetOrCreateSheet("AIç»“æœ")
+            ' æ¿€æ´»å·¥ä½œè¡¨
             wsOutput.Activate()
-            ' Çå¿ÕÊä³ö±í
+            ' æ¸…ç©ºè¾“å‡ºè¡¨
             wsOutput.Cells.Clear()
 
             'wsOutput.Range("F8").Value = cellValue
 
-            ' ÔİÍ£ÆÁÄ»¸üĞÂºÍ¼ÆËã
+            ' æš‚åœå±å¹•æ›´æ–°å’Œè®¡ç®—
             Globals.ThisAddIn.Application.ScreenUpdating = False
             Globals.ThisAddIn.Application.Calculation = XlCalculation.xlCalculationManual
 
-            ' Ğ´Èë±íÍ·
+            ' å†™å…¥è¡¨å¤´
             Dim columns() As String = Split(Trim(lines(0)), "|")
             For i As Integer = 1 To UBound(columns)
                 wsOutput.Cells(1, i).Value = Trim(columns(i))
             Next i
 
 
-            ' Ğ´Èë±í¸ñÊı¾İ£¨Ìø¹ı·Ö¸ôÏßºÍ±íÍ·£©
+            ' å†™å…¥è¡¨æ ¼æ•°æ®ï¼ˆè·³è¿‡åˆ†éš”çº¿å’Œè¡¨å¤´ï¼‰
             For i As Integer = 2 To UBound(lines)
-                If Trim(lines(i)) <> "" And Not Left(Trim(lines(i)), 1) = "-" Then ' Ìø¹ı¿ÕĞĞºÍ·Ö¸ôÏß
+                If Trim(lines(i)) <> "" And Not Left(Trim(lines(i)), 1) = "-" Then ' è·³è¿‡ç©ºè¡Œå’Œåˆ†éš”çº¿
                     columns = Split(Trim(lines(i)), "|")
                     For j As Integer = 1 To UBound(columns) - 1
                         wsOutput.Cells(i, j).Value = Trim(columns(j))
@@ -173,10 +173,10 @@ Public Class Ribbon1
             Globals.ThisAddIn.Application.ScreenUpdating = True
             Globals.ThisAddIn.Application.Calculation = XlCalculation.xlCalculationAutomatic
 
-            ' ÌáÊ¾Íê³É
-            GlobalStatusStripAll.ShowWarning("Êı¾İÒÑ³É¹¦Ğ´Èë AI½á¹û£¡")
+            ' æç¤ºå®Œæˆ
+            GlobalStatusStripAll.ShowWarning("æ•°æ®å·²æˆåŠŸå†™å…¥ AIç»“æœï¼")
         Catch ex As Exception
-            MsgBox("½âÎöÏìÓ¦Ê±³ö´í£º" & ex.Message, vbCritical)
+            MsgBox("è§£æå“åº”æ—¶å‡ºé”™ï¼š" & ex.Message, vbCritical)
         End Try
     End Sub
 
@@ -185,7 +185,7 @@ Public Class Ribbon1
         Try
             ws = Globals.ThisAddIn.Application.Sheets(sheetName)
         Catch ex As Exception
-            ' Èç¹û¹¤×÷±í²»´æÔÚ£¬Ôò´´½¨Ò»¸öĞÂµÄ¹¤×÷±í
+            ' å¦‚æœå·¥ä½œè¡¨ä¸å­˜åœ¨ï¼Œåˆ™åˆ›å»ºä¸€ä¸ªæ–°çš„å·¥ä½œè¡¨
             ws = Globals.ThisAddIn.Application.Sheets.Add()
             ws.Name = sheetName
         End Try
@@ -195,4 +195,34 @@ Public Class Ribbon1
     Protected Overrides Function GetApplication() As ApplicationInfo
         Return New ApplicationInfo("Excel", OfficeApplicationType.Excel)
     End Function
+
+    ' DeepseekæŒ‰é’®ç‚¹å‡»äº‹ä»¶å®ç°
+    Protected Overrides Sub DeepseekButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Globals.ThisAddIn.ShowDeepseekTaskPane()
+    End Sub
+
+    ' æ‰¹é‡æ•°æ®ç”ŸæˆæŒ‰é’®ç‚¹å‡»äº‹ä»¶å®ç°
+    Protected Overrides Sub BatchDataGenButton_Click(sender As Object, e As RibbonControlEventArgs)
+        ' åˆ›å»ºå¹¶æ˜¾ç¤ºæ‰¹é‡æ•°æ®ç”Ÿæˆé…ç½®è¡¨å•
+        Dim batchDataForm As New BatchDataGenerationForm()
+        If batchDataForm.ShowDialog() = DialogResult.OK Then
+            ' åœ¨Excelä¸­ç”Ÿæˆæ•°æ®çš„ä»£ç 
+            ' è·å–å½“å‰å·¥ä½œç°¿å’Œæ´»åŠ¨å·¥ä½œè¡¨
+            Dim excelApp As Excel.Application = Globals.ThisAddIn.Application
+            Dim activeWorksheet As Excel.Worksheet = excelApp.ActiveSheet
+
+            ' è¿™é‡Œå®ç°æ•°æ®ç”Ÿæˆé€»è¾‘
+            ' ...
+        End If
+    End Sub
+
+    ' MCPæŒ‰é’®ç‚¹å‡»äº‹ä»¶å®ç°
+    Protected Overrides Sub MCPButton_Click(sender As Object, e As RibbonControlEventArgs)
+        ' åˆ›å»ºå¹¶æ˜¾ç¤ºMCPé…ç½®è¡¨å•
+        Dim mcpConfigForm As New MCPConfigForm()
+        If mcpConfigForm.ShowDialog() = DialogResult.OK Then
+            ' åœ¨éœ€è¦æ—¶å¯ä»¥é›†æˆåˆ°ChatControlè°ƒç”¨MCPæœåŠ¡
+        End If
+    End Sub
+
 End Class

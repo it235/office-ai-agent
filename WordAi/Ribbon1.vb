@@ -1,8 +1,8 @@
-' WordAi\Ribbon1.vb
+ï»¿' WordAi\Ribbon1.vb
 Imports System.Diagnostics
 Imports System.Windows.Forms
 Imports Microsoft.Office.Tools.Ribbon
-Imports ShareRibbon  ' Ìí¼Ó´ËÒıÓÃ
+Imports ShareRibbon  ' æ·»åŠ æ­¤å¼•ç”¨
 
 Public Class Ribbon1
     Inherits BaseOfficeRibbon
@@ -17,11 +17,21 @@ Public Class Ribbon1
         'Globals.ThisAddIn.ShowChatTaskPane()
     End Sub
     Protected Overrides Sub DataAnalysisButton_Click(sender As Object, e As RibbonControlEventArgs)
-        ' Word ÌØ¶¨µÄÊı¾İ·ÖÎöÂß¼­
-        MessageBox.Show("WordÊı¾İ·ÖÎö¹¦ÄÜÕıÔÚ¿ª·¢ÖĞ...")
+        ' Word ç‰¹å®šçš„æ•°æ®åˆ†æé€»è¾‘
+        MessageBox.Show("Wordæ•°æ®åˆ†æåŠŸèƒ½æ­£åœ¨å¼€å‘ä¸­...")
     End Sub
 
     Protected Overrides Function GetApplication() As ApplicationInfo
         Return New ApplicationInfo("Word", OfficeApplicationType.Word)
     End Function
+
+    Protected Overrides Sub DeepseekButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Globals.ThisAddIn.ShowDeepseekTaskPane()
+    End Sub
+    Protected Overrides Sub BatchDataGenButton_Click(sender As Object, e As RibbonControlEventArgs)
+    End Sub
+
+    Protected Overrides Sub MCPButton_Click(sender As Object, e As RibbonControlEventArgs)
+        MessageBox.Show("åŠŸèƒ½æ­£åœ¨å¼€å‘ä¸­...")
+    End Sub
 End Class

@@ -1,4 +1,4 @@
-Imports System.Diagnostics
+ï»¿Imports System.Diagnostics
 Imports System.IO
 Imports System.Runtime.InteropServices
 Imports System.Threading.Tasks
@@ -11,24 +11,48 @@ Public Class ThisAddIn
     Public Shared chatControl As ChatControl
 
 
+    ' åœ¨ç±»ä¸­æ·»åŠ ä»¥ä¸‹å˜é‡
+    Private _deepseekControl As DeepseekControl
+    Private _deepseekTaskPane As Microsoft.Office.Tools.CustomTaskPane
+
     Private Sub WordAi_Startup() Handles Me.Startup
 
         Try
             WebView2Loader.EnsureWebView2Loader()
         Catch ex As Exception
-            MessageBox.Show($"WebView2 ³õÊ¼»¯Ê§°Ü: {ex.Message}")
+            MessageBox.Show($"WebView2 åˆå§‹åŒ–å¤±è´¥: {ex.Message}")
         End Try
 
-        ' ´¦Àí¹¤×÷±íºÍ¹¤×÷²¾ÇĞ»»ÊÂ¼ş
+        ' å¤„ç†å·¥ä½œè¡¨å’Œå·¥ä½œç°¿åˆ‡æ¢äº‹ä»¶
         'AddHandler Globals.ThisAddIn.Application.ActiveDocument, AddressOf Me.Application_WorkbookActivate
         Application_WorkbookActivate()
-        ' ³õÊ¼»¯ Timer£¬ÓÃÓÚWPSÖĞÀ©´óÁÄÌìÇøÓòµÄ¿í¶È
+        ' åˆå§‹åŒ– Timerï¼Œç”¨äºWPSä¸­æ‰©å¤§èŠå¤©åŒºåŸŸçš„å®½åº¦
         widthTimer = New Timer()
         AddHandler widthTimer.Tick, AddressOf WidthTimer_Tick
-        widthTimer.Interval = 100 ' ÉèÖÃÑÓ³ÙÊ±¼ä£¬µ¥Î»ÎªºÁÃë
+        widthTimer.Interval = 100 ' è®¾ç½®å»¶è¿Ÿæ—¶é—´ï¼Œå•ä½ä¸ºæ¯«ç§’
+
+        widthTimer1 = New Timer()
+        AddHandler widthTimer1.Tick, AddressOf WidthTimer1_Tick
+        widthTimer1.Interval = 100 ' è®¾ç½®å»¶è¿Ÿæ—¶é—´ï¼Œå•ä½ä¸ºæ¯«ç§’
+        CreateDeepseekTaskPane()
 
     End Sub
 
+    Private Sub CreateDeepseekTaskPane()
+        Try
+            If _deepseekControl Is Nothing Then
+                ' ä¸ºæ–°å·¥ä½œç°¿åˆ›å»ºä»»åŠ¡çª—æ ¼
+                _deepseekControl = New DeepseekControl()
+                _deepseekTaskPane = Me.CustomTaskPanes.Add(_deepseekControl, "Deepseek AIæ™ºèƒ½åŠ©æ‰‹")
+                _deepseekTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
+                _deepseekTaskPane.Width = 420
+                AddHandler _deepseekTaskPane.VisibleChanged, AddressOf DeepseekTaskPane_VisibleChanged
+                _deepseekTaskPane.Visible = False
+            End If
+        Catch ex As Exception
+            MessageBox.Show($"åˆå§‹åŒ–ä»»åŠ¡çª—æ ¼å¤±è´¥: {ex.Message}")
+        End Try
+    End Sub
 
     Private Function IsWpsActive() As Boolean
         Try
@@ -43,30 +67,40 @@ Public Class ThisAddIn
     End Sub
 
 
-    '    ' ÇĞ»»¹¤×÷±íÊ±ÖØĞÂ
+    '    ' åˆ‡æ¢å·¥ä½œè¡¨æ—¶é‡æ–°
 
     Private Sub Application_WorkbookActivate()
         Try
-            ' ÎªĞÂ¹¤×÷²¾´´½¨ÈÎÎñ´°¸ñ
+            ' ä¸ºæ–°å·¥ä½œç°¿åˆ›å»ºä»»åŠ¡çª—æ ¼
             chatControl = New ChatControl()
-            chatTaskPane = Me.CustomTaskPanes.Add(chatControl, "PPT AIÖÇÄÜÖúÊÖ")
+            chatTaskPane = Me.CustomTaskPanes.Add(chatControl, "PPT AIæ™ºèƒ½åŠ©æ‰‹")
             chatTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
             chatTaskPane.Width = 420
             AddHandler chatTaskPane.VisibleChanged, AddressOf ChatTaskPane_VisibleChanged
             chatTaskPane.Visible = False
 
         Catch ex As Exception
-            MessageBox.Show($"³õÊ¼»¯ĞÂ½¨¹¤×÷²¾ÈÎÎñ´°¸ñÊ§°Ü: {ex.Message}")
+            MessageBox.Show($"åˆå§‹åŒ–æ–°å»ºå·¥ä½œç°¿ä»»åŠ¡çª—æ ¼å¤±è´¥: {ex.Message}")
         End Try
     End Sub
 
     Private widthTimer As Timer
-    ' ½â¾öWPSÖĞÎŞ·¨ÏÔÊ¾Õı³£¿í¶ÈµÄÎÊÌâ
+    Private widthTimer1 As Timer
+    ' è§£å†³WPSä¸­æ— æ³•æ˜¾ç¤ºæ­£å¸¸å®½åº¦çš„é—®é¢˜
     Private Sub ChatTaskPane_VisibleChanged(sender As Object, e As EventArgs)
         Dim taskPane As Microsoft.Office.Tools.CustomTaskPane = CType(sender, Microsoft.Office.Tools.CustomTaskPane)
         If taskPane.Visible Then
             If IsWpsActive() Then
                 widthTimer.Start()
+            End If
+        End If
+    End Sub
+
+    Private Sub DeepseekTaskPane_VisibleChanged(sender As Object, e As EventArgs)
+        Dim taskPane As Microsoft.Office.Tools.CustomTaskPane = CType(sender, Microsoft.Office.Tools.CustomTaskPane)
+        If taskPane.Visible Then
+            If IsWpsActive() Then
+                widthTimer1.Start()
             End If
         End If
     End Sub
@@ -77,8 +111,14 @@ Public Class ThisAddIn
             chatTaskPane.Width = 420
         End If
     End Sub
+    Private Sub WidthTimer1_Tick(sender As Object, e As EventArgs)
+        widthTimer1.Stop()
+        If IsWpsActive() AndAlso _deepseekTaskPane IsNot Nothing Then
+            _deepseekTaskPane.Width = 420
+        End If
+    End Sub
     Private Sub AiHelper_Shutdown() Handles Me.Shutdown
-        ' ÇåÀí×ÊÔ´
+        ' æ¸…ç†èµ„æº
         'RemoveHandler Globals.ThisAddIn.Application.WorkbookActivate, AddressOf Me.Application_WorkbookActivate
     End Sub
 
@@ -90,5 +130,9 @@ Public Class ThisAddIn
             loadChatHtml = False
             Await chatControl.LoadLocalHtmlFile()
         End If
+    End Sub
+
+    Public Async Sub ShowDeepseekTaskPane()
+        _deepseekTaskPane.Visible = True
     End Sub
 End Class

@@ -1,4 +1,4 @@
-' ShareRibbon\Controls\BaseChatControl.vb
+ï»¿' ShareRibbon\Controls\BaseChatControl.vb
 Imports System.Diagnostics
 Imports System.Drawing
 Imports System.IO
@@ -37,7 +37,7 @@ Public MustInherit Class BaseChatControl
     Protected stopReaderStream As Boolean = False
 
 
-    ' aiµÄÀúÊ·»Ø¸´
+    ' aiçš„å†å²å›å¤
     Protected historyMessageData As New List(Of HistoryMessage)
 
     Protected loadingPictureBox As PictureBox
@@ -45,13 +45,13 @@ Public MustInherit Class BaseChatControl
     Protected Overrides Sub WndProc(ByRef m As Message)
         Const WM_PASTE As Integer = &H302
         If m.Msg = WM_PASTE Then
-            ' ÔÚ´Ë´¦ÀíÕ³Ìù²Ù×÷£¬±ÈÈç£º
+            ' åœ¨æ­¤å¤„ç†ç²˜è´´æ“ä½œï¼Œæ¯”å¦‚ï¼š
             If Clipboard.ContainsText() Then
                 Dim txt As String = Clipboard.GetText()
 
-                'QuestionTextBox.Text &= txt ' ½«Õ³ÌùÄÚÈİÖ±½ÓĞ´Èëµ±Ç°¹â±êÎ»ÖÃ
+                'QuestionTextBox.Text &= txt ' å°†ç²˜è´´å†…å®¹ç›´æ¥å†™å…¥å½“å‰å…‰æ ‡ä½ç½®
             End If
-            ' ²»°ÑÏûÏ¢´«µİ¸ø»ùÀà£¬´Ó¶øÀ¹½ØºóĞø´¦Àí  
+            ' ä¸æŠŠæ¶ˆæ¯ä¼ é€’ç»™åŸºç±»ï¼Œä»è€Œæ‹¦æˆªåç»­å¤„ç†  
             Return
         End If
         MyBase.WndProc(m)
@@ -59,58 +59,58 @@ Public MustInherit Class BaseChatControl
 
     Protected Async Function InitializeWebView2() As Task
         Try
-            ' ×Ô¶¨ÒåÓÃ»§Êı¾İÄ¿Â¼
+            ' è‡ªå®šä¹‰ç”¨æˆ·æ•°æ®ç›®å½•
             Dim userDataFolder As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MyAppWebView2Cache")
 
-            ' È·±£Ä¿Â¼´æÔÚ
+            ' ç¡®ä¿ç›®å½•å­˜åœ¨
             If Not Directory.Exists(userDataFolder) Then
                 Directory.CreateDirectory(userDataFolder)
             End If
 
-            ' ÊÍ·Å×ÊÔ´ÎÄ¼şµ½±¾µØ
+            ' é‡Šæ”¾èµ„æºæ–‡ä»¶åˆ°æœ¬åœ°
             Dim wwwRoot As String = ResourceExtractor.ExtractResources()
 
-            ' ÅäÖÃ WebView2 µÄ´´½¨ÊôĞÔ
+            ' é…ç½® WebView2 çš„åˆ›å»ºå±æ€§
             ChatBrowser.CreationProperties = New CoreWebView2CreationProperties With {
                 .UserDataFolder = userDataFolder
             }
 
-            ' ³õÊ¼»¯ WebView2
+            ' åˆå§‹åŒ– WebView2
             Await ChatBrowser.EnsureCoreWebView2Async(Nothing)
 
-            ' È·±£ CoreWebView2 ÒÑ³õÊ¼»¯
+            ' ç¡®ä¿ CoreWebView2 å·²åˆå§‹åŒ–
             If ChatBrowser.CoreWebView2 IsNot Nothing Then
 
-                ' ÉèÖÃ WebView2 µÄ°²È«Ñ¡Ïî
+                ' è®¾ç½® WebView2 çš„å®‰å…¨é€‰é¡¹
                 ChatBrowser.CoreWebView2.Settings.IsScriptEnabled = True
                 ChatBrowser.CoreWebView2.Settings.AreDefaultScriptDialogsEnabled = True
                 ChatBrowser.CoreWebView2.Settings.IsWebMessageEnabled = True
-                ChatBrowser.CoreWebView2.Settings.AreDevToolsEnabled = True ' ¿ª·¢Ê±ÆôÓÃ¿ª·¢Õß¹¤¾ß
+                ChatBrowser.CoreWebView2.Settings.AreDevToolsEnabled = True ' å¼€å‘æ—¶å¯ç”¨å¼€å‘è€…å·¥å…·
 
-                ' ÉèÖÃĞéÄâÖ÷»úÃûÓ³Éäµ½±¾µØÄ¿Â¼
+                ' è®¾ç½®è™šæ‹Ÿä¸»æœºåæ˜ å°„åˆ°æœ¬åœ°ç›®å½•
                 ChatBrowser.CoreWebView2.SetVirtualHostNameToFolderMapping(
-                    "officeai.local", ' ĞéÄâÖ÷»úÃû
-                    wwwRoot,          ' ±¾µØÎÄ¼ş¼ĞÂ·¾¶
-                    CoreWebView2HostResourceAccessKind.Allow  ' ÔÊĞí·ÃÎÊ
+                    "officeai.local", ' è™šæ‹Ÿä¸»æœºå
+                    wwwRoot,          ' æœ¬åœ°æ–‡ä»¶å¤¹è·¯å¾„
+                    CoreWebView2HostResourceAccessKind.Allow  ' å…è®¸è®¿é—®
                 )
 
-                ' Ìæ»»Ä£°åÖĞµÄ {wwwroot} Õ¼Î»·û
+                ' æ›¿æ¢æ¨¡æ¿ä¸­çš„ {wwwroot} å ä½ç¬¦
                 Dim htmlContent As String = My.Resources.chat_template
 
-                ' ¼ÓÔØ HTML Ä£°å
+                ' åŠ è½½ HTML æ¨¡æ¿
                 ChatBrowser.CoreWebView2.NavigateToString(htmlContent)
 
-                ' ÅäÖÃ Marked ºÍ´úÂë¸ßÁÁ
+                ' é…ç½® Marked å’Œä»£ç é«˜äº®
                 ConfigureMarked()
-                ' Ìí¼Óµ¼º½Íê³ÉÊÂ¼ş´¦Àí£¬È·±£ÔÚÒ³Ãæ¼ÓÔØÍê³Éºó³õÊ¼»¯ÉèÖÃ
+                ' æ·»åŠ å¯¼èˆªå®Œæˆäº‹ä»¶å¤„ç†ï¼Œç¡®ä¿åœ¨é¡µé¢åŠ è½½å®Œæˆååˆå§‹åŒ–è®¾ç½®
                 AddHandler ChatBrowser.CoreWebView2.NavigationCompleted, AddressOf OnWebViewNavigationCompleted
 
             Else
-                MessageBox.Show("WebView2 ³õÊ¼»¯Ê§°Ü£¬CoreWebView2 ²»¿ÉÓÃ¡£", "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                MessageBox.Show("WebView2 åˆå§‹åŒ–å¤±è´¥ï¼ŒCoreWebView2 ä¸å¯ç”¨ã€‚", "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Error)
             End If
         Catch ex As Exception
-            Dim errorMessage As String = $"³õÊ¼»¯Ê§°Ü: {ex.Message}{Environment.NewLine}ÀàĞÍ: {ex.GetType().Name}{Environment.NewLine}¶ÑÕ»:{ex.StackTrace}"
-            MessageBox.Show(errorMessage, "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Dim errorMessage As String = $"åˆå§‹åŒ–å¤±è´¥: {ex.Message}{Environment.NewLine}ç±»å‹: {ex.GetType().Name}{Environment.NewLine}å †æ ˆ:{ex.StackTrace}"
+            MessageBox.Show(errorMessage, "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Function
     Private Async Sub InjectScript(scriptContent As String)
@@ -118,7 +118,7 @@ Public MustInherit Class BaseChatControl
             Dim escapedScript = JsonConvert.SerializeObject(scriptContent)
             Await ChatBrowser.CoreWebView2.ExecuteScriptAsync($"eval({escapedScript})")
         Else
-            MessageBox.Show("CoreWebView2 Î´³õÊ¼»¯£¬ÎŞ·¨×¢Èë½Å±¾¡£", "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("CoreWebView2 æœªåˆå§‹åŒ–ï¼Œæ— æ³•æ³¨å…¥è„šæœ¬ã€‚", "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End If
     End Sub
 
@@ -137,11 +137,11 @@ Public MustInherit Class BaseChatControl
         "
             Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
         Else
-            MessageBox.Show("CoreWebView2 Î´³õÊ¼»¯£¬ÎŞ·¨ÅäÖÃ Marked¡£", "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("CoreWebView2 æœªåˆå§‹åŒ–ï¼Œæ— æ³•é…ç½® Markedã€‚", "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End If
     End Function
 
-    ' ´æ´¢ÁÄÌìHTMLµÄÎÄ¼şÂ·¾¶
+    ' å­˜å‚¨èŠå¤©HTMLçš„æ–‡ä»¶è·¯å¾„
     Protected ReadOnly ChatHtmlFilePath As String = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
         ConfigSettings.OfficeAiAppDataFolder,
@@ -152,27 +152,27 @@ Public MustInherit Class BaseChatControl
         If e.IsSuccess Then
             Try
                 If ChatBrowser.InvokeRequired Then
-                    ' Ê¹ÓÃÍ¬²½µÄ Invoke ¶ø²»ÊÇÒì²½µÄ
+                    ' ä½¿ç”¨åŒæ­¥çš„ Invoke è€Œä¸æ˜¯å¼‚æ­¥çš„
                     ChatBrowser.Invoke(Sub()
-                                           Task.Delay(100).Wait() ' Í¬²½µÈ´ı
+                                           Task.Delay(100).Wait() ' åŒæ­¥ç­‰å¾…
                                            InitializeSettings()
 
-                                           ' Ö±½ÓÔÚUIÏß³ÌÒÆ³ıÊÂ¼ş´¦ÀíÆ÷
+                                           ' ç›´æ¥åœ¨UIçº¿ç¨‹ç§»é™¤äº‹ä»¶å¤„ç†å™¨
                                            If ChatBrowser IsNot Nothing AndAlso ChatBrowser.CoreWebView2 IsNot Nothing Then
                                                RemoveHandler ChatBrowser.CoreWebView2.NavigationCompleted, AddressOf OnWebViewNavigationCompleted
                                            End If
                                        End Sub)
                 Else
-                    Task.Delay(100).Wait() ' Í¬²½µÈ´ı
+                    Task.Delay(100).Wait() ' åŒæ­¥ç­‰å¾…
                     InitializeSettings()
 
-                    ' Ö±½ÓÔÚUIÏß³ÌÒÆ³ıÊÂ¼ş´¦ÀíÆ÷
+                    ' ç›´æ¥åœ¨UIçº¿ç¨‹ç§»é™¤äº‹ä»¶å¤„ç†å™¨
                     If ChatBrowser IsNot Nothing AndAlso ChatBrowser.CoreWebView2 IsNot Nothing Then
                         RemoveHandler ChatBrowser.CoreWebView2.NavigationCompleted, AddressOf OnWebViewNavigationCompleted
                     End If
                 End If
             Catch ex As Exception
-                Debug.WriteLine($"µ¼º½Íê³ÉÊÂ¼ş´¦ÀíÖĞ³ö´í: {ex.Message}")
+                Debug.WriteLine($"å¯¼èˆªå®Œæˆäº‹ä»¶å¤„ç†ä¸­å‡ºé”™: {ex.Message}")
                 Debug.WriteLine(ex.StackTrace)
             End Try
         End If
@@ -180,14 +180,14 @@ Public MustInherit Class BaseChatControl
 
     Protected Sub InitializeSettings()
         Try
-            ' ¼ÓÔØÉèÖÃ
+            ' åŠ è½½è®¾ç½®
             Dim chatSettings As New ChatSettings(GetApplication())
             selectedCellChecked = ChatSettings.selectedCellChecked
             contextLimit = ChatSettings.contextLimit
             topicRandomness = ChatSettings.topicRandomness
             settingsScrollChecked = ChatSettings.settingsScrollChecked
 
-            ' ½«ÉèÖÃ·¢ËÍµ½Ç°¶Ë
+            ' å°†è®¾ç½®å‘é€åˆ°å‰ç«¯
             Dim js As String = $"
             document.getElementById('topic-randomness').value = '{ChatSettings.topicRandomness}';
             document.getElementById('topic-randomness-value').textContent = '{ChatSettings.topicRandomness}';
@@ -202,13 +202,13 @@ Public MustInherit Class BaseChatControl
                 selectElement.value = '{ChatSettings.chatMode}';
             }}
             
-            // Í¬²½µ½Ö÷½çÃæµÄcheckbox
+            // åŒæ­¥åˆ°ä¸»ç•Œé¢çš„checkbox
             document.getElementById('scrollChecked').checked = {ChatSettings.settingsScrollChecked.ToString().ToLower()};
             document.getElementById('selectedCell').checked = {ChatSettings.selectedCellChecked.ToString().ToLower()};
         "
             ExecuteJavaScriptAsyncJS(js)
         Catch ex As Exception
-            Debug.WriteLine($"³õÊ¼»¯ÉèÖÃÊ§°Ü: {ex.Message}")
+            Debug.WriteLine($"åˆå§‹åŒ–è®¾ç½®å¤±è´¥: {ex.Message}")
         End Try
     End Sub
 
@@ -225,13 +225,13 @@ Public MustInherit Class BaseChatControl
                 Case "executeCode"
                     HandleExecuteCode(jsonDoc)
                 Case "saveSettings"
-                    Debug.Print("±£´æÉèÖÃ")
+                    Debug.Print("ä¿å­˜è®¾ç½®")
                     HandleSaveSettings(jsonDoc)
                 Case Else
-                    Debug.WriteLine($"Î´ÖªÏûÏ¢ÀàĞÍ: {messageType}")
+                    Debug.WriteLine($"æœªçŸ¥æ¶ˆæ¯ç±»å‹: {messageType}")
             End Select
         Catch ex As Exception
-            Debug.WriteLine($"´¦ÀíÏûÏ¢³ö´í: {ex.Message}")
+            Debug.WriteLine($"å¤„ç†æ¶ˆæ¯å‡ºé”™: {ex.Message}")
         End Try
     End Sub
 
@@ -251,7 +251,7 @@ Public MustInherit Class BaseChatControl
         Dim chatMode As String = jsonDoc("chatMode")
         Dim executeCodePreview As Boolean = jsonDoc("executeCodePreview")
         Dim chatSettings As New ChatSettings(GetApplication())
-        ' ±£´æÉèÖÃµ½ÅäÖÃÎÄ¼ş
+        ' ä¿å­˜è®¾ç½®åˆ°é…ç½®æ–‡ä»¶
         chatSettings.SaveSettings(topicRandomness, contextLimit, selectedCellChecked,
                                   settingsScrollChecked, executeCodePreview, chatMode)
     End Sub
@@ -262,15 +262,15 @@ Public MustInherit Class BaseChatControl
         Public Property address As String
     End Class
 
-    ' ¶¨ÒåÎÄ¼şÄÚÈİ½âÎö½á¹ûµÄÀà
+    ' å®šä¹‰æ–‡ä»¶å†…å®¹è§£æç»“æœçš„ç±»
     Public Class FileContentResult
         Public Property FileName As String
-        Public Property FileType As String  ' "Excel", "Word", "Text", µÈ
-        Public Property ParsedContent As String  ' ¸ñÊ½»¯µÄÄÚÈİ×Ö·û´®
-        Public Property RawData As Object  ' Ô­Ê¼Êı¾İ£¬¿ÉÓÃÓÚ½øÒ»²½´¦Àí
+        Public Property FileType As String  ' "Excel", "Word", "Text", ç­‰
+        Public Property ParsedContent As String  ' æ ¼å¼åŒ–çš„å†…å®¹å­—ç¬¦ä¸²
+        Public Property RawData As Object  ' åŸå§‹æ•°æ®ï¼Œå¯ç”¨äºè¿›ä¸€æ­¥å¤„ç†
     End Class
 
-    ' ÔÚ HandleSendMessage ·½·¨ÖĞÌí¼ÓÎÄ¼şÄÚÈİ½âÎöÂß¼­
+    ' åœ¨ HandleSendMessage æ–¹æ³•ä¸­æ·»åŠ æ–‡ä»¶å†…å®¹è§£æé€»è¾‘
     Protected Overridable Sub HandleSendMessage(jsonDoc As JObject)
         Dim messageValue As JToken = jsonDoc("value")
         Dim question As String
@@ -292,7 +292,7 @@ Public MustInherit Class BaseChatControl
                 filePaths = messageValue("filePaths").ToObject(Of List(Of String))()
             End If
 
-            ' ½âÎö selectedContent
+            ' è§£æ selectedContent
             If messageValue("selectedContent") IsNot Nothing AndAlso messageValue("selectedContent").Type = JTokenType.Array Then
                 Try
                     selectedContents = messageValue("selectedContent").ToObject(Of List(Of SendMessageReferenceContentItem))()
@@ -312,36 +312,36 @@ Public MustInherit Class BaseChatControl
             Return ' Nothing to send
         End If
 
-        ' --- ´¦ÀíÑ¡ÖĞµÄÄÚÈİ ---
-        question = AppendCurrentSelectedContent("--- ÓÃ»§µÄÎÊÌâ£º" & question & " ¡£ÓÃ»§ÌáÎÊ½áÊø£¬ºóĞøÒıÓÃµÄÎÄ¼ş¶¼ÔÚÍ¬Ò»Ä¿Â¼ÏÂËùÒÔ¿ÉÒÔ·ÅĞÄ¶ÁÈ¡¡£ ---")
+        ' --- å¤„ç†é€‰ä¸­çš„å†…å®¹ ---
+        question = AppendCurrentSelectedContent("--- ç”¨æˆ·çš„é—®é¢˜ï¼š" & question & " ã€‚ç”¨æˆ·æé—®ç»“æŸï¼Œåç»­å¼•ç”¨çš„æ–‡ä»¶éƒ½åœ¨åŒä¸€ç›®å½•ä¸‹æ‰€ä»¥å¯ä»¥æ”¾å¿ƒè¯»å–ã€‚ ---")
 
-        ' --- ÎÄ¼şÄÚÈİ½âÎöÂß¼­ ---
+        ' --- æ–‡ä»¶å†…å®¹è§£æé€»è¾‘ ---
         Dim fileContentBuilder As New StringBuilder()
         Dim parsedFiles As New List(Of FileContentResult)()
 
         If filePaths IsNot Nothing AndAlso filePaths.Count > 0 Then
-            fileContentBuilder.AppendLine(vbCrLf & "--- ÒÔÏÂÊÇÓÃ»§ÒıÓÃµÄÆäËûÎÄ¼şÄÚÈİ ---")
+            fileContentBuilder.AppendLine(vbCrLf & "--- ä»¥ä¸‹æ˜¯ç”¨æˆ·å¼•ç”¨çš„å…¶ä»–æ–‡ä»¶å†…å®¹ ---")
 
-            ' »ñÈ¡µ±Ç°¹¤×÷Ä¿Â¼
+            ' è·å–å½“å‰å·¥ä½œç›®å½•
             Dim currentWorkingDir As String = GetCurrentWorkingDirectory()
             If String.IsNullOrEmpty(currentWorkingDir) Then
-                GlobalStatusStrip.ShowWarning("Çë±£´æµ±Ç°ÎÄ¼ş£¬²¢ÇÒ°ÑÒıÓÃÎÄ¼şºÍµ±Ç°ÎÄ¼ş·ÅÔÚÍ¬Ò»Ä¿Â¼ÏÂºóÖØÊÔ: ")
+                GlobalStatusStrip.ShowWarning("è¯·ä¿å­˜å½“å‰æ–‡ä»¶ï¼Œå¹¶ä¸”æŠŠå¼•ç”¨æ–‡ä»¶å’Œå½“å‰æ–‡ä»¶æ”¾åœ¨åŒä¸€ç›®å½•ä¸‹åé‡è¯•: ")
                 Return
             End If
 
             For Each filePath As String In filePaths
                 Try
-                    ' ¼ì²éÎÄ¼şÊÇ·ñÎª¾ø¶ÔÂ·¾¶
+                    ' æ£€æŸ¥æ–‡ä»¶æ˜¯å¦ä¸ºç»å¯¹è·¯å¾„
                     Dim fullFilePath As String = filePath
 
-                    ' Èç¹û²»ÊÇ¾ø¶ÔÂ·¾¶£¬Ôò³¢ÊÔÔÚµ±Ç°¹¤×÷Ä¿Â¼ÏÂ²éÕÒ
+                    ' å¦‚æœä¸æ˜¯ç»å¯¹è·¯å¾„ï¼Œåˆ™å°è¯•åœ¨å½“å‰å·¥ä½œç›®å½•ä¸‹æŸ¥æ‰¾
                     If Not Path.IsPathRooted(filePath) AndAlso Not String.IsNullOrEmpty(currentWorkingDir) Then
                         fullFilePath = Path.Combine(currentWorkingDir, Path.GetFileName(filePath))
-                        Debug.WriteLine($"³¢ÊÔÔÚ¹¤×÷Ä¿Â¼²éÕÒÎÄ¼ş: {fullFilePath}")
+                        Debug.WriteLine($"å°è¯•åœ¨å·¥ä½œç›®å½•æŸ¥æ‰¾æ–‡ä»¶: {fullFilePath}")
                     End If
 
                     If File.Exists(fullFilePath) Then
-                        ' ¸ù¾İÎÄ¼şÀ©Õ¹ÃûÑ¡ÔñºÏÊÊµÄ½âÎö·½·¨
+                        ' æ ¹æ®æ–‡ä»¶æ‰©å±•åé€‰æ‹©åˆé€‚çš„è§£ææ–¹æ³•
                         Dim fileExtension As String = Path.GetExtension(fullFilePath).ToLower()
                         Dim fileContentResult As FileContentResult = Nothing
 
@@ -356,40 +356,40 @@ Public MustInherit Class BaseChatControl
                                 fileContentResult = New FileContentResult With {
                             .FileName = Path.GetFileName(fullFilePath),
                             .FileType = "Unknown",
-                            .ParsedContent = $"[²»Ö§³ÖµÄÎÄ¼şÀàĞÍ: {fileExtension}]"
+                            .ParsedContent = $"[ä¸æ”¯æŒçš„æ–‡ä»¶ç±»å‹: {fileExtension}]"
                         }
                         End Select
 
                         If fileContentResult IsNot Nothing Then
                             parsedFiles.Add(fileContentResult)
-                            fileContentBuilder.AppendLine($"ÎÄ¼şÃû: {fileContentResult.FileName}")
-                            fileContentBuilder.AppendLine($"ÎÄ¼şÄÚÈİ:")
+                            fileContentBuilder.AppendLine($"æ–‡ä»¶å: {fileContentResult.FileName}")
+                            fileContentBuilder.AppendLine($"æ–‡ä»¶å†…å®¹:")
                             fileContentBuilder.AppendLine(fileContentResult.ParsedContent)
                             fileContentBuilder.AppendLine("---")
                         End If
                     Else
-                        fileContentBuilder.AppendLine($"ÎÄ¼ş '{Path.GetFileName(filePath)}' Î´ÕÒµ½»òÂ·¾¶ÎŞĞ§")
-                        Debug.WriteLine($"ÎÄ¼şÎ´ÕÒµ½: {fullFilePath}")
-                        ' ³¢ÊÔÁĞ³öµ±Ç°Ä¿Â¼ÖĞµÄÎÄ¼ş£¬ÓÃÓÚµ÷ÊÔ
+                        fileContentBuilder.AppendLine($"æ–‡ä»¶ '{Path.GetFileName(filePath)}' æœªæ‰¾åˆ°æˆ–è·¯å¾„æ— æ•ˆ")
+                        Debug.WriteLine($"æ–‡ä»¶æœªæ‰¾åˆ°: {fullFilePath}")
+                        ' å°è¯•åˆ—å‡ºå½“å‰ç›®å½•ä¸­çš„æ–‡ä»¶ï¼Œç”¨äºè°ƒè¯•
                         If Directory.Exists(currentWorkingDir) Then
                             Dim filesInDir = Directory.GetFiles(currentWorkingDir)
-                            Debug.WriteLine($"µ±Ç°Ä¿Â¼ÖĞµÄÎÄ¼ş: {String.Join(", ", filesInDir.Select(Function(f) Path.GetFileName(f)))}")
+                            Debug.WriteLine($"å½“å‰ç›®å½•ä¸­çš„æ–‡ä»¶: {String.Join(", ", filesInDir.Select(Function(f) Path.GetFileName(f)))}")
                         End If
                     End If
                 Catch ex As Exception
                     Debug.WriteLine($"Error processing file '{filePath}': {ex.Message}")
-                    fileContentBuilder.AppendLine($"´¦ÀíÎÄ¼ş '{Path.GetFileName(filePath)}' Ê±³ö´í: {ex.Message}")
+                    fileContentBuilder.AppendLine($"å¤„ç†æ–‡ä»¶ '{Path.GetFileName(filePath)}' æ—¶å‡ºé”™: {ex.Message}")
                     fileContentBuilder.AppendLine("---")
                 End Try
             Next
 
-            fileContentBuilder.AppendLine("--- ÎÄ¼şÄÚÈİ½áÊø ---" & vbCrLf)
+            fileContentBuilder.AppendLine("--- æ–‡ä»¶å†…å®¹ç»“æŸ ---" & vbCrLf)
         End If
 
-        ' ¹¹½¨×îÖÕ·¢ËÍ¸ø LLM µÄÏûÏ¢
+        ' æ„å»ºæœ€ç»ˆå‘é€ç»™ LLM çš„æ¶ˆæ¯
         Dim finalMessageToLLM As String = question
 
-        ' È»ºóÌí¼ÓÎÄ¼şÄÚÈİ£¨Èç¹ûÓĞ£©
+        ' ç„¶åæ·»åŠ æ–‡ä»¶å†…å®¹ï¼ˆå¦‚æœæœ‰ï¼‰
         If fileContentBuilder.Length > 0 Then
             finalMessageToLLM &= fileContentBuilder.ToString()
         End If
@@ -406,23 +406,23 @@ Public MustInherit Class BaseChatControl
     End Sub
 
 
-    ' ³éÏó·½·¨£¬ÓÉ×ÓÀàÊµÏÖ
+    ' æŠ½è±¡æ–¹æ³•ï¼Œç”±å­ç±»å®ç°
     Protected MustOverride Function ParseFile(filePath As String) As FileContentResult
     Protected MustOverride Function GetCurrentWorkingDirectory() As String
     Protected MustOverride Function AppendCurrentSelectedContent(message As String) As String
 
-    ' Í¨ÓÃµÄÎÄ±¾ÎÄ¼ş½âÎö·½·¨
-    ' Í¨ÓÃµÄÎÄ±¾ÎÄ¼ş½âÎö·½·¨
+    ' é€šç”¨çš„æ–‡æœ¬æ–‡ä»¶è§£ææ–¹æ³•
+    ' é€šç”¨çš„æ–‡æœ¬æ–‡ä»¶è§£ææ–¹æ³•
     Protected Function ParseTextFile(filePath As String) As FileContentResult
         Try
             Dim extension As String = Path.GetExtension(filePath).ToLower()
 
-            ' ¶Ô CSV ÎÄ¼şÊ¹ÓÃ×¨ÃÅµÄ´¦ÀíÂß¼­
+            ' å¯¹ CSV æ–‡ä»¶ä½¿ç”¨ä¸“é—¨çš„å¤„ç†é€»è¾‘
             If extension = ".csv" Then
                 Return ParseCsvFile(filePath)
             End If
 
-            ' ¶ÔÆÕÍ¨ÎÄ±¾ÎÄ¼ş½øĞĞ±àÂë¼ì²â
+            ' å¯¹æ™®é€šæ–‡æœ¬æ–‡ä»¶è¿›è¡Œç¼–ç æ£€æµ‹
             Dim encoding As Encoding = DetectFileEncoding(filePath)
             Dim content As String = File.ReadAllText(filePath, encoding)
 
@@ -438,56 +438,56 @@ Public MustInherit Class BaseChatControl
             Return New FileContentResult With {
             .FileName = Path.GetFileName(filePath),
             .FileType = "Text",
-            .ParsedContent = $"[½âÎöÎÄ±¾ÎÄ¼şÊ±³ö´í: {ex.Message}]"
+            .ParsedContent = $"[è§£ææ–‡æœ¬æ–‡ä»¶æ—¶å‡ºé”™: {ex.Message}]"
         }
         End Try
     End Function
 
-    ' ×¨ÃÅÓÃÓÚ½âÎö CSV ÎÄ¼şµÄ·½·¨
+    ' ä¸“é—¨ç”¨äºè§£æ CSV æ–‡ä»¶çš„æ–¹æ³•
     Protected Function ParseCsvFile(filePath As String) As FileContentResult
         Try
-            ' ¼ì²âÎÄ¼ş±àÂë
+            ' æ£€æµ‹æ–‡ä»¶ç¼–ç 
             Dim encoding As Encoding = DetectFileEncoding(filePath)
 
-            ' ÓÃ¼ì²âµ½µÄ±àÂë¶ÁÈ¡ÄÚÈİ
+            ' ç”¨æ£€æµ‹åˆ°çš„ç¼–ç è¯»å–å†…å®¹
             Dim csvContent As String = File.ReadAllText(filePath, encoding)
 
-            ' ´´½¨Ò»¸ö¸ñÊ½»¯µÄ CSV ÄÚÈİ
+            ' åˆ›å»ºä¸€ä¸ªæ ¼å¼åŒ–çš„ CSV å†…å®¹
             Dim formattedContent As New StringBuilder()
-            formattedContent.AppendLine($"CSV ÎÄ¼ş: {Path.GetFileName(filePath)} (±àÂë: {encoding.EncodingName})")
+            formattedContent.AppendLine($"CSV æ–‡ä»¶: {Path.GetFileName(filePath)} (ç¼–ç : {encoding.EncodingName})")
             formattedContent.AppendLine()
 
-            ' ·ÖÎö CSV Êı¾İ½á¹¹
+            ' åˆ†æ CSV æ•°æ®ç»“æ„
             Dim rows As String() = csvContent.Split({vbCr, vbLf}, StringSplitOptions.RemoveEmptyEntries)
 
             If rows.Length > 0 Then
-                ' ¼ì²â·Ö¸ô·û£¬¿ÉÄÜÊÇ¶ººÅ¡¢·ÖºÅ¡¢ÖÆ±í·ûµÈ
+                ' æ£€æµ‹åˆ†éš”ç¬¦ï¼Œå¯èƒ½æ˜¯é€—å·ã€åˆ†å·ã€åˆ¶è¡¨ç¬¦ç­‰
                 Dim delimiter As Char = DetectCsvDelimiter(rows(0))
 
-                ' »ñÈ¡ÁĞÊı£¬ÓÃÓÚºóĞøÏŞÖÆÊı¾İÁ¿
+                ' è·å–åˆ—æ•°ï¼Œç”¨äºåç»­é™åˆ¶æ•°æ®é‡
                 Dim columns As String() = rows(0).Split(delimiter)
                 Dim columnCount As Integer = columns.Length
 
-                ' Ìí¼Ó±íÍ·£¨Èç¹û´æÔÚ£©
-                formattedContent.AppendLine("±íÍ·:")
+                ' æ·»åŠ è¡¨å¤´ï¼ˆå¦‚æœå­˜åœ¨ï¼‰
+                formattedContent.AppendLine("è¡¨å¤´:")
                 formattedContent.AppendLine(FormatCsvRow(rows(0), delimiter))
                 formattedContent.AppendLine()
 
-                ' Ìí¼ÓÊı¾İĞĞ£¨ÏŞÖÆĞĞÊı£¬±ÜÃâÊı¾İÌ«¶à£©
-                Dim maxRows As Integer = Math.Min(rows.Length, 25) ' ×î¶àÏÔÊ¾25ĞĞ
-                formattedContent.AppendLine("Êı¾İ:")
+                ' æ·»åŠ æ•°æ®è¡Œï¼ˆé™åˆ¶è¡Œæ•°ï¼Œé¿å…æ•°æ®å¤ªå¤šï¼‰
+                Dim maxRows As Integer = Math.Min(rows.Length, 25) ' æœ€å¤šæ˜¾ç¤º25è¡Œ
+                formattedContent.AppendLine("æ•°æ®:")
 
                 For i As Integer = 1 To maxRows - 1
                     formattedContent.AppendLine(FormatCsvRow(rows(i), delimiter))
                 Next
 
-                ' Èç¹ûÓĞ¸ü¶àĞĞ£¬Ìí¼ÓÌáÊ¾
+                ' å¦‚æœæœ‰æ›´å¤šè¡Œï¼Œæ·»åŠ æç¤º
                 If rows.Length > maxRows Then
                     formattedContent.AppendLine("...")
-                    formattedContent.AppendLine($"[ÎÄ¼ş°üº¬ {rows.Length} ĞĞ£¬½öÏÔÊ¾Ç° {maxRows - 1} ĞĞÊı¾İ]")
+                    formattedContent.AppendLine($"[æ–‡ä»¶åŒ…å« {rows.Length} è¡Œï¼Œä»…æ˜¾ç¤ºå‰ {maxRows - 1} è¡Œæ•°æ®]")
                 End If
             Else
-                formattedContent.AppendLine("[CSV ÎÄ¼şÎª¿Õ]")
+                formattedContent.AppendLine("[CSV æ–‡ä»¶ä¸ºç©º]")
             End If
 
             Return New FileContentResult With {
@@ -501,18 +501,18 @@ Public MustInherit Class BaseChatControl
             Return New FileContentResult With {
             .FileName = Path.GetFileName(filePath),
             .FileType = "CSV",
-            .ParsedContent = $"[½âÎö CSV ÎÄ¼şÊ±³ö´í: {ex.Message}]"
+            .ParsedContent = $"[è§£æ CSV æ–‡ä»¶æ—¶å‡ºé”™: {ex.Message}]"
         }
         End Try
     End Function
 
-    ' ¸ñÊ½»¯ CSV ĞĞÊı¾İ£¬Ê¹Æä¸üÒ×¶Á
+    ' æ ¼å¼åŒ– CSV è¡Œæ•°æ®ï¼Œä½¿å…¶æ›´æ˜“è¯»
     Private Function FormatCsvRow(row As String, delimiter As Char) As String
         Dim fields As String() = row.Split(delimiter)
         Dim formattedRow As New StringBuilder()
 
         For i As Integer = 0 To fields.Length - 1
-            Dim field As String = fields(i).Trim(""""c) ' ÒÆ³ıÒıºÅ
+            Dim field As String = fields(i).Trim(""""c) ' ç§»é™¤å¼•å·
             If i < fields.Length - 1 Then
                 formattedRow.Append($"{field} | ")
             Else
@@ -523,14 +523,14 @@ Public MustInherit Class BaseChatControl
         Return formattedRow.ToString()
     End Function
 
-    ' ¼ì²â CSV ÎÄ¼şµÄ·Ö¸ô·û
+    ' æ£€æµ‹ CSV æ–‡ä»¶çš„åˆ†éš”ç¬¦
     Private Function DetectCsvDelimiter(sampleLine As String) As Char
-        ' ³£¼ûµÄ CSV ·Ö¸ô·û
+        ' å¸¸è§çš„ CSV åˆ†éš”ç¬¦
         Dim possibleDelimiters As Char() = {","c, ";"c, vbTab, "|"c}
-        Dim bestDelimiter As Char = ","c ' Ä¬ÈÏÊ¹ÓÃ¶ººÅ
+        Dim bestDelimiter As Char = ","c ' é»˜è®¤ä½¿ç”¨é€—å·
         Dim maxCount As Integer = 0
 
-        ' ¼ì²éÃ¿¸ö¿ÉÄÜµÄ·Ö¸ô·û
+        ' æ£€æŸ¥æ¯ä¸ªå¯èƒ½çš„åˆ†éš”ç¬¦
         For Each delimiter In possibleDelimiters
             Dim count As Integer = sampleLine.Count(Function(c) c = delimiter)
             If count > maxCount Then
@@ -542,16 +542,16 @@ Public MustInherit Class BaseChatControl
         Return bestDelimiter
     End Function
 
-    ' ¼ì²âÎÄ¼ş±àÂë
+    ' æ£€æµ‹æ–‡ä»¶ç¼–ç 
     Private Function DetectFileEncoding(filePath As String) As Encoding
-        ' Ê×ÏÈ£¬ÎÒÃÇ³¢ÊÔ´Ó BOM (Byte Order Mark) ¼ì²â±àÂë
+        ' é¦–å…ˆï¼Œæˆ‘ä»¬å°è¯•ä» BOM (Byte Order Mark) æ£€æµ‹ç¼–ç 
         Try
             Using fs As New FileStream(filePath, FileMode.Open, FileAccess.Read)
-                ' ¶ÁÈ¡Ç°¼¸¸ö×Ö½ÚÀ´¼ì²â BOM
+                ' è¯»å–å‰å‡ ä¸ªå­—èŠ‚æ¥æ£€æµ‹ BOM
                 Dim bom(3) As Byte
                 Dim bytesRead As Integer = fs.Read(bom, 0, bom.Length)
 
-                ' ¼ì²éÊÇ·ñÓĞ BOM
+                ' æ£€æŸ¥æ˜¯å¦æœ‰ BOM
                 If bytesRead >= 3 AndAlso bom(0) = &HEF AndAlso bom(1) = &HBB AndAlso bom(2) = &HBF Then
                     ' UTF-8 with BOM
                     Return New UTF8Encoding(True)
@@ -573,86 +573,86 @@ Public MustInherit Class BaseChatControl
                 End If
             End Using
 
-            ' ¶¨ÒåUnicodeÌæ»»×Ö·û£¬ÓÃÓÚ¼ì²âÎŞĞ§×Ö·û
-            Dim unicodeReplacementChar As Char = ChrW(&HFFFD) ' Unicode Ìæ»»×Ö·û U+FFFD
+            ' å®šä¹‰Unicodeæ›¿æ¢å­—ç¬¦ï¼Œç”¨äºæ£€æµ‹æ— æ•ˆå­—ç¬¦
+            Dim unicodeReplacementChar As Char = ChrW(&HFFFD) ' Unicode æ›¿æ¢å­—ç¬¦ U+FFFD
 
-            ' Õë¶ÔÖĞÎÄÎÄ¼ş£¬ÓÅÏÈ³¢ÊÔ GB18030/GBK ±àÂë
+            ' é’ˆå¯¹ä¸­æ–‡æ–‡ä»¶ï¼Œä¼˜å…ˆå°è¯• GB18030/GBK ç¼–ç 
             Dim fileExtension As String = Path.GetExtension(filePath).ToLower()
             If fileExtension = ".csv" Then
-                ' Ê×ÏÈ³¢ÊÔ GB18030/GBK ±àÂë£¬ÕâÔÚÖĞÎÄ»·¾³ÏÂ·Ç³£³£¼û
+                ' é¦–å…ˆå°è¯• GB18030/GBK ç¼–ç ï¼Œè¿™åœ¨ä¸­æ–‡ç¯å¢ƒä¸‹éå¸¸å¸¸è§
                 Try
-                    ' ¶ÁÈ¡²¿·ÖÎÄ¼şÄÚÈİ
-                    Dim csvSampleBytes As Byte() = New Byte(4095) {}  ' ¶ÁÈ¡Ç° 4KB
+                    ' è¯»å–éƒ¨åˆ†æ–‡ä»¶å†…å®¹
+                    Dim csvSampleBytes As Byte() = New Byte(4095) {}  ' è¯»å–å‰ 4KB
                     Using fs As New FileStream(filePath, FileMode.Open, FileAccess.Read)
                         fs.Read(csvSampleBytes, 0, csvSampleBytes.Length)
                     End Using
 
-                    ' ³¢ÊÔÓÃ GB18030 ½âÂë
+                    ' å°è¯•ç”¨ GB18030 è§£ç 
                     Dim gbkEncoding As Encoding = Encoding.GetEncoding("GB18030")
                     Dim gbkText As String = gbkEncoding.GetString(csvSampleBytes)
 
-                    ' ¼ì²é½âÂëºóµÄÎÄ±¾ÊÇ·ñ·ûºÏ CSV ¸ñÊ½µÄÌØÕ÷£¨°üº¬¶ººÅºÍ»»ĞĞ·û£©
+                    ' æ£€æŸ¥è§£ç åçš„æ–‡æœ¬æ˜¯å¦ç¬¦åˆ CSV æ ¼å¼çš„ç‰¹å¾ï¼ˆåŒ…å«é€—å·å’Œæ¢è¡Œç¬¦ï¼‰
                     If gbkText.Contains(",") AndAlso (gbkText.Contains(vbCr) OrElse gbkText.Contains(vbLf)) Then
-                        ' Èç¹û°üº¬¶ººÅºÍ»»ĞĞ·û£¬¿ÉÄÜÊÇÓĞĞ§µÄ CSV
+                        ' å¦‚æœåŒ…å«é€—å·å’Œæ¢è¡Œç¬¦ï¼Œå¯èƒ½æ˜¯æœ‰æ•ˆçš„ CSV
                         Dim invalidCharCount As Integer = gbkText.Count(Function(c) c = "?"c Or c = unicodeReplacementChar)
                         Dim totalCharCount As Integer = gbkText.Length
 
-                        ' ÔÊĞíÓĞÉÙÁ¿²»¿ÉÊ¶±ğ×Ö·û
-                        If invalidCharCount <= totalCharCount * 0.05 Then ' ÔÊĞí5%µÄ²»¿ÉÊ¶±ğ×Ö·û
+                        ' å…è®¸æœ‰å°‘é‡ä¸å¯è¯†åˆ«å­—ç¬¦
+                        If invalidCharCount <= totalCharCount * 0.05 Then ' å…è®¸5%çš„ä¸å¯è¯†åˆ«å­—ç¬¦
                             Return gbkEncoding
                         End If
                     End If
                 Catch ex As Exception
-                    ' ºöÂÔ´íÎó£¬¼ÌĞø³¢ÊÔÆäËû±àÂë
-                    Debug.WriteLine($"³¢ÊÔ GB18030 ±àÂëÊ±³ö´í: {ex.Message}")
+                    ' å¿½ç•¥é”™è¯¯ï¼Œç»§ç»­å°è¯•å…¶ä»–ç¼–ç 
+                    Debug.WriteLine($"å°è¯• GB18030 ç¼–ç æ—¶å‡ºé”™: {ex.Message}")
                 End Try
             End If
 
-            ' ³¢ÊÔ¼¸ÖÖ³£¼ûµÄ±àÂë
+            ' å°è¯•å‡ ç§å¸¸è§çš„ç¼–ç 
             Dim encodingsToTry As Encoding() = {
             New UTF8Encoding(False),        ' UTF-8 without BOM
-            Encoding.GetEncoding("GB18030"), ' ÖĞÎÄ±àÂë£¬º­¸Ç¼òÌåÖĞÎÄ
-            Encoding.Default                ' ÏµÍ³Ä¬ÈÏ±àÂë
+            Encoding.GetEncoding("GB18030"), ' ä¸­æ–‡ç¼–ç ï¼Œæ¶µç›–ç®€ä½“ä¸­æ–‡
+            Encoding.Default                ' ç³»ç»Ÿé»˜è®¤ç¼–ç 
         }
 
-            ' ¶ÁÈ¡ÎÄ¼şµÄÇ°¼¸ĞĞÑù±¾
-            Dim generalSampleBytes As Byte() = New Byte(4095) {}  ' ¶ÁÈ¡Ç° 4KB
+            ' è¯»å–æ–‡ä»¶çš„å‰å‡ è¡Œæ ·æœ¬
+            Dim generalSampleBytes As Byte() = New Byte(4095) {}  ' è¯»å–å‰ 4KB
             Using fs As New FileStream(filePath, FileMode.Open, FileAccess.Read)
                 fs.Read(generalSampleBytes, 0, generalSampleBytes.Length)
             End Using
 
-            Dim bestEncoding As Encoding = encodingsToTry(0) ' Ä¬ÈÏÊ¹ÓÃµÚÒ»¸ö±àÂë
+            Dim bestEncoding As Encoding = encodingsToTry(0) ' é»˜è®¤ä½¿ç”¨ç¬¬ä¸€ä¸ªç¼–ç 
             Dim leastInvalidCharCount As Integer = Integer.MaxValue
 
-            ' ³¢ÊÔÃ¿ÖÖ±àÂë£¬Ñ¡Ôñ²úÉú×îÉÙÎŞĞ§×Ö·ûµÄ±àÂë
+            ' å°è¯•æ¯ç§ç¼–ç ï¼Œé€‰æ‹©äº§ç”Ÿæœ€å°‘æ— æ•ˆå­—ç¬¦çš„ç¼–ç 
             For Each enc In encodingsToTry
                 Try
                     Dim sample As String = enc.GetString(generalSampleBytes)
-                    ' ¼ÆËãÎÊºÅºÍÌæ»»×Ö·ûµÄÊıÁ¿×÷ÎªÎŞĞ§×Ö·ûµÄÖ¸±ê
+                    ' è®¡ç®—é—®å·å’Œæ›¿æ¢å­—ç¬¦çš„æ•°é‡ä½œä¸ºæ— æ•ˆå­—ç¬¦çš„æŒ‡æ ‡
                     Dim invalidCharCount As Integer = sample.Count(Function(c) c = "?"c Or c = unicodeReplacementChar)
 
-                    ' Èç¹ûÕâ¸ö±àÂë²úÉúµÄÎŞĞ§×Ö·û¸üÉÙ
+                    ' å¦‚æœè¿™ä¸ªç¼–ç äº§ç”Ÿçš„æ— æ•ˆå­—ç¬¦æ›´å°‘
                     If invalidCharCount < leastInvalidCharCount Then
                         leastInvalidCharCount = invalidCharCount
                         bestEncoding = enc
 
-                        ' Èç¹ûÃ»ÓĞÎŞĞ§×Ö·û£¬Á¢¼´Ê¹ÓÃÕâ¸ö±àÂë
+                        ' å¦‚æœæ²¡æœ‰æ— æ•ˆå­—ç¬¦ï¼Œç«‹å³ä½¿ç”¨è¿™ä¸ªç¼–ç 
                         If invalidCharCount = 0 Then
                             Exit For
                         End If
                     End If
                 Catch ex As Exception
-                    ' ºöÂÔ½âÂë´íÎó£¬³¢ÊÔÏÂÒ»¸ö±àÂë
+                    ' å¿½ç•¥è§£ç é”™è¯¯ï¼Œå°è¯•ä¸‹ä¸€ä¸ªç¼–ç 
                     Continue For
                 End Try
             Next
 
-            ' Ê¹ÓÃ²úÉú×îÉÙÎŞĞ§×Ö·ûµÄ±àÂë
+            ' ä½¿ç”¨äº§ç”Ÿæœ€å°‘æ— æ•ˆå­—ç¬¦çš„ç¼–ç 
             Return bestEncoding
 
         Catch ex As Exception
-            Debug.WriteLine($"¼ì²âÎÄ¼ş±àÂëÊ±³ö´í: {ex.Message}")
-            ' ³ö´íÊ±Ê¹ÓÃÏµÍ³Ä¬ÈÏ±àÂë
+            Debug.WriteLine($"æ£€æµ‹æ–‡ä»¶ç¼–ç æ—¶å‡ºé”™: {ex.Message}")
+            ' å‡ºé”™æ—¶ä½¿ç”¨ç³»ç»Ÿé»˜è®¤ç¼–ç 
             Return Encoding.Default
         End Try
     End Function
@@ -666,68 +666,68 @@ Public MustInherit Class BaseChatControl
     Protected MustOverride Sub GetSelectionContent(target As Object)
 
 
-    '' Ö´ĞĞ´úÂëµÄ·½·¨
+    '' æ‰§è¡Œä»£ç çš„æ–¹æ³•
     'Private Sub ExecuteCode(code As String, language As String, preview As Boolean)
-    '    ' ¸ù¾İÓïÑÔÀàĞÍÖ´ĞĞ²»Í¬µÄ²Ù×÷
+    '    ' æ ¹æ®è¯­è¨€ç±»å‹æ‰§è¡Œä¸åŒçš„æ“ä½œ
     '    Select Case language.ToLower()
     '        Case "vba", "vb", "vbscript", "language-vba", "language-vbscript", "language-vba hljs language-vbscript", "vba hljs language-vbscript"
-    '            ' Ö´ĞĞ VBA ´úÂë
+    '            ' æ‰§è¡Œ VBA ä»£ç 
     '            ExecuteVBACode(code, preview)
     '            'RunCode(code, preview)
     '        Case Else
-    '            'MessageBox.Show("²»Ö§³ÖµÄÓïÑÔÀàĞÍ: " & language)
-    '            GlobalStatusStrip.ShowWarning("²»Ö§³ÖµÄÓïÑÔÀàĞÍ: " & language)
+    '            'MessageBox.Show("ä¸æ”¯æŒçš„è¯­è¨€ç±»å‹: " & language)
+    '            GlobalStatusStrip.ShowWarning("ä¸æ”¯æŒçš„è¯­è¨€ç±»å‹: " & language)
     '    End Select
     'End Sub
 
-    ' Ö´ĞĞ´úÂëµÄ·½·¨
+    ' æ‰§è¡Œä»£ç çš„æ–¹æ³•
     Private Sub ExecuteCode(code As String, language As String, preview As Boolean)
-        ' ¸ù¾İÓïÑÔÀàĞÍÖ´ĞĞ²»Í¬µÄ²Ù×÷
+        ' æ ¹æ®è¯­è¨€ç±»å‹æ‰§è¡Œä¸åŒçš„æ“ä½œ
         Select Case language.ToLower()
             Case "vba", "vb", "vbscript", "language-vba", "language-vbscript", "language-vba hljs language-vbscript", "vba hljs language-vbscript"
-                ' Ö´ĞĞ VBA ´úÂë
+                ' æ‰§è¡Œ VBA ä»£ç 
                 ExecuteVBACode(code, preview)
             Case "js", "javascript", "javascript hljs", "jscript", "language-js", "language-javascript"
-                ' Ö´ĞĞ JavaScript ´úÂë
+                ' æ‰§è¡Œ JavaScript ä»£ç 
                 ExecuteJavaScript(code, preview)
             Case "excel", "formula", "function", "language-excel"
-                ' Ö´ĞĞ Excel º¯Êı/¹«Ê½
+                ' æ‰§è¡Œ Excel å‡½æ•°/å…¬å¼
                 ExecuteExcelFormula(code, preview)
                 'Case "sql", "language-sql"
-                '    ' Ö´ĞĞ SQL ²éÑ¯
+                '    ' æ‰§è¡Œ SQL æŸ¥è¯¢
                 '    ExecuteSqlQuery(code, preview)
                 'Case "powerquery", "m", "language-powerquery", "language-m"
-                '    ' Ö´ĞĞ PowerQuery/M ÓïÑÔ
+                '    ' æ‰§è¡Œ PowerQuery/M è¯­è¨€
                 '    ExecutePowerQuery(code, preview)
                 'Case "python", "py", "language-python"
-                '    ' Ö´ĞĞ Python ´úÂë
+                '    ' æ‰§è¡Œ Python ä»£ç 
                 '    ExecutePython(code, preview)
             Case Else
-                GlobalStatusStrip.ShowWarning("²»Ö§³ÖµÄÓïÑÔÀàĞÍ: " & language)
+                GlobalStatusStrip.ShowWarning("ä¸æ”¯æŒçš„è¯­è¨€ç±»å‹: " & language)
         End Select
     End Sub
 
-    ' Ö´ĞĞJavaScript´úÂë - ×¨×¢ÓÚ²Ù×÷Office/WPS¶ÔÏóÄ£ĞÍ£¬Ö§³ÖOffice JS API·ç¸ñ´úÂë
+    ' æ‰§è¡ŒJavaScriptä»£ç  - ä¸“æ³¨äºæ“ä½œOffice/WPSå¯¹è±¡æ¨¡å‹ï¼Œæ”¯æŒOffice JS APIé£æ ¼ä»£ç 
     Protected Function ExecuteJavaScript(jsCode As String, preview As Boolean) As Boolean
         Try
-            ' »ñÈ¡OfficeÓ¦ÓÃ¶ÔÏó
+            ' è·å–Officeåº”ç”¨å¯¹è±¡
             Dim appObject As Object = GetOfficeApplicationObject()
             If appObject Is Nothing Then
-                GlobalStatusStrip.ShowWarning("ÎŞ·¨»ñÈ¡OfficeÓ¦ÓÃ³ÌĞò¶ÔÏó")
+                GlobalStatusStrip.ShowWarning("æ— æ³•è·å–Officeåº”ç”¨ç¨‹åºå¯¹è±¡")
                 Return False
             End If
 
-            ' ¼ì²âÊÇ·ñÊÇOffice JS API·ç¸ñµÄ´úÂë
+            ' æ£€æµ‹æ˜¯å¦æ˜¯Office JS APIé£æ ¼çš„ä»£ç 
             Dim isOfficeJsApiStyle As Boolean = jsCode.Contains("getActiveWorksheet") OrElse
                                             jsCode.Contains("getUsedRange") OrElse
                                             jsCode.Contains("getValues") OrElse
                                             jsCode.Contains("setValues")
 
-            ' ´´½¨½Å±¾¿ØÖÆÒıÇæ
+            ' åˆ›å»ºè„šæœ¬æ§åˆ¶å¼•æ“
             Dim scriptEngine As Object = CreateObject("MSScriptControl.ScriptControl")
             scriptEngine.Language = "JScript"
 
-            ' ÅĞ¶ÏÊÇWPS»¹ÊÇMicrosoft Office
+            ' åˆ¤æ–­æ˜¯WPSè¿˜æ˜¯Microsoft Office
             Dim isWPS As Boolean = False
             Try
                 Dim appName As String = appObject.Name
@@ -736,18 +736,18 @@ Public MustInherit Class BaseChatControl
                 isWPS = False
             End Try
 
-            ' ½«OfficeÓ¦ÓÃ¶ÔÏó±©Â¶¸ø½Å±¾»·¾³
+            ' å°†Officeåº”ç”¨å¯¹è±¡æš´éœ²ç»™è„šæœ¬ç¯å¢ƒ
             scriptEngine.AddObject("app", appObject, True)
 
-            ' Ìí¼ÓÊÊÅä²ã´úÂë
+            ' æ·»åŠ é€‚é…å±‚ä»£ç 
             Dim adapterCode As String = "
-        // Office JS API ÊÊÅä²ã
+        // Office JS API é€‚é…å±‚
         var Office = {
             isWPS: " & isWPS.ToString().ToLower() & ",
             app: app,
             context: {
                 workbook: {
-                    // ÊÊÅä Office JS API ·½·¨µ½ COM ¶ÔÏó
+                    // é€‚é… Office JS API æ–¹æ³•åˆ° COM å¯¹è±¡
                     getActiveWorksheet: function() {
                         return {
                             sheet: app.ActiveSheet,
@@ -779,7 +779,7 @@ Public MustInherit Class BaseChatControl
                                                 try {
                                                     this.range.Cells(i+1, j+1).Value = row[j];
                                                 } catch(e) {
-                                                    // ºöÂÔµ¥Ôª¸ñÉèÖÃ´íÎó
+                                                    // å¿½ç•¥å•å…ƒæ ¼è®¾ç½®é”™è¯¯
                                                 }
                                             }
                                         }
@@ -790,76 +790,76 @@ Public MustInherit Class BaseChatControl
                     }
                 }
             },
-            // ÈÕÖ¾º¯Êı
+            // æ—¥å¿—å‡½æ•°
             log: function(message) { 
-                return 'Êä³ö: ' + message; 
+                return 'è¾“å‡º: ' + message; 
             }
         };
         
-        // Office JS API Ö÷º¯ÊıÊÊÅäÆ÷
+        // Office JS API ä¸»å‡½æ•°é€‚é…å™¨
         function executeOfficeJsApi(codeFunc) {
             var workbook = Office.context.workbook;
             if(typeof codeFunc === 'function') {
                 try {
                     return codeFunc(workbook);
                 } catch(e) {
-                    return 'Office JS API Ö´ĞĞ´íÎó: ' + e.message;
+                    return 'Office JS API æ‰§è¡Œé”™è¯¯: ' + e.message;
                 }
             }
             return 'Invalid function';
         }
         "
 
-            ' Ô¤Ö´ĞĞÊÊÅä²ã´úÂë
+            ' é¢„æ‰§è¡Œé€‚é…å±‚ä»£ç 
             scriptEngine.ExecuteStatement(adapterCode)
 
-            ' ¹¹½¨Ö´ĞĞ´úÂë£¬¸ù¾İ´úÂëÀàĞÍÑ¡Ôñ²»Í¬µÄÖ´ĞĞ·½Ê½
+            ' æ„å»ºæ‰§è¡Œä»£ç ï¼Œæ ¹æ®ä»£ç ç±»å‹é€‰æ‹©ä¸åŒçš„æ‰§è¡Œæ–¹å¼
             Dim wrappedCode As String
 
             If isOfficeJsApiStyle Then
-                ' Èç¹ûÊÇOffice JS API·ç¸ñ£¬Ê¹ÓÃÊÊÅä²ãÖ´ĞĞ
+                ' å¦‚æœæ˜¯Office JS APIé£æ ¼ï¼Œä½¿ç”¨é€‚é…å±‚æ‰§è¡Œ
                 wrappedCode = "
             try {
-                // ½«ÓÃ»§´úÂë°ü×°Îªº¯Êı
+                // å°†ç”¨æˆ·ä»£ç åŒ…è£…ä¸ºå‡½æ•°
                 var userFunc = function(workbook) {
                     " & jsCode & "
                 };
                 
-                // Ê¹ÓÃÊÊÅäÆ÷Ö´ĞĞ
+                // ä½¿ç”¨é€‚é…å™¨æ‰§è¡Œ
                 executeOfficeJsApi(userFunc);
-                return 'Office JS API ´úÂëÖ´ĞĞ³É¹¦';
+                return 'Office JS API ä»£ç æ‰§è¡ŒæˆåŠŸ';
             } catch(e) {
-                return 'Office JS API Ö´ĞĞ´íÎó: ' + e.message;
+                return 'Office JS API æ‰§è¡Œé”™è¯¯: ' + e.message;
             }
             "
             Else
-                ' ÆÕÍ¨JavaScript´úÂë
+                ' æ™®é€šJavaScriptä»£ç 
                 wrappedCode = "
             try {
-                // ÓÃ»§´úÂë¿ªÊ¼
+                // ç”¨æˆ·ä»£ç å¼€å§‹
                 " & jsCode & "
-                // ÓÃ»§´úÂë½áÊø
-                return '´úÂëÖ´ĞĞ³É¹¦';
+                // ç”¨æˆ·ä»£ç ç»“æŸ
+                return 'ä»£ç æ‰§è¡ŒæˆåŠŸ';
             } catch(e) {
-                return 'Ö´ĞĞ´íÎó: ' + e.message;
+                return 'æ‰§è¡Œé”™è¯¯: ' + e.message;
             }
             "
             End If
 
-            ' Ö´ĞĞJavaScript´úÂë²¢»ñÈ¡½á¹û
+            ' æ‰§è¡ŒJavaScriptä»£ç å¹¶è·å–ç»“æœ
             Dim result As String = scriptEngine.Eval(wrappedCode)
             GlobalStatusStrip.ShowInfo(result)
 
             Return True
         Catch ex As Exception
-            MessageBox.Show("Ö´ĞĞJavaScript´úÂëÊ±³ö´í: " & ex.Message, "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("æ‰§è¡ŒJavaScriptä»£ç æ—¶å‡ºé”™: " & ex.Message, "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Error)
             Return False
         End Try
     End Function
 
 
 
-    ' Ìí¼ÓÇå³ıÌØ¶¨ sheetName µÄ·½·¨
+    ' æ·»åŠ æ¸…é™¤ç‰¹å®š sheetName çš„æ–¹æ³•
     Public Async Sub ClearSelectedContentBySheetName(sheetName As String)
         Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(
         $"clearSelectedContentBySheetName({JsonConvert.SerializeObject(sheetName)})"
@@ -867,58 +867,58 @@ Public MustInherit Class BaseChatControl
     End Sub
 
 
-    ' ³éÏó·½·¨ - »ñÈ¡OfficeÓ¦ÓÃ³ÌĞò¶ÔÏó
+    ' æŠ½è±¡æ–¹æ³• - è·å–Officeåº”ç”¨ç¨‹åºå¯¹è±¡
     Protected MustOverride Function GetOfficeApplicationObject() As Object
 
-    ' Ö´ĞĞExcel¹«Ê½»òº¯Êı - »ùÀàÍ¨ÓÃÊµÏÖ
+    ' æ‰§è¡ŒExcelå…¬å¼æˆ–å‡½æ•° - åŸºç±»é€šç”¨å®ç°
     Protected Function ExecuteExcelFormula(formulaCode As String, preview As Boolean) As Boolean
         Try
-            ' »ñÈ¡Ó¦ÓÃ³ÌĞòĞÅÏ¢
+            ' è·å–åº”ç”¨ç¨‹åºä¿¡æ¯
             Dim appInfo As ApplicationInfo = GetApplication()
 
-            ' È¥³ı¿ÉÄÜµÄµÈºÅÇ°×º
+            ' å»é™¤å¯èƒ½çš„ç­‰å·å‰ç¼€
             If formulaCode.StartsWith("=") Then
                 formulaCode = formulaCode.Substring(1)
             End If
 
-            ' ¸ù¾İÓ¦ÓÃÀàĞÍ´¦Àí
+            ' æ ¹æ®åº”ç”¨ç±»å‹å¤„ç†
             If appInfo.Type = OfficeApplicationType.Excel Then
-                ' ¶ÔÓÚExcel£¬Ê¹ÓÃEvaluate·½·¨
+                ' å¯¹äºExcelï¼Œä½¿ç”¨Evaluateæ–¹æ³•
                 Dim result As Boolean = EvaluateFormula(formulaCode, preview)
-                GlobalStatusStrip.ShowInfo("¹«Ê½Ö´ĞĞ½á¹û: " & result.ToString())
+                GlobalStatusStrip.ShowInfo("å…¬å¼æ‰§è¡Œç»“æœ: " & result.ToString())
                 Return True
             Else
-                ' ÆäËûÓ¦ÓÃ²»Ö§³ÖÖ±½ÓÖ´ĞĞExcel¹«Ê½
-                GlobalStatusStrip.ShowWarning("Excel¹«Ê½Ö´ĞĞ½öÖ§³ÖExcel»·¾³")
+                ' å…¶ä»–åº”ç”¨ä¸æ”¯æŒç›´æ¥æ‰§è¡ŒExcelå…¬å¼
+                GlobalStatusStrip.ShowWarning("Excelå…¬å¼æ‰§è¡Œä»…æ”¯æŒExcelç¯å¢ƒ")
                 Return False
             End If
         Catch ex As Exception
-            MessageBox.Show("Ö´ĞĞExcel¹«Ê½Ê±³ö´í: " & ex.Message, "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("æ‰§è¡ŒExcelå…¬å¼æ—¶å‡ºé”™: " & ex.Message, "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Error)
             Return False
         End Try
     End Function
 
-    ' Ğé·½·¨ - ÆÀ¹ÀExcel¹«Ê½£¨Ö»ÓĞExcel×ÓÀà»áÊµÏÖ£©
+    ' è™šæ–¹æ³• - è¯„ä¼°Excelå…¬å¼ï¼ˆåªæœ‰Excelå­ç±»ä¼šå®ç°ï¼‰
     Protected Overridable Function EvaluateFormula(formula As String, preview As Boolean) As Boolean
-        ' Ä¬ÈÏÊµÏÖ·µ»ØNothing
+        ' é»˜è®¤å®ç°è¿”å›Nothing
         Return True
     End Function
 
-    ' Ö´ĞĞÇ°¶Ë´«À´µÄ VBA ´úÂëÆ¬¶Î
+    ' æ‰§è¡Œå‰ç«¯ä¼ æ¥çš„ VBA ä»£ç ç‰‡æ®µ
     Protected Function ExecuteVBACode(vbaCode As String, preview As Boolean)
 
         If preview Then
-            ' ·µ»ØÊÇ·ñĞèÒªÖ´ĞĞ£¬accept-True£¬reject-False
+            ' è¿”å›æ˜¯å¦éœ€è¦æ‰§è¡Œï¼Œaccept-Trueï¼Œreject-False
             If Not RunCodePreview(vbaCode, preview) Then
                 Return True
             End If
-            ' Èç¹ûÔ¤ÀÀÄ£Ê½£¬Ö±½Ó·µ»Ø
+            ' å¦‚æœé¢„è§ˆæ¨¡å¼ï¼Œç›´æ¥è¿”å›
         End If
 
-        ' »ñÈ¡ VBA ÏîÄ¿
+        ' è·å– VBA é¡¹ç›®
         Dim vbProj As VBProject = GetVBProject()
 
-        ' Ìí¼Ó¿ÕÖµ¼ì²é
+        ' æ·»åŠ ç©ºå€¼æ£€æŸ¥
         If vbProj Is Nothing Then
             Return False
         End If
@@ -927,58 +927,58 @@ Public MustInherit Class BaseChatControl
         Dim tempModuleName As String = "TempMod" & DateTime.Now.Ticks.ToString().Substring(0, 8)
 
         Try
-            ' ´´½¨ÁÙÊ±Ä£¿é
+            ' åˆ›å»ºä¸´æ—¶æ¨¡å—
             vbComp = vbProj.VBComponents.Add(vbext_ComponentType.vbext_ct_StdModule)
             vbComp.Name = tempModuleName
 
-            ' ¼ì²é´úÂëÊÇ·ñÒÑ°üº¬ Sub/Function ÉùÃ÷
+            ' æ£€æŸ¥ä»£ç æ˜¯å¦å·²åŒ…å« Sub/Function å£°æ˜
             If ContainsProcedureDeclaration(vbaCode) Then
-                ' ´úÂëÒÑ°üº¬¹ı³ÌÉùÃ÷£¬Ö±½ÓÌí¼Ó
+                ' ä»£ç å·²åŒ…å«è¿‡ç¨‹å£°æ˜ï¼Œç›´æ¥æ·»åŠ 
                 vbComp.CodeModule.AddFromString(vbaCode)
 
-                ' ²éÕÒµÚÒ»¸ö¹ı³ÌÃû²¢Ö´ĞĞ
+                ' æŸ¥æ‰¾ç¬¬ä¸€ä¸ªè¿‡ç¨‹åå¹¶æ‰§è¡Œ
                 Dim procName As String = FindFirstProcedureName(vbComp)
                 If Not String.IsNullOrEmpty(procName) Then
                     RunCode(tempModuleName & "." & procName)
                 Else
-                    'MessageBox.Show("ÎŞ·¨ÔÚ´úÂëÖĞÕÒµ½¿ÉÖ´ĞĞµÄ¹ı³Ì")
-                    GlobalStatusStrip.ShowWarning("ÎŞ·¨ÔÚ´úÂëÖĞÕÒµ½¿ÉÖ´ĞĞµÄ¹ı³Ì")
+                    'MessageBox.Show("æ— æ³•åœ¨ä»£ç ä¸­æ‰¾åˆ°å¯æ‰§è¡Œçš„è¿‡ç¨‹")
+                    GlobalStatusStrip.ShowWarning("æ— æ³•åœ¨ä»£ç ä¸­æ‰¾åˆ°å¯æ‰§è¡Œçš„è¿‡ç¨‹")
                 End If
             Else
-                ' ´úÂë²»°üº¬¹ı³ÌÉùÃ÷£¬½«Æä°ü×°ÔÚ Auto_Run ¹ı³ÌÖĞ
+                ' ä»£ç ä¸åŒ…å«è¿‡ç¨‹å£°æ˜ï¼Œå°†å…¶åŒ…è£…åœ¨ Auto_Run è¿‡ç¨‹ä¸­
                 Dim wrappedCode As String = "Sub Auto_Run()" & vbNewLine &
                                            vbaCode & vbNewLine &
                                            "End Sub"
                 vbComp.CodeModule.AddFromString(wrappedCode)
 
-                ' Ö´ĞĞ Auto_Run ¹ı³Ì
+                ' æ‰§è¡Œ Auto_Run è¿‡ç¨‹
                 RunCode(tempModuleName & ".Auto_Run")
 
             End If
 
         Catch ex As Exception
-            MessageBox.Show("Ö´ĞĞ VBA ´úÂëÊ±³ö´í: " & ex.Message, "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("æ‰§è¡Œ VBA ä»£ç æ—¶å‡ºé”™: " & ex.Message, "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Error)
         Finally
-            ' ÎŞÂÛ³É¹¦»¹ÊÇÊ§°Ü£¬¶¼É¾³ıÁÙÊ±Ä£¿é
+            ' æ— è®ºæˆåŠŸè¿˜æ˜¯å¤±è´¥ï¼Œéƒ½åˆ é™¤ä¸´æ—¶æ¨¡å—
             Try
                 If vbProj IsNot Nothing AndAlso vbComp IsNot Nothing Then
                     vbProj.VBComponents.Remove(vbComp)
                 End If
             Catch
-                ' ºöÂÔÇåÀí´íÎó
+                ' å¿½ç•¥æ¸…ç†é”™è¯¯
             End Try
         End Try
     End Function
 
 
-    ' ¼ì²é´úÂëÊÇ·ñ°üº¬¹ı³ÌÉùÃ÷
+    ' æ£€æŸ¥ä»£ç æ˜¯å¦åŒ…å«è¿‡ç¨‹å£°æ˜
     Public Function ContainsProcedureDeclaration(code As String) As Boolean
-        ' Ê¹ÓÃ¼òµ¥µÄÕıÔò±í´ïÊ½¼ì²éÊÇ·ñ°üº¬ Sub »ò Function ÉùÃ÷
+        ' ä½¿ç”¨ç®€å•çš„æ­£åˆ™è¡¨è¾¾å¼æ£€æŸ¥æ˜¯å¦åŒ…å« Sub æˆ– Function å£°æ˜
         Return Regex.IsMatch(code, "^\s*(Sub|Function)\s+\w+", RegexOptions.Multiline Or RegexOptions.IgnoreCase)
     End Function
 
 
-    ' ²éÕÒÄ£¿éÖĞµÄµÚÒ»¸ö¹ı³ÌÃû
+    ' æŸ¥æ‰¾æ¨¡å—ä¸­çš„ç¬¬ä¸€ä¸ªè¿‡ç¨‹å
     Public Function FindFirstProcedureName(comp As VBComponent) As String
         Try
             Dim codeModule As CodeModule = comp.CodeModule
@@ -995,7 +995,7 @@ Public MustInherit Class BaseChatControl
 
             Return String.Empty
         Catch
-            ' Èç¹û³ö´í£¬³¢ÊÔÊ¹ÓÃÕıÔò±í´ïÊ½´Ó´úÂëÖĞÌáÈ¡
+            ' å¦‚æœå‡ºé”™ï¼Œå°è¯•ä½¿ç”¨æ­£åˆ™è¡¨è¾¾å¼ä»ä»£ç ä¸­æå–
             Dim code As String = comp.CodeModule.Lines(1, comp.CodeModule.CountOfLines)
             Dim match As Match = Regex.Match(code, "^\s*(Sub|Function)\s+(\w+)", RegexOptions.Multiline Or RegexOptions.IgnoreCase)
 
@@ -1012,17 +1012,17 @@ Public MustInherit Class BaseChatControl
         Dim apiKey As String = ConfigSettings.ApiKey
 
         If String.IsNullOrWhiteSpace(apiKey) Then
-            GlobalStatusStrip.ShowWarning("ÇëÏÈÅäÖÃ´óÄ£ĞÍApiKey£¡")
+            GlobalStatusStrip.ShowWarning("è¯·å…ˆé…ç½®å¤§æ¨¡å‹ApiKeyï¼")
             Return
         End If
 
         If String.IsNullOrWhiteSpace(apiUrl) Then
-            GlobalStatusStrip.ShowWarning("ÇëÏÈÅäÖÃ´óÄ£ĞÍApi£¡")
+            GlobalStatusStrip.ShowWarning("è¯·å…ˆé…ç½®å¤§æ¨¡å‹Apiï¼")
             Return
         End If
 
         If String.IsNullOrWhiteSpace(question) Then
-            GlobalStatusStrip.ShowWarning("ÇëÊäÈëÎÊÌâ£¡")
+            GlobalStatusStrip.ShowWarning("è¯·è¾“å…¥é—®é¢˜ï¼")
             Return
         End If
 
@@ -1033,18 +1033,18 @@ Public MustInherit Class BaseChatControl
             Await SendHttpRequestStream(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody)
             Await SaveFullWebPageAsync2()
         Catch ex As Exception
-            MessageBox.Show("ÇëÇóÊ§°Ü: " & ex.Message, "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("è¯·æ±‚å¤±è´¥: " & ex.Message, "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Error)
         Finally
         End Try
 
     End Function
 
     Private Sub ManageHistoryMessageSize()
-        ' Èç¹ûÀúÊ·ÏûÏ¢Êı³¬¹ıÏŞÖÆ£¬ÓĞÒ»Ìõsystem£¬ËùÒÔ+1
+        ' å¦‚æœå†å²æ¶ˆæ¯æ•°è¶…è¿‡é™åˆ¶ï¼Œæœ‰ä¸€æ¡systemï¼Œæ‰€ä»¥+1
         While historyMessageData.Count > contextLimit + 1
-            ' ±£ÁôÏµÍ³ÏûÏ¢£¨µÚÒ»ÌõÏûÏ¢£©
+            ' ä¿ç•™ç³»ç»Ÿæ¶ˆæ¯ï¼ˆç¬¬ä¸€æ¡æ¶ˆæ¯ï¼‰
             If historyMessageData.Count > 1 Then
-                ' ÒÆ³ıµÚ¶şÌõÏûÏ¢£¨×îÔçµÄ·ÇÏµÍ³ÏûÏ¢£©
+                ' ç§»é™¤ç¬¬äºŒæ¡æ¶ˆæ¯ï¼ˆæœ€æ—©çš„éç³»ç»Ÿæ¶ˆæ¯ï¼‰
                 historyMessageData.RemoveAt(1)
             End If
         End While
@@ -1056,10 +1056,10 @@ Public MustInherit Class BaseChatControl
                                   Replace(vbTab, "\t").Replace(vbBack, "\b").
                                   Replace(Chr(12), "\f")
 
-        ' ¹¹½¨ messages Êı×é
+        ' æ„å»º messages æ•°ç»„
         Dim messages As New List(Of String)()
 
-        ' Ìí¼Ó system ÏûÏ¢
+        ' æ·»åŠ  system æ¶ˆæ¯
         Dim systemMessage = historyMessageData.FirstOrDefault(Function(m) m.role = "system")
         If systemMessage IsNot Nothing Then
             historyMessageData.Remove(systemMessage)
@@ -1076,15 +1076,15 @@ Public MustInherit Class BaseChatControl
             }
         historyMessageData.Add(q)
 
-        ' ¹ÜÀíÀúÊ·ÏûÏ¢´óĞ¡
+        ' ç®¡ç†å†å²æ¶ˆæ¯å¤§å°
         ManageHistoryMessageSize()
 
-        ' Ìí¼ÓÀúÊ·ÏûÏ¢
+        ' æ·»åŠ å†å²æ¶ˆæ¯
         For Each message In historyMessageData
             messages.Add($"{{""role"": ""{message.role}"", ""content"": ""{message.content}""}}")
         Next
 
-        ' ¹¹½¨ JSON ÇëÇóÌå
+        ' æ„å»º JSON è¯·æ±‚ä½“
         Dim messagesJson = String.Join(",", messages)
         Dim requestBody = $"{{""model"": ""{ConfigSettings.ModelName}"", ""messages"": [{messagesJson}], ""stream"": true}}"
 
@@ -1092,7 +1092,7 @@ Public MustInherit Class BaseChatControl
     End Function
 
 
-    ' Ìí¼ÓÒ»¸ö½á¹¹À´´æ´¢tokenĞÅÏ¢
+    ' æ·»åŠ ä¸€ä¸ªç»“æ„æ¥å­˜å‚¨tokenä¿¡æ¯
     Private Structure TokenInfo
         Public PromptTokens As Integer
         Public CompletionTokens As Integer
@@ -1103,32 +1103,32 @@ Public MustInherit Class BaseChatControl
     Private lastTokenInfo As Nullable(Of TokenInfo)
     Private Async Function SendHttpRequestStream(apiUrl As String, apiKey As String, requestBody As String) As Task
 
-        ' ×é×°ai´ğ¸´Í·²¿
+        ' ç»„è£…aiç­”å¤å¤´éƒ¨
         Dim uuid As String = Guid.NewGuid().ToString()
         Try
 
-            ' Ç¿ÖÆÊ¹ÓÃ TLS 1.2
+            ' å¼ºåˆ¶ä½¿ç”¨ TLS 1.2
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
 
             Using client As New HttpClient()
                 client.Timeout = Timeout.InfiniteTimeSpan
 
-                ' ×¼±¸ÇëÇó ---
+                ' å‡†å¤‡è¯·æ±‚ ---
                 Dim request As New HttpRequestMessage(HttpMethod.Post, apiUrl)
                 request.Headers.Authorization = New AuthenticationHeaderValue("Bearer", apiKey)
                 request.Content = New StringContent(requestBody, Encoding.UTF8, "application/json")
 
-                ' ´òÓ¡ÇëÇóÈÕÖ¾ ---
-                Debug.WriteLine("[HTTP] ¿ªÊ¼·¢ËÍÁ÷Ê½ÇëÇó...")
+                ' æ‰“å°è¯·æ±‚æ—¥å¿— ---
+                Debug.WriteLine("[HTTP] å¼€å§‹å‘é€æµå¼è¯·æ±‚...")
                 Debug.WriteLine($"[HTTP] Request Body: {requestBody}")
 
 
                 Dim aiName As String = ConfigSettings.platform & " " & ConfigSettings.ModelName
 
-                ' ·¢ËÍÇëÇó ---
+                ' å‘é€è¯·æ±‚ ---
                 Using response As HttpResponseMessage = Await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead)
                     response.EnsureSuccessStatusCode()
-                    Debug.WriteLine($"[HTTP] ÏìÓ¦×´Ì¬Âë: {response.StatusCode}")
+                    Debug.WriteLine($"[HTTP] å“åº”çŠ¶æ€ç : {response.StatusCode}")
 
                     Dim js As String = $"createChatSection('{aiName}', formatDateTime(new Date()), '{uuid}');"
                     If ChatBrowser.InvokeRequired Then
@@ -1137,60 +1137,60 @@ Public MustInherit Class BaseChatControl
                         Await ChatBrowser.ExecuteScriptAsync(js)
                     End If
 
-                    ' ´¦ÀíÁ÷ ---
+                    ' å¤„ç†æµ ---
                     Dim stringBuilder As New StringBuilder()
                     Using responseStream As Stream = Await response.Content.ReadAsStreamAsync()
                         Using reader As New StreamReader(responseStream, Encoding.UTF8)
                             Dim buffer(102300) As Char
                             Dim readCount As Integer
                             Do
-                                ' ¼ì²éÊÇ·ñĞèÒªÍ£Ö¹¶ÁÈ¡
+                                ' æ£€æŸ¥æ˜¯å¦éœ€è¦åœæ­¢è¯»å–
                                 If stopReaderStream Then
-                                    Debug.WriteLine("[Stream] ÓÃ»§ÊÖ¶¯Í£Ö¹Á÷¶ÁÈ¡")
-                                    ' Çå¿Õµ±Ç°»º³åÇø
+                                    Debug.WriteLine("[Stream] ç”¨æˆ·æ‰‹åŠ¨åœæ­¢æµè¯»å–")
+                                    ' æ¸…ç©ºå½“å‰ç¼“å†²åŒº
                                     _currentMarkdownBuffer.Clear()
                                     allMarkdownBuffer.Clear()
-                                    ' Í£Ö¹¶ÁÈ¡²¢ÍË³öÑ­»·
+                                    ' åœæ­¢è¯»å–å¹¶é€€å‡ºå¾ªç¯
                                     Exit Do
                                 End If
                                 readCount = Await reader.ReadAsync(buffer, 0, buffer.Length)
                                 If readCount = 0 Then Exit Do
                                 Dim chunk As String = New String(buffer, 0, readCount)
-                                ' Èç¹ûchunk²»ÊÇÒÔdata¿ªÍ·£¬ÔòÌø¹ı
+                                ' å¦‚æœchunkä¸æ˜¯ä»¥dataå¼€å¤´ï¼Œåˆ™è·³è¿‡
                                 chunk = chunk.Replace("data:", "")
                                 stringBuilder.Append(chunk)
-                                'Debug.WriteLine($"[Stream] ½ÓÊÕµ½¿é:{stringBuilder}")
-                                ' ÅĞ¶ÏstringBuilderÊÇ·ñÒÔ'}'½áÎ²£¬Èç¹ûÊÇÔò½âÎö
+                                'Debug.WriteLine($"[Stream] æ¥æ”¶åˆ°å—:{stringBuilder}")
+                                ' åˆ¤æ–­stringBuilderæ˜¯å¦ä»¥'}'ç»“å°¾ï¼Œå¦‚æœæ˜¯åˆ™è§£æ
                                 If stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}).EndsWith("}") Then
                                     ProcessStreamChunk(stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}), uuid)
                                     stringBuilder.Clear()
                                 End If
                             Loop
-                            Debug.WriteLine("[Stream] Á÷½ÓÊÕÍê³É")
+                            Debug.WriteLine("[Stream] æµæ¥æ”¶å®Œæˆ")
                         End Using
                     End Using
                 End Using
             End Using
         Catch ex As Exception
-            Debug.WriteLine($"[ERROR] ÇëÇó¹ı³ÌÖĞ³ö´í: {ex.ToString()}")
-            MessageBox.Show("ÇëÇóÊ§°Ü: " & ex.Message, "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Debug.WriteLine($"[ERROR] è¯·æ±‚è¿‡ç¨‹ä¸­å‡ºé”™: {ex.ToString()}")
+            MessageBox.Show("è¯·æ±‚å¤±è´¥: " & ex.Message, "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Error)
         Finally
-            ' Ê¹ÓÃ×îºóÒ»¸öÏìÓ¦¿éÖĞµÄtotal_tokens
+            ' ä½¿ç”¨æœ€åä¸€ä¸ªå“åº”å—ä¸­çš„total_tokens
             Dim finalTokens As Integer = If(lastTokenInfo.HasValue, lastTokenInfo.Value.TotalTokens, 0)
             Debug.WriteLine($"finally {finalTokens}")
             ExecuteJavaScriptAsyncJS($"processStreamComplete('{uuid}',{finalTokens});")
 
-            ' ¼ÇÂ¼È«¾ÖÉÏÏÂÎÄÖĞ£¬·½±ãºóĞøÊ¹ÓÃ
+            ' è®°å½•å…¨å±€ä¸Šä¸‹æ–‡ä¸­ï¼Œæ–¹ä¾¿åç»­ä½¿ç”¨
             Dim answer = New HistoryMessage() With {
                 .role = "assistant",
                 .content = allMarkdownBuffer.ToString()
             }
             historyMessageData.Add(answer)
-            ' ¹ÜÀíÀúÊ·ÏûÏ¢´óĞ¡
+            ' ç®¡ç†å†å²æ¶ˆæ¯å¤§å°
             ManageHistoryMessageSize()
 
             allMarkdownBuffer.Clear()
-            ' ÖØÖÃtokenĞÅÏ¢
+            ' é‡ç½®tokenä¿¡æ¯
             lastTokenInfo = Nothing
         End Try
     End Function
@@ -1198,8 +1198,8 @@ Public MustInherit Class BaseChatControl
 
 
     Private ReadOnly markdownPipeline As MarkdownPipeline = New MarkdownPipelineBuilder() _
-    .UseAdvancedExtensions() _      ' ÆôÓÃ±í¸ñ¡¢´úÂë¿éµÈÀ©Õ¹
-    .Build()                        ' ¹¹½¨²»¿É±ä¹ÜµÀ
+    .UseAdvancedExtensions() _      ' å¯ç”¨è¡¨æ ¼ã€ä»£ç å—ç­‰æ‰©å±•
+    .Build()                        ' æ„å»ºä¸å¯å˜ç®¡é“
 
     Private _currentMarkdownBuffer As New StringBuilder()
     Private allMarkdownBuffer As New StringBuilder()
@@ -1213,7 +1213,7 @@ Public MustInherit Class BaseChatControl
             For Each line In lines
                 line = line.Trim()
                 If line = "[DONE]" Then
-                    FlushBuffer("content", uuid) ' ×îºóË¢ĞÂ»º³åÇø
+                    FlushBuffer("content", uuid) ' æœ€ååˆ·æ–°ç¼“å†²åŒº
                     Return
                 End If
                 If line = "" Then
@@ -1223,7 +1223,7 @@ Public MustInherit Class BaseChatControl
                 Debug.Print(line)
                 Dim jsonObj As JObject = JObject.Parse(line)
 
-                ' »ñÈ¡tokenĞÅÏ¢ - Ö»±£´æ×îºóÒ»¸öÏìÓ¦¿éµÄusageĞÅÏ¢
+                ' è·å–tokenä¿¡æ¯ - åªä¿å­˜æœ€åä¸€ä¸ªå“åº”å—çš„usageä¿¡æ¯
                 Dim usage = jsonObj("usage")
                 If usage IsNot Nothing Then
                     lastTokenInfo = New TokenInfo With {
@@ -1236,7 +1236,7 @@ Public MustInherit Class BaseChatControl
                 Dim reasoning_content As String = jsonObj("choices")(0)("delta")("reasoning_content")?.ToString()
                 If Not String.IsNullOrEmpty(reasoning_content) Then
                     _currentMarkdownBuffer.Append(reasoning_content)
-                    ' ¼ì²éÊÇ·ñµ½´ï´úÂë¿é×ÔÈ»·Ö¸îµã£¨ÀıÈç»»ĞĞ·û£©
+                    ' æ£€æŸ¥æ˜¯å¦åˆ°è¾¾ä»£ç å—è‡ªç„¶åˆ†å‰²ç‚¹ï¼ˆä¾‹å¦‚æ¢è¡Œç¬¦ï¼‰
                     'If reasoning_content.Contains(vbLf) OrElse reasoning_content.TrimEnd().EndsWith("`") Then
                     FlushBuffer("reasoning", uuid)
                     'End If
@@ -1246,15 +1246,15 @@ Public MustInherit Class BaseChatControl
 
                 If Not String.IsNullOrEmpty(content) Then
                     _currentMarkdownBuffer.Append(content)
-                    ' ¼ì²éÊÇ·ñµ½´ï´úÂë¿é×ÔÈ»·Ö¸îµã£¨ÀıÈç»»ĞĞ·û£©
+                    ' æ£€æŸ¥æ˜¯å¦åˆ°è¾¾ä»£ç å—è‡ªç„¶åˆ†å‰²ç‚¹ï¼ˆä¾‹å¦‚æ¢è¡Œç¬¦ï¼‰
                     'If content.Contains(vbLf) OrElse content.TrimEnd().EndsWith("`") Then
                     FlushBuffer("content", uuid)
                     'End If
                 End If
             Next
         Catch ex As Exception
-            Debug.WriteLine($"[ERROR] Êı¾İ´¦ÀíÊ§°Ü: {ex.Message}")
-            MessageBox.Show("ÇëÇóÊ§°Ü: " & ex.Message, "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Debug.WriteLine($"[ERROR] æ•°æ®å¤„ç†å¤±è´¥: {ex.Message}")
+            MessageBox.Show("è¯·æ±‚å¤±è´¥: " & ex.Message, "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
 
@@ -1276,7 +1276,7 @@ Public MustInherit Class BaseChatControl
     End Sub
 
 
-    ' Ö´ĞĞjs½Å±¾µÄÒì²½·½·¨
+    ' æ‰§è¡Œjsè„šæœ¬çš„å¼‚æ­¥æ–¹æ³•
     Private Async Function ExecuteJavaScriptAsyncJS(js As String) As Task
         If ChatBrowser.InvokeRequired Then
             ChatBrowser.Invoke(Sub() ChatBrowser.ExecuteScriptAsync(js))
@@ -1296,12 +1296,12 @@ Public MustInherit Class BaseChatControl
         .Replace("'", "\'") _
         .Replace(vbCr, "") _
         .Replace(vbLf, "\n") _
-        .Replace("</script>", "<\/script>")  ' ±ÜÃâ½Å±¾×¢Èë
+        .Replace("</script>", "<\/script>")  ' é¿å…è„šæœ¬æ³¨å…¥
     End Function
 
 
 
-    ' ¹²ÓÃµÄHTTPÇëÇó·½·¨
+    ' å…±ç”¨çš„HTTPè¯·æ±‚æ–¹æ³•
     Protected Async Function SendHttpRequest(apiUrl As String, apiKey As String, requestBody As String) As Task(Of String)
         Try
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
@@ -1314,22 +1314,22 @@ Public MustInherit Class BaseChatControl
                 Return Await response.Content.ReadAsStringAsync()
             End Using
         Catch ex As Exception
-            MessageBox.Show($"ÇëÇóÊ§°Ü: {ex.Message}")
+            MessageBox.Show($"è¯·æ±‚å¤±è´¥: {ex.Message}")
             Return String.Empty
         End Try
     End Function
 
-    ' ¼ÓÔØ±¾µØHTMLÎÄ¼ş
+    ' åŠ è½½æœ¬åœ°HTMLæ–‡ä»¶
     Public Async Function LoadLocalHtmlFile() As Task
         Try
-            ' ¼ì²éHTMLÎÄ¼şÊÇ·ñ´æÔÚ
+            ' æ£€æŸ¥HTMLæ–‡ä»¶æ˜¯å¦å­˜åœ¨
             Dim htmlFilePath As String = ChatHtmlFilePath
             If File.Exists(htmlFilePath) Then
 
                 Await Task.Run(Sub()
                                    Dim htmlContent As String = File.ReadAllText(htmlFilePath, System.Text.Encoding.UTF8)
                                    htmlContent = htmlContent.TrimStart("""").TrimEnd("""")
-                                   ' Ö±½Óµ¼º½µ½±¾µØHTMLÎÄ¼ş
+                                   ' ç›´æ¥å¯¼èˆªåˆ°æœ¬åœ°HTMLæ–‡ä»¶
                                    If ChatBrowser.InvokeRequired Then
                                        ChatBrowser.Invoke(Sub() ChatBrowser.CoreWebView2.NavigateToString(htmlContent))
                                    Else
@@ -1339,23 +1339,23 @@ Public MustInherit Class BaseChatControl
 
             End If
         Catch ex As Exception
-            Debug.WriteLine($"¼ÓÔØ±¾µØHTMLÎÄ¼şÊ±³ö´í£º{ex.Message}")
+            Debug.WriteLine($"åŠ è½½æœ¬åœ°HTMLæ–‡ä»¶æ—¶å‡ºé”™ï¼š{ex.Message}")
         End Try
     End Function
 
     Public Async Function SaveFullWebPageAsync2() As Task
         Try
-            ' 1. ´´½¨Ä¿Â¼£¨Í¬²½²Ù×÷£¬ÎŞĞèÒì²½£©
+            ' 1. åˆ›å»ºç›®å½•ï¼ˆåŒæ­¥æ“ä½œï¼Œæ— éœ€å¼‚æ­¥ï¼‰
 
             Dim dir = Path.GetDirectoryName(ChatHtmlFilePath)
             If Not Directory.Exists(dir) Then
                 Directory.CreateDirectory(dir)
             End If
 
-            ' 2. »ñÈ¡ HTML£¨Òì²½ÎŞ×èÈû£©
+            ' 2. è·å– HTMLï¼ˆå¼‚æ­¥æ— é˜»å¡ï¼‰
             Dim htmlContent As String = Await GetFullHtmlContentAsync()
 
-            ' 3. ±£´æÎÄ¼ş£¨Òì²½ºóÌ¨Ïß³Ì£©
+            ' 3. ä¿å­˜æ–‡ä»¶ï¼ˆå¼‚æ­¥åå°çº¿ç¨‹ï¼‰
             Await Task.Run(Sub()
                                Dim fullHtml As String = "<!DOCTYPE html>" & Environment.NewLine & htmlContent
                                File.WriteAllText(
@@ -1365,16 +1365,16 @@ Public MustInherit Class BaseChatControl
             )
                            End Sub)
 
-            Debug.WriteLine("±£´æ³É¹¦")
+            Debug.WriteLine("ä¿å­˜æˆåŠŸ")
         Catch ex As Exception
-            Debug.WriteLine($"±£´æÊ§°Ü: {ex.Message}")
+            Debug.WriteLine($"ä¿å­˜å¤±è´¥: {ex.Message}")
         End Try
     End Function
 
     Private Async Function GetFullHtmlContentAsync() As Task(Of String)
         Dim tcs As New TaskCompletionSource(Of String)()
 
-        ' Ç¿ÖÆÇĞ»»µ½ WebView2 µÄ UI Ïß³Ì²Ù×÷
+        ' å¼ºåˆ¶åˆ‡æ¢åˆ° WebView2 çš„ UI çº¿ç¨‹æ“ä½œ
         ChatBrowser.BeginInvoke(Async Sub()
                                     Try
                                         Await EnsureWebView2InitializedAsync()
@@ -1389,7 +1389,7 @@ Public MustInherit Class BaseChatControl
                                         Dim decodedHtml As String = UnescapeHtmlContent(rawResult)
                                         decodedHtml = decodedHtml.TrimStart("""").TrimEnd("""")
 
-                                        ' ÒÆ³ı <script> ±êÇ©¼°ÆäÄÚÈİ
+                                        ' ç§»é™¤ <script> æ ‡ç­¾åŠå…¶å†…å®¹
                                         Dim scriptPattern As String = "<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>"
                                         decodedHtml = Regex.Replace(decodedHtml, scriptPattern, String.Empty, RegexOptions.IgnoreCase)
 
@@ -1409,30 +1409,24 @@ Public MustInherit Class BaseChatControl
     End Function
 
     Private Function UnescapeHtmlContent(htmlContent As String) As String
-        ' ´¦Àí×ªÒå×Ö·û£¨Ö±½Ó´Ó JSON ×Ö·û´®ÖĞÌáÈ¡£©
+        ' å¤„ç†è½¬ä¹‰å­—ç¬¦ï¼ˆç›´æ¥ä» JSON å­—ç¬¦ä¸²ä¸­æå–ï¼‰
         Return System.Text.RegularExpressions.Regex.Unescape(
         htmlContent
     )
     End Function
 
-    ' ÌáÊ¾´ÊÅäÖÃ£¨Ã¿´Î½ö¿ÉÊ¹ÓÃ1¸ö£©
+    ' æç¤ºè¯é…ç½®ï¼ˆæ¯æ¬¡ä»…å¯ä½¿ç”¨1ä¸ªï¼‰
     Public Class HistoryMessage
         Public Property role As String
         Public Property content As String
     End Class
 
-    ' ×¢Èë¸¨Öú½Å±¾
+    ' æ³¨å…¥è¾…åŠ©è„šæœ¬
     Protected Sub InitializeWebView2Script()
-        ' ÉèÖÃ Web ÏûÏ¢´¦ÀíÆ÷
+        ' è®¾ç½® Web æ¶ˆæ¯å¤„ç†å™¨
         AddHandler ChatBrowser.WebMessageReceived, AddressOf WebView2_WebMessageReceived
 
-        ' ¼ì²é±¾µØHTMLÎÄ¼şÊÇ·ñ´æÔÚ ¼ÓÔØ±¾µØHTMLÎÄ¼ş
-        'Dim htmlFilePath As String = ChatHtmlFilePath
-        'If File.Exists(htmlFilePath) Then
-        '    LoadLocalHtmlFile()
-        'End If
-
-        ' ×¢Èë¸¨Öú½Å±¾
+        ' æ³¨å…¥è¾…åŠ©è„šæœ¬
         Dim script As String = "
         window.vsto = {
             executeCode: function(code, language,preview) {
@@ -1475,7 +1469,7 @@ Public MustInherit Class BaseChatControl
         ChatBrowser.ExecuteScriptAsync(script)
     End Sub
 
-    ' Ñ¡ÖĞÄÚÈİ·¢ËÍµ½ÁÄÌìÇø
+    ' é€‰ä¸­å†…å®¹å‘é€åˆ°èŠå¤©åŒº
     Public Async Sub AddSelectedContentItem(sheetName As String, address As String)
         Dim ctrlKey As Boolean = (Control.ModifierKeys And Keys.Control) = Keys.Control
         Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(
@@ -1485,23 +1479,23 @@ Public MustInherit Class BaseChatControl
 
 
     Protected Shared Sub VBAxceptionHandle(ex As Runtime.InteropServices.COMException)
-        ' ´¦ÀíĞÅÈÎÖĞĞÄÈ¨ÏŞÎÊÌâ
-        If ex.Message.Contains("³ÌĞò·ÃÎÊ²»±»ĞÅÈÎ") OrElse
+        ' å¤„ç†ä¿¡ä»»ä¸­å¿ƒæƒé™é—®é¢˜
+        If ex.Message.Contains("ç¨‹åºè®¿é—®ä¸è¢«ä¿¡ä»»") OrElse
        ex.Message.Contains("Programmatic access to Visual Basic Project is not trusted") Then
             VBATrustShowBox()
         Else
-            MessageBox.Show("Ö´ĞĞ VBA ´úÂëÊ±³ö´í: " & ex.Message, "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("æ‰§è¡Œ VBA ä»£ç æ—¶å‡ºé”™: " & ex.Message, "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End If
     End Sub
 
     Private Shared Sub VBATrustShowBox()
         MessageBox.Show(
-                        "ÎŞ·¨Ö´ĞĞ VBA ´úÂë£¬Çë°´ÒÔÏÂ²½ÖèÉèÖÃ£º" & vbCrLf & vbCrLf &
-                        "1. µã»÷ 'ÎÄ¼ş' -> 'Ñ¡Ïî' -> 'ĞÅÈÎÖĞĞÄ'" & vbCrLf &
-                        "2. µã»÷ 'ĞÅÈÎÖĞĞÄÉèÖÃ'" & vbCrLf &
-                        "3. Ñ¡Ôñ 'ºêÉèÖÃ'" & vbCrLf &
-                        "4. ¹´Ñ¡ 'ĞÅÈÎ¶Ô VBA ÏîÄ¿¶ÔÏóÄ£ĞÍµÄ·ÃÎÊ'",
-                        "ĞèÒªÉèÖÃĞÅÈÎÖĞĞÄÈ¨ÏŞ",
+                        "æ— æ³•æ‰§è¡Œ VBA ä»£ç ï¼Œè¯·æŒ‰ä»¥ä¸‹æ­¥éª¤è®¾ç½®ï¼š" & vbCrLf & vbCrLf &
+                        "1. ç‚¹å‡» 'æ–‡ä»¶' -> 'é€‰é¡¹' -> 'ä¿¡ä»»ä¸­å¿ƒ'" & vbCrLf &
+                        "2. ç‚¹å‡» 'ä¿¡ä»»ä¸­å¿ƒè®¾ç½®'" & vbCrLf &
+                        "3. é€‰æ‹© 'å®è®¾ç½®'" & vbCrLf &
+                        "4. å‹¾é€‰ 'ä¿¡ä»»å¯¹ VBA é¡¹ç›®å¯¹è±¡æ¨¡å‹çš„è®¿é—®'",
+                        "éœ€è¦è®¾ç½®ä¿¡ä»»ä¸­å¿ƒæƒé™",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Warning)
     End Sub

@@ -1,4 +1,4 @@
-Imports System.Diagnostics
+ï»¿Imports System.Diagnostics
 Imports System.Drawing
 Imports System.IO
 Imports System.Linq
@@ -28,25 +28,25 @@ Public Class ChatControl
     Private sheetContentItems As New Dictionary(Of String, Tuple(Of System.Windows.Forms.Label, System.Windows.Forms.Button))
 
     Public Sub New()
-        ' ´Ëµ÷ÓÃÊÇÉè¼ÆÊ¦Ëù±ØĞèµÄ¡£
+        ' æ­¤è°ƒç”¨æ˜¯è®¾è®¡å¸ˆæ‰€å¿…éœ€çš„ã€‚
         InitializeComponent()
 
-        ' È·±£WebView2¿Ø¼ş¿ÉÒÔÕı³£½»»¥
+        ' ç¡®ä¿WebView2æ§ä»¶å¯ä»¥æ­£å¸¸äº¤äº’
         ChatBrowser.BringToFront()
 
-        '¼ÓÈëµ×²¿¸æ¾¯À¸
+        'åŠ å…¥åº•éƒ¨å‘Šè­¦æ 
         Me.Controls.Add(GlobalStatusStrip.StatusStrip)
 
-        ' ¶©ÔÄ SelectionChange ÊÂ¼ş - Ê¹ÓÃĞÂµÄÖØÔØ·½·¨
+        ' è®¢é˜… SelectionChange äº‹ä»¶ - ä½¿ç”¨æ–°çš„é‡è½½æ–¹æ³•
         AddHandler Globals.ThisAddIn.Application.SheetSelectionChange, AddressOf GetSelectionContentExcel
 
     End Sub
 
-    ' ±£³ÖÔ­ÓĞµÄOverride·½·¨ÒÔ¼æÈİ»ùÀà
+    ' ä¿æŒåŸæœ‰çš„Overrideæ–¹æ³•ä»¥å…¼å®¹åŸºç±»
     Protected Overrides Sub GetSelectionContent(target As Object)
-        ' Èç¹ûÊÇ´ÓExcelµÄSheetSelectionChangeÊÂ¼şµ÷ÓÃ£¬targetÓ¦¸ÃÊÇWorksheet
+        ' å¦‚æœæ˜¯ä»Excelçš„SheetSelectionChangeäº‹ä»¶è°ƒç”¨ï¼Œtargetåº”è¯¥æ˜¯Worksheet
         If TypeOf target Is Microsoft.Office.Interop.Excel.Worksheet Then
-            ' »ñÈ¡µ±Ç°Ñ¡ÖĞµÄ·¶Î§
+            ' è·å–å½“å‰é€‰ä¸­çš„èŒƒå›´
             Dim selection = Globals.ThisAddIn.Application.Selection
             If TypeOf selection Is Microsoft.Office.Interop.Excel.Range Then
                 GetSelectionContentExcel(target, DirectCast(selection, Microsoft.Office.Interop.Excel.Range))
@@ -54,21 +54,21 @@ Public Class ChatControl
         End If
     End Sub
 
-    ' Ìí¼ÓÒ»¸öĞÂµÄÖØÔØ·½·¨À´´¦ÀíExcelµÄÊÂ¼ş
+    ' æ·»åŠ ä¸€ä¸ªæ–°çš„é‡è½½æ–¹æ³•æ¥å¤„ç†Excelçš„äº‹ä»¶
     Private Sub GetSelectionContentExcel(Sh As Microsoft.Office.Interop.Excel.Worksheet, Target As Microsoft.Office.Interop.Excel.Range)
         If Me.Visible AndAlso selectedCellChecked Then
             Dim sheetName As String = Sh.Name
             Dim address As String = Target.Address(False, False)
             Dim key As String = $"{sheetName}"
 
-            ' ¼ì²éÑ¡ÖĞ·¶Î§µÄµ¥Ôª¸ñÊıÁ¿
+            ' æ£€æŸ¥é€‰ä¸­èŒƒå›´çš„å•å…ƒæ ¼æ•°é‡
             Dim cellCount As Integer = Target.Cells.Count
 
-            ' Èç¹ûÑ¡ÔñÁË¶à¸öµ¥Ôª¸ñ£¬×ÜÊÇÌí¼ÓÎªÒıÓÃ£¬²»¹ÜÊÇ·ñÓĞÄÚÈİ
+            ' å¦‚æœé€‰æ‹©äº†å¤šä¸ªå•å…ƒæ ¼ï¼Œæ€»æ˜¯æ·»åŠ ä¸ºå¼•ç”¨ï¼Œä¸ç®¡æ˜¯å¦æœ‰å†…å®¹
             If cellCount > 1 Then
                 AddSelectedContentItem(key, address)
             Else
-                ' Ö»ÓĞµ¥¸öµ¥Ôª¸ñÊ±£¬²Å¼ì²éÊÇ·ñÓĞÄÚÈİ
+                ' åªæœ‰å•ä¸ªå•å…ƒæ ¼æ—¶ï¼Œæ‰æ£€æŸ¥æ˜¯å¦æœ‰å†…å®¹
                 Dim hasContent As Boolean = False
                 For Each cell As Microsoft.Office.Interop.Excel.Range In Target
                     If cell.Value IsNot Nothing AndAlso Not String.IsNullOrEmpty(cell.Value.ToString()) Then
@@ -78,10 +78,10 @@ Public Class ChatControl
                 Next
 
                 If hasContent Then
-                    ' Ñ¡ÖĞµ¥Ôª¸ñÓĞÄÚÈİ£¬Ìí¼ÓĞÂµÄÏî
+                    ' é€‰ä¸­å•å…ƒæ ¼æœ‰å†…å®¹ï¼Œæ·»åŠ æ–°çš„é¡¹
                     AddSelectedContentItem(key, address)
                 Else
-                    ' Ñ¡ÖĞÃ»ÓĞÄÚÈİ£¬Çå³ıÏàÍ¬ sheetName µÄÒıÓÃ
+                    ' é€‰ä¸­æ²¡æœ‰å†…å®¹ï¼Œæ¸…é™¤ç›¸åŒ sheetName çš„å¼•ç”¨
                     ClearSelectedContentBySheetName(key)
                 End If
             End If
@@ -97,9 +97,9 @@ Public Class ChatControl
 )
     End Sub
 
-    ' ³õÊ¼»¯Ê±×¢Èë»ù´¡ HTML ½á¹¹
+    ' åˆå§‹åŒ–æ—¶æ³¨å…¥åŸºç¡€ HTML ç»“æ„
     Private Async Sub MainForm_Load(sender As Object, e As EventArgs) Handles MyBase.Load
-        ' ³õÊ¼»¯ WebView2
+        ' åˆå§‹åŒ– WebView2
         Await InitializeWebView2()
         InitializeWebView2Script()
         InitializeSettings()
@@ -124,70 +124,69 @@ Public Class ChatControl
             VBAxceptionHandle(ex)
             Return False
         Catch ex As Exception
-            MessageBox.Show("Ö´ĞĞ´úÂëÊ±³ö´í: " & ex.Message, "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("æ‰§è¡Œä»£ç æ—¶å‡ºé”™: " & ex.Message, "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Error)
             Return False
         End Try
     End Function
 
 
     Protected Overrides Function RunCodePreview(vbaCode As String, preview As Boolean)
-        ' Èç¹ûĞèÒªÔ¤ÀÀ
+        ' å¦‚æœéœ€è¦é¢„è§ˆ
         Dim previewTool As New EnhancedPreviewAndConfirm()
-        ' ÔÊĞíÓÃ»§Ô¤ÀÀ´úÂë±ä¸ü
+        ' å…è®¸ç”¨æˆ·é¢„è§ˆä»£ç å˜æ›´
         If previewTool.PreviewAndConfirmVbaExecution(vbaCode) Then
-            Debug.Print("Ô¤ÀÀ½áÊø£¬ÓÃ»§Í¬ÒâÖ´ĞĞ´úÂë: " & vbaCode)
+            Debug.Print("é¢„è§ˆç»“æŸï¼Œç”¨æˆ·åŒæ„æ‰§è¡Œä»£ç : " & vbaCode)
             Return True
         Else
-            ' ÓÃ»§È¡Ïû»ò¾Ü¾ø
+            ' ç”¨æˆ·å–æ¶ˆæˆ–æ‹’ç»
             Return False
         End If
     End Function
 
 
 
-    ' Ìá¹©ExcelÓ¦ÓÃ³ÌĞò¶ÔÏó
+    ' æä¾›Excelåº”ç”¨ç¨‹åºå¯¹è±¡
     Protected Overrides Function GetOfficeApplicationObject() As Object
         Return Globals.ThisAddIn.Application
     End Function
 
-    ' ÊµÏÖExcel¹«Ê½ÆÀ¹À' Ö´ĞĞExcel¹«Ê½»òº¯Êı - ÔöÇ¿°æÖ§³Ö¸³ÖµºÍÔ¤ÀÀ
-
+    ' å®ç°Excelå…¬å¼è¯„ä¼°' æ‰§è¡ŒExcelå…¬å¼æˆ–å‡½æ•° - å¢å¼ºç‰ˆæ”¯æŒèµ‹å€¼å’Œé¢„è§ˆ
     Protected Overrides Function EvaluateFormula(formulaCode As String, preview As Boolean) As Boolean
         Try
-            ' ¼ì²éÊÇ·ñÊÇ¸³ÖµÓï¾ä (ÀıÈç C1=A1+B1)
+            ' æ£€æŸ¥æ˜¯å¦æ˜¯èµ‹å€¼è¯­å¥ (ä¾‹å¦‚ C1=A1+B1)
             Dim isAssignment As Boolean = Regex.IsMatch(formulaCode, "^[A-Za-z]+[0-9]+\s*=")
 
             If isAssignment Then
-                ' ½âÎö¸³ÖµÓï¾ä
+                ' è§£æèµ‹å€¼è¯­å¥
                 Dim parts As String() = formulaCode.Split(New Char() {"="c}, 2)
                 Dim targetCell As String = parts(0).Trim()
                 Dim formula As String = parts(1).Trim()
 
-                ' Èç¹û¹«Ê½ÒÔ=¿ªÍ·£¬ÔòÒÆ³ı
+                ' å¦‚æœå…¬å¼ä»¥=å¼€å¤´ï¼Œåˆ™ç§»é™¤
                 If formula.StartsWith("=") Then
                     formula = formula.Substring(1)
                 End If
 
-                ' Èç¹ûĞèÒªÔ¤ÀÀ£¬ÏÔÊ¾Ô¤ÀÀ¶Ô»°¿ò
+                ' å¦‚æœéœ€è¦é¢„è§ˆï¼Œæ˜¾ç¤ºé¢„è§ˆå¯¹è¯æ¡†
                 If preview Then
                     Dim excel As Object = Globals.ThisAddIn.Application
                     Dim currentValue As Object = Nothing
                     Try
                         currentValue = excel.Range(targetCell).Value
                     Catch ex As Exception
-                        ' µ¥Ôª¸ñ¿ÉÄÜ²»´æÔÚÖµ
+                        ' å•å…ƒæ ¼å¯èƒ½ä¸å­˜åœ¨å€¼
                     End Try
 
-                    ' ¼ÆËãĞÂÖµ
+                    ' è®¡ç®—æ–°å€¼
                     Dim newValue As Object = excel.Evaluate(formula)
 
-                    ' ´´½¨Ô¤ÀÀ¶Ô»°¿ò
-                    Dim previewMsg As String = $"½«ÒªÔÚµ¥Ôª¸ñ {targetCell} ÖĞÓ¦ÓÃ¹«Ê½:" & vbCrLf & vbCrLf &
+                    ' åˆ›å»ºé¢„è§ˆå¯¹è¯æ¡†
+                    Dim previewMsg As String = $"å°†è¦åœ¨å•å…ƒæ ¼ {targetCell} ä¸­åº”ç”¨å…¬å¼:" & vbCrLf & vbCrLf &
                                           $"={formula}" & vbCrLf & vbCrLf &
-                                          $"µ±Ç°Öµ: {If(currentValue Is Nothing, "(¿Õ)", currentValue)}" & vbCrLf &
-                                          $"ĞÂÖµ: {If(newValue Is Nothing, "(¿Õ)", newValue)}"
+                                          $"å½“å‰å€¼: {If(currentValue Is Nothing, "(ç©º)", currentValue)}" & vbCrLf &
+                                          $"æ–°å€¼: {If(newValue Is Nothing, "(ç©º)", newValue)}"
 
-                    Dim result As DialogResult = MessageBox.Show(previewMsg, "Excel¹«Ê½Ô¤ÀÀ",
+                    Dim result As DialogResult = MessageBox.Show(previewMsg, "Excelå…¬å¼é¢„è§ˆ",
                                                           MessageBoxButtons.OKCancel,
                                                           MessageBoxIcon.Information)
 
@@ -196,44 +195,44 @@ Public Class ChatControl
                     End If
                 End If
 
-                ' Ö´ĞĞ¸³Öµ
+                ' æ‰§è¡Œèµ‹å€¼
                 Dim range As Object = Globals.ThisAddIn.Application.Range(targetCell)
                 range.Formula = "=" & formula
 
-                GlobalStatusStrip.ShowInfo($"¹«Ê½ '={formula}' ÒÑÓ¦ÓÃµ½µ¥Ôª¸ñ {targetCell}")
+                GlobalStatusStrip.ShowInfo($"å…¬å¼ '={formula}' å·²åº”ç”¨åˆ°å•å…ƒæ ¼ {targetCell}")
                 Return True
             Else
-                ' ÆÕÍ¨¹«Ê½¼ÆËã (²»°üº¬¸³Öµ)
-                ' È¥³ı¿ÉÄÜµÄµÈºÅÇ°×º
+                ' æ™®é€šå…¬å¼è®¡ç®— (ä¸åŒ…å«èµ‹å€¼)
+                ' å»é™¤å¯èƒ½çš„ç­‰å·å‰ç¼€
                 If formulaCode.StartsWith("=") Then
                     formulaCode = formulaCode.Substring(1)
                 End If
 
-                ' ¼ÆËã¹«Ê½½á¹û
+                ' è®¡ç®—å…¬å¼ç»“æœ
                 Dim result As Object = Globals.ThisAddIn.Application.Evaluate(formulaCode)
 
-                ' Èç¹ûĞèÒªÔ¤ÀÀ£¬ÏÔÊ¾¼ÆËã½á¹û
+                ' å¦‚æœéœ€è¦é¢„è§ˆï¼Œæ˜¾ç¤ºè®¡ç®—ç»“æœ
                 If preview Then
-                    Dim previewMsg As String = $"¹«Ê½¼ÆËã½á¹û:" & vbCrLf & vbCrLf &
+                    Dim previewMsg As String = $"å…¬å¼è®¡ç®—ç»“æœ:" & vbCrLf & vbCrLf &
                                          $"={formulaCode}" & vbCrLf & vbCrLf &
-                                         $"½á¹û: {If(result Is Nothing, "(¿Õ)", result)}"
+                                         $"ç»“æœ: {If(result Is Nothing, "(ç©º)", result)}"
 
-                    MessageBox.Show(previewMsg, "Excel¹«Ê½½á¹û", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                    MessageBox.Show(previewMsg, "Excelå…¬å¼ç»“æœ", MessageBoxButtons.OK, MessageBoxIcon.Information)
                 Else
-                    ' ÏÔÊ¾½á¹û
-                    GlobalStatusStrip.ShowInfo($"¹«Ê½ '={formulaCode}' µÄ¼ÆËã½á¹û: {result}")
+                    ' æ˜¾ç¤ºç»“æœ
+                    GlobalStatusStrip.ShowInfo($"å…¬å¼ '={formulaCode}' çš„è®¡ç®—ç»“æœ: {result}")
                 End If
 
                 Return True
             End If
         Catch ex As Exception
-            MessageBox.Show("Ö´ĞĞExcel¹«Ê½Ê±³ö´í: " & ex.Message, "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("æ‰§è¡ŒExcelå…¬å¼æ—¶å‡ºé”™: " & ex.Message, "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Error)
             Return False
         End Try
     End Function
 
 
-    ' Ö´ĞĞSQL²éÑ¯
+    ' æ‰§è¡ŒSQLæŸ¥è¯¢
     Protected Function ExecuteSqlQuery(sqlCode As String, preview As Boolean) As Boolean
         Try
             If preview Then
@@ -242,41 +241,41 @@ Public Class ChatControl
                 End If
             End If
 
-            ' »ñÈ¡Ó¦ÓÃ³ÌĞòĞÅÏ¢
+            ' è·å–åº”ç”¨ç¨‹åºä¿¡æ¯
             Dim appInfo As ApplicationInfo = GetApplication()
 
             Dim activeWorkbook As Object = Globals.ThisAddIn.Application.ActiveWorkbook
 
-            ' ´´½¨²éÑ¯±í
+            ' åˆ›å»ºæŸ¥è¯¢è¡¨
             Dim activeSheet As Object = Globals.ThisAddIn.Application.ActiveSheet
             Dim queryTable As Object = Nothing
 
-                ' »ñÈ¡¿ÉÓÃµÄµ¥Ôª¸ñÇøÓò
+                ' è·å–å¯ç”¨çš„å•å…ƒæ ¼åŒºåŸŸ
                 Dim targetCell As Object = activeSheet.Range("A1")
 
-                ' ´´½¨SQLÁ¬½Ó×Ö·û´® (Ê¾ÀıÊ¹ÓÃµ±Ç°¹¤×÷²¾×÷ÎªÊı¾İÔ´)
+                ' åˆ›å»ºSQLè¿æ¥å­—ç¬¦ä¸² (ç¤ºä¾‹ä½¿ç”¨å½“å‰å·¥ä½œç°¿ä½œä¸ºæ•°æ®æº)
                 Dim connString As String = "OLEDB;Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" &
                                       activeWorkbook.FullName & ";Extended Properties='Excel 12.0 Xml;HDR=YES';"
 
-                ' ´´½¨²éÑ¯¶¨Òå
+                ' åˆ›å»ºæŸ¥è¯¢å®šä¹‰
                 queryTable = activeSheet.QueryTables.Add(connString, targetCell, sqlCode)
 
-                ' ÉèÖÃ²éÑ¯ÊôĞÔ
+                ' è®¾ç½®æŸ¥è¯¢å±æ€§
                 queryTable.RefreshStyle = 1 ' xlOverwriteCells
                 queryTable.BackgroundQuery = False
 
-                ' Ö´ĞĞ²éÑ¯
+                ' æ‰§è¡ŒæŸ¥è¯¢
                 queryTable.Refresh(False)
 
-                GlobalStatusStrip.ShowWarning("SQL²éÑ¯ÒÑÖ´ĞĞ")
+                GlobalStatusStrip.ShowWarning("SQLæŸ¥è¯¢å·²æ‰§è¡Œ")
             Return True
         Catch ex As Exception
-            MessageBox.Show("Ö´ĞĞSQL²éÑ¯Ê±³ö´í: " & ex.Message, "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("æ‰§è¡ŒSQLæŸ¥è¯¢æ—¶å‡ºé”™: " & ex.Message, "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Error)
             Return False
         End Try
     End Function
 
-    ' Ö´ĞĞPowerQuery/MÓïÑÔ
+    ' æ‰§è¡ŒPowerQuery/Mè¯­è¨€
     Protected Function ExecutePowerQuery(mCode As String, preview As Boolean) As Boolean
         Try
             If preview Then
@@ -285,31 +284,31 @@ Public Class ChatControl
                 End If
             End If
 
-            ' »ñÈ¡Ó¦ÓÃ³ÌĞòĞÅÏ¢
+            ' è·å–åº”ç”¨ç¨‹åºä¿¡æ¯
             Dim appInfo As ApplicationInfo = GetApplication()
 
-            ' PowerQueryÖ´ĞĞĞèÒª½Ï¸´ÔÓµÄÊµÏÖ£¬ÕâÀï½öÌá¹©»ù±¾¿ò¼Ü
+            ' PowerQueryæ‰§è¡Œéœ€è¦è¾ƒå¤æ‚çš„å®ç°ï¼Œè¿™é‡Œä»…æä¾›åŸºæœ¬æ¡†æ¶
             Dim excelApp = Globals.ThisAddIn.Application
                 Dim wb As Object = excelApp.ActiveWorkbook
 
-                ' ¼ì²éExcel°æ±¾ÊÇ·ñÖ§³ÖPowerQuery
-                Dim versionSupported As Boolean = excelApp.Version >= 15 ' Excel 2013¼°ÒÔÉÏ°æ±¾
+                ' æ£€æŸ¥Excelç‰ˆæœ¬æ˜¯å¦æ”¯æŒPowerQuery
+                Dim versionSupported As Boolean = excelApp.Version >= 15 ' Excel 2013åŠä»¥ä¸Šç‰ˆæœ¬
 
                 If Not versionSupported Then
-                    GlobalStatusStrip.ShowWarning("PowerQueryĞèÒªExcel 2013»ò¸ü¸ß°æ±¾")
+                    GlobalStatusStrip.ShowWarning("PowerQueryéœ€è¦Excel 2013æˆ–æ›´é«˜ç‰ˆæœ¬")
                     Return False
                 End If
 
-                ' PowerQueryÖ´ĞĞÂß¼­ĞèÒª¸ù¾İ¾ßÌåĞèÇóÊµÏÖ
-                GlobalStatusStrip.ShowWarning("PowerQuery´úÂëÖ´ĞĞ¹¦ÄÜÕıÔÚ¿ª·¢ÖĞ")
+                ' PowerQueryæ‰§è¡Œé€»è¾‘éœ€è¦æ ¹æ®å…·ä½“éœ€æ±‚å®ç°
+                GlobalStatusStrip.ShowWarning("PowerQueryä»£ç æ‰§è¡ŒåŠŸèƒ½æ­£åœ¨å¼€å‘ä¸­")
             Return True
         Catch ex As Exception
-            MessageBox.Show("Ö´ĞĞPowerQuery´úÂëÊ±³ö´í: " & ex.Message, "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("æ‰§è¡ŒPowerQueryä»£ç æ—¶å‡ºé”™: " & ex.Message, "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Error)
             Return False
         End Try
     End Function
 
-    ' Ö´ĞĞPython´úÂë
+    ' æ‰§è¡ŒPythonä»£ç 
     Protected Function ExecutePython(pythonCode As String, preview As Boolean) As Boolean
         Try
             If preview Then
@@ -318,16 +317,16 @@ Public Class ChatControl
                 End If
             End If
 
-            ' »ñÈ¡Ó¦ÓÃ³ÌĞòĞÅÏ¢
+            ' è·å–åº”ç”¨ç¨‹åºä¿¡æ¯
             Dim appInfo As ApplicationInfo = GetApplication()
 
             Dim excelApp = Globals.ThisAddIn.Application
 
-                ' ¼ì²éExcel°æ±¾ÊÇ·ñÖ§³ÖPython (Excel 365)
+                ' æ£€æŸ¥Excelç‰ˆæœ¬æ˜¯å¦æ”¯æŒPython (Excel 365)
                 Dim versionSupported As Boolean = False
 
                 Try
-                    ' ³¢ÊÔ·ÃÎÊPython¶ÔÏó£¬Èç¹û²»Ö§³Ö»áÅ×³öÒì³£
+                    ' å°è¯•è®¿é—®Pythonå¯¹è±¡ï¼Œå¦‚æœä¸æ”¯æŒä¼šæŠ›å‡ºå¼‚å¸¸
                     Dim pythonObj As Object = excelApp.PythonExecute("print('test')")
                     versionSupported = True
                 Catch
@@ -335,16 +334,16 @@ Public Class ChatControl
                 End Try
 
                 If Not versionSupported Then
-                    ' Èç¹ûÄÚÖÃPython²»¿ÉÓÃ£¬¿ÉÒÔ³¢ÊÔÍ¨¹ıÍâ²¿Python½âÊÍÆ÷Ö´ĞĞ
-                    GlobalStatusStrip.ShowWarning("´ËExcel°æ±¾²»Ö§³ÖÄÚÖÃPython£¬³¢ÊÔÊ¹ÓÃÍâ²¿Python...")
+                    ' å¦‚æœå†…ç½®Pythonä¸å¯ç”¨ï¼Œå¯ä»¥å°è¯•é€šè¿‡å¤–éƒ¨Pythonè§£é‡Šå™¨æ‰§è¡Œ
+                    GlobalStatusStrip.ShowWarning("æ­¤Excelç‰ˆæœ¬ä¸æ”¯æŒå†…ç½®Pythonï¼Œå°è¯•ä½¿ç”¨å¤–éƒ¨Python...")
 
-                    ' ´´½¨ÁÙÊ±PythonÎÄ¼ş
+                    ' åˆ›å»ºä¸´æ—¶Pythonæ–‡ä»¶
                     Dim tempFile As String = Path.Combine(Path.GetTempPath(), "excel_python_" & Guid.NewGuid().ToString() & ".py")
                     File.WriteAllText(tempFile, pythonCode)
 
-                    ' Ê¹ÓÃProcessÀàÖ´ĞĞPython½Å±¾
+                    ' ä½¿ç”¨Processç±»æ‰§è¡ŒPythonè„šæœ¬
                     Dim startInfo As New ProcessStartInfo With {
-                    .FileName = "python", ' ¼ÙÉèPythonÒÑ°²×°²¢ÔÚPATHÖĞ
+                    .FileName = "python", ' å‡è®¾Pythonå·²å®‰è£…å¹¶åœ¨PATHä¸­
                     .Arguments = tempFile,
                     .UseShellExecute = False,
                     .RedirectStandardOutput = True,
@@ -358,37 +357,37 @@ Public Class ChatControl
                         process.WaitForExit()
 
                         If Not String.IsNullOrEmpty(error1) Then
-                        GlobalStatusStrip.ShowWarning("PythonÖ´ĞĞ´íÎó: " & error1)
+                        GlobalStatusStrip.ShowWarning("Pythonæ‰§è¡Œé”™è¯¯: " & error1)
                     Else
-                            GlobalStatusStrip.ShowWarning("PythonÖ´ĞĞ½á¹û: " & output)
+                            GlobalStatusStrip.ShowWarning("Pythonæ‰§è¡Œç»“æœ: " & output)
                         End If
                     End Using
 
-                    ' É¾³ıÁÙÊ±ÎÄ¼ş
+                    ' åˆ é™¤ä¸´æ—¶æ–‡ä»¶
                     Try
                         File.Delete(tempFile)
                     Catch
-                        ' ºöÂÔÇåÀí´íÎó
+                        ' å¿½ç•¥æ¸…ç†é”™è¯¯
                     End Try
                 Else
-                    ' Ê¹ÓÃExcelÄÚÖÃPythonÖ´ĞĞ´úÂë
+                    ' ä½¿ç”¨Excelå†…ç½®Pythonæ‰§è¡Œä»£ç 
                     Dim result As Object = excelApp.PythonExecute(pythonCode)
-                    GlobalStatusStrip.ShowWarning("Python´úÂëÒÑÖ´ĞĞ")
+                    GlobalStatusStrip.ShowWarning("Pythonä»£ç å·²æ‰§è¡Œ")
                 End If
 
             Return True
         Catch ex As Exception
-            MessageBox.Show("Ö´ĞĞPython´úÂëÊ±³ö´í: " & ex.Message, "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("æ‰§è¡ŒPythonä»£ç æ—¶å‡ºé”™: " & ex.Message, "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Error)
             Return False
         End Try
     End Function
 
     Private Function GetSelectedRangeContent() As String
         Try
-            ' »ñÈ¡ sheetContentItems µÄÄÚÈİ
+            ' è·å– sheetContentItems çš„å†…å®¹
             Dim selectedContents As String = String.Join("|", sheetContentItems.Values.Select(Function(item) item.Item1.Text))
 
-            ' ½âÎö selectedContents ²¢»ñÈ¡Ã¿¸ö¹¤×÷±íÖĞÑ¡¶¨µÄµ¥Ôª¸ñÄÚÈİ
+            ' è§£æ selectedContents å¹¶è·å–æ¯ä¸ªå·¥ä½œè¡¨ä¸­é€‰å®šçš„å•å…ƒæ ¼å†…å®¹
             Dim parsedContents As New StringBuilder()
             If Not String.IsNullOrEmpty(selectedContents) Then
                 Dim sheetSelections = selectedContents.Split("|"c)
@@ -400,16 +399,16 @@ Public Class ChatControl
                         For Each range In ranges
                             Dim content = GetRangeContent(sheetName, range)
                             If Not String.IsNullOrEmpty(content) Then
-                                parsedContents.AppendLine($"{sheetName}µÄ{range}:{content}")
+                                parsedContents.AppendLine($"{sheetName}çš„{range}:{content}")
                             End If
                         Next
                     End If
                 Next
             End If
 
-            ' ½« parsedContents ¼ÓÈëµ½ question ÖĞ
+            ' å°† parsedContents åŠ å…¥åˆ° question ä¸­
             If parsedContents.Length > 0 Then
-                Return "ÎÒÄÜÌá¹©ÎÒÑ¡ÖĞµÄÊı¾İ×÷Îª²Î¿¼£º{" & parsedContents.ToString() & "}"
+                Return "æˆ‘èƒ½æä¾›æˆ‘é€‰ä¸­çš„æ•°æ®ä½œä¸ºå‚è€ƒï¼š{" & parsedContents.ToString() & "}"
             End If
         Catch ex As Exception
             Return String.Empty
@@ -454,56 +453,56 @@ Public Class ChatControl
         Return New ApplicationInfo("Excel", OfficeApplicationType.Excel)
     End Function
     Protected Overrides Sub SendChatMessage(message As String)
-        ' ÕâÀï¿ÉÒÔÊµÏÖwordµÄÌØÊâÂß¼­
+        ' è¿™é‡Œå¯ä»¥å®ç°wordçš„ç‰¹æ®Šé€»è¾‘
         Debug.Print(message)
         Send(message)
     End Sub
 
     Protected Overrides Function AppendCurrentSelectedContent(message As String) As String
         Try
-            ' »ñÈ¡µ±Ç°»î¶¯¹¤×÷±íºÍÑ¡ÔñÇøÓò
+            ' è·å–å½“å‰æ´»åŠ¨å·¥ä½œè¡¨å’Œé€‰æ‹©åŒºåŸŸ
             Dim activeWorkbook = Globals.ThisAddIn.Application.ActiveWorkbook
             Dim selection = Globals.ThisAddIn.Application.Selection
 
-            ' Èç¹ûÓĞÑ¡ÔñÇøÓòÇÒÎª Range ÀàĞÍ
+            ' å¦‚æœæœ‰é€‰æ‹©åŒºåŸŸä¸”ä¸º Range ç±»å‹
             If selection IsNot Nothing AndAlso TypeOf selection Is Microsoft.Office.Interop.Excel.Range Then
                 Dim selectedRange As Microsoft.Office.Interop.Excel.Range = DirectCast(selection, Microsoft.Office.Interop.Excel.Range)
 
-                ' ´´½¨ÄÚÈİ¹¹½¨Æ÷£¬°´ÕÕ ParseFile µÄ½á¹¹
+                ' åˆ›å»ºå†…å®¹æ„å»ºå™¨ï¼ŒæŒ‰ç…§ ParseFile çš„ç»“æ„
                 Dim contentBuilder As New StringBuilder()
-                contentBuilder.AppendLine(vbCrLf & "--- ÓÃ»§Ñ¡ÖĞµÄWorkbookSheet²Î¿¼ÄÚÈİÈçÏÂ ---")
+                contentBuilder.AppendLine(vbCrLf & "--- ç”¨æˆ·é€‰ä¸­çš„WorkbookSheetå‚è€ƒå†…å®¹å¦‚ä¸‹ ---")
 
-                ' Ìí¼Ó»î¶¯¹¤×÷²¾ĞÅÏ¢
-                contentBuilder.AppendLine($"¹¤×÷²¾: {Path.GetFileName(activeWorkbook.FullName)}")
+                ' æ·»åŠ æ´»åŠ¨å·¥ä½œç°¿ä¿¡æ¯
+                contentBuilder.AppendLine($"å·¥ä½œç°¿: {Path.GetFileName(activeWorkbook.FullName)}")
 
-                ' »ñÈ¡Ñ¡ÔñµÄ¹¤×÷±íĞÅÏ¢
+                ' è·å–é€‰æ‹©çš„å·¥ä½œè¡¨ä¿¡æ¯
                 Dim worksheet As Microsoft.Office.Interop.Excel.Worksheet = selectedRange.Worksheet
                 Dim sheetName As String = worksheet.Name
 
-                ' Ìí¼Ó¹¤×÷±íĞÅÏ¢
-                contentBuilder.AppendLine($"¹¤×÷±í: {sheetName}")
+                ' æ·»åŠ å·¥ä½œè¡¨ä¿¡æ¯
+                contentBuilder.AppendLine($"å·¥ä½œè¡¨: {sheetName}")
 
-                ' »ñÈ¡Ñ¡ÔñÇøÓòµÄ·¶Î§µØÖ·
+                ' è·å–é€‰æ‹©åŒºåŸŸçš„èŒƒå›´åœ°å€
                 Dim address As String = selectedRange.Address(False, False)
-                contentBuilder.AppendLine($"  Ê¹ÓÃ·¶Î§: {address}")
+                contentBuilder.AppendLine($"  ä½¿ç”¨èŒƒå›´: {address}")
 
-                ' ¶ÁÈ¡Ñ¡ÔñÇøÓòÖĞµÄµ¥Ôª¸ñÄÚÈİ
+                ' è¯»å–é€‰æ‹©åŒºåŸŸä¸­çš„å•å…ƒæ ¼å†…å®¹
                 Dim usedRange As Microsoft.Office.Interop.Excel.Range = selectedRange
 
-                ' »ñÈ¡ÇøÓòµÄĞĞÁĞĞÅÏ¢
+                ' è·å–åŒºåŸŸçš„è¡Œåˆ—ä¿¡æ¯
                 Dim firstRow As Integer = usedRange.Row
                 Dim firstCol As Integer = usedRange.Column
                 Dim lastRow As Integer = firstRow + usedRange.Rows.Count - 1
                 Dim lastCol As Integer = firstCol + usedRange.Columns.Count - 1
 
-                ' ÏŞÖÆ¶ÁÈ¡µÄµ¥Ôª¸ñÊıÁ¿£¨·ÀÖ¹Êı¾İ¹ı´ó£©
+                ' é™åˆ¶è¯»å–çš„å•å…ƒæ ¼æ•°é‡ï¼ˆé˜²æ­¢æ•°æ®è¿‡å¤§ï¼‰
                 Dim maxRows As Integer = Math.Min(lastRow, firstRow + 30)
                 Dim maxCols As Integer = Math.Min(lastCol, firstCol + 10)
 
-                ' ¼ì²éÊÇ·ñÓĞÊµ¼ÊÄÚÈİµÄ±êÖ¾
+                ' æ£€æŸ¥æ˜¯å¦æœ‰å®é™…å†…å®¹çš„æ ‡å¿—
                 Dim hasContent As Boolean = False
 
-                ' Öğ¸öµ¥Ôª¸ñ¶ÁÈ¡ÄÚÈİ
+                ' é€ä¸ªå•å…ƒæ ¼è¯»å–å†…å®¹
                 For rowIndex As Integer = firstRow To maxRows
                     For colIndex As Integer = firstCol To maxCols
                         Try
@@ -516,38 +515,38 @@ Public Class ChatControl
                                 hasContent = True
                             End If
                         Catch cellEx As Exception
-                            Debug.WriteLine($"¶ÁÈ¡µ¥Ôª¸ñÊ±³ö´í: {cellEx.Message}")
-                            ' ¼ÌĞø´¦ÀíÏÂÒ»¸öµ¥Ôª¸ñ
+                            Debug.WriteLine($"è¯»å–å•å…ƒæ ¼æ—¶å‡ºé”™: {cellEx.Message}")
+                            ' ç»§ç»­å¤„ç†ä¸‹ä¸€ä¸ªå•å…ƒæ ¼
                         End Try
                     Next
                 Next
 
-                ' Èç¹ûÓĞ¸ü¶àĞĞ»òÁĞÎ´ÏÔÊ¾£¬Ìí¼ÓÌáÊ¾
+                ' å¦‚æœæœ‰æ›´å¤šè¡Œæˆ–åˆ—æœªæ˜¾ç¤ºï¼Œæ·»åŠ æç¤º
                 If lastRow > maxRows Then
-                    contentBuilder.AppendLine($"  ... ¹²ÓĞ {lastRow - firstRow + 1} ĞĞ£¬½öÏÔÊ¾Ç° {maxRows - firstRow + 1} ĞĞ")
+                    contentBuilder.AppendLine($"  ... å…±æœ‰ {lastRow - firstRow + 1} è¡Œï¼Œä»…æ˜¾ç¤ºå‰ {maxRows - firstRow + 1} è¡Œ")
                 End If
                 If lastCol > maxCols Then
-                    contentBuilder.AppendLine($"  ... ¹²ÓĞ {lastCol - firstCol + 1} ÁĞ£¬½öÏÔÊ¾Ç° {maxCols - firstCol + 1} ÁĞ")
+                    contentBuilder.AppendLine($"  ... å…±æœ‰ {lastCol - firstCol + 1} åˆ—ï¼Œä»…æ˜¾ç¤ºå‰ {maxCols - firstCol + 1} åˆ—")
                 End If
 
-                contentBuilder.AppendLine("--- WorkbookSheet²Î¿¼ÄÚÈİµ½Õâ½áÊø ---" & vbCrLf)
+                contentBuilder.AppendLine("--- WorkbookSheetå‚è€ƒå†…å®¹åˆ°è¿™ç»“æŸ ---" & vbCrLf)
 
-                ' Ö»ÓĞÔÚÓĞÊµ¼ÊÄÚÈİÊ±²ÅÌí¼Óµ½ÏûÏ¢ÖĞ
+                ' åªæœ‰åœ¨æœ‰å®é™…å†…å®¹æ—¶æ‰æ·»åŠ åˆ°æ¶ˆæ¯ä¸­
                 If hasContent Then
-                    ' ½«Ñ¡ÖĞÄÚÈİÌí¼Óµ½ÏûÏ¢ÖĞ
+                    ' å°†é€‰ä¸­å†…å®¹æ·»åŠ åˆ°æ¶ˆæ¯ä¸­
                     message &= contentBuilder.ToString()
                 End If
             End If
         Catch ex As Exception
-            Debug.WriteLine($"»ñÈ¡Ñ¡ÖĞµ¥Ôª¸ñÄÚÈİÊ±³ö´í: {ex.Message}")
-            ' ³ö´íÊ±²»Ìí¼ÓÑ¡ÖĞÄÚÈİ£¬¼ÌĞø·¢ËÍÔ­Ê¼ÏûÏ¢
+            Debug.WriteLine($"è·å–é€‰ä¸­å•å…ƒæ ¼å†…å®¹æ—¶å‡ºé”™: {ex.Message}")
+            ' å‡ºé”™æ—¶ä¸æ·»åŠ é€‰ä¸­å†…å®¹ï¼Œç»§ç»­å‘é€åŸå§‹æ¶ˆæ¯
         End Try
         Return message
     End Function
 
     Protected Overrides Function ParseFile(filePath As String) As FileContentResult
         Try
-            ' ´´½¨Ò»¸öĞÂµÄ Excel Ó¦ÓÃ³ÌĞòÊµÀı£¨Îª±ÜÃâÓ°Ïìµ±Ç°¹¤×÷²¾£©
+            ' åˆ›å»ºä¸€ä¸ªæ–°çš„ Excel åº”ç”¨ç¨‹åºå®ä¾‹ï¼ˆä¸ºé¿å…å½±å“å½“å‰å·¥ä½œç°¿ï¼‰
             Dim excelApp As New Microsoft.Office.Interop.Excel.Application
             excelApp.Visible = False
             excelApp.DisplayAlerts = False
@@ -557,26 +556,26 @@ Public Class ChatControl
                 workbook = excelApp.Workbooks.Open(filePath, ReadOnly:=True)
                 Dim contentBuilder As New StringBuilder()
 
-                contentBuilder.AppendLine($"ÎÄ¼ş: {Path.GetFileName(filePath)} °üº¬ÒÔÏÂÄÚÈİ:")
+                contentBuilder.AppendLine($"æ–‡ä»¶: {Path.GetFileName(filePath)} åŒ…å«ä»¥ä¸‹å†…å®¹:")
 
-                ' ´¦ÀíÃ¿¸ö¹¤×÷±í
+                ' å¤„ç†æ¯ä¸ªå·¥ä½œè¡¨
                 For Each worksheet As Microsoft.Office.Interop.Excel.Worksheet In workbook.Worksheets
                     Dim sheetName As String = worksheet.Name
-                    contentBuilder.AppendLine($"¹¤×÷±í: {sheetName}")
+                    contentBuilder.AppendLine($"å·¥ä½œè¡¨: {sheetName}")
 
-                    ' »ñÈ¡Ê¹ÓÃ·¶Î§
+                    ' è·å–ä½¿ç”¨èŒƒå›´
                     Dim usedRange As Microsoft.Office.Interop.Excel.Range = worksheet.UsedRange
                     If usedRange IsNot Nothing Then
                         Dim lastRow As Integer = usedRange.Row + usedRange.Rows.Count - 1
                         Dim lastCol As Integer = usedRange.Column + usedRange.Columns.Count - 1
 
-                        ' ÏŞÖÆ¶ÁÈ¡µÄµ¥Ôª¸ñÊıÁ¿£¨·ÀÖ¹ÎÄ¼ş¹ı´ó£©
+                        ' é™åˆ¶è¯»å–çš„å•å…ƒæ ¼æ•°é‡ï¼ˆé˜²æ­¢æ–‡ä»¶è¿‡å¤§ï¼‰
                         Dim maxRows As Integer = Math.Min(lastRow, 30)
                         Dim maxCols As Integer = Math.Min(lastCol, 10)
 
-                        contentBuilder.AppendLine($"  Ê¹ÓÃ·¶Î§: {GetExcelColumnName(usedRange.Column)}{usedRange.Row}:{GetExcelColumnName(lastCol)}{lastRow}")
+                        contentBuilder.AppendLine($"  ä½¿ç”¨èŒƒå›´: {GetExcelColumnName(usedRange.Column)}{usedRange.Row}:{GetExcelColumnName(lastCol)}{lastRow}")
 
-                        ' ¶ÁÈ¡µ¥Ôª¸ñÄÚÈİ
+                        ' è¯»å–å•å…ƒæ ¼å†…å®¹
                         For rowIndex As Integer = usedRange.Row To maxRows
                             For colIndex As Integer = usedRange.Column To maxCols
                                 Try
@@ -588,18 +587,18 @@ Public Class ChatControl
                                         contentBuilder.AppendLine($"  {cellAddress}: {cellValue}")
                                     End If
                                 Catch cellEx As Exception
-                                    Debug.WriteLine($"¶ÁÈ¡µ¥Ôª¸ñÊ±³ö´í: {cellEx.Message}")
-                                    ' ¼ÌĞø´¦ÀíÏÂÒ»¸öµ¥Ôª¸ñ
+                                    Debug.WriteLine($"è¯»å–å•å…ƒæ ¼æ—¶å‡ºé”™: {cellEx.Message}")
+                                    ' ç»§ç»­å¤„ç†ä¸‹ä¸€ä¸ªå•å…ƒæ ¼
                                 End Try
                             Next
                         Next
 
-                        ' Èç¹ûÓĞ¸ü¶àĞĞ»òÁĞÎ´ÏÔÊ¾£¬Ìí¼ÓÌáÊ¾
+                        ' å¦‚æœæœ‰æ›´å¤šè¡Œæˆ–åˆ—æœªæ˜¾ç¤ºï¼Œæ·»åŠ æç¤º
                         If lastRow > maxRows Then
-                            contentBuilder.AppendLine($"  ... ¹²ÓĞ {lastRow - usedRange.Row + 1} ĞĞ£¬½öÏÔÊ¾Ç° {maxRows - usedRange.Row + 1} ĞĞ")
+                            contentBuilder.AppendLine($"  ... å…±æœ‰ {lastRow - usedRange.Row + 1} è¡Œï¼Œä»…æ˜¾ç¤ºå‰ {maxRows - usedRange.Row + 1} è¡Œ")
                         End If
                         If lastCol > maxCols Then
-                            contentBuilder.AppendLine($"  ... ¹²ÓĞ {lastCol - usedRange.Column + 1} ÁĞ£¬½öÏÔÊ¾Ç° {maxCols - usedRange.Column + 1} ÁĞ")
+                            contentBuilder.AppendLine($"  ... å…±æœ‰ {lastCol - usedRange.Column + 1} åˆ—ï¼Œä»…æ˜¾ç¤ºå‰ {maxCols - usedRange.Column + 1} åˆ—")
                         End If
                     End If
 
@@ -610,11 +609,11 @@ Public Class ChatControl
                 .FileName = Path.GetFileName(filePath),
                 .FileType = "Excel",
                 .ParsedContent = contentBuilder.ToString(),
-                .RawData = Nothing ' ¿ÉÒÔÑ¡Ôñ´æ´¢¸ü¶àÊı¾İ¹©ºóĞø´¦Àí
+                .RawData = Nothing ' å¯ä»¥é€‰æ‹©å­˜å‚¨æ›´å¤šæ•°æ®ä¾›åç»­å¤„ç†
             }
 
             Finally
-                ' ÇåÀí×ÊÔ´
+                ' æ¸…ç†èµ„æº
                 If workbook IsNot Nothing Then
                     workbook.Close(SaveChanges:=False)
                     System.Runtime.InteropServices.Marshal.ReleaseComObject(workbook)
@@ -626,16 +625,16 @@ Public Class ChatControl
                 GC.WaitForPendingFinalizers()
             End Try
         Catch ex As Exception
-            Debug.WriteLine($"½âÎö Excel ÎÄ¼şÊ±³ö´í: {ex.Message}")
+            Debug.WriteLine($"è§£æ Excel æ–‡ä»¶æ—¶å‡ºé”™: {ex.Message}")
             Return New FileContentResult With {
             .FileName = Path.GetFileName(filePath),
             .FileType = "Excel",
-            .ParsedContent = $"[½âÎö Excel ÎÄ¼şÊ±³ö´í: {ex.Message}]"
+            .ParsedContent = $"[è§£æ Excel æ–‡ä»¶æ—¶å‡ºé”™: {ex.Message}]"
         }
         End Try
     End Function
 
-    ' ¸¨Öú·½·¨£º½«ÁĞË÷Òı×ª»»Îª Excel ÁĞÃû£¨Èç 1->A, 27->AA£©
+    ' è¾…åŠ©æ–¹æ³•ï¼šå°†åˆ—ç´¢å¼•è½¬æ¢ä¸º Excel åˆ—åï¼ˆå¦‚ 1->A, 27->AAï¼‰
     Private Function GetExcelColumnName(columnIndex As Integer) As String
         Dim dividend As Integer = columnIndex
         Dim columnName As String = String.Empty
@@ -650,18 +649,18 @@ Public Class ChatControl
         Return columnName
     End Function
 
-    ' ÊµÏÖ»ñÈ¡µ±Ç° Excel ¹¤×÷Ä¿Â¼µÄ·½·¨
+    ' å®ç°è·å–å½“å‰ Excel å·¥ä½œç›®å½•çš„æ–¹æ³•
     Protected Overrides Function GetCurrentWorkingDirectory() As String
         Try
-            ' »ñÈ¡µ±Ç°»î¶¯¹¤×÷²¾µÄÂ·¾¶
+            ' è·å–å½“å‰æ´»åŠ¨å·¥ä½œç°¿çš„è·¯å¾„
             If Globals.ThisAddIn.Application.ActiveWorkbook IsNot Nothing Then
                 Return Globals.ThisAddIn.Application.ActiveWorkbook.Path
             End If
         Catch ex As Exception
-            Debug.WriteLine($"»ñÈ¡µ±Ç°¹¤×÷Ä¿Â¼Ê±³ö´í: {ex.Message}")
+            Debug.WriteLine($"è·å–å½“å‰å·¥ä½œç›®å½•æ—¶å‡ºé”™: {ex.Message}")
         End Try
 
-        ' Èç¹ûÎŞ·¨»ñÈ¡¹¤×÷²¾Â·¾¶£¬Ôò·µ»ØÓ¦ÓÃ³ÌĞòÄ¿Â¼
+        ' å¦‚æœæ— æ³•è·å–å·¥ä½œç°¿è·¯å¾„ï¼Œåˆ™è¿”å›åº”ç”¨ç¨‹åºç›®å½•
         Return System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)
     End Function
 End Class

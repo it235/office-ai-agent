@@ -144,7 +144,16 @@
     <Compile Include="Controls\BaseDataCapturePane.vb">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Include="Controls\BaseDeepseekChat.Designer.vb">
+      <DependentUpon>BaseDeepseekChat.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Controls\BaseDeepseekChat.vb">
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Include="Controls\WebSiteContentConfirmDialog.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Mcp\MCPConfigForm.vb">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="My Project\AssemblyInfo.vb" />
@@ -232,6 +241,15 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Resources\clear.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\deepseek.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\websit.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\website.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.VisualBasic.targets" />
   <Import Project="..\packages\Microsoft.Web.WebView2.1.0.3240.44\build\Microsoft.Web.WebView2.targets" Condition="Exists('..\packages\Microsoft.Web.WebView2.1.0.3240.44\build\Microsoft.Web.WebView2.targets')" />

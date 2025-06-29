@@ -1,4 +1,4 @@
-' ShareRibbon\Ribbon\BaseOfficeRibbon.vb
+ï»¿' ShareRibbon\Ribbon\BaseOfficeRibbon.vb
 Imports System.IO
 Imports System.Net
 Imports System.Net.Http
@@ -15,8 +15,8 @@ Public MustInherit Class BaseOfficeRibbon
 
     'Public Sub New(ByVal factory As Microsoft.Office.Tools.Ribbon.RibbonFactory)
     '    MyBase.New(factory)
-    '    InitializeComponent()  ' Designer ÖĞ¶¨ÒåµÄ³õÊ¼»¯
-    '    InitializeBaseRibbon()  ' »ùÀàÖĞµÄÍ¨ÓÃ³õÊ¼»¯
+    '    InitializeComponent()  ' Designer ä¸­å®šä¹‰çš„åˆå§‹åŒ–
+    '    InitializeBaseRibbon()  ' åŸºç±»ä¸­çš„é€šç”¨åˆå§‹åŒ–
     'End Sub
 
     Private Sub Ribbon1_Load(ByVal sender As System.Object, ByVal e As RibbonUIEventArgs) Handles MyBase.Load
@@ -28,23 +28,23 @@ Public MustInherit Class BaseOfficeRibbon
     End Sub
 
     Protected Overridable Sub InitializeBaseRibbon()
-        ' ÉèÖÃ»ù´¡µÄÊÂ¼ş´¦Àí³ÌĞò
+        ' è®¾ç½®åŸºç¡€çš„äº‹ä»¶å¤„ç†ç¨‹åº
         'AddHandler ChatButton.Click, AddressOf ChatButton_Click
         'AddHandler ClearCacheButton.Click, AddressOf ClearCacheButton_Click
         'AddHandler AboutButton.Click, AddressOf AboutButton_Click
         'AddHandler DataAnalysisButton.Click, AddressOf DataAnalysisButton_Click
     End Sub
 
-    ' ¹ØÓÚÎÒ°´Å¥µã»÷ÊÂ¼ş
+    ' å…³äºæˆ‘æŒ‰é’®ç‚¹å‡»äº‹ä»¶
     Private Sub AboutButton_Click_1(sender As Object, e As RibbonControlEventArgs) Handles AboutButton.Click
-        MsgBox("´ó¼ÒºÃ£¬ÎÒÊÇBÕ¾µÄ¾ı¸ç£¬ÕËºÅ ¾ı¸çÁÄ±à³Ì ¡£¸Ã²å¼şµÄÁé¸ĞÊÇÀ´×ÔÓÚÒ»Î»BÕ¾µÄ·ÛË¿£¬ËûÊÇÒøĞĞÉó¼ÆÏà¹ØµÄ¹¤×÷£¬¾­³£Óë±í¸ñ´ò½»µÀ£¬ºÜ¶àÊ±ºò±í¸ñÖĞµÄÊı¾İÎŞ·¨Í¨¹ı¹Ì¶¨µÄ¹«Ê½À´¼ÆËã£¬µ«ÊÇÔÚÈËÀàÀí½âÉÏÓÖ¾ßÓĞÏàÍ¬µÄÒâÒå£¬ËùÒÔExcel AIµ®ÉúÁË¡£
-²å¼şÔÚ³ÖĞøÓÅ»¯ÖĞ£¬ÎÒ±¾ÉíÓëExcel´ò½»µÀ±È½ÏÉÙ£¬Èç¹ûÄãÓĞ¸ü¶àºÃµÄidea¿ÉÒÔ¹ıÀ´¸øÎÒÁôÑÔ»òÆÀÂÛ£¬²»¶ÏÍêÉÆ¸Ã²å¼ş¡£ExcelAiÊı¾İµÄÄ¬ÈÏ´æ·ÅÄ¿Â¼ÔÚµ±Ç°ÓÃ»§/ÎÄµµ/" + ConfigSettings.OfficeAiAppDataFolder + "ÏÂ¡£")
+        MsgBox("å¤§å®¶å¥½ï¼Œæˆ‘æ˜¯Bç«™çš„å›å“¥ï¼Œè´¦å· å›å“¥èŠç¼–ç¨‹ ã€‚è¯¥æ’ä»¶çš„çµæ„Ÿæ˜¯æ¥è‡ªäºä¸€ä½Bç«™çš„ç²‰ä¸ï¼Œä»–æ˜¯é“¶è¡Œå®¡è®¡ç›¸å…³çš„å·¥ä½œï¼Œç»å¸¸ä¸è¡¨æ ¼æ‰“äº¤é“ï¼Œå¾ˆå¤šæ—¶å€™è¡¨æ ¼ä¸­çš„æ•°æ®æ— æ³•é€šè¿‡å›ºå®šçš„å…¬å¼æ¥è®¡ç®—ï¼Œä½†æ˜¯åœ¨äººç±»ç†è§£ä¸Šåˆå…·æœ‰ç›¸åŒçš„æ„ä¹‰ï¼Œæ‰€ä»¥Excel AIè¯ç”Ÿäº†ã€‚
+æ’ä»¶åœ¨æŒç»­ä¼˜åŒ–ä¸­ï¼Œæˆ‘æœ¬èº«ä¸Excelæ‰“äº¤é“æ¯”è¾ƒå°‘ï¼Œå¦‚æœä½ æœ‰æ›´å¤šå¥½çš„ideaå¯ä»¥è¿‡æ¥ç»™æˆ‘ç•™è¨€æˆ–è¯„è®ºï¼Œä¸æ–­å®Œå–„è¯¥æ’ä»¶ã€‚ExcelAiæ•°æ®çš„é»˜è®¤å­˜æ”¾ç›®å½•åœ¨å½“å‰ç”¨æˆ·/æ–‡æ¡£/" + ConfigSettings.OfficeAiAppDataFolder + "ä¸‹ã€‚")
     End Sub
 
-    ' ÇåÀí»º´æÅäÖÃ°´Å¥µã»÷ÊÂ¼ş
+    ' æ¸…ç†ç¼“å­˜é…ç½®æŒ‰é’®ç‚¹å‡»äº‹ä»¶
     Private Sub ClearCacheConfig_Click_1(sender As Object, e As RibbonControlEventArgs) Handles ClearCacheButton.Click
-        ' µ¯³öÈ·ÈÏ¿ò
-        Dim result = MessageBox.Show("½«É¾³ıÎÄµµ\" & ConfigSettings.OfficeAiAppDataFolder & "Ä¿Â¼ÏÂËùÓĞµÄÅäÖÃ£¬ÁÄÌì¼ÇÂ¼ĞÅÏ¢£¬ÄúÈ·¶¨ÒªÇåÀíÂğ£¿", "È·ÈÏ²Ù×÷", MessageBoxButtons.OKCancel, MessageBoxIcon.Question)
+        ' å¼¹å‡ºç¡®è®¤æ¡†
+        Dim result = MessageBox.Show("å°†åˆ é™¤æ–‡æ¡£\" & ConfigSettings.OfficeAiAppDataFolder & "ç›®å½•ä¸‹æ‰€æœ‰çš„é…ç½®ï¼ŒèŠå¤©è®°å½•ä¿¡æ¯ï¼Œæ‚¨ç¡®å®šè¦æ¸…ç†å—ï¼Ÿ", "ç¡®è®¤æ“ä½œ", MessageBoxButtons.OKCancel, MessageBoxIcon.Question)
         If result <> DialogResult.OK Then
             Return
         End If
@@ -56,31 +56,31 @@ Public MustInherit Class BaseOfficeRibbon
                 For Each file In files
                     System.IO.File.Delete(file)
                 Next
-                MsgBox("»º´æÅäÖÃÒÑÇåÀí£¡")
+                MsgBox("ç¼“å­˜é…ç½®å·²æ¸…ç†ï¼")
             Catch ex As Exception
-                MsgBox("ÇåÀí»º´æÅäÖÃÊ±³ö´í£º" & ex.Message, vbCritical)
+                MsgBox("æ¸…ç†ç¼“å­˜é…ç½®æ—¶å‡ºé”™ï¼š" & ex.Message, vbCritical)
             End Try
         Else
-            MsgBox("»º´æÄ¿Â¼²»´æÔÚ£¡")
+            MsgBox("ç¼“å­˜ç›®å½•ä¸å­˜åœ¨ï¼")
         End If
     End Sub
 
-    ' µã»÷RibbonÇøµÄÅäÖÃAPI°´Å¥ºó´¥·¢
+    ' ç‚¹å‡»RibbonåŒºçš„é…ç½®APIæŒ‰é’®åè§¦å‘
     Private Sub ConfigApiButton_Click(sender As Object, e As RibbonControlEventArgs) Handles ConfigApiButton.Click
-        ' ´´½¨²¢ÏÔÊ¾ÅäÖÃ API µÄ¶Ô»°¿ò
+        ' åˆ›å»ºå¹¶æ˜¾ç¤ºé…ç½® API çš„å¯¹è¯æ¡†
         Dim configForm As New ConfigApiForm()
         If configForm.ShowDialog() = DialogResult.OK Then
         End If
     End Sub
     Private Sub PromptConfigButton_Click(sender As Object, e As RibbonControlEventArgs) Handles PromptConfigButton.Click
-        ' ´´½¨²¢ÏÔÊ¾ÅäÖÃ API µÄ¶Ô»°¿ò
+        ' åˆ›å»ºå¹¶æ˜¾ç¤ºé…ç½® API çš„å¯¹è¯æ¡†
         Dim configForm As New ConfigPromptForm(GetApplication())
         If configForm.ShowDialog() = DialogResult.OK Then
         End If
     End Sub
 
 
-    ' ¶¨Òå ComboBoxItem Àà
+    ' å®šä¹‰ ComboBoxItem ç±»
     Private Class ComboBoxItem
         Public Property Text As String
         Public Property Value As String
@@ -96,7 +96,7 @@ Public MustInherit Class BaseOfficeRibbon
     End Class
 
 
-    ' ¹²ÓÃµÄÊÂ¼ş´¦Àí·½·¨
+    ' å…±ç”¨çš„äº‹ä»¶å¤„ç†æ–¹æ³•
     'Protected Sub ConfigApiButton_Click(sender As Object, e As RibbonControlEventArgs)
     '    Using configForm As New ConfigApiForm()
     '        configForm.ShowDialog()
@@ -111,8 +111,8 @@ Public MustInherit Class BaseOfficeRibbon
 
     Protected Sub ClearCacheButton_Click(sender As Object, e As RibbonControlEventArgs)
         If MessageBox.Show(
-            $"½«É¾³ıÎÄµµ\{ConfigSettings.OfficeAiAppDataFolder}Ä¿Â¼ÏÂËùÓĞµÄÅäÖÃ£¬ÁÄÌì¼ÇÂ¼ĞÅÏ¢£¬ÄúÈ·¶¨ÒªÇåÀíÂğ£¿",
-            "È·ÈÏ²Ù×÷",
+            $"å°†åˆ é™¤æ–‡æ¡£\{ConfigSettings.OfficeAiAppDataFolder}ç›®å½•ä¸‹æ‰€æœ‰çš„é…ç½®ï¼ŒèŠå¤©è®°å½•ä¿¡æ¯ï¼Œæ‚¨ç¡®å®šè¦æ¸…ç†å—ï¼Ÿ",
+            "ç¡®è®¤æ“ä½œ",
             MessageBoxButtons.OKCancel,
             MessageBoxIcon.Question) <> DialogResult.OK Then
             Return
@@ -127,29 +127,40 @@ Public MustInherit Class BaseOfficeRibbon
                 For Each file In Directory.GetFiles(appDataPath)
                     'file.Delete(file)
                 Next
-                MessageBox.Show("»º´æÅäÖÃÒÑÇåÀí£¡")
+                MessageBox.Show("ç¼“å­˜é…ç½®å·²æ¸…ç†ï¼")
             Catch ex As Exception
-                MessageBox.Show($"ÇåÀí»º´æÅäÖÃÊ±³ö´í£º{ex.Message}", "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                MessageBox.Show($"æ¸…ç†ç¼“å­˜é…ç½®æ—¶å‡ºé”™ï¼š{ex.Message}", "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Error)
             End Try
         End If
     End Sub
 
     Protected Sub AboutButton_Click(sender As Object, e As RibbonControlEventArgs)
         MessageBox.Show(
-            $"´ó¼ÒºÃ£¬ÎÒÊÇBÕ¾µÄ¾ı¸ç£¬ÕËºÅ ¾ı¸çÁÄ±à³Ì¡£¸Ã²å¼şµÄÁé¸ĞÊÇÀ´×ÔÓÚÒ»Î»BÕ¾µÄ·ÛË¿£¬ËûÊÇÒøĞĞÉó¼ÆÏà¹ØµÄ¹¤×÷£¬¾­³£Óë±í¸ñ´ò½»µÀ£¬ºÜ¶àÊ±ºò±í¸ñÖĞµÄÊı¾İÎŞ·¨Í¨¹ı¹Ì¶¨µÄ¹«Ê½À´¼ÆËã£¬µ«ÊÇÔÚÈËÀàÀí½âÉÏÓÖ¾ßÓĞÏàÍ¬µÄÒâÒå£¬ËùÒÔExcel AIµ®ÉúÁË¡£{vbCrLf}²å¼şÔÚ³ÖĞøÓÅ»¯ÖĞ£¬ÎÒ±¾ÉíÓëExcel´ò½»µÀ±È½ÏÉÙ£¬Èç¹ûÄãÓĞ¸ü¶àºÃµÄidea¿ÉÒÔ¹ıÀ´¸øÎÒÁôÑÔ»òÆÀÂÛ£¬²»¶ÏÍêÉÆ¸Ã²å¼ş¡£ExcelAiÊı¾İµÄÄ¬ÈÏ´æ·ÅÄ¿Â¼ÔÚµ±Ç°ÓÃ»§/ÎÄµµ/{ConfigSettings.OfficeAiAppDataFolder}ÏÂ¡£"
+            $"å¤§å®¶å¥½ï¼Œæˆ‘æ˜¯Bç«™çš„å›å“¥ï¼Œè´¦å· å›å“¥èŠç¼–ç¨‹ã€‚è¯¥æ’ä»¶çš„çµæ„Ÿæ˜¯æ¥è‡ªäºä¸€ä½Bç«™çš„ç²‰ä¸ï¼Œä»–æ˜¯é“¶è¡Œå®¡è®¡ç›¸å…³çš„å·¥ä½œï¼Œç»å¸¸ä¸è¡¨æ ¼æ‰“äº¤é“ï¼Œå¾ˆå¤šæ—¶å€™è¡¨æ ¼ä¸­çš„æ•°æ®æ— æ³•é€šè¿‡å›ºå®šçš„å…¬å¼æ¥è®¡ç®—ï¼Œä½†æ˜¯åœ¨äººç±»ç†è§£ä¸Šåˆå…·æœ‰ç›¸åŒçš„æ„ä¹‰ï¼Œæ‰€ä»¥Excel AIè¯ç”Ÿäº†ã€‚{vbCrLf}æ’ä»¶åœ¨æŒç»­ä¼˜åŒ–ä¸­ï¼Œæˆ‘æœ¬èº«ä¸Excelæ‰“äº¤é“æ¯”è¾ƒå°‘ï¼Œå¦‚æœä½ æœ‰æ›´å¤šå¥½çš„ideaå¯ä»¥è¿‡æ¥ç»™æˆ‘ç•™è¨€æˆ–è¯„è®ºï¼Œä¸æ–­å®Œå–„è¯¥æ’ä»¶ã€‚ExcelAiæ•°æ®çš„é»˜è®¤å­˜æ”¾ç›®å½•åœ¨å½“å‰ç”¨æˆ·/æ–‡æ¡£/{ConfigSettings.OfficeAiAppDataFolder}ä¸‹ã€‚"
         )
     End Sub
 
-    ' AIÁÄÌìÊµÏÖ
+    ' AIèŠå¤©å®ç°
     Protected MustOverride Sub ChatButton_Click(sender As Object, e As RibbonControlEventArgs) Handles ChatButton.Click
 
-    ' webÅÀ³æÊµÏÖ
+    ' webçˆ¬è™«å®ç°
     Protected MustOverride Sub WebResearchButton_Click(sender As Object, e As RibbonControlEventArgs) Handles WebCaptureButton.Click
 
-    ' ¾Û¹âµÆÊµÏÖ£¨¸úËæÊó±êÑ¡ÖĞÕûĞĞºÍÕûÁĞ²¢¸ßÁÁ£©
+    ' èšå…‰ç¯å®ç°ï¼ˆè·Ÿéšé¼ æ ‡é€‰ä¸­æ•´è¡Œå’Œæ•´åˆ—å¹¶é«˜äº®ï¼‰
     Protected MustOverride Sub SpotlightButton_Click(sender As Object, e As RibbonControlEventArgs) Handles SpotlightButton.Click
 
-    ' Êı¾İÄ§·¨·ÖÎöÊµÏÖ
+    ' æ•°æ®é­”æ³•åˆ†æå®ç°
     Protected MustOverride Sub DataAnalysisButton_Click(sender As Object, e As RibbonControlEventArgs) Handles DataAnalysisButton.Click
     Protected MustOverride Function GetApplication() As ApplicationInfo
+
+
+    ' DeepseekæŒ‰é’®ç‚¹å‡»äº‹ä»¶
+    Protected MustOverride Sub DeepseekButton_Click(sender As Object, e As RibbonControlEventArgs) Handles DeepseekButton.Click
+
+    ' æ‰¹é‡æ•°æ®ç”ŸæˆæŒ‰é’®ç‚¹å‡»äº‹ä»¶
+    Protected MustOverride Sub BatchDataGenButton_Click(sender As Object, e As RibbonControlEventArgs) Handles BatchDataGenButton.Click
+
+    ' MCPæŒ‰é’®ç‚¹å‡»äº‹ä»¶
+    Protected MustOverride Sub MCPButton_Click(sender As Object, e As RibbonControlEventArgs) Handles MCPButton.Click
+
 End Class

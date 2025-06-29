@@ -1,4 +1,4 @@
-Imports System.Windows.Forms
+ÔªøImports System.Windows.Forms
 Imports Microsoft.Web.WebView2.WinForms
 <Global.Microsoft.VisualBasic.CompilerServices.DesignerGenerated()>
 Partial Class BaseDataCapturePane
@@ -80,24 +80,24 @@ Partial Class BaseDataCapturePane
         'BackButton
         '
         Me.BackButton.AutoSize = True
+        Me.BackButton.Enabled = False
         Me.BackButton.Location = New System.Drawing.Point(5, 0)
         Me.BackButton.Margin = New System.Windows.Forms.Padding(0, 0, 5, 0)
         Me.BackButton.Name = "BackButton"
         Me.BackButton.Size = New System.Drawing.Size(30, 24)
         Me.BackButton.TabIndex = 0
-        Me.BackButton.Text = "°˚"
-        Me.BackButton.Enabled = False
+        Me.BackButton.Text = "‚Üê"
         '
         'ForwardButton
         '
         Me.ForwardButton.AutoSize = True
+        Me.ForwardButton.Enabled = False
         Me.ForwardButton.Location = New System.Drawing.Point(40, 0)
         Me.ForwardButton.Margin = New System.Windows.Forms.Padding(0, 0, 5, 0)
         Me.ForwardButton.Name = "ForwardButton"
         Me.ForwardButton.Size = New System.Drawing.Size(30, 24)
         Me.ForwardButton.TabIndex = 1
-        Me.ForwardButton.Text = "°˙"
-        Me.ForwardButton.Enabled = False
+        Me.ForwardButton.Text = "‚Üí"
         '
         'NavigateButton
         '
@@ -107,7 +107,7 @@ Partial Class BaseDataCapturePane
         Me.NavigateButton.Name = "NavigateButton"
         Me.NavigateButton.Size = New System.Drawing.Size(50, 24)
         Me.NavigateButton.TabIndex = 2
-        Me.NavigateButton.Text = "¥Úø™"
+        Me.NavigateButton.Text = "ÊâìÂºÄ"
         '
         'CaptureButton
         '
@@ -117,7 +117,7 @@ Partial Class BaseDataCapturePane
         Me.CaptureButton.Name = "CaptureButton"
         Me.CaptureButton.Size = New System.Drawing.Size(75, 24)
         Me.CaptureButton.TabIndex = 3
-        Me.CaptureButton.Text = "◊•»°’˚“≥"
+        Me.CaptureButton.Text = "ÊäìÂèñÊï¥È°µ"
         '
         'SelectDomButton
         '
@@ -127,7 +127,7 @@ Partial Class BaseDataCapturePane
         Me.SelectDomButton.Name = "SelectDomButton"
         Me.SelectDomButton.Size = New System.Drawing.Size(75, 24)
         Me.SelectDomButton.TabIndex = 4
-        Me.SelectDomButton.Text = "—°‘Ò‘™Àÿ"
+        Me.SelectDomButton.Text = "ÈÄâÊã©ÂÖÉÁ¥†"
         '
         'UrlTextBox
         '

@@ -234,10 +234,16 @@
   -->
   <ItemGroup>
     <AppDesigner Include="My Project\" />
+    <Compile Include="BatchDataGenerationForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="ChatControl.Designer.vb">
       <DependentUpon>ChatControl.vb</DependentUpon>
     </Compile>
     <Compile Include="ChatControl.vb">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="DeepseekControl.vb">
       <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="EnhancedPreviewAndConfirm.vb" />
