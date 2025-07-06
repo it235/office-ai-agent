@@ -332,7 +332,6 @@ Public MustInherit Class BaseDataCapturePane
             SetNavigationState(False)
         End Try
     End Sub
-
     Private Async Sub CaptureButton_Click(sender As Object, e As EventArgs)
         If isCapturing Then
             MessageBox.Show("正在抓取中，请稍候...", "提示")
@@ -340,39 +339,915 @@ Public MustInherit Class BaseDataCapturePane
         End If
 
         Try
-            isCapturing = True
+            ' 显示抓取类型选择对话框
+            Dim captureTypeResult = MessageBox.Show(
+            "请选择抓取内容类型：" & vbCrLf & vbCrLf &
+            "【是】- 抓取文本内容（智能解析，保持格式）" & vbCrLf &
+            "【否】- 抓取HTML代码（包含完整标签结构）" & vbCrLf &
+            "【取消】- 取消操作",
+            "选择抓取类型",
+            MessageBoxButtons.YesNoCancel,
+            MessageBoxIcon.Question,
+            MessageBoxDefaultButton.Button1)
 
-            ' 获取HTML内容
-            Dim script As String
-            If Not String.IsNullOrEmpty(selectedDomPath) Then
-                ' 使用选定的DOM路径
-                script = $"
-                (function() {{
-                    const element = document.querySelector('{selectedDomPath}');
-                    return element ? element.outerHTML : null;
-                }})();
-            "
-            Else
-                ' 获取整个页面内容
-                script = "document.documentElement.outerHTML;"
-            End If
-
-            Dim html = Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
-            If Not String.IsNullOrEmpty(html) Then
-                html = JsonConvert.DeserializeObject(Of String)(html)
-                HandleExtractedContent(html)
-            Else
-                MessageBox.Show("未能获取到内容", "提示")
-            End If
+            Select Case captureTypeResult
+                Case DialogResult.Yes
+                    ' 抓取文本内容
+                    Await CaptureTextContent()
+                Case DialogResult.No
+                    ' 抓取HTML代码
+                    Await CaptureHtmlContent()
+                Case DialogResult.Cancel
+                    ' 取消操作
+                    Return
+            End Select
 
         Catch ex As Exception
+            Debug.WriteLine($"抓取内容时出错: {ex.Message}")
             MessageBox.Show($"抓取内容时出错: {ex.Message}", "错误")
-        Finally
-            isCapturing = False
         End Try
     End Sub
 
+    ' 抓取文本内容方法
+    Private Async Function CaptureTextContent() As Task
+        Try
+            isCapturing = True
+            CaptureButton.Text = "抓取文本中..."
+            CaptureButton.Enabled = False
 
+            ' 等待页面完全渲染（对Vue/React等SPA很重要）
+            Await EnsurePageFullyLoaded()
+
+            ' 获取处理后的页面内容
+            Dim extractedContent As String
+
+            If Not String.IsNullOrEmpty(selectedDomPath) Then
+                ' 使用选定的DOM路径抓取特定元素
+                extractedContent = Await ExtractSelectedElement()
+            Else
+                ' 抓取整个页面内容
+                extractedContent = Await ExtractFullPageContent()
+            End If
+
+            If Not String.IsNullOrEmpty(extractedContent) Then
+                ' 清理和格式化内容
+                Dim cleanContent = CleanAndFormatContent(extractedContent)
+
+                ' 添加页面信息头部
+                Dim pageInfo = Await GetPageMetaInfo()
+                Dim finalContent = pageInfo & vbCrLf & vbCrLf & cleanContent
+
+                HandleExtractedContent(finalContent)
+
+                Debug.WriteLine($"成功抓取文本内容，长度: {finalContent.Length} 字符")
+                'MessageBox.Show("文本内容抓取完成！", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Else
+                MessageBox.Show("未能获取到有效的文本内容", "提示")
+            End If
+
+        Catch ex As Exception
+            Debug.WriteLine($"抓取文本内容时出错: {ex.Message}")
+            MessageBox.Show($"抓取文本内容时出错: {ex.Message}", "错误")
+        Finally
+            isCapturing = False
+            CaptureButton.Text = "抓取内容"
+            CaptureButton.Enabled = True
+        End Try
+    End Function
+
+    ' 确保页面完全加载（包括动态内容）
+    Private Async Function EnsurePageFullyLoaded() As Task
+        Try
+            ' 等待页面加载完成的脚本
+            Dim waitScript = "
+        (async function() {
+            // 等待基本DOM加载
+            if (document.readyState !== 'complete') {
+                await new Promise(resolve => {
+                    if (document.readyState === 'complete') {
+                        resolve();
+                    } else {
+                        window.addEventListener('load', resolve, { once: true });
+                    }
+                });
+            }
+
+            // 等待Vue/React等框架渲染完成
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // 检查是否有动态加载的内容
+            let retryCount = 0;
+            const maxRetries = 5;
+            
+            while (retryCount < maxRetries) {
+                // 触发滚动以加载懒加载内容
+                window.scrollTo(0, document.body.scrollHeight);
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // 检查是否有加载指示器
+                const loadingIndicators = document.querySelectorAll(
+                    '[class*=""loading""], [class*=""spinner""], [class*=""skeleton""], .loading, .spinner'
+                );
+                
+                if (loadingIndicators.length === 0) {
+                    break;
+                }
+                
+                retryCount++;
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+
+            // 滚动回顶部
+            window.scrollTo(0, 0);
+            
+            // 最后等待一点时间确保渲染完成
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            return 'ready';
+        })();
+        "
+
+            Dim result = Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(waitScript)
+            Debug.WriteLine($"页面加载等待完成: {result}")
+
+        Catch ex As Exception
+            Debug.WriteLine($"等待页面加载时出错: {ex.Message}")
+        End Try
+    End Function
+
+    ' 抓取选定元素内容
+    Private Async Function ExtractSelectedElement() As Task(Of String)
+        Try
+            Dim script = $"
+        (function() {{
+            const element = document.querySelector('{selectedDomPath}');
+            if (!element) return null;
+            
+            // 获取元素的可见文本内容，保持基本结构
+            function getCleanText(el) {{
+                if (!el) return '';
+                
+                // 克隆元素避免修改原DOM
+                const clone = el.cloneNode(true);
+                
+                // 移除脚本和样式标签
+                const scripts = clone.querySelectorAll('script, style, noscript');
+                scripts.forEach(s => s.remove());
+                
+                // 处理特殊元素
+                const links = clone.querySelectorAll('a[href]');
+                links.forEach(link => {{
+                    const href = link.getAttribute('href');
+                    if (href && !href.startsWith('#')) {{
+                        link.textContent = `${{link.textContent}} [${{href}}]`;
+                    }}
+                }});
+                
+                const images = clone.querySelectorAll('img[src], img[alt]');
+                images.forEach(img => {{
+                    const alt = img.getAttribute('alt') || '';
+                    const src = img.getAttribute('src') || '';
+                    img.outerHTML = `[图片: ${{alt || '无描述'}}]${{src ? ' - ' + src : ''}}`;
+                }});
+                
+                return clone.innerText || clone.textContent || '';
+            }}
+            
+            return getCleanText(element);
+        }})();
+        "
+
+            Dim result = Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
+            If Not String.IsNullOrEmpty(result) AndAlso result <> "null" Then
+                Return JsonConvert.DeserializeObject(Of String)(result)
+            End If
+
+            Return String.Empty
+
+        Catch ex As Exception
+            Debug.WriteLine($"抓取选定元素时出错: {ex.Message}")
+            Return String.Empty
+        End Try
+    End Function
+
+    ' 抓取完整页面内容
+    Private Async Function ExtractFullPageContent() As Task(Of String)
+        Try
+            Dim script = "
+        (function() {
+            // 智能内容提取函数
+            function extractMainContent() {
+                // 移除不需要的元素
+                const elementsToRemove = [
+                    'script', 'style', 'noscript', 'iframe', 'embed', 'object',
+                    '[style*=""display: none""]', '[style*=""visibility: hidden""]',
+                    '.advertisement', '.ads', '.ad', '[class*=""popup""]', 
+                    '[class*=""modal""]', '.cookie-banner', '.cookie-notice'
+                ];
+                
+                const clone = document.cloneNode(true);
+                const body = clone.body || clone.documentElement;
+                
+                elementsToRemove.forEach(selector => {
+                    const elements = body.querySelectorAll(selector);
+                    elements.forEach(el => el.remove());
+                });
+                
+                // 查找主要内容区域
+                const mainSelectors = [
+                    'main', 'article', '[role=""main""]', '.main-content', 
+                    '.content', '.post', '.entry', '#content', '#main'
+                ];
+                
+                let mainContent = null;
+                for (const selector of mainSelectors) {
+                    const element = body.querySelector(selector);
+                    if (element && element.textContent.trim().length > 100) {
+                        mainContent = element;
+                        break;
+                    }
+                }
+                
+                const sourceElement = mainContent || body;
+                
+                // 递归处理元素，保持结构
+                function processElement(element, level = 0) {
+                    if (!element || level > 10) return '';
+                    
+                    const tagName = element.tagName ? element.tagName.toLowerCase() : '';
+                    let result = '';
+                    
+                    // 处理不同类型的元素
+                    switch (tagName) {
+                        case 'h1':
+                        case 'h2':
+                        case 'h3':
+                        case 'h4':
+                        case 'h5':
+                        case 'h6':
+                            const headerLevel = '='.repeat(parseInt(tagName.charAt(1)));
+                            result += `\n\n${headerLevel} ${element.textContent.trim()} ${headerLevel}\n\n`;
+                            break;
+                            
+                        case 'p':
+                            const text = element.textContent.trim();
+                            if (text) result += `${text}\n\n`;
+                            break;
+                            
+                        case 'br':
+                            result += '\n';
+                            break;
+                            
+                        case 'hr':
+                            result += '\n---\n\n';
+                            break;
+                            
+                        case 'blockquote':
+                            const quote = element.textContent.trim();
+                            if (quote) result += `> ${quote}\n\n`;
+                            break;
+                            
+                        case 'ul':
+                        case 'ol':
+                            const listItems = element.querySelectorAll('li');
+                            listItems.forEach((li, index) => {
+                                const bullet = tagName === 'ul' ? '•' : `${index + 1}.`;
+                                result += `${bullet} ${li.textContent.trim()}\n`;
+                            });
+                            result += '\n';
+                            break;
+                            
+                        case 'table':
+                            result += processTable(element);
+                            break;
+                            
+                        case 'a':
+                            const href = element.getAttribute('href');
+                            const linkText = element.textContent.trim();
+                            if (href && !href.startsWith('#') && linkText) {
+                                result += `${linkText} [${href}]`;
+                            } else {
+                                result += linkText;
+                            }
+                            break;
+                            
+                        case 'img':
+                            const alt = element.getAttribute('alt') || '';
+                            const src = element.getAttribute('src') || '';
+                            result += `[图片: ${alt || '无描述'}]${src ? ` - ${src}` : ''}\n`;
+                            break;
+                            
+                        case 'div':
+                        case 'section':
+                        case 'article':
+                        case 'aside':
+                        case 'header':
+                        case 'footer':
+                        case 'nav':
+                            // 递归处理子元素
+                            for (const child of element.children) {
+                                result += processElement(child, level + 1);
+                            }
+                            // 如果没有子元素，处理文本内容
+                            if (element.children.length === 0) {
+                                const text = element.textContent.trim();
+                                if (text && text.length > 0) {
+                                    result += `${text}\n\n`;
+                                }
+                            }
+                            break;
+                            
+                        default:
+                            // 处理其他元素的文本内容
+                            const childText = element.textContent.trim();
+                            if (childText && element.children.length === 0) {
+                                result += `${childText} `;
+                            } else {
+                                // 递归处理子元素
+                                for (const child of element.children) {
+                                    result += processElement(child, level + 1);
+                                }
+                            }
+                            break;
+                    }
+                    
+                    return result;
+                }
+                
+                // 处理表格
+                function processTable(table) {
+                    let tableResult = '\n';
+                    const rows = table.querySelectorAll('tr');
+                    
+                    rows.forEach((row, rowIndex) => {
+                        const cells = row.querySelectorAll('td, th');
+                        const cellTexts = Array.from(cells).map(cell => 
+                            cell.textContent.trim().replace(/\s+/g, ' ')
+                        );
+                        
+                        if (cellTexts.length > 0) {
+                            tableResult += `| ${cellTexts.join(' | ')} |\n`;
+                            
+                            // 添加表头分隔线
+                            if (rowIndex === 0 && row.querySelector('th')) {
+                                const separator = cellTexts.map(() => '---').join(' | ');
+                                tableResult += `| ${separator} |\n`;
+                            }
+                        }
+                    });
+                    
+                    return tableResult + '\n';
+                }
+                
+                return processElement(sourceElement);
+            }
+            
+            return extractMainContent();
+        })();
+        "
+
+            Dim result = Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
+            If Not String.IsNullOrEmpty(result) AndAlso result <> "null" Then
+                Return JsonConvert.DeserializeObject(Of String)(result)
+            End If
+
+            Return String.Empty
+
+        Catch ex As Exception
+            Debug.WriteLine($"抓取完整页面时出错: {ex.Message}")
+            Return String.Empty
+        End Try
+    End Function
+
+    ' 获取页面元信息
+    Private Async Function GetPageMetaInfo() As Task(Of String)
+        Try
+            Dim script = "
+        (function() {
+            const title = document.title || '无标题';
+            const url = window.location.href;
+            const description = document.querySelector('meta[name=""description""]')?.content || '';
+            const author = document.querySelector('meta[name=""author""]')?.content || '';
+            const publishDate = document.querySelector('meta[property=""article:published_time""]')?.content || 
+                               document.querySelector('meta[name=""date""]')?.content || '';
+            
+            let info = `页面标题: ${title}\n`;
+            info += `页面链接: ${url}\n`;
+            if (description) info += `页面描述: ${description}\n`;
+            if (author) info += `作者: ${author}\n`;
+            if (publishDate) info += `发布时间: ${publishDate}\n`;
+            info += `抓取时间: ${new Date().toLocaleString('zh-CN')}\n`;
+            info += '----------------------------------------';
+            
+            return info;
+        })();
+        "
+
+            Dim result = Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
+            If Not String.IsNullOrEmpty(result) AndAlso result <> "null" Then
+                Return JsonConvert.DeserializeObject(Of String)(result)
+            End If
+
+            Return "页面信息获取失败"
+
+        Catch ex As Exception
+            Debug.WriteLine($"获取页面信息时出错: {ex.Message}")
+            Return "页面信息获取失败"
+        End Try
+    End Function
+
+    ' 清理和格式化内容
+    Private Function CleanAndFormatContent(content As String) As String
+        If String.IsNullOrWhiteSpace(content) Then
+            Return String.Empty
+        End If
+
+        Try
+            ' 基本清理
+            Dim cleaned = content.Trim()
+
+            ' 移除多余的空行（超过2个连续换行符替换为2个）
+            cleaned = Regex.Replace(cleaned, "\n{3,}", vbCrLf & vbCrLf)
+
+            ' 移除行首行尾空格
+            Dim lines = cleaned.Split({vbCrLf, vbLf}, StringSplitOptions.None)
+            For i = 0 To lines.Length - 1
+                lines(i) = lines(i).Trim()
+            Next
+            cleaned = String.Join(vbCrLf, lines)
+
+            ' 移除开头和结尾的多余换行
+            cleaned = cleaned.Trim()
+
+            ' 限制最大长度（防止内容过长）
+            If cleaned.Length > 50000 Then
+                cleaned = cleaned.Substring(0, 50000) & vbCrLf & vbCrLf & "... [内容过长，已截断]"
+            End If
+
+            Return cleaned
+
+        Catch ex As Exception
+            Debug.WriteLine($"清理内容时出错: {ex.Message}")
+            Return content
+        End Try
+    End Function
+
+    ' 修改抓取HTML代码方法 - 支持大文件处理
+    Private Async Function CaptureHtmlContent() As Task
+        Try
+            isCapturing = True
+            CaptureButton.Text = "抓取HTML中..."
+            CaptureButton.Enabled = False
+
+            ' 等待页面完全渲染
+            Await EnsurePageFullyLoaded()
+
+            ' 获取渲染后的HTML内容
+            Dim htmlContent As String
+
+            If Not String.IsNullOrEmpty(selectedDomPath) Then
+                ' 抓取选定元素的HTML
+                htmlContent = Await ExtractSelectedElementHtml()
+            Else
+                ' 抓取整个页面的HTML
+                htmlContent = Await ExtractFullPageHtml()
+            End If
+
+            If Not String.IsNullOrEmpty(htmlContent) Then
+                Debug.WriteLine($"获取到HTML内容，长度: {htmlContent.Length} 字符")
+
+                ' 检查内容大小，决定处理方式
+                If htmlContent.Length > 200000 Then ' 200KB
+                    Dim choice = MessageBox.Show(
+                    $"HTML内容很大 ({htmlContent.Length:N0} 字符)，选择处理方式：" & vbCrLf & vbCrLf &
+                    "【是】- 完整显示（可能较慢）" & vbCrLf &
+                    "【否】- 保存到文件" & vbCrLf &
+                    "【取消】- 截断显示",
+                    "大文件处理",
+                    MessageBoxButtons.YesNoCancel,
+                    MessageBoxIcon.Question)
+
+                    Select Case choice
+                        Case DialogResult.Yes
+                            ' 完整处理
+                            Await ProcessLargeHtmlContent(htmlContent)
+                        Case DialogResult.No
+                            ' 保存到文件
+                            Await SaveHtmlToFile(htmlContent)
+                        Case DialogResult.Cancel
+                            ' 截断处理
+                            Await ProcessTruncatedHtmlContent(htmlContent)
+                    End Select
+                Else
+                    ' 正常处理
+                    Await ProcessNormalHtmlContent(htmlContent)
+                End If
+
+            Else
+                MessageBox.Show("未能获取到有效的HTML内容", "提示")
+            End If
+
+        Catch ex As Exception
+            Debug.WriteLine($"抓取HTML内容时出错: {ex.Message}")
+            MessageBox.Show($"抓取HTML内容时出错: {ex.Message}", "错误")
+        Finally
+            isCapturing = False
+            CaptureButton.Text = "抓取内容"
+            CaptureButton.Enabled = True
+        End Try
+    End Function
+
+    ' 处理大HTML内容
+    Private Async Function ProcessLargeHtmlContent(htmlContent As String) As Task
+        Try
+            ' 在后台线程处理格式化以避免UI卡死
+            Dim formattedHtml As String = Nothing
+
+            Await Task.Run(Sub()
+                               formattedHtml = FormatHtmlContent(htmlContent)
+                           End Sub)
+
+            ' 添加页面信息头部
+            Dim pageInfo = Await GetPageMetaInfo()
+            Dim finalContent = pageInfo & vbCrLf & vbCrLf &
+                          "========== 大型HTML代码内容 ==========" & vbCrLf &
+                          $"原始大小: {htmlContent.Length:N0} 字符" & vbCrLf &
+                          $"格式化后: {formattedHtml.Length:N0} 字符" & vbCrLf & vbCrLf &
+                          formattedHtml
+
+            HandleExtractedContent(finalContent)
+            MessageBox.Show("大型HTML内容处理完成！", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information)
+
+        Catch ex As Exception
+            MessageBox.Show($"处理大型HTML内容时出错: {ex.Message}", "错误")
+        End Try
+    End Function
+
+    ' 保存HTML到文件
+    Private Async Function SaveHtmlToFile(htmlContent As String) As Task
+        Try
+            Using saveDialog As New SaveFileDialog()
+                saveDialog.Filter = "HTML文件 (*.html)|*.html|所有文件 (*.*)|*.*"
+                saveDialog.DefaultExt = "html"
+                saveDialog.FileName = $"captured_page_{DateTime.Now:yyyyMMdd_HHmmss}.html"
+
+                If saveDialog.ShowDialog() = DialogResult.OK Then
+                    ' 在后台线程保存文件
+                    Await Task.Run(Sub()
+                                       File.WriteAllText(saveDialog.FileName, htmlContent, Encoding.UTF8)
+                                   End Sub)
+
+                    ' 同时在文档中插入文件信息
+                    Dim pageInfo = Await GetPageMetaInfo()
+                    Dim fileInfo = $"{pageInfo}{vbCrLf}{vbCrLf}" &
+                              "========== HTML文件已保存 ==========" & vbCrLf &
+                              $"文件路径: {saveDialog.FileName}" & vbCrLf &
+                              $"文件大小: {htmlContent.Length:N0} 字符" & vbCrLf &
+                              $"保存时间: {DateTime.Now:yyyy-MM-dd HH:mm:ss}" & vbCrLf
+
+                    HandleExtractedContent(fileInfo)
+                    MessageBox.Show($"HTML内容已保存到：{vbCrLf}{saveDialog.FileName}", "保存成功")
+                End If
+            End Using
+
+        Catch ex As Exception
+            MessageBox.Show($"保存HTML文件时出错: {ex.Message}", "错误")
+        End Try
+    End Function
+
+    ' 处理截断的HTML内容
+    Private Async Function ProcessTruncatedHtmlContent(htmlContent As String) As Task
+        Try
+            ' 截断处理，但保留结构完整性
+            Dim truncatedHtml = TruncateHtmlSafely(htmlContent, 100000)
+            Dim formattedHtml = FormatHtmlContent(truncatedHtml)
+
+            Dim pageInfo = Await GetPageMetaInfo()
+            Dim finalContent = pageInfo & vbCrLf & vbCrLf &
+                          "========== HTML代码内容（已截断） ==========" & vbCrLf &
+                          $"原始大小: {htmlContent.Length:N0} 字符" & vbCrLf &
+                          $"显示大小: {formattedHtml.Length:N0} 字符" & vbCrLf & vbCrLf &
+                          formattedHtml & vbCrLf & vbCrLf &
+                          "... [内容过长，已截断，完整内容请选择保存到文件]"
+
+            HandleExtractedContent(finalContent)
+            MessageBox.Show("HTML内容已截断显示！", "完成", MessageBoxButtons.OK, MessageBoxIcon.Information)
+
+        Catch ex As Exception
+            MessageBox.Show($"处理截断HTML内容时出错: {ex.Message}", "错误")
+        End Try
+    End Function
+
+    ' 处理正常大小的HTML内容
+    Private Async Function ProcessNormalHtmlContent(htmlContent As String) As Task
+        Try
+            Dim formattedHtml = FormatHtmlContent(htmlContent)
+            Dim pageInfo = Await GetPageMetaInfo()
+            Dim finalContent = pageInfo & vbCrLf & vbCrLf &
+                          "========== HTML代码内容 ==========" & vbCrLf & vbCrLf &
+                          formattedHtml
+
+            HandleExtractedContent(finalContent)
+            'MessageBox.Show("HTML代码抓取完成！", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information)
+
+        Catch ex As Exception
+            MessageBox.Show($"处理HTML内容时出错: {ex.Message}", "错误")
+        End Try
+    End Function
+
+    ' 安全截断HTML内容，保持标签完整性
+    Private Function TruncateHtmlSafely(htmlContent As String, maxLength As Integer) As String
+        If htmlContent.Length <= maxLength Then
+            Return htmlContent
+        End If
+
+        Try
+            ' 找到合适的截断点（在标签之间）
+            Dim truncatePos = maxLength
+            While truncatePos > 0 AndAlso htmlContent(truncatePos) <> ">"c
+                truncatePos -= 1
+            End While
+
+            If truncatePos > 0 Then
+                Return htmlContent.Substring(0, truncatePos + 1)
+            Else
+                Return htmlContent.Substring(0, maxLength)
+            End If
+
+        Catch ex As Exception
+            Return htmlContent.Substring(0, Math.Min(maxLength, htmlContent.Length))
+        End Try
+    End Function
+
+    ' 抓取选定元素的HTML代码
+    Private Async Function ExtractSelectedElementHtml() As Task(Of String)
+        Try
+            Dim script = $"
+        (function() {{
+            const element = document.querySelector('{selectedDomPath}');
+            if (!element) return null;
+            
+            // 获取元素的完整HTML，包括所有属性和子元素
+            function getElementHtml(el) {{
+                if (!el) return '';
+                
+                // 克隆元素以避免修改原DOM
+                const clone = el.cloneNode(true);
+                
+                // 清理一些可能影响显示的内联样式
+                function cleanElement(element) {{
+                    // 移除一些调试相关的属性
+                    element.removeAttribute('data-reactid');
+                    element.removeAttribute('data-react-checksum');
+                    
+                    // 递归处理子元素
+                    Array.from(element.children).forEach(child => {{
+                        cleanElement(child);
+                    }});
+                }}
+                
+                cleanElement(clone);
+                
+                // 返回格式化的HTML
+                return clone.outerHTML;
+            }}
+            
+            return getElementHtml(element);
+        }})();
+        "
+
+            Dim result = Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
+            If Not String.IsNullOrEmpty(result) AndAlso result <> "null" Then
+                Return JsonConvert.DeserializeObject(Of String)(result)
+            End If
+
+            Return String.Empty
+
+        Catch ex As Exception
+            Debug.WriteLine($"抓取选定元素HTML时出错: {ex.Message}")
+            Return String.Empty
+        End Try
+    End Function
+
+    ' 最简单有效的解决方案 - 去掉JSON序列化的限制
+    Private Async Function ExtractFullPageHtml() As Task(Of String)
+        Try
+            ' 首先检查内容大小
+            Dim sizeCheckScript = "document.documentElement.outerHTML.length;"
+            Dim sizeResult = Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(sizeCheckScript)
+            Dim contentSize = CInt(sizeResult)
+
+            Debug.WriteLine($"HTML内容大小: {contentSize:N0} 字符")
+
+            If contentSize > 2000000 Then ' 2MB
+                ' 内容太大，提示用户
+                Dim choice = MessageBox.Show(
+                $"HTML内容非常大 ({contentSize:N0} 字符)，可能会导致传输问题。" & vbCrLf & vbCrLf &
+                "建议选择：" & vbCrLf &
+                "【是】- 尝试完整传输（可能失败）" & vbCrLf &
+                "【否】- 使用简化HTML" & vbCrLf &
+                "【取消】- 取消操作",
+                "内容过大警告",
+                MessageBoxButtons.YesNoCancel,
+                MessageBoxIcon.Warning)
+
+                Select Case choice
+                    Case DialogResult.No
+                        Return Await ExtractSimplifiedHtml()
+                    Case DialogResult.Cancel
+                        Return String.Empty
+                End Select
+            End If
+
+            ' 尝试直接获取（无JSON包装）
+            Dim script = "
+        (function() {
+            const docClone = document.cloneNode(true);
+            
+            // 清理不需要的元素
+            const elementsToRemove = [
+                'script[src*=""webview""]',
+                'script[src*=""devtools""]', 
+                '.inspector-overlay',
+                '[data-inspector]'
+            ];
+            
+            elementsToRemove.forEach(selector => {
+                const elements = docClone.querySelectorAll(selector);
+                elements.forEach(el => el.remove());
+            });
+            
+            const head = docClone.head ? docClone.head.outerHTML : '';
+            const body = docClone.body ? docClone.body.outerHTML : '';
+            
+            let fullHtml = '<!DOCTYPE html>\\n<html';
+            
+            if (document.documentElement.attributes) {
+                Array.from(document.documentElement.attributes).forEach(attr => {
+                    fullHtml += ` ${attr.name}=\""${attr.value}\""`;
+                });
+            }
+            
+            fullHtml += '>\\n' + head + '\\n' + body + '\\n</html>';
+            
+            return fullHtml;
+        })();
+        "
+
+            Dim result = Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
+            If Not String.IsNullOrEmpty(result) AndAlso result <> "null" Then
+                ' 直接反序列化，不需要额外包装
+                Dim htmlContent = JsonConvert.DeserializeObject(Of String)(result)
+                Debug.WriteLine($"HTML传输成功，最终长度: {htmlContent.Length:N0} 字符")
+                Return htmlContent
+            End If
+
+            Return String.Empty
+
+        Catch ex As Exception
+            Debug.WriteLine($"抓取HTML时出错: {ex.Message}")
+            ' 降级到简化版本
+            Return CreateSimplifiedHtml()
+        End Try
+    End Function
+
+    ' 添加缺失的简化HTML创建方法
+    Private Function CreateSimplifiedHtml() As String
+        Try
+            Dim simplified = $"<!DOCTYPE html>
+<html>
+<head>
+    <title>页面内容（简化版）</title>
+    <meta charset='utf-8'>
+</head>
+<body>
+    <h1>页面内容（简化版）</h1>
+    <p>原始页面过大，这是简化版本</p>
+    <p>页面URL: {ChatBrowser.CoreWebView2?.Source}</p>
+    <p>页面标题: {ChatBrowser.CoreWebView2?.DocumentTitle}</p>
+    <hr>
+    <div>由于原始HTML内容过大，无法完整传输。请考虑使用文本抓取模式或保存到文件。</div>
+</body>
+</html>"
+
+            Return simplified
+
+        Catch ex As Exception
+            Debug.WriteLine($"创建简化HTML时出错: {ex.Message}")
+            Return "<!DOCTYPE html><html><head><title>错误</title></head><body><h1>HTML抓取失败</h1><p>无法获取页面内容</p></body></html>"
+        End Try
+    End Function
+    ' 简化版HTML提取（移除大部分内容）
+    Private Async Function ExtractSimplifiedHtml() As Task(Of String)
+        Try
+            Dim script = "
+        (function() {
+            const simplified = document.createElement('html');
+            simplified.innerHTML = `
+                <head>
+                    <title>${document.title}</title>
+                    <meta charset='utf-8'>
+                </head>
+                <body>
+                    <h1>页面内容（简化版）</h1>
+                    <p>原始页面过大，这是简化版本</p>
+                    <p>页面URL: ${window.location.href}</p>
+                    <p>页面标题: ${document.title}</p>
+                    <hr>
+                    <div>${document.body.innerText.substring(0, 5000)}</div>
+                </body>
+            `;
+            return simplified.outerHTML;
+        })();
+        "
+
+            Dim result = Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
+            If Not String.IsNullOrEmpty(result) AndAlso result <> "null" Then
+                Return JsonConvert.DeserializeObject(Of String)(result)
+            End If
+
+            Return String.Empty
+
+        Catch ex As Exception
+            Debug.WriteLine($"获取简化HTML时出错: {ex.Message}")
+            Return String.Empty
+        End Try
+    End Function
+    ' 格式化HTML内容
+    Private Function FormatHtmlContent(htmlContent As String) As String
+        If String.IsNullOrWhiteSpace(htmlContent) Then
+            Return String.Empty
+        End If
+
+        Try
+            ' 使用HtmlAgilityPack格式化HTML
+            Dim doc As New HtmlDocument()
+            doc.LoadHtml(htmlContent)
+
+            ' 格式化设置
+            doc.OptionOutputAsXml = False
+            doc.OptionAutoCloseOnEnd = True
+            doc.OptionFixNestedTags = True
+
+            ' 获取格式化后的HTML
+            Dim formattedHtml As String
+
+            Using stringWriter As New StringWriter()
+                doc.Save(stringWriter)
+                formattedHtml = stringWriter.ToString()
+            End Using
+
+            ' 基本的格式化处理
+            formattedHtml = formattedHtml.Replace("><", ">" & vbCrLf & "<")
+
+            ' 添加适当的缩进
+            Dim lines = formattedHtml.Split({vbCrLf, vbLf}, StringSplitOptions.None)
+            Dim indentLevel = 0
+            Dim formattedLines As New List(Of String)
+
+            For Each line In lines
+                Dim trimmedLine = line.Trim()
+                If String.IsNullOrEmpty(trimmedLine) Then Continue For
+
+                ' 减少缩进（闭合标签）
+                If trimmedLine.StartsWith("</") Then
+                    indentLevel = Math.Max(0, indentLevel - 1)
+                End If
+
+                ' 添加缩进
+                Dim indent = New String(" "c, indentLevel * 2)
+                formattedLines.Add(indent & trimmedLine)
+
+                ' 增加缩进（开放标签，但不是自闭合标签）
+                If trimmedLine.StartsWith("<") AndAlso
+               Not trimmedLine.StartsWith("</") AndAlso
+               Not trimmedLine.EndsWith("/>") AndAlso
+               Not trimmedLine.Contains("<img ") AndAlso
+               Not trimmedLine.Contains("<br") AndAlso
+               Not trimmedLine.Contains("<hr") AndAlso
+               Not trimmedLine.Contains("<input ") AndAlso
+               Not trimmedLine.Contains("<meta ") AndAlso
+               Not trimmedLine.Contains("<link ") Then
+                    indentLevel += 1
+                End If
+            Next
+
+            formattedHtml = String.Join(vbCrLf, formattedLines)
+
+            ' 限制长度
+            'If formattedHtml.Length > 100000 Then
+            '    formattedHtml = formattedHtml.Substring(0, 100000) &
+            '               vbCrLf & vbCrLf & "... [HTML内容过长，已截断]"
+            'End If
+
+            Return formattedHtml
+
+        Catch ex As Exception
+            Debug.WriteLine($"格式化HTML时出错: {ex.Message}")
+            ' 如果格式化失败，返回原始内容
+            Return htmlContent
+        End Try
+    End Function
 
     ' 添加表格数据模型
     Protected Class TableData

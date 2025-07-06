@@ -1,23 +1,11 @@
-<!DOCTYPE html>
+ï»¿<!DOCTYPE html>
 <html>
 <head>
     <meta charset="GBK">
     <title>Excel Ai Chat Content</title>
-<!-- ÏÈ¼ÓÔØºËĞÄ¿â -->
+<!-- å…ˆåŠ è½½æ ¸å¿ƒåº“ -->
 <script src="https://officeai.local/js/highlight.min.js"></script>
 <link rel="stylesheet" href="https://officeai.local/css/github.min.css">
-<!-- È·±£ºËĞÄ¿â¼ÓÔØÍê³ÉºóÔÙ¼ÓÔØÓïÑÔ°ü -->
-<script>
-    // Ìí¼Óµ÷ÊÔÈÕÖ¾
-    console.log('Initializing scripts...');
-    
-    // ¼ì²é highlight.js ÊÇ·ñ¼ÓÔØ
-    if (typeof hljs !== 'undefined') {
-        console.log('highlight.js loaded successfully');
-    } else {
-        console.error('highlight.js not loaded');
-    }
-</script>
 <script src="https://officeai.local/js/marked.min.js"></script>
 <script src="https://officeai.local/js/vbscript.min.js"></script>
 
@@ -133,7 +121,7 @@
             margin: 0.5em 0;
         }
 
-        /* ·¢ÆğÈËĞÅÏ¢ÑùÊ½ */
+        /* å‘èµ·äººä¿¡æ¯æ ·å¼ */
         .message-header {
             display: flex;
             align-items: center;
@@ -286,7 +274,7 @@
             line-height: 1.6;
         }
 
-        /* ´úÂë¿éÑùÊ½ÓÅ»¯ */
+        /* ä»£ç å—æ ·å¼ä¼˜åŒ– */
         pre {
             background-color: #f6f8fa;
             border-radius: 6px;
@@ -328,10 +316,10 @@
         }
 
         .code-block {
-            margin-top: -1px; /* È·±£ºÍtoggle-labelÎŞ·ìÏÎ½Ó */
+            margin-top: -1px; /* ç¡®ä¿å’Œtoggle-labelæ— ç¼è¡”æ¥ */
         }
 
-        /* ¶¯»­Ğ§¹û */
+        /* åŠ¨ç”»æ•ˆæœ */
         @keyframes fadeIn {
             from {
                 opacity: 0;
@@ -346,7 +334,7 @@
             animation: fadeIn 0.3s ease-in-out;
         }
 
-        /* µ±ÄÚÈİ³¬¹ıÒ»¶¨¸ß¶ÈÊ±×Ô¶¯µ÷ÕûÈİÆ÷¸ß¶È */
+        /* å½“å†…å®¹è¶…è¿‡ä¸€å®šé«˜åº¦æ—¶è‡ªåŠ¨è°ƒæ•´å®¹å™¨é«˜åº¦ */
         .reasoning-container:not(.collapsed) {
             display: flex;
             flex-direction: column;
@@ -461,10 +449,10 @@
             flex-direction: column;
             gap: 6px;
         }
-        /* ÌáÊ¾´Ê½¨ÒéÑùÊ½ */
+        /* æç¤ºè¯å»ºè®®æ ·å¼ */
         #prompt-suggestions {
             border: 1px solid #e0e0e0;
-            border-bottom: none; /* ±ÜÃâÓëtextareaÉÏ±ß¿òÖØ¸´ */
+            border-bottom: none; /* é¿å…ä¸textareaä¸Šè¾¹æ¡†é‡å¤ */
             border-radius: 6px 6px 0 0;
             max-height: 150px;
             overflow-y: auto;
@@ -582,53 +570,53 @@
         }
         #references-wrapper {
             width: 100%;
-            background: #f8f9fa; /* Ç³»ÒÉ«±³¾°£¬Ê¹ÆäÓëÊäÈëÇøÓòÂÔÓĞÇø·Ö */
-            border-radius: 8px; /* Ô²½ÇÓëÊäÈë¿òĞ­µ÷ */
-            padding: 8px 12px; /* ÄÚ²¿Áô°× */
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05); /* ÇáÎ¢ÒõÓ°Ôö¼Ó²ã´Î¸Ğ */
-            margin-bottom: 8px; /* ÓëÏÂ·½ÔªËØµÄ¼ä¾à */
+            background: #f8f9fa; /* æµ…ç°è‰²èƒŒæ™¯ï¼Œä½¿å…¶ä¸è¾“å…¥åŒºåŸŸç•¥æœ‰åŒºåˆ† */
+            border-radius: 8px; /* åœ†è§’ä¸è¾“å…¥æ¡†åè°ƒ */
+            padding: 8px 12px; /* å†…éƒ¨ç•™ç™½ */
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05); /* è½»å¾®é˜´å½±å¢åŠ å±‚æ¬¡æ„Ÿ */
+            margin-bottom: 8px; /* ä¸ä¸‹æ–¹å…ƒç´ çš„é—´è· */
             box-sizing: border-box;
         }
 
-        /* ÒıÓÃÇøÓò±êÌâ ("ÒıÓÃ:") */
-        .reference-section-title { /* ´ËÀàÃûÒÑÔÚHTMLÖĞÖ¸¶¨¸øĞÂµÄ span#references-title */
-            font-size: 13px; /* ÉÔÎ¢Ôö´ó×ÖºÅ */
-            color: #333; /* Éî»ÒÉ«£¬¸üÇåÎú */
-            margin-bottom: 8px; /* ±êÌâÓëĞ¾Æ¬Ö®¼äµÄ¼ä¾à */
+        /* å¼•ç”¨åŒºåŸŸæ ‡é¢˜ ("å¼•ç”¨:") */
+        .reference-section-title { /* æ­¤ç±»åå·²åœ¨HTMLä¸­æŒ‡å®šç»™æ–°çš„ span#references-title */
+            font-size: 13px; /* ç¨å¾®å¢å¤§å­—å· */
+            color: #333; /* æ·±ç°è‰²ï¼Œæ›´æ¸…æ™° */
+            margin-bottom: 8px; /* æ ‡é¢˜ä¸èŠ¯ç‰‡ä¹‹é—´çš„é—´è· */
             display: block;
             font-weight: 500;
         }
 
-        /* °üº¬ËùÓĞÒıÓÃÏî (chips) µÄÈİÆ÷ */
-        .reference-chips-container { /* ´ËÀàÃûÒÑÔÚHTMLÖĞÖ¸¶¨¸øĞÂµÄ div#reference-chips-list */
-            max-height: 70px; /* µ÷Õû×î´ó¸ß¶ÈÒÔÊÊÓ¦ÄÚÈİ */
+        /* åŒ…å«æ‰€æœ‰å¼•ç”¨é¡¹ (chips) çš„å®¹å™¨ */
+        .reference-chips-container { /* æ­¤ç±»åå·²åœ¨HTMLä¸­æŒ‡å®šç»™æ–°çš„ div#reference-chips-list */
+            max-height: 70px; /* è°ƒæ•´æœ€å¤§é«˜åº¦ä»¥é€‚åº”å†…å®¹ */
             overflow-y: auto;
             width: 100%;
             line-height: 0;
             padding-top: 2px;
         }
 
-        /* µ¥¸öÒıÓÃÏî (chip) */
+        /* å•ä¸ªå¼•ç”¨é¡¹ (chip) */
         .reference-chip {
             display: inline-block;
             vertical-align: top;
-            background-color: #e9ecef; /* µ÷Õûchip±³¾°É« */
-            border: 1px solid #ced4da; /* µ÷Õûchip±ß¿òÉ« */
+            background-color: #e9ecef; /* è°ƒæ•´chipèƒŒæ™¯è‰² */
+            border: 1px solid #ced4da; /* è°ƒæ•´chipè¾¹æ¡†è‰² */
             border-radius: 16px;
-            padding: 4px 10px 5px 10px; /* Î¢µ÷ÄÚ±ß¾à */
-            font-size: 12px; /* µ÷Õû×ÖÌå´óĞ¡ */
-            color: #212529; /* µ÷ÕûÎÄ×ÖÑÕÉ« */
-            box-shadow: none; /* ÒÆ³ıµ¥¸öchipµÄÒõÓ°£¬ÓÉÍâ²¿wrapperÍ³Ò»´¦Àí */
+            padding: 4px 10px 5px 10px; /* å¾®è°ƒå†…è¾¹è· */
+            font-size: 12px; /* è°ƒæ•´å­—ä½“å¤§å° */
+            color: #212529; /* è°ƒæ•´æ–‡å­—é¢œè‰² */
+            box-shadow: none; /* ç§»é™¤å•ä¸ªchipçš„é˜´å½±ï¼Œç”±å¤–éƒ¨wrapperç»Ÿä¸€å¤„ç† */
             transition: background-color 0.2s, border-color 0.2s;
             margin-right: 6px;
             margin-bottom: 6px;
             line-height: normal;
-            max-width: 230px; /* ÏŞÖÆµ¥¸öchipµÄ×î´ó¿í¶È */
-            cursor: default; /* Ä¬ÈÏ¹â±ê */
+            max-width: 230px; /* é™åˆ¶å•ä¸ªchipçš„æœ€å¤§å®½åº¦ */
+            cursor: default; /* é»˜è®¤å…‰æ ‡ */
         }
 
         .reference-chip:hover {
-            background-color: #dee2e6; /* hoverÊ±ÑÕÉ«¼ÓÉî */
+            background-color: #dee2e6; /* hoveræ—¶é¢œè‰²åŠ æ·± */
             border-color: #adb5bd;
         }
 
@@ -648,7 +636,7 @@
 
         .reference-chip-remove {
             cursor: pointer;
-            color: #6c757d; /* ÒÆ³ı°´Å¥ÑÕÉ«µ÷Õû */
+            color: #6c757d; /* ç§»é™¤æŒ‰é’®é¢œè‰²è°ƒæ•´ */
             font-size: 15px;
             border: none;
             background: none;
@@ -661,12 +649,12 @@
         }
 
         .reference-chip-remove:hover {
-            color: #343a40; /* hoverÊ±ÒÆ³ı°´Å¥ÑÕÉ«¼ÓÉî */
+            color: #343a40; /* hoveræ—¶ç§»é™¤æŒ‰é’®é¢œè‰²åŠ æ·± */
         }
         .reference-chip-remove svg {
             width: 16px;
             height: 16px;
-            fill: currentColor; /* Ê¹SVGÑÕÉ«Ëæ¸¸ÔªËØcolorÊôĞÔ±ä»¯ */
+            fill: currentColor; /* ä½¿SVGé¢œè‰²éšçˆ¶å…ƒç´ colorå±æ€§å˜åŒ– */
         }
 
         .reference-container {
@@ -735,21 +723,24 @@
         }
 
         #stop-button {
-            background: #e9525f;
+            background: #e9525f !important;
             border: none;
             border-radius: 6px;
-            padding: 6px; /* µ÷ÕûpaddingÊ¹°´Å¥¸ü½ô´Õ */
+            padding: 6px;
             cursor: pointer;
-            display: none;   
+            display: none !important;
             align-items: center;
-            justify-content: center; /* ¾ÓÖĞÏÔÊ¾·½¿é */
+            justify-content: center;
             transition: background-color 0.2s;
+            color: white;
         }
 
         #stop-button:hover {
             background: #c82333;
         }
-
+        #stop-button svg {
+            display: block;
+        }
         .message-footer {
             margin-left: 42px;
             margin-top: 8px;
@@ -766,7 +757,7 @@
             color: #4a6fa5;
         }
 
-        /* ÉèÖÃ°´Å¥ÑùÊ½ */
+        /* è®¾ç½®æŒ‰é’®æ ·å¼ */
         #settings-button {
             background: none;
             border: none;
@@ -783,7 +774,7 @@
                 color: #4a6fa5;
             }
 
-        /* ÉèÖÃdialog¶Ô»°¿òÑùÊ½ */
+        /* è®¾ç½®dialogå¯¹è¯æ¡†æ ·å¼ */
         .settings-dialog {
             display: none;
             position: fixed;
@@ -810,7 +801,7 @@
         }
 
         .setting-item.checkbox-item {
-            display: block; /* ¸ÄÎª¿é¼¶ÏÔÊ¾¶ø²»ÊÇ flex */
+            display: block; /* æ”¹ä¸ºå—çº§æ˜¾ç¤ºè€Œä¸æ˜¯ flex */
         }
 
         .setting-item.checkbox-item .setting-label {
@@ -919,7 +910,7 @@
             z-index: 999;
         }
 
-        /**¸½¼şÏÔÊ¾ÇøÓò*/
+        /**é™„ä»¶æ˜¾ç¤ºåŒºåŸŸ*/
         #chat-input-actions button {
             background: none;
             border: none;
@@ -963,7 +954,7 @@
             padding: 4px;
         }
 
-        /* ¸½¼şÏÔÊ¾ÇøÓòÑùÊ½ */
+        /* é™„ä»¶æ˜¾ç¤ºåŒºåŸŸæ ·å¼ */
         #attached-files-list .attached-file-item {
             display: none !important;
             justify-content: space-between;
@@ -998,7 +989,7 @@
             fill: #b71c1c;
         }
 
-        /**ÁÄÌìÄÚÈİÒıÓÃµÄÂß¼­*/
+        /**èŠå¤©å†…å®¹å¼•ç”¨çš„é€»è¾‘*/
         .chat-message-references {
             margin-top: 10px;
             border: 1px solid #e0e5eb;
@@ -1065,24 +1056,196 @@
         .chat-message-reference-content div:last-child {
             margin-bottom: 0;
         }
+
+        /* å†å²è®°å½•ä¾§è¾¹æ æ ·å¼ */
+        #history-sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 320px;
+            height: 100vh;
+            background: white;
+            box-shadow: 2px 0 15px rgba(0,0,0,0.1);
+            transform: translateX(-100%);
+            transition: transform 0.3s ease;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+        }
+
+            #history-sidebar.sidebar-visible {
+                transform: translateX(0);
+            }
+
+        .sidebar-header {
+            padding: 10px;
+            border-bottom: 1px solid #e6e6e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f8f9fa;
+        }
+
+            .sidebar-header h3 {
+                margin: 0;
+                color: #333;
+                font-size: 16px;
+                font-weight: 500;
+            }
+
+        #close-sidebar-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: #666;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+
+            #close-sidebar-btn:hover {
+                background: #e9ecef;
+                color: #333;
+            }
+
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0;
+        }
+
+        #history-list {
+            padding: 0;
+        }
+
+        .history-item {
+            padding: 12px 20px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+            .history-item:hover {
+                background: #f8f9fa;
+            }
+
+            .history-item:last-child {
+                border-bottom: none;
+            }
+
+        .history-item-title {
+            font-size: 14px;
+            color: #333;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .history-item-date {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .history-item-size {
+            font-size: 11px;
+            color: #999;
+        }
+
+        /* é®ç½©å±‚ */
+        #sidebar-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0,0,0,0.5);
+            z-index: 999;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+            #sidebar-overlay.overlay-visible {
+                opacity: 1;
+                visibility: visible;
+            }
+
+        /* ç©ºçŠ¶æ€æ ·å¼ */
+        .empty-state {
+            padding: 40px 20px;
+            text-align: center;
+            color: #666;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            color: #ccc;
+            margin-bottom: 16px;
+        }
+
+        .empty-state-text {
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        /* åŠ è½½çŠ¶æ€ */
+        .loading-state {
+            padding: 20px;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+        }
+
+        /* å†å²è®°å½•æŒ‰é’®æ ·å¼ - ä¸å…¶ä»–æŒ‰é’®ä¿æŒä¸€è‡´ */
+        #history-toggle-btn {
+            background: none;
+            border: none;
+            padding: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            transition: color 0.2s, background-color 0.2s;
+        }
+
+            #history-toggle-btn:hover {
+                color: #4a6fa5;
+                background-color: #f0f0f0;
+            }
+
+        /* å“åº”å¼è°ƒæ•´ */
+        @media (max-width: 768px) {
+            #history-sidebar {
+                width: 280px;
+            }
+        }
     </style>
 </head>
 <body>
-
-
     <div id="case-container">
         <div id="case-header">
-            <h3>ÖÇÄÜÁÄÌìÄ£Ê½ËµÃ÷</h3>
+            <h3>æ™ºèƒ½èŠå¤©æ¨¡å¼è¯´æ˜</h3>
         </div>
         <div id="case-content">
             <div id="case-info">
-                <p>1.ÊÔÊÔ°´#ºÅ¿ìËÙÌáÎÊ</p>
-                <p>2.»á»°ÒÑ×Ô¶¯¿ªÆôÉÏÏÂÎÄ£¬Äú¿ÉÍ¨¹ı²»¶ÏÌáÎÊ¾ÀÕıAIµÄ»Ø´ğ</p>
-                <p>3.Ê¹ÓÃÇ°ÇëÅäÖÃ´óÄ£ĞÍApi£¬<a href="https://cloud.siliconflow.cn/i/PGhr3knx" target="_blank">µã´ËÈ¡Ãâ·Ñ¶î¶È</a></p>
-                <p>4.ÅäÖÃ´óÄ£ĞÍÌáÊ¾´ÊÄÜ¹»¸ü¿ì£¬¸ü×¼È·µÄµÃµ½ÄãÏëÒªµÄ´ğ°¸</p>
-                <p>5.Èç¹ûÃ»½â¾öÄãµÄÍ´µã£¬<a href="https://jsj.top/f/OZJDfa" target="_blank">µã»÷´Ë´¦Ìá³öĞèÇó</a>£¬ÏÂ¸ö°æ±¾¼û</p>
-                <p>6.ÁÄÌì¼ÇÂ¼´æ·ÅÔÚ¡°µ±Ç°ÓÃ»§/ÎÄµµ/OfficeAiAppData¡±Ä¿Â¼ÏÂ</p>
-                <p>7.µ±Ç°°æ±¾:<span id="version">2.5.1</span>£¬<a href="https://www.officeso.cn" target="_blank">Ã¿ÔÂ·¢²¼ĞÂ¹¦ÄÜ</a></p>
+                <p>1.è¯•è¯•æŒ‰#å·å¿«é€Ÿæé—®</p>
+                <p>2.ä¼šè¯å·²è‡ªåŠ¨å¼€å¯ä¸Šä¸‹æ–‡ï¼Œæ‚¨å¯é€šè¿‡ä¸æ–­æé—®çº æ­£AIçš„å›ç­”</p>
+                <p>3.ä½¿ç”¨å‰è¯·é…ç½®å¤§æ¨¡å‹Apiï¼Œ<a href="https://cloud.siliconflow.cn/i/PGhr3knx" target="_blank">ç‚¹æ­¤å–å…è´¹é¢åº¦</a></p>
+                <p>4.é…ç½®å¤§æ¨¡å‹æç¤ºè¯èƒ½å¤Ÿæ›´å¿«ï¼Œæ›´å‡†ç¡®çš„å¾—åˆ°ä½ æƒ³è¦çš„ç­”æ¡ˆ</p>
+                <p>5.å¦‚æœæ²¡è§£å†³ä½ çš„ç—›ç‚¹ï¼Œ<a href="https://jsj.top/f/OZJDfa" target="_blank">ç‚¹å‡»æ­¤å¤„æå‡ºéœ€æ±‚</a>ï¼Œä¸‹ä¸ªç‰ˆæœ¬è§</p>
+                <p>6.èŠå¤©è®°å½•å­˜æ”¾åœ¨â€œå½“å‰ç”¨æˆ·/æ–‡æ¡£/OfficeAiAppDataâ€ç›®å½•ä¸‹</p>
+                <p>7.å½“å‰ç‰ˆæœ¬:<span id="version">2.5.1</span>ï¼Œ<a href="https://www.officeso.cn" target="_blank">æ¯æœˆå‘å¸ƒæ–°åŠŸèƒ½</a></p>
             </div>
         </div>
     </div>
@@ -1097,21 +1260,21 @@
         <!-- message input -->
         <div id="chat-input-card">
             <div id="chat-input-inner">
-                <!-- ºÏ²¢ºóµÄÒıÓÃÇøÓò -->
+                <!-- åˆå¹¶åçš„å¼•ç”¨åŒºåŸŸ -->
                 <div id="references-wrapper" style="display:none;">
-                    <span id="references-title" class="reference-section-title">ÒıÓÃ:</span>
+                    <span id="references-title" class="reference-section-title">å¼•ç”¨:</span>
                     <div id="reference-chips-list" class="reference-chips-container">
-                        <!-- ËùÓĞÒıÓÃÏî£¨¹¤×÷±íÄÚÈİºÍÎÄ¼ş£©½«ÔÚ´Ë´¦¶¯Ì¬Ìí¼Ó -->
+                        <!-- æ‰€æœ‰å¼•ç”¨é¡¹ï¼ˆå·¥ä½œè¡¨å†…å®¹å’Œæ–‡ä»¶ï¼‰å°†åœ¨æ­¤å¤„åŠ¨æ€æ·»åŠ  -->
                     </div>
                 </div>
 
                 <div id="prompt-suggestions" style="display: none;">
-                    <!-- ÌáÊ¾´ÊÏî½«ÔÚ´Ë´¦¶¯Ì¬Ìí¼Ó -->
+                    <!-- æç¤ºè¯é¡¹å°†åœ¨æ­¤å¤„åŠ¨æ€æ·»åŠ  -->
                 </div>
-                <textarea id="chat-input" placeholder="ÇëÔÚ´ËÊäÈëÄúµÄÎÊÌâ... °´Enter¼üÖ±½Ó·¢ËÍ£¬Shift+Enter»»ĞĞ" rows="2"></textarea>
+                <textarea id="chat-input" placeholder="è¯·åœ¨æ­¤è¾“å…¥æ‚¨çš„é—®é¢˜... æŒ‰Enteré”®ç›´æ¥å‘é€ï¼ŒShift+Enteræ¢è¡Œ" rows="2"></textarea>
                 <div id="chat-input-actions">
 
-                    <button id="settings-button" title="ÉèÖÃ" onclick="settingsButton()">
+                    <button id="settings-button" title="è®¾ç½®" onclick="settingsButton()">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="3"></circle>
                             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -1120,86 +1283,111 @@
 
                     <label class="input-option">
                         <select id="chatMode" onchange="chatModeChanged(this)">
-                            <option value="chat">ChatÄ£Ê½</option>
-                            <option value="agent">AgentÄ£Ê½</option>
+                            <option value="chat">Chatæ¨¡å¼</option>
+                            <option value="agent">Agentæ¨¡å¼</option>
                         </select>
                     </label>
 
-                    <!-- ĞÂÔö£º¸½¼ş°´Å¥ -->
-                    <button id="attach-file-button" title="Ìí¼Ó¸½¼ş" style="padding: 4px;">
+                    <!-- æ–°å¢ï¼šé™„ä»¶æŒ‰é’® -->
+                    <button id="attach-file-button" title="æ·»åŠ é™„ä»¶" style="padding: 4px;">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
                         </svg>
                     </button>
                     <input type="file" id="file-input" multiple style="display: none;" accept=".xls,.xlsx,.xlsm,.xlsb,.csv,.doc,.docx,.ppt,.pptx">
 
-                    <button id="send-button" title="·¢ËÍ">
+                    <button id="send-button" title="å‘é€">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 20px; height: 20px;">
                             <line x1="22" y1="2" x2="11" y2="13"></line>
                             <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                         </svg>
                     </button>
-                    <!--style="display: none;"-->
-                    <!-- ĞŞ¸Äºó -->
-                    <button id="stop-button" title="È¡Ïû" onclick="stopButton()">
-                        <div style="width: 14px; height: 12px;  border-radius: 2px;"></div>
+
+                    <!-- ä¿®æ”¹å -->
+                    <button id="stop-button" title="å–æ¶ˆ" onclick="stopButton()">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+                            <rect x="3" y="3" width="10" height="10" fill="white" rx="1"></rect>
+                        </svg>
+                    </button>
+
+                    <!-- æ–°å¢ï¼šå†å²è®°å½•æŒ‰é’®ï¼Œæ”¾åœ¨å–æ¶ˆæŒ‰é’®ä¹‹å -->
+                    <button id="history-toggle-btn" title="æŸ¥çœ‹å†å²èŠå¤©è®°å½•">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12,6 12,12 16,14"></polyline>
+                        </svg>
                     </button>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- å†å²è®°å½•ä¾§è¾¹æ  -->
+    <div id="history-sidebar" class="sidebar-hidden">
+        <div class="sidebar-header">
+            <h3>å†å²èŠå¤©è®°å½•</h3>
+            <button id="close-sidebar-btn" title="å…³é—­">Ã—</button>
+        </div>
+        <div class="sidebar-content">
+            <div id="history-list">
+                <!-- å†å²è®°å½•åˆ—è¡¨å°†åœ¨è¿™é‡ŒåŠ¨æ€åŠ è½½ -->
+            </div>
+        </div>
+    </div>
 
-    <!-- Ìí¼ÓÉèÖÃ¶Ô»°¿ò -->
+    <!-- é®ç½©å±‚ -->
+    <div id="sidebar-overlay" class="overlay-hidden"></div>
+
+    <!-- æ·»åŠ è®¾ç½®å¯¹è¯æ¡† -->
     <div class="overlay" id="settings-overlay"></div>
     <div class="settings-dialog" id="settings-dialog">
-        <div class="settings-title">AI¶Ô»°ÉèÖÃ</div>
+        <div class="settings-title">AIå¯¹è¯è®¾ç½®</div>
 
         <div class="setting-item checkbox-item">
             <div>
-                <label class="setting-label">ÊµÊ±¹ö¶¯¶Ô»°ÄÚÈİ</label>
+                <label class="setting-label">å®æ—¶æ»šåŠ¨å¯¹è¯å†…å®¹</label>
                 <input type="checkbox" id="settings-scroll-checked">
             </div>
-            <div class="setting-tip">¿ªÆôºó»á×Ô¶¯¹ö¶¯µ½×îĞÂµÄ¶Ô»°ÄÚÈİ</div>
+            <div class="setting-tip">å¼€å¯åä¼šè‡ªåŠ¨æ»šåŠ¨åˆ°æœ€æ–°çš„å¯¹è¯å†…å®¹</div>
         </div>
 
         <div class="setting-item checkbox-item">
             <div>
-                <label class="setting-label">ÒıÓÃÑ¡ÖĞÄÚÈİ</label>
+                <label class="setting-label">å¼•ç”¨é€‰ä¸­å†…å®¹</label>
                 <input type="checkbox" id="settings-selected-cell">
             </div>
-            <div class="setting-tip">¿ªÆôºó¿ÉÒÔÑ¡Ôñ²¢ÒıÓÃ¹¤×÷±íÄÚÈİ</div>
+            <div class="setting-tip">å¼€å¯åå¯ä»¥é€‰æ‹©å¹¶å¼•ç”¨å·¥ä½œè¡¨å†…å®¹</div>
         </div>
 
         <div class="setting-item checkbox-item">
             <div>
-                <label class="setting-label">¹¤×÷±í±ä¸üÔ¤ÀÀ</label>
+                <label class="setting-label">å·¥ä½œè¡¨å˜æ›´é¢„è§ˆ</label>
                 <input type="checkbox" id="settings-executecode-preview">
             </div>
-            <div class="setting-tip">¿ªÆôºó£¬AgentÄ£Ê½ÏÂ¿ÉÌáÇ°Ô¤ÀÀ±ä¸üµã£¬¶Ô±È²îÒì</div>
+            <div class="setting-tip">å¼€å¯åï¼ŒAgentæ¨¡å¼ä¸‹å¯æå‰é¢„è§ˆå˜æ›´ç‚¹ï¼Œå¯¹æ¯”å·®å¼‚</div>
         </div>
 
         <div class="setting-item">
-            <label class="setting-label">»°ÌâËæ»úĞÔ</label>
+            <label class="setting-label">è¯é¢˜éšæœºæ€§</label>
             <div class="slider-container">
                 <input type="range" class="slider" id="topic-randomness" min="0.1" max="1.6" step="0.1" value="0.8">
                 <span class="slider-value" id="topic-randomness-value">0.8</span>
             </div>
-            <div class="setting-tip">½Ï¸ßµÄÊıÖµ»áÊ¹Í¬ÎÊÌâÃ¿´ÎÊä³öµÄ½á¹û¸üËæ»ú</div>
+            <div class="setting-tip">è¾ƒé«˜çš„æ•°å€¼ä¼šä½¿åŒé—®é¢˜æ¯æ¬¡è¾“å‡ºçš„ç»“æœæ›´éšæœº</div>
         </div>
 
         <div class="setting-item">
-            <label class="setting-label">ÉÏÏÂÎÄÊıÁ¿ÏŞÖÆ</label>
+            <label class="setting-label">ä¸Šä¸‹æ–‡æ•°é‡é™åˆ¶</label>
             <div class="slider-container">
                 <input type="range" class="slider" id="context-limit" min="1" max="10" value="5">
                 <span class="slider-value" id="context-limit-value">5</span>
             </div>
-            <div class="setting-tip">µ¥Ìõ»Ø¸´¼ÇÂ¼¶Ô»°Êı£¬Ã¿´ÎÏëÈÃai¼Ç×¡ÀúÊ·¶àÉÙÌõ¶Ô»°</div>
+            <div class="setting-tip">å•æ¡å›å¤è®°å½•å¯¹è¯æ•°ï¼Œæ¯æ¬¡æƒ³è®©aiè®°ä½å†å²å¤šå°‘æ¡å¯¹è¯</div>
         </div>
 
         <div class="settings-buttons">
-            <button class="settings-button cancel-button" id="settings-cancel" onclick="settingsCancel()">È¡Ïû</button>
-            <button class="settings-button save-button" id="settings-save" onclick="settingsSave()">±£´æ</button>
+            <button class="settings-button cancel-button" id="settings-cancel" onclick="settingsCancel()">å–æ¶ˆ</button>
+            <button class="settings-button save-button" id="settings-save" onclick="settingsSave()">ä¿å­˜</button>
         </div>
     </div>
 
@@ -1225,32 +1413,32 @@
 
             // add button
             return `
-                                                        <div class="code-block">
-                                                            ${codeHtml}
-                                                            <div class="code-buttons">
-                                                                <button class="code-button copy-button" onclick="copyCode(this)">
-                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                                                                    </svg>
-                                                                    ¸´ÖÆ
-                                                                </button>
-                                                                <button class="code-button edit-button" onclick="editCode(this)">
-                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                                                                    </svg>
-                                                                    ±à¼­
-                                                                </button>
-                                                                <button class="code-button execute-button" onclick="executeCode(this)">
-                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                                                                    </svg>
-                                                                    Ö´ĞĞ
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    `;
+                                                                        <div class="code-block">
+                                                                            ${codeHtml}
+                                                                            <div class="code-buttons">
+                                                                                <button class="code-button copy-button" onclick="copyCode(this)">
+                                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                                                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                                                                    </svg>
+                                                                                    å¤åˆ¶
+                                                                                </button>
+                                                                                <button class="code-button edit-button" onclick="editCode(this)">
+                                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                                                                    </svg>
+                                                                                    ç¼–è¾‘
+                                                                                </button>
+                                                                                <button class="code-button execute-button" onclick="executeCode(this)">
+                                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                                                                    </svg>
+                                                                                    æ‰§è¡Œ
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    `;
         };
 
         marked.use({ renderer });
@@ -1274,11 +1462,11 @@
 
                 const originalText = button.innerHTML;
                 button.innerHTML = `
-                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                                <polyline points="20 6 9 17 4 12"></polyline>
-                                                            </svg>
-                                                            ÒÑ¸´ÖÆ
-                                                        `;
+                                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                                <polyline points="20 6 9 17 4 12"></polyline>
+                                                                            </svg>
+                                                                            å·²å¤åˆ¶
+                                                                        `;
                 setTimeout(() => {
                     button.innerHTML = originalText;
                 }, 2000);
@@ -1312,21 +1500,21 @@
                     // user inject vsto object
                     window.vsto.executeCode(code, language, preview);
                 } else {
-                    alert('ÎŞ·¨Ö´ĞĞ´úÂë£ºÎ´¼ì²âµ½Ö§³ÖµÄÍ¨ĞÅ½Ó¿Ú');
+                    alert('æ— æ³•æ‰§è¡Œä»£ç ï¼šæœªæ£€æµ‹åˆ°æ”¯æŒçš„é€šä¿¡æ¥å£');
                 }
 
                 const originalText = button.innerHTML;
                 button.innerHTML = `
-                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                                <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                                                            </svg>
-                                                            ÒÑÖ´ĞĞ
-                                                        `;
+                                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                                                            </svg>
+                                                                            å·²æ‰§è¡Œ
+                                                                        `;
                 setTimeout(() => {
                     button.innerHTML = originalText;
                 }, 2000);
             } catch (err) {
-                alert('Ö´ĞĞÊ§°Ü£º' + err.message);
+                alert('æ‰§è¡Œå¤±è´¥ï¼š' + err.message);
             }
         }
 
@@ -1351,23 +1539,23 @@
         }
 
 
-        // È·±£ËùÓĞº¯Êı¶¼ÔÚÈ«¾Ö×÷ÓÃÓòÖĞ¶¨Òå
+        // ç¡®ä¿æ‰€æœ‰å‡½æ•°éƒ½åœ¨å…¨å±€ä½œç”¨åŸŸä¸­å®šä¹‰
         window.rendererMap = {};
         window.reasoningRendererMap = {};
 
-        // ´´½¨ÁÄÌìÇøÓò£¬°üº¬·¢ËÍÕßĞÅÏ¢ºÍÄÚÈİÇøÓò£¬µ«²»°üº¬ÍÆÀíÇøÓò
+        // åˆ›å»ºèŠå¤©åŒºåŸŸï¼ŒåŒ…å«å‘é€è€…ä¿¡æ¯å’Œå†…å®¹åŒºåŸŸï¼Œä½†ä¸åŒ…å«æ¨ç†åŒºåŸŸ
         window.createChatSection = function (sender, timestamp, uuid) {
 
-            // ´´½¨ÁÄÌìÈİÆ÷
+            // åˆ›å»ºèŠå¤©å®¹å™¨
             const chatContainer = document.createElement('div');
             chatContainer.className = 'chat-container';
             chatContainer.id = 'chat-' + uuid;
 
-            // ´´½¨·¢ËÍÕßĞÅÏ¢ÇøÓò
+            // åˆ›å»ºå‘é€è€…ä¿¡æ¯åŒºåŸŸ
             const messageHeader = document.createElement('div');
             messageHeader.className = 'message-header';
 
-            // Ìí¼ÓÍ·Ïñ
+            // æ·»åŠ å¤´åƒ
             const avatar = document.createElement('div');
             if (sender !== 'Me') {
                 avatar.innerHTML = 'AI';
@@ -1378,7 +1566,7 @@
             }
             messageHeader.appendChild(avatar);
 
-            // Ìí¼Ó·¢ËÍÕßÃû³ÆºÍÊ±¼ä´Á
+            // æ·»åŠ å‘é€è€…åç§°å’Œæ—¶é—´æˆ³
             const senderInfo = document.createElement('div');
             senderInfo.className = 'sender-info';
 
@@ -1396,111 +1584,111 @@
 
             chatContainer.appendChild(messageHeader);
 
-            // ´´½¨ÄÚÈİÇøÓò
+            // åˆ›å»ºå†…å®¹åŒºåŸŸ
             const contentContainer = document.createElement('div');
             contentContainer.className = 'message-content';
             contentContainer.id = 'content-' + uuid;
             chatContainer.appendChild(contentContainer);
 
-            // Ìí¼ÓfooterÇøÓò
+            // æ·»åŠ footeråŒºåŸŸ
             const footerContainer = document.createElement('div');
             footerContainer.className = 'message-footer';
             footerContainer.id = 'footer-' + uuid;
             chatContainer.appendChild(footerContainer);
 
-            // ½«ÁÄÌìÈİÆ÷Ìí¼Óµ½ÁÄÌìÈİÆ÷
+            // å°†èŠå¤©å®¹å™¨æ·»åŠ åˆ°èŠå¤©å®¹å™¨
             const chatHistoryContainer = document.getElementById('chat-container');
             if (chatHistoryContainer) {
                 chatHistoryContainer.appendChild(chatContainer);
             } else {
-                console.error('ÕÒ²»µ½ chat-container ÔªËØ£¬ÇëÈ·±£Ò³ÃæÖĞ´æÔÚ´ËÔªËØ');
-                document.body.appendChild(chatContainer); // »ØÍËµ½Ìí¼Óµ½ body
+                console.error('æ‰¾ä¸åˆ° chat-container å…ƒç´ ï¼Œè¯·ç¡®ä¿é¡µé¢ä¸­å­˜åœ¨æ­¤å…ƒç´ ');
+                document.body.appendChild(chatContainer); // å›é€€åˆ°æ·»åŠ åˆ° body
             }
 
-            // ´´½¨äÖÈ¾Æ÷
+            // åˆ›å»ºæ¸²æŸ“å™¨
             window.rendererMap[uuid] = new MarkdownStreamRenderer(contentContainer.id);
 
 
             return uuid;
         };
 
-        // ÎªÖ¸¶¨µÄÁÄÌìÇøÓòÌí¼ÓÍÆÀíÈİÆ÷
+        // ä¸ºæŒ‡å®šçš„èŠå¤©åŒºåŸŸæ·»åŠ æ¨ç†å®¹å™¨
         window.createReasoningContainer = function (uuid) {
             if (!uuid) {
-                console.error('UUID²»ÄÜÎª¿Õ');
+                console.error('UUIDä¸èƒ½ä¸ºç©º');
                 return false;
             }
 
-            // ¼ì²éÊÇ·ñÒÑ¾­´æÔÚÍÆÀíÈİÆ÷
+            // æ£€æŸ¥æ˜¯å¦å·²ç»å­˜åœ¨æ¨ç†å®¹å™¨
             if (document.getElementById('reasoning-' + uuid)) {
-                console.warn('UUIDÎª' + uuid + 'µÄÍÆÀíÈİÆ÷ÒÑ´æÔÚ');
+                console.warn('UUIDä¸º' + uuid + 'çš„æ¨ç†å®¹å™¨å·²å­˜åœ¨');
                 return true;
             }
 
             const chatContainer = document.getElementById('chat-' + uuid);
             if (!chatContainer) {
-                console.error('ÕÒ²»µ½UUIDÎª' + uuid + 'µÄÁÄÌìÈİÆ÷');
+                console.error('æ‰¾ä¸åˆ°UUIDä¸º' + uuid + 'çš„èŠå¤©å®¹å™¨');
                 return false;
             }
 
-            // ´´½¨ÍÆÀíÈİÆ÷
+            // åˆ›å»ºæ¨ç†å®¹å™¨
             const reasoningContainer = document.createElement('div');
             reasoningContainer.className = 'reasoning-container';
             reasoningContainer.id = 'reasoning-' + uuid;
 
-            // ´´½¨ÍÆÀí±êÌâÀ¸
+            // åˆ›å»ºæ¨ç†æ ‡é¢˜æ 
             const reasoningHeader = document.createElement('div');
             reasoningHeader.className = 'reasoning-header';
             reasoningHeader.innerHTML = `
-                                                        <span class="reasoning-title">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                                                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
-                                                            </svg>
-                                                            Ë¼¿¼¹ı³Ì
-                                                        </span>
-                                                        <span class="reasoning-toggle">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                                                                <path d="M7 10l5 5 5-5z"/>
-                                                            </svg>
-                                                        </span>
-                                                    `;
+                                                                        <span class="reasoning-title">
+                                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                                                                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
+                                                                            </svg>
+                                                                            æ€è€ƒè¿‡ç¨‹
+                                                                        </span>
+                                                                        <span class="reasoning-toggle">
+                                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                                                                                <path d="M7 10l5 5 5-5z"/>
+                                                                            </svg>
+                                                                        </span>
+                                                                    `;
 
-            // Ìí¼Óµã»÷ÊÂ¼şÒÔÕ¹¿ª/ÕÛµşÍÆÀíÄÚÈİ
+            // æ·»åŠ ç‚¹å‡»äº‹ä»¶ä»¥å±•å¼€/æŠ˜å æ¨ç†å†…å®¹
             reasoningHeader.addEventListener('click', function () {
                 reasoningContainer.classList.toggle('collapsed');
             });
 
-            // ´´½¨ÍÆÀíÄÚÈİÇøÓò
+            // åˆ›å»ºæ¨ç†å†…å®¹åŒºåŸŸ
             const reasoningContent = document.createElement('div');
             reasoningContent.className = 'reasoning-content';
             reasoningContent.id = 'reasoning-content-' + uuid;
 
-            // ½«ÍÆÀí±êÌâºÍÄÚÈİÌí¼Óµ½ÍÆÀíÈİÆ÷
+            // å°†æ¨ç†æ ‡é¢˜å’Œå†…å®¹æ·»åŠ åˆ°æ¨ç†å®¹å™¨
             reasoningContainer.appendChild(reasoningHeader);
             reasoningContainer.appendChild(reasoningContent);
 
-            // ½«ÍÆÀíÈİÆ÷²åÈëµ½ÏûÏ¢Í·²¿ºÍÄÚÈİÖ®¼ä
+            // å°†æ¨ç†å®¹å™¨æ’å…¥åˆ°æ¶ˆæ¯å¤´éƒ¨å’Œå†…å®¹ä¹‹é—´
             const contentContainer = document.getElementById('content-' + uuid);
             chatContainer.insertBefore(reasoningContainer, contentContainer);
 
-            // ´´½¨ÍÆÀíäÖÈ¾Æ÷
+            // åˆ›å»ºæ¨ç†æ¸²æŸ“å™¨
             window.reasoningRendererMap[uuid] = new MarkdownStreamRenderer(reasoningContent);
 
             return true;
         };
 
-        // Ìí¼ÓÓÃ»§¹ö¶¯×´Ì¬¸ú×Ù
+        // æ·»åŠ ç”¨æˆ·æ»šåŠ¨çŠ¶æ€è·Ÿè¸ª
         window.userScrollPosition = 0;
         window.autoScrollEnabled = true;
 
 
-        // ĞŞ¸Ä appendRenderer º¯Êı
+        // ä¿®æ”¹ appendRenderer å‡½æ•°
         window.appendRenderer = function (uuid, text) {
             if (!uuid) {
                 return false;
             }
 
-            // ¼ì²éÊÇ·ñ´æÔÚÍÆÀíÈİÆ÷£¬Èç¹û´æÔÚÇÒÎ´ÕÛµş£¬Ôò×Ô¶¯ÕÛµş
+            // æ£€æŸ¥æ˜¯å¦å­˜åœ¨æ¨ç†å®¹å™¨ï¼Œå¦‚æœå­˜åœ¨ä¸”æœªæŠ˜å ï¼Œåˆ™è‡ªåŠ¨æŠ˜å 
             const reasoningContainer = document.getElementById('reasoning-' + uuid);
             if (reasoningContainer && !reasoningContainer.classList.contains('collapsed')) {
                 reasoningContainer.classList.add('collapsed');
@@ -1508,26 +1696,26 @@
 
             const renderer = window.rendererMap[uuid];
             if (renderer) {
-                // ¼ÇÂ¼Ìí¼ÓÄÚÈİÇ°µÄÎÄµµ¸ß¶È
+                // è®°å½•æ·»åŠ å†…å®¹å‰çš„æ–‡æ¡£é«˜åº¦
 
                 renderer.append(text);
 
                 contentScroll();
                 return true;
             } else {
-                console.error('ÕÒ²»µ½UUIDÎª' + uuid + 'µÄäÖÈ¾Æ÷');
+                console.error('æ‰¾ä¸åˆ°UUIDä¸º' + uuid + 'çš„æ¸²æŸ“å™¨');
                 return false;
             }
         };
 
-        // Ìí¼ÓÍÆÀíÄÚÈİµÄº¯Êı
+        // æ·»åŠ æ¨ç†å†…å®¹çš„å‡½æ•°
         window.appendReasoning = function (uuid, text) {
             if (!uuid) {
-                console.error('UUID²»ÄÜÎª¿Õ');
+                console.error('UUIDä¸èƒ½ä¸ºç©º');
                 return false;
             }
 
-            // Èç¹ûÍÆÀíÈİÆ÷²»´æÔÚ£¬ÏÈ´´½¨Ëü
+            // å¦‚æœæ¨ç†å®¹å™¨ä¸å­˜åœ¨ï¼Œå…ˆåˆ›å»ºå®ƒ
             if (!document.getElementById('reasoning-' + uuid)) {
                 if (!window.createReasoningContainer(uuid)) {
                     return false;
@@ -1536,15 +1724,15 @@
 
             const reasoningRenderer = window.reasoningRendererMap[uuid];
             if (reasoningRenderer) {
-                // Ìí¼ÓÄÚÈİ
+                // æ·»åŠ å†…å®¹
                 reasoningRenderer.append(text);
 
-                // È·±£ÍÆÀíÈİÆ÷¿É¼û£¨ÔÚÍÆÀí¹ı³ÌÖĞ£©
+                // ç¡®ä¿æ¨ç†å®¹å™¨å¯è§ï¼ˆåœ¨æ¨ç†è¿‡ç¨‹ä¸­ï¼‰
                 const reasoningContainer = document.getElementById('reasoning-' + uuid);
                 if (reasoningContainer) {
                     reasoningContainer.classList.remove('collapsed');
                 }
-                // »ñÈ¡ÍÆÀíÄÚÈİÇøÓò²¢¹ö¶¯µ½µ×²¿
+                // è·å–æ¨ç†å†…å®¹åŒºåŸŸå¹¶æ»šåŠ¨åˆ°åº•éƒ¨
                 const reasoningContent = document.getElementById('reasoning-content-' + uuid);
                 if (reasoningContent) {
                     reasoningContent.scrollTop = reasoningContent.scrollHeight;
@@ -1552,84 +1740,88 @@
                 contentScroll()
                 return true;
             } else {
-                console.error('ÕÒ²»µ½UUIDÎª' + uuid + 'µÄÍÆÀíäÖÈ¾Æ÷');
+                console.error('æ‰¾ä¸åˆ°UUIDä¸º' + uuid + 'çš„æ¨ç†æ¸²æŸ“å™¨');
                 return false;
             }
         };
 
-        //ÏÂÀ­¹ö¶¯Ìõ
+        //ä¸‹æ‹‰æ»šåŠ¨æ¡
         window.contentScroll = function () {
             if (document.getElementById("settings-scroll-checked").checked) {
                 window.scrollTo(0, document.body.scrollHeight);
             }
         }
 
-        // Íê³ÉÍÆÀí¹ı³Ì£¬ÕÛµşÍÆÀíÇøÓò
+        // å®Œæˆæ¨ç†è¿‡ç¨‹ï¼ŒæŠ˜å æ¨ç†åŒºåŸŸ
         window.completeReasoning = function (uuid) {
             if (!uuid) {
-                console.error('UUID²»ÄÜÎª¿Õ');
+                console.error('UUIDä¸èƒ½ä¸ºç©º');
                 return false;
             }
 
             const reasoningContainer = document.getElementById('reasoning-' + uuid);
             if (reasoningContainer) {
-                // Ìí¼ÓÒ»¸ö¶ÌÔİµÄÑÓ³Ù£¬ÈÃÓÃ»§¿´µ½×îÖÕµÄÍÆÀí½á¹û
+                // æ·»åŠ ä¸€ä¸ªçŸ­æš‚çš„å»¶è¿Ÿï¼Œè®©ç”¨æˆ·çœ‹åˆ°æœ€ç»ˆçš„æ¨ç†ç»“æœ
                 setTimeout(() => {
                     reasoningContainer.classList.add('collapsed');
                 }, 1000);
                 return true;
             } else {
-                console.error('ÕÒ²»µ½UUIDÎª' + uuid + 'µÄÍÆÀíÈİÆ÷');
+                console.error('æ‰¾ä¸åˆ°UUIDä¸º' + uuid + 'çš„æ¨ç†å®¹å™¨');
                 return false;
             }
         };
-        // Ìí¼ÓÍ£Ö¹°´Å¥µã»÷´¦Àíº¯Êı
+        // æ·»åŠ åœæ­¢æŒ‰é’®ç‚¹å‡»å¤„ç†å‡½æ•°
         function stopButton() {
-            sendMessageToServer('InnerStopBtn_#');
-            //// ÇĞ»»»Ø·¢ËÍ°´Å¥
-            //document.getElementById('send-button').style.display = 'flex';
-            //document.getElementById('stop-button').style.display = 'none';
+            //sendMessageToServer('InnerStopBtn_#');
+            sendMessageToServer({
+                type: 'stopMessage'
+            });
         };
 
-        //ÏûÏ¢½ÓÊÕÍê³ÉµÄÍ¨Öª
+        //æ¶ˆæ¯æ¥æ”¶å®Œæˆçš„é€šçŸ¥
         function processStreamComplete(uuid, totalTokens) {
 
-            // Ìí¼ÓtokenÕ¹Ê¾
+            // æ·»åŠ tokenå±•ç¤º
             const footerDiv = document.getElementById('footer-' + uuid);
             if (footerDiv) {
-                footerDiv.innerHTML = `<span class="token-count">ÏûºÄtoken£º${totalTokens}</span>`;
+                footerDiv.innerHTML = `<span class="token-count">æ¶ˆè€—tokenï¼š${totalTokens}</span>`;
             }
 
-            // ÇĞ»»»Ø·¢ËÍ°´Å¥
-            document.getElementById('send-button').style.display = 'flex';
-            document.getElementById('stop-button').style.display = 'none';
+            // å¼ºåˆ¶åˆ‡æ¢å›å‘é€æŒ‰é’®
+            const sendButton = document.getElementById('send-button');
+            const stopButton = document.getElementById('stop-button');
 
-            //ÕÛµş´úÂë¿éÇøÓò
-            // Ê×ÏÈ»ñÈ¡¶ÔÓ¦uuidµÄÄÚÈİÇøÓò
+            sendButton.style.setProperty('display', 'flex', 'important');
+            stopButton.style.setProperty('display', 'none', 'important');
+
+
+            //æŠ˜å ä»£ç å—åŒºåŸŸ
+            // é¦–å…ˆè·å–å¯¹åº”uuidçš„å†…å®¹åŒºåŸŸ
             const contentDiv = document.getElementById('content-' + uuid);
             if (contentDiv) {
-                // ÕÒµ½ËùÓĞ´úÂë¿é
+                // æ‰¾åˆ°æ‰€æœ‰ä»£ç å—
                 const codeBlocks = contentDiv.querySelectorAll('pre code');
                 codeBlocks.forEach(codeBlock => {
-                    // »ñÈ¡´úÂë¿éµÄ¸¸ÔªËØ
+                    // è·å–ä»£ç å—çš„çˆ¶å…ƒç´ 
                     const preElement = codeBlock.parentElement;
                     if (preElement) {
-                        // Èç¹û¸¸ÔªËØ»¹Ã»ÓĞÕÛµşÑùÊ½£¬Ìí¼ÓÕÛµşÏà¹ØµÄÑùÊ½ºÍ¹¦ÄÜ
+                        // å¦‚æœçˆ¶å…ƒç´ è¿˜æ²¡æœ‰æŠ˜å æ ·å¼ï¼Œæ·»åŠ æŠ˜å ç›¸å…³çš„æ ·å¼å’ŒåŠŸèƒ½
                         if (!preElement.classList.contains('collapsible')) {
-                            // Ìí¼ÓÕÛµşÑùÊ½Àà
+                            // æ·»åŠ æŠ˜å æ ·å¼ç±»
                             preElement.classList.add('collapsible', 'collapsed');
 
-                            // ´´½¨Õ¹¿ª/ÕÛµş±êÇ©
+                            // åˆ›å»ºå±•å¼€/æŠ˜å æ ‡ç­¾
                             const toggleLabel = document.createElement('div');
                             toggleLabel.className = 'code-toggle-label';
-                            toggleLabel.innerHTML = 'µã»÷Õ¹¿ª´úÂë';
+                            toggleLabel.innerHTML = 'ç‚¹å‡»å±•å¼€ä»£ç ';
                             toggleLabel.onclick = function (e) {
                                 e.stopPropagation();
                                 preElement.classList.toggle('collapsed');
-                                toggleLabel.innerHTML = preElement.classList.contains('collapsed') ? 'µã»÷Õ¹¿ª´úÂë' : 'µã»÷ÕÛµş´úÂë';
+                                toggleLabel.innerHTML = preElement.classList.contains('collapsed') ? 'ç‚¹å‡»å±•å¼€ä»£ç ' : 'ç‚¹å‡»æŠ˜å ä»£ç ';
                             };
 
-                            // ½«±êÇ©²åÈëµ½´úÂë¿éÇ°Ãæ
+                            // å°†æ ‡ç­¾æ’å…¥åˆ°ä»£ç å—å‰é¢
                             preElement.parentNode.insertBefore(toggleLabel, preElement);
                         }
                     }
@@ -1648,7 +1840,7 @@
             settingsSave()
         }
 
-        // Éú³ÉUUID
+        // ç”ŸæˆUUID
         function generateUUID() {
             return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
                 const r = Math.random() * 16 | 0;
@@ -1663,7 +1855,7 @@
             }
         }
 
-        // ¸ñÊ½»¯ÈÕÆÚÊ±¼ä
+        // æ ¼å¼åŒ–æ—¥æœŸæ—¶é—´
         function formatDateTime(date) {
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -1675,14 +1867,14 @@
             return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
         }
 
-        // ±à¼­´úÂëº¯Êı
+        // ç¼–è¾‘ä»£ç å‡½æ•°
         function editCode(button) {
             const codeBlock = button.closest('.code-block');
             const codeElement = codeBlock.querySelector('code');
             const code = codeElement.textContent;
             const language = codeElement.className.replace('language-', '');
 
-            // ´´½¨±à¼­ÇøÓò
+            // åˆ›å»ºç¼–è¾‘åŒºåŸŸ
             const editorContainer = document.createElement('div');
             editorContainer.className = 'editor-container';
 
@@ -1695,36 +1887,36 @@
 
             const saveButton = document.createElement('button');
             saveButton.className = 'code-button';
-            saveButton.innerHTML = '±£´æ';
+            saveButton.innerHTML = 'ä¿å­˜';
             saveButton.onclick = function () {
-                // »ñÈ¡±à¼­ºóµÄ´úÂë
+                // è·å–ç¼–è¾‘åçš„ä»£ç 
                 const newCode = textarea.value;
 
-                // ¸üĞÂ´úÂë¿é
+                // æ›´æ–°ä»£ç å—
                 const newCodeHtml = marked.parse('```' + language + '\n' + newCode + '\n```');
 
-                // Ìæ»»Õû¸ö´úÂë¿é
+                // æ›¿æ¢æ•´ä¸ªä»£ç å—
                 const tempDiv = document.createElement('div');
                 tempDiv.innerHTML = newCodeHtml;
                 const newCodeBlock = tempDiv.querySelector('.code-block');
 
                 codeBlock.parentNode.replaceChild(newCodeBlock, codeBlock);
 
-                // ÖØĞÂÓ¦ÓÃÓï·¨¸ßÁÁ
+                // é‡æ–°åº”ç”¨è¯­æ³•é«˜äº®
                 document.querySelectorAll('pre code').forEach((block) => {
                     hljs.highlightElement(block);
                 });
 
-                // ÒÆ³ı±à¼­ÇøÓò
+                // ç§»é™¤ç¼–è¾‘åŒºåŸŸ
                 editorContainer.remove();
             };
 
             const cancelButton = document.createElement('button');
             cancelButton.className = 'code-button';
             cancelButton.style.backgroundColor = '#f44336';
-            cancelButton.innerHTML = 'È¡Ïû';
+            cancelButton.innerHTML = 'å–æ¶ˆ';
             cancelButton.onclick = function () {
-                // ÒÆ³ı±à¼­ÇøÓò£¬»Ö¸´´úÂë¿é
+                // ç§»é™¤ç¼–è¾‘åŒºåŸŸï¼Œæ¢å¤ä»£ç å—
                 codeBlock.style.display = 'block';
                 editorContainer.remove();
             };
@@ -1735,38 +1927,38 @@
             editorContainer.appendChild(textarea);
             editorContainer.appendChild(buttonsDiv);
 
-            // Òş²ØÔ­´úÂë¿é£¬²åÈë±à¼­ÇøÓò
+            // éšè—åŸä»£ç å—ï¼Œæ’å…¥ç¼–è¾‘åŒºåŸŸ
             codeBlock.style.display = 'none';
             codeBlock.parentNode.insertBefore(editorContainer, codeBlock);
 
-            // È·±£°´Å¥¿É¼û
+            // ç¡®ä¿æŒ‰é’®å¯è§
             textarea.focus();
             editorContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
 
-        // Ìí¼ÓÇå¿ÕÁÄÌìÄÚÈİµÄº¯Êı
+        // æ·»åŠ æ¸…ç©ºèŠå¤©å†…å®¹çš„å‡½æ•°
         window.clearAllChats = function () {
-            // »ñÈ¡ÁÄÌìÈİÆ÷
+            // è·å–èŠå¤©å®¹å™¨
             const chatContainer = document.getElementById('chat-container');
             if (chatContainer) {
-                // Çå¿ÕÈİÆ÷ÄÚÈİ
+                // æ¸…ç©ºå®¹å™¨å†…å®¹
                 chatContainer.innerHTML = '';
 
-                // Çå¿ÕäÖÈ¾Æ÷Ó³Éä
+                // æ¸…ç©ºæ¸²æŸ“å™¨æ˜ å°„
                 window.rendererMap = {};
                 window.reasoningRendererMap = {};
 
-                // ÖØÖÃ×Ô¶¯¹ö¶¯
+                // é‡ç½®è‡ªåŠ¨æ»šåŠ¨
                 window.autoScrollEnabled = true;
 
-                console.log('ÒÑÇå¿ÕËùÓĞÁÄÌìÄÚÈİ');
+                console.log('å·²æ¸…ç©ºæ‰€æœ‰èŠå¤©å†…å®¹');
                 return true;
             } else {
-                console.error('ÕÒ²»µ½ÁÄÌìÈİÆ÷');
+                console.error('æ‰¾ä¸åˆ°èŠå¤©å®¹å™¨');
                 return false;
             }
         };
-        // »ñÈ¡Õû¸öÁÄÌìÈİÆ÷µÄHTML
+        // è·å–æ•´ä¸ªèŠå¤©å®¹å™¨çš„HTML
         window.getFullChatHTML = function () {
             const chatContainer = document.getElementById('chat-container');
             if (chatContainer) {
@@ -1775,17 +1967,17 @@
             return '';
         };
 
-        // ÉèÖÃÁÄÌìÈİÆ÷µÄHTML
+        // è®¾ç½®èŠå¤©å®¹å™¨çš„HTML
         window.setFullChatHTML = function (html) {
             const chatContainer = document.getElementById('chat-container');
             if (chatContainer) {
-                // Çå¿ÕÏÖÓĞÄÚÈİ
+                // æ¸…ç©ºç°æœ‰å†…å®¹
                 chatContainer.innerHTML = '';
 
-                // ÉèÖÃĞÂÄÚÈİ
+                // è®¾ç½®æ–°å†…å®¹
                 chatContainer.innerHTML = html;
 
-                // ÖØ½¨äÖÈ¾Æ÷Ó³Éä
+                // é‡å»ºæ¸²æŸ“å™¨æ˜ å°„
                 window.rebuildRendererMaps();
 
                 return true;
@@ -1793,17 +1985,17 @@
             return false;
         };
 
-        // ÖØ½¨äÖÈ¾Æ÷Ó³Éä
+        // é‡å»ºæ¸²æŸ“å™¨æ˜ å°„
         window.rebuildRendererMaps = function () {
-            // Çå¿ÕÏÖÓĞÓ³Éä
+            // æ¸…ç©ºç°æœ‰æ˜ å°„
             window.rendererMap = {};
             window.reasoningRendererMap = {};
 
-            // ²éÕÒËùÓĞÄÚÈİºÍÍÆÀíÈİÆ÷
+            // æŸ¥æ‰¾æ‰€æœ‰å†…å®¹å’Œæ¨ç†å®¹å™¨
             const contentContainers = document.querySelectorAll('.message-content');
             const reasoningContainers = document.querySelectorAll('.reasoning-content');
 
-            // ÖØ½¨ÄÚÈİäÖÈ¾Æ÷Ó³Éä
+            // é‡å»ºå†…å®¹æ¸²æŸ“å™¨æ˜ å°„
             contentContainers.forEach(container => {
                 const id = container.id;
                 if (id && id.startsWith('content-')) {
@@ -1812,7 +2004,7 @@
                 }
             });
 
-            // ÖØ½¨ÍÆÀíäÖÈ¾Æ÷Ó³Éä
+            // é‡å»ºæ¨ç†æ¸²æŸ“å™¨æ˜ å°„
             reasoningContainers.forEach(container => {
                 const id = container.id;
                 if (id && id.startsWith('reasoning-content-')) {
@@ -1821,14 +2013,14 @@
                 }
             });
 
-            console.log('ÒÑÖØ½¨äÖÈ¾Æ÷Ó³Éä');
+            console.log('å·²é‡å»ºæ¸²æŸ“å™¨æ˜ å°„');
             return true;
         };
 
-        // ×ÔÊÊÓ¦textarea¸ß¶È
+        // è‡ªé€‚åº”textareaé«˜åº¦
         const chatInput = document.getElementById('chat-input');
 
-        // Õ¹¿ª/ÕÛµşÒıÓÃÇø
+        // å±•å¼€/æŠ˜å å¼•ç”¨åŒº
         function toggleReference(uuid) {
             const ref = document.getElementById('reference-' + uuid);
             if (ref) {
@@ -1850,21 +2042,25 @@
                     window.vsto.postMessage(messagePayload);
                 }
             } else {
-                alert('ÎŞ·¨Ö´ĞĞ´úÂë£ºÎ´¼ì²âµ½Ö§³ÖµÄÍ¨ĞÅ½Ó¿Ú');
+                alert('æ— æ³•æ‰§è¡Œä»£ç ï¼šæœªæ£€æµ‹åˆ°æ”¯æŒçš„é€šä¿¡æ¥å£');
             }
         }
         function sendChatMessage() {
-            const userTypedText = chatInput.value.trim(); // ÓÃ»§µÄÔ­Ê¼ÊäÈë
-            const attachedFileObjects = window.attachedFiles; // ±£³Ö File ¶ÔÏóÊı×é
-            const selectedSheetContent = window.getAllSelectedContent(); // »ñÈ¡Ñ¡ÖĞµÄ¹¤×÷±íÄÚÈİ
+            const userTypedText = chatInput.value.trim(); // ç”¨æˆ·çš„åŸå§‹è¾“å…¥
+            const attachedFileObjects = window.attachedFiles; // ä¿æŒ File å¯¹è±¡æ•°ç»„
+            const selectedSheetContent = window.getAllSelectedContent(); // è·å–é€‰ä¸­çš„å·¥ä½œè¡¨å†…å®¹
 
-            // ¼ì²éÊÇ·ñÓĞÈÎºÎÄÚÈİ·¢ËÍ
+            // æ£€æŸ¥æ˜¯å¦æœ‰ä»»ä½•å†…å®¹å‘é€
             if (!userTypedText && attachedFileObjects.length === 0 && selectedSheetContent.length === 0) return;
 
-            document.getElementById('send-button').style.display = 'none';
-            document.getElementById('stop-button').style.display = 'flex';
+            // å¼ºåˆ¶åˆ‡æ¢æŒ‰é’®æ˜¾ç¤ºçŠ¶æ€
+            const sendButton = document.getElementById('send-button');
+            const stopButton = document.getElementById('stop-button');
 
-            // ×¼±¸·¢ËÍµ½ºó¶ËµÄÊı¾İ
+            sendButton.style.setProperty('display', 'none', 'important');
+            stopButton.style.setProperty('display', 'flex', 'important');
+
+            // å‡†å¤‡å‘é€åˆ°åç«¯çš„æ•°æ®
             const messagePayloadValue = {
                 text: userTypedText,
                 filePaths: attachedFileObjects.map(file => (file && typeof file.path === 'string' && file.path) ? file.path : file.name),
@@ -1880,73 +2076,73 @@
             const now = new Date();
             const timestamp = formatDateTime(now);
 
-            // 1. ´´½¨»ù±¾µÄÁÄÌì½Ú£¨Í·Ïñ¡¢Ãû³Æ¡¢Ê±¼ä´Á¡¢¿ÕµÄ message-content div£©
+            // 1. åˆ›å»ºåŸºæœ¬çš„èŠå¤©èŠ‚ï¼ˆå¤´åƒã€åç§°ã€æ—¶é—´æˆ³ã€ç©ºçš„ message-content divï¼‰
             createChatSection('Me', timestamp, uuid);
 
-            // 2. »ñÈ¡¸Õ´´½¨µÄ message-content div
+            // 2. è·å–åˆšåˆ›å»ºçš„ message-content div
             const messageContentDiv = document.getElementById('content-' + uuid);
             if (!messageContentDiv) {
                 console.error('Could not find message content div for ' + uuid);
                 return;
             }
 
-            // 3. ¹¹½¨²¢ÉèÖÃ message-content div µÄ innerHTML
+            // 3. æ„å»ºå¹¶è®¾ç½® message-content div çš„ innerHTML
             let htmlContent = '';
 
-            // 3a. Ìí¼ÓÓÃ»§ÊäÈëµÄÎÄ±¾ (Markdown ½âÎö)
+            // 3a. æ·»åŠ ç”¨æˆ·è¾“å…¥çš„æ–‡æœ¬ (Markdown è§£æ)
             if (userTypedText) {
                 htmlContent += marked.parse(userTypedText);
             }
 
-            // 3b. Ìí¼Ó¿ÉÕÛµşµÄ "ÒıÓÃÄÚÈİ"
+            // 3b. æ·»åŠ å¯æŠ˜å çš„ "å¼•ç”¨å†…å®¹"
             if (selectedSheetContent.length > 0) {
                 let itemsHtml = selectedSheetContent.map(item => `<div>${item.sheetName}: ${item.address}</div>`).join('');
                 htmlContent += `
-                    <div class="chat-message-references collapsed" id="msg-ref-sel-${uuid}">
-                        <div class="chat-message-reference-header" onclick="toggleChatMessageReference(this)">
-                            <span class="chat-message-reference-arrow">&#9658;</span>
-                            <span class="chat-message-reference-label">ÒıÓÃÄÚÈİ (${selectedSheetContent.length})</span>
-                        </div>
-                        <div class="chat-message-reference-content">
-                            ${itemsHtml}
-                        </div>
-                    </div>`;
+                                    <div class="chat-message-references collapsed" id="msg-ref-sel-${uuid}">
+                                        <div class="chat-message-reference-header" onclick="toggleChatMessageReference(this)">
+                                            <span class="chat-message-reference-arrow">&#9658;</span>
+                                            <span class="chat-message-reference-label">å¼•ç”¨å†…å®¹ (${selectedSheetContent.length})</span>
+                                        </div>
+                                        <div class="chat-message-reference-content">
+                                            ${itemsHtml}
+                                        </div>
+                                    </div>`;
             }
 
-            // 3c. Ìí¼Ó¿ÉÕÛµşµÄ "ÒıÓÃÎÄ¼ş"
+            // 3c. æ·»åŠ å¯æŠ˜å çš„ "å¼•ç”¨æ–‡ä»¶"
             if (attachedFileObjects.length > 0) {
                 let displayItemsHtml = attachedFileObjects.map(file => `<div>${escapeHtml(file.name)}</div>`).join('');
                 htmlContent += `
-        <div class="chat-message-references collapsed" id="msg-ref-file-${uuid}">
-            <div class="chat-message-reference-header" onclick="toggleChatMessageReference(this)">
-                <span class="chat-message-reference-arrow">&#9658;</span>
-                <span class="chat-message-reference-label">ÒıÓÃÎÄ¼ş (${attachedFileObjects.length})</span>
-            </div>
-            <div class="chat-message-reference-content">
-                ${displayItemsHtml}
-            </div>
-        </div>`;
+                        <div class="chat-message-references collapsed" id="msg-ref-file-${uuid}">
+                            <div class="chat-message-reference-header" onclick="toggleChatMessageReference(this)">
+                                <span class="chat-message-reference-arrow">&#9658;</span>
+                                <span class="chat-message-reference-label">å¼•ç”¨æ–‡ä»¶ (${attachedFileObjects.length})</span>
+                            </div>
+                            <div class="chat-message-reference-content">
+                                ${displayItemsHtml}
+                            </div>
+                        </div>`;
             }
 
             messageContentDiv.innerHTML = htmlContent;
 
-            // 3d. Èç¹ûÓÃ»§ÎÄ±¾ÖĞ°üº¬´úÂë¿é£¬ĞèÒªÖØĞÂ¸ßÁÁ
+            // 3d. å¦‚æœç”¨æˆ·æ–‡æœ¬ä¸­åŒ…å«ä»£ç å—ï¼Œéœ€è¦é‡æ–°é«˜äº®
             messageContentDiv.querySelectorAll('pre code').forEach((block) => {
                 hljs.highlightElement(block);
-                // Èç¹ûĞèÒª£¬ÕâÀïÒ²¿ÉÒÔÖØĞÂ¸½¼Ó´úÂë¿éµÄ¸´ÖÆ/±à¼­/Ö´ĞĞ°´Å¥Âß¼­
-                // µ«ÓÉÓÚ marked.parse ÒÑ¾­´¦ÀíÁË°´Å¥£¬¿ÉÄÜ²»ĞèÒªÖØ¸´
+                // å¦‚æœéœ€è¦ï¼Œè¿™é‡Œä¹Ÿå¯ä»¥é‡æ–°é™„åŠ ä»£ç å—çš„å¤åˆ¶/ç¼–è¾‘/æ‰§è¡ŒæŒ‰é’®é€»è¾‘
+                // ä½†ç”±äº marked.parse å·²ç»å¤„ç†äº†æŒ‰é’®ï¼Œå¯èƒ½ä¸éœ€è¦é‡å¤
             });
 
-            // 4. Çå¿ÕÊäÈëÇøÓòµÄÒıÓÃºÍÎÄ±¾¿ò
+            // 4. æ¸…ç©ºè¾“å…¥åŒºåŸŸçš„å¼•ç”¨å’Œæ–‡æœ¬æ¡†
             window.selectedContentMap = {};
-            window.attachedFiles = []; // Çå¿Õ File ¶ÔÏóÊı×é
-            renderReferences(); // ¸üĞÂÊäÈëÇøÓòµÄÒıÓÃÏÔÊ¾
+            window.attachedFiles = []; // æ¸…ç©º File å¯¹è±¡æ•°ç»„
+            renderReferences(); // æ›´æ–°è¾“å…¥åŒºåŸŸçš„å¼•ç”¨æ˜¾ç¤º
 
             chatInput.value = '';
-            chatInput.style.height = 'auto'; // ÖØÖÃÊäÈë¿ò¸ß¶È
+            chatInput.style.height = 'auto'; // é‡ç½®è¾“å…¥æ¡†é«˜åº¦
             hidePromptSuggestions();
 
-            // 5. ¹ö¶¯µ½×îĞÂÏûÏ¢
+            // 5. æ»šåŠ¨åˆ°æœ€æ–°æ¶ˆæ¯
             //contentScroll();
         }
 
@@ -1959,11 +2155,11 @@
                 .replace(/"/g, "&quot;")
                 .replace(/'/g, "&#039;");
         }
-        // ·¢ËÍ°´Å¥µã»÷
+        // å‘é€æŒ‰é’®ç‚¹å‡»
         document.getElementById('send-button').onclick = sendChatMessage;
 
 
-        // »Ø³µ·¢ËÍ£¬Shift+Enter»»ĞĞ
+        // å›è½¦å‘é€ï¼ŒShift+Enteræ¢è¡Œ
         chatInput.addEventListener('keydown', function (e) {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -1974,7 +2170,7 @@
 
         window.selectedContentMap = {}; // { sheetName: Set(address1, address2, ...) }
 
-        // Ìí¼ÓÑ¡ÖĞÄÚÈİ£¨Ö§³ÖCtrl¶àÑ¡£¬·ñÔòµ¥Ñ¡£©
+        // æ·»åŠ é€‰ä¸­å†…å®¹ï¼ˆæ”¯æŒCtrlå¤šé€‰ï¼Œå¦åˆ™å•é€‰ï¼‰
         window.addSelectedContentItem = function (sheetName, address, ctrlKey) {
             if (!address || address.trim() === '') {
                 return;
@@ -1988,21 +2184,21 @@
             } else {
                 window.selectedContentMap[sheetName] = newItem;
             }
-            renderReferences(); // <--- ¸üĞÂµ÷ÓÃ
+            renderReferences(); // <--- æ›´æ–°è°ƒç”¨
         };
 
-        // Çå³ıÖ¸¶¨ sheetName µÄÑ¡ÖĞÄÚÈİ
+        // æ¸…é™¤æŒ‡å®š sheetName çš„é€‰ä¸­å†…å®¹
         window.clearSelectedContentBySheetName = function (sheetName) {
             if (window.selectedContentMap && window.selectedContentMap.hasOwnProperty(sheetName)) {
-                // É¾³ı¸Ã sheetName ¶ÔÓ¦µÄÒıÓÃÄÚÈİ
+                // åˆ é™¤è¯¥ sheetName å¯¹åº”çš„å¼•ç”¨å†…å®¹
                 delete window.selectedContentMap[sheetName];
-                // ¸üĞÂÒ³ÃæÉÏµÄÒıÓÃÏÔÊ¾
+                // æ›´æ–°é¡µé¢ä¸Šçš„å¼•ç”¨æ˜¾ç¤º
                 renderReferences();
             }
         };
 
-        // ÒÆ³ıµ¥¸öÄÚÈİ
-        // ĞŞ¸Äºó£ºÍ¨¹ıitemIdÒÆ³ı
+        // ç§»é™¤å•ä¸ªå†…å®¹
+        // ä¿®æ”¹åï¼šé€šè¿‡itemIdç§»é™¤
         window.removeSelectedContentItem = function (itemIdToRemove) {
             for (const sheetName in window.selectedContentMap) {
                 if (window.selectedContentMap.hasOwnProperty(sheetName)) {
@@ -2012,19 +2208,19 @@
                     }
                 }
             }
-            renderReferences(); // <--- ¸üĞÂµ÷ÓÃ
+            renderReferences(); // <--- æ›´æ–°è°ƒç”¨
         };
 
 
-        // »ñÈ¡ËùÓĞÑ¡ÖĞÄÚÈİ
-        // ĞŞ¸Äºó£ºÊÊÅäĞÂµÄselectedContentMap½á¹¹
+        // è·å–æ‰€æœ‰é€‰ä¸­å†…å®¹
+        // ä¿®æ”¹åï¼šé€‚é…æ–°çš„selectedContentMapç»“æ„
         window.getAllSelectedContent = function () {
             const arr = [];
             for (const sheetName in window.selectedContentMap) {
                 if (window.selectedContentMap.hasOwnProperty(sheetName)) {
                     const selectedItem = window.selectedContentMap[sheetName];
                     if (selectedItem) {
-                        // ¿ÉÒÔÑ¡ÔñÊÇ·ñÒ²·µ»Øid£¬È¡¾öÓÚÆäËûµØ·½ÊÇ·ñĞèÒª
+                        // å¯ä»¥é€‰æ‹©æ˜¯å¦ä¹Ÿè¿”å›idï¼Œå–å†³äºå…¶ä»–åœ°æ–¹æ˜¯å¦éœ€è¦
                         arr.push({ sheetName: sheetName, address: selectedItem.address, id: selectedItem.id });
                     }
                 }
@@ -2032,31 +2228,31 @@
             return arr;
         };
 
-        // ×ÔÊÊÓ¦textarea¸ß¶È ºÍ ÌáÊ¾´Ê½¨ÒéÂß¼­
+        // è‡ªé€‚åº”textareaé«˜åº¦ å’Œ æç¤ºè¯å»ºè®®é€»è¾‘
         const promptSuggestionsDiv = document.getElementById('prompt-suggestions');
         const attachFileButton = document.getElementById('attach-file-button');
         const fileInput = document.getElementById('file-input');
 
-        // »ñÈ¡ĞÂµÄÍ³Ò»ÒıÓÃÇøÓòµÄÔªËØ
+        // è·å–æ–°çš„ç»Ÿä¸€å¼•ç”¨åŒºåŸŸçš„å…ƒç´ 
         const referencesWrapper = document.getElementById('references-wrapper');
-        const referencesTitle = document.getElementById('references-title'); // Ó¦¸ÃÒÑÔÚHTMLÖĞÉèÖÃÎª "ÒıÓÃ:"
+        const referencesTitle = document.getElementById('references-title'); // åº”è¯¥å·²åœ¨HTMLä¸­è®¾ç½®ä¸º "å¼•ç”¨:"
         const referenceChipsList = document.getElementById('reference-chips-list');
 
 
         window.attachedFiles = []; // Array to store selected File objects
-        window.selectedContentMap = {}; 
+        window.selectedContentMap = {};
 
-        // Ô¤¶¨ÒåµÄÌáÊ¾´ÊÁĞ±í
+        // é¢„å®šä¹‰çš„æç¤ºè¯åˆ—è¡¨
         const predefinedPrompts = [
-            "°ïÎÒ°ÑAÁĞ¼ÓBÁĞµÄÖµĞ´ÈëCÁĞ",
-            "°ïÎÒ°ÑSheet1ºÍSheet2µÄ±í¸ñ°´Ãû×ÖºÏ²¢",
-            "°ïÎÒ°ÑSheet1µÄÊı¾İ£¬°´ÕÕÖĞÎÄÃû³Æ²ğ·Ö³É¶à¸öxlsxÎÄ¼ş",
-            "¸øÎÒ½«ÎÒÑ¡ÖĞµÄWordÄÚÈİ¸ñÊ½µ÷ÕûÒ»ÏÂ",
-            "¸øÎÒÉú³ÉÒ»¸ö3Ò³µÄÖÜ±¨PPTÎÄ¼ş"
+            "å¸®æˆ‘æŠŠAåˆ—åŠ Båˆ—çš„å€¼å†™å…¥Cåˆ—",
+            "å¸®æˆ‘æŠŠSheet1å’ŒSheet2çš„è¡¨æ ¼æŒ‰åå­—åˆå¹¶",
+            "å¸®æˆ‘æŠŠSheet1çš„æ•°æ®ï¼ŒæŒ‰ç…§ä¸­æ–‡åç§°æ‹†åˆ†æˆå¤šä¸ªxlsxæ–‡ä»¶",
+            "ç»™æˆ‘å°†æˆ‘é€‰ä¸­çš„Wordå†…å®¹æ ¼å¼è°ƒæ•´ä¸€ä¸‹",
+            "ç»™æˆ‘ç”Ÿæˆä¸€ä¸ª3é¡µçš„å‘¨æŠ¥PPTæ–‡ä»¶"
         ];
 
         function showPromptSuggestions() {
-            promptSuggestionsDiv.innerHTML = ''; // Çå¿Õ¾É½¨Òé
+            promptSuggestionsDiv.innerHTML = ''; // æ¸…ç©ºæ—§å»ºè®®
             predefinedPrompts.forEach(promptText => {
                 const item = document.createElement('div');
                 item.className = 'prompt-suggestion-item';
@@ -2065,7 +2261,7 @@
                     chatInput.value = promptText;
                     hidePromptSuggestions();
                     chatInput.focus();
-                    // ´¥·¢inputÊÂ¼şÒÔµ÷Õû¸ß¶È
+                    // è§¦å‘inputäº‹ä»¶ä»¥è°ƒæ•´é«˜åº¦
                     const event = new Event('input', { bubbles: true, cancelable: true });
                     chatInput.dispatchEvent(event);
                 };
@@ -2079,17 +2275,17 @@
         }
 
 
-        // --- ĞÂµÄÍ³Ò»äÖÈ¾º¯Êı ---
+        // --- æ–°çš„ç»Ÿä¸€æ¸²æŸ“å‡½æ•° ---
         function renderReferences() {
             if (!referencesWrapper || !referenceChipsList || !referencesTitle) {
                 console.error("Reference display elements not found!");
                 return;
             }
 
-            referenceChipsList.innerHTML = ''; // Çå¿ÕËùÓĞÏÖÓĞµÄchips
+            referenceChipsList.innerHTML = ''; // æ¸…ç©ºæ‰€æœ‰ç°æœ‰çš„chips
             let hasAnyReferences = false;
 
-            // 1. äÖÈ¾Ñ¡ÖĞµÄ¹¤×÷±íÄÚÈİ
+            // 1. æ¸²æŸ“é€‰ä¸­çš„å·¥ä½œè¡¨å†…å®¹
             for (const sheetName in window.selectedContentMap) {
                 if (window.selectedContentMap.hasOwnProperty(sheetName)) {
                     const selectedItem = window.selectedContentMap[sheetName];
@@ -2110,10 +2306,10 @@
 
                     const removeBtn = document.createElement('button');
                     removeBtn.className = 'reference-chip-remove';
-                    removeBtn.title = 'ÒÆ³ı´ËÒıÓÃ';
+                    removeBtn.title = 'ç§»é™¤æ­¤å¼•ç”¨';
                     removeBtn.innerHTML = `<svg viewBox="0 0 20 20"><line x1="5" y1="5" x2="15" y2="15" stroke="currentColor" stroke-width="2"/><line x1="15" y1="5" x2="5" y2="15" stroke="currentColor" stroke-width="2"/></svg>`;
                     removeBtn.onclick = function () {
-                        removeSelectedContentItem(selectedItem.id); // µ÷ÓÃÒÑÓĞµÄÒÆ³ıº¯Êı
+                        removeSelectedContentItem(selectedItem.id); // è°ƒç”¨å·²æœ‰çš„ç§»é™¤å‡½æ•°
                     };
                     chipContentWrapper.appendChild(removeBtn);
                     itemChip.appendChild(chipContentWrapper);
@@ -2121,7 +2317,7 @@
                 }
             }
 
-            // 2. äÖÈ¾¸½¼ÓµÄÎÄ¼ş
+            // 2. æ¸²æŸ“é™„åŠ çš„æ–‡ä»¶
             window.attachedFiles.forEach((file, index) => {
                 hasAnyReferences = true;
                 const itemChip = document.createElement('div');
@@ -2138,20 +2334,20 @@
 
                 const removeBtn = document.createElement('button');
                 removeBtn.className = 'reference-chip-remove';
-                removeBtn.title = 'ÒÆ³ı´ËÎÄ¼ş';
+                removeBtn.title = 'ç§»é™¤æ­¤æ–‡ä»¶';
                 removeBtn.innerHTML = `<svg viewBox="0 0 20 20"><line x1="5" y1="5" x2="15" y2="15" stroke="currentColor" stroke-width="2"/><line x1="15" y1="5" x2="5" y2="15" stroke="currentColor" stroke-width="2"/></svg>`;
                 removeBtn.onclick = function () {
                     window.attachedFiles.splice(index, 1);
-                    renderReferences(); // ÖØĞÂäÖÈ¾Õû¸öÒıÓÃÇøÓò
+                    renderReferences(); // é‡æ–°æ¸²æŸ“æ•´ä¸ªå¼•ç”¨åŒºåŸŸ
                 };
                 chipContentWrapper.appendChild(removeBtn);
                 itemChip.appendChild(chipContentWrapper);
                 referenceChipsList.appendChild(itemChip);
             });
 
-            // 3. ¿ØÖÆÕû¸öÒıÓÃÇøÓòµÄÏÔÊ¾/Òş²Ø
+            // 3. æ§åˆ¶æ•´ä¸ªå¼•ç”¨åŒºåŸŸçš„æ˜¾ç¤º/éšè—
             if (hasAnyReferences) {
-                referencesWrapper.style.display = 'block'; // »òÕß 'flex' Èç¹û #references-wrapper ±¾ÉíÊÇflexÈİÆ÷
+                referencesWrapper.style.display = 'block'; // æˆ–è€… 'flex' å¦‚æœ #references-wrapper æœ¬èº«æ˜¯flexå®¹å™¨
             } else {
                 referencesWrapper.style.display = 'none';
             }
@@ -2170,19 +2366,19 @@
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 if (!allowedExtensions.exec(file.name)) {
-                    alert(`ÎÄ¼şÀàĞÍ²»Ö§³Ö: ${file.name}`);
+                    alert(`æ–‡ä»¶ç±»å‹ä¸æ”¯æŒ: ${file.name}`);
                     continue;
                 }
                 const isDuplicate = window.attachedFiles.some(
                     existingFile => existingFile.name === file.name && existingFile.size === file.size
                 );
                 if (isDuplicate) {
-                    console.log(`ÎÄ¼şÒÑÌí¼Ó: ${file.name}`);
+                    console.log(`æ–‡ä»¶å·²æ·»åŠ : ${file.name}`);
                     continue;
                 }
                 window.attachedFiles.push(file);
             }
-            renderReferences(); // <--- ¸üĞÂµ÷ÓÃ
+            renderReferences(); // <--- æ›´æ–°è°ƒç”¨
             fileInput.value = '';
         });
 
@@ -2190,11 +2386,11 @@
 
 
         chatInput.addEventListener('input', function () {
-            // ×ÔÊÊÓ¦¸ß¶È
+            // è‡ªé€‚åº”é«˜åº¦
             this.style.height = 'auto';
             this.style.height = (this.scrollHeight) + 'px';
 
-            // ÌáÊ¾´ÊÂß¼­
+            // æç¤ºè¯é€»è¾‘
             const value = this.value;
             if (value === '#') {
                 showPromptSuggestions();
@@ -2203,7 +2399,7 @@
             }
         });
 
-        // Èç¹ûÓÃ»§µã»÷textareaÍâ²¿£¬Ò²Òş²ØÌáÊ¾´Ê
+        // å¦‚æœç”¨æˆ·ç‚¹å‡»textareaå¤–éƒ¨ï¼Œä¹Ÿéšè—æç¤ºè¯
         document.addEventListener('click', function (event) {
             if (!chatInput.contains(event.target) && !promptSuggestionsDiv.contains(event.target) && !attachFileButton.contains(event.target)) {
                 if (!event.target.closest('.reference-chip-remove')) { // Don't hide if clicking remove on a chip
@@ -2213,7 +2409,7 @@
         });
 
         function settingsButton() {
-            // ÏÔÊ¾ÕÚÕÖºÍ¶Ô»°¿ò
+            // æ˜¾ç¤ºé®ç½©å’Œå¯¹è¯æ¡†
             document.getElementById('settings-overlay').style.display = 'block';
             document.getElementById('settings-dialog').style.display = 'block';
         }
@@ -2231,7 +2427,7 @@
             let executeCodePreview = document.getElementById('settings-executecode-preview').checked
             let chatMode = document.getElementById("chatMode").value
 
-            // ±£´æËæ»úĞÔºÍÉÏÏÂÎÄÏŞÖÆµÄÉèÖÃ
+            // ä¿å­˜éšæœºæ€§å’Œä¸Šä¸‹æ–‡é™åˆ¶çš„è®¾ç½®
             if (window.chrome && window.chrome.webview) {
                 // ues WebView2
                 window.chrome.webview.postMessage({
@@ -2254,16 +2450,16 @@
                     executeCodePreview: executeCodePreview,
                 });
             } else {
-                alert('ÎŞ·¨Ö´ĞĞ´úÂë£ºÎ´¼ì²âµ½Ö§³ÖµÄÍ¨ĞÅ½Ó¿Ú');
+                alert('æ— æ³•æ‰§è¡Œä»£ç ï¼šæœªæ£€æµ‹åˆ°æ”¯æŒçš„é€šä¿¡æ¥å£');
             }
 
-            // ¹Ø±Õ¶Ô»°¿ò
+            // å…³é—­å¯¹è¯æ¡†
             document.getElementById('settings-overlay').style.display = 'none';
             document.getElementById('settings-dialog').style.display = 'none';
         }
 
 
-        // »¬¿éÖµÊµÊ±¸üĞÂ
+        // æ»‘å—å€¼å®æ—¶æ›´æ–°
         document.getElementById('topic-randomness').oninput = function () {
             document.getElementById('topic-randomness-value').textContent =
                 Number(this.value).toFixed(1);
@@ -2273,10 +2469,201 @@
             document.getElementById('context-limit-value').textContent = this.value;
         };
 
-        // µã»÷ÕÚÕÖ¹Ø±Õ¶Ô»°¿ò
+        // ç‚¹å‡»é®ç½©å…³é—­å¯¹è¯æ¡†
         document.getElementById('settings-overlay').onclick = function () {
             document.getElementById('settings-overlay').style.display = 'none';
             document.getElementById('settings-dialog').style.display = 'none';
+        };
+
+
+        // å†å²è®°å½•åŠŸèƒ½
+        window.historyManager = {
+            isOpen: false,
+
+            // åˆå§‹åŒ–å†å²è®°å½•åŠŸèƒ½
+            init: function () {
+                const toggleBtn = document.getElementById('history-toggle-btn');
+                const sidebar = document.getElementById('history-sidebar');
+                const overlay = document.getElementById('sidebar-overlay');
+                const closeBtn = document.getElementById('close-sidebar-btn');
+
+                // ç»‘å®šäº‹ä»¶
+                toggleBtn.addEventListener('click', () => this.toggleSidebar());
+                closeBtn.addEventListener('click', () => this.closeSidebar());
+                overlay.addEventListener('click', () => this.closeSidebar());
+
+                // é”®ç›˜äº‹ä»¶
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape' && this.isOpen) {
+                        this.closeSidebar();
+                    }
+                });
+            },
+
+            // åˆ‡æ¢ä¾§è¾¹æ æ˜¾ç¤º/éšè—
+            toggleSidebar: function () {
+                if (this.isOpen) {
+                    this.closeSidebar();
+                } else {
+                    this.openSidebar();
+                }
+            },
+
+            // æ‰“å¼€ä¾§è¾¹æ 
+            openSidebar: function () {
+                const sidebar = document.getElementById('history-sidebar');
+                const overlay = document.getElementById('sidebar-overlay');
+
+                sidebar.classList.remove('sidebar-hidden');
+                sidebar.classList.add('sidebar-visible');
+                overlay.classList.remove('overlay-hidden');
+                overlay.classList.add('overlay-visible');
+
+                this.isOpen = true;
+
+                // åŠ è½½å†å²è®°å½•
+                this.loadHistoryFiles();
+            },
+
+            // å…³é—­ä¾§è¾¹æ 
+            closeSidebar: function () {
+                const sidebar = document.getElementById('history-sidebar');
+                const overlay = document.getElementById('sidebar-overlay');
+
+                sidebar.classList.remove('sidebar-visible');
+                sidebar.classList.add('sidebar-hidden');
+                overlay.classList.remove('overlay-visible');
+                overlay.classList.add('overlay-hidden');
+
+                this.isOpen = false;
+            },
+
+            // åŠ è½½å†å²è®°å½•æ–‡ä»¶åˆ—è¡¨
+            loadHistoryFiles: function () {
+                const historyList = document.getElementById('history-list');
+
+                // æ˜¾ç¤ºåŠ è½½çŠ¶æ€
+                historyList.innerHTML = '<div class="loading-state">æ­£åœ¨åŠ è½½å†å²è®°å½•...</div>';
+
+                // å‘é€æ¶ˆæ¯åˆ°VBåç«¯è¯·æ±‚å†å²æ–‡ä»¶åˆ—è¡¨
+                this.sendMessageToVB({
+                    type: 'getHistoryFiles'
+                });
+            },
+
+            // æ¥æ”¶ä»VBä¼ æ¥çš„å†å²æ–‡ä»¶åˆ—è¡¨
+            displayHistoryFiles: function (files) {
+                const historyList = document.getElementById('history-list');
+
+                if (!files || files.length === 0) {
+                    historyList.innerHTML = `
+                            <div class="empty-state">
+                                <div class="empty-state-icon">ğŸ“„</div>
+                                <div class="empty-state-text">æ‚¨è¿˜æ²¡æœ‰ä»»ä½•å†å²è®°å½•</div>
+                            </div>
+                        `;
+                    return;
+                }
+
+                // æŒ‰æ–‡ä»¶åæ’åºï¼ˆæœ€æ–°çš„åœ¨å‰ï¼‰
+                files.sort((a, b) => b.fileName.localeCompare(a.fileName));
+
+                // ç”Ÿæˆæ–‡ä»¶åˆ—è¡¨HTML
+                const itemsHtml = files.map(file => `
+                        <div class="history-item" onclick="historyManager.openHistoryFile('${file.fullPath.replace(/\\/g, '\\\\')}')">
+                            <div class="history-item-title">${this.formatFileName(file.fileName)}</div>
+                            <div class="history-item-date">${this.formatFileDate(file.fileName)}</div>
+                            <div class="history-item-size">${this.formatFileSize(file.size)}</div>
+                        </div>
+                    `).join('');
+
+                historyList.innerHTML = itemsHtml;
+            },
+
+            // æ ¼å¼åŒ–æ–‡ä»¶åæ˜¾ç¤º
+            formatFileName: function (fileName) {
+                // æ–°æ ¼å¼: saved_chat_yyyyMMdd_HHmmss_ä¸­æ–‡å†…å®¹.html æˆ– saved_chat_yyyyMMdd_HHmmss.html
+                const match = fileName.match(/saved_chat_\d{8}_\d{6}_(.+)\.html/);
+                if (match && match[1]) {
+                    // å¦‚æœæœ‰ä¸­æ–‡å†…å®¹éƒ¨åˆ†ï¼Œè¿”å›ä¸­æ–‡å†…å®¹
+                    return match[1];
+                } else {
+                    // å¦‚æœæ²¡æœ‰ä¸­æ–‡å†…å®¹ï¼ŒæŒ‰ç…§åŸé€»è¾‘ï¼šç§»é™¤ saved_chat_ å‰ç¼€å’Œ .html åç¼€
+                    return fileName.replace('saved_chat_', '').replace('.html', '');
+                }
+            },
+
+            // æ ¼å¼åŒ–æ–‡ä»¶æ—¥æœŸ
+            formatFileDate: function (fileName) {
+                // ä»æ–‡ä»¶åä¸­æå–æ—¥æœŸæ—¶é—´ä¿¡æ¯
+                // æ–°æ ¼å¼: saved_chat_yyyyMMdd_HHmmss_ä¸­æ–‡å†…å®¹.html æˆ– saved_chat_yyyyMMdd_HHmmss.html
+                const match = fileName.match(/saved_chat_(\d{8})_(\d{6})(?:_.*)?\.html/);
+                if (match) {
+                    const dateStr = match[1]; // yyyyMMdd
+                    const timeStr = match[2]; // HHmmss
+
+                    const year = dateStr.substring(0, 4);
+                    const month = dateStr.substring(4, 6);
+                    const day = dateStr.substring(6, 8);
+                    const hour = timeStr.substring(0, 2);
+                    const minute = timeStr.substring(2, 4);
+                    const second = timeStr.substring(4, 6);
+
+                    return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+                }
+                return 'æœªçŸ¥æ—¶é—´';
+            },
+
+
+            // æ ¼å¼åŒ–æ–‡ä»¶å¤§å°
+            formatFileSize: function (bytes) {
+                if (bytes === 0) return '0 B';
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+            },
+
+            // æ‰“å¼€å†å²æ–‡ä»¶
+            openHistoryFile: function (filePath) {
+                // å‘é€æ¶ˆæ¯åˆ°VBåç«¯æ‰“å¼€æ–‡ä»¶
+                this.sendMessageToVB({
+                    type: 'openHistoryFile',
+                    filePath: filePath
+                });
+
+                // å…³é—­ä¾§è¾¹æ 
+                this.closeSidebar();
+            },
+
+            // å‘é€æ¶ˆæ¯åˆ°VBåç«¯
+            sendMessageToVB: function (message) {
+                try {
+                    if (window.chrome && window.chrome.webview) {
+                        window.chrome.webview.postMessage(message);
+                    } else if (window.vsto) {
+                        if (typeof window.vsto.sendMessage === 'function') {
+                            window.vsto.sendMessage(JSON.stringify(message));
+                        } else if (typeof window.vsto.postMessage === 'function') {
+                            window.vsto.postMessage(message);
+                        }
+                    } else {
+                        console.error('æ— æ³•ä¸åç«¯é€šä¿¡');
+                    }
+                } catch (error) {
+                    console.error('å‘é€æ¶ˆæ¯åˆ°VBåç«¯å¤±è´¥:', error);
+                }
+            }
+        };
+
+        // é¡µé¢åŠ è½½å®Œæˆååˆå§‹åŒ–å†å²è®°å½•åŠŸèƒ½
+        document.addEventListener('DOMContentLoaded', function () {
+            historyManager.init();
+        });
+
+        // æä¾›å…¨å±€å‡½æ•°ä¾›VBåç«¯è°ƒç”¨
+        window.setHistoryFilesList = function (files) {
+            historyManager.displayHistoryFiles(files);
         };
     </script>
 </body>

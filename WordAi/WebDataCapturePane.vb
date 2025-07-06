@@ -89,22 +89,83 @@ Public Class WebDataCapturePane
                 ' 在当前光标位置插入内容
                 Dim selection = doc.Application.Selection
                 If selection IsNot Nothing Then
-                    ' 插入内容
-                    selection.TypeText(content)
-                    'selection.TypeText(vbCrLf & vbCrLf)
 
-                    ' 插入分隔线
-                    'selection.TypeText(vbCrLf & "----------------------------------------" & vbCrLf)
-                    'selection.TypeText("来源: " & ChatBrowser.CoreWebView2.DocumentTitle & vbCrLf)
-                    'selection.TypeText("URL: " & ChatBrowser.CoreWebView2.Source & " " & "时间: " & DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") & vbCrLf)
-                    'selection.TypeText("----------------------------------------" & vbCrLf & vbCrLf)
+                    ' 检查内容长度，决定插入策略
+                    If content.Length > 32000 Then ' Word的TypeText方法通常限制在32K字符左右
+                        ' 分块插入大内容
+                        InsertLargeContent(selection, content)
+                    Else
+                        ' 直接插入小内容
+                        selection.TypeText(content)
+                    End If
 
-                    'MessageBox.Show("内容已成功提取并插入到文档中", "成功")
+                    ' 确保内容完全插入
+                    Debug.WriteLine($"实际插入内容长度: {content.Length}")
+
                 End If
             End If
         Catch ex As Exception
             MessageBox.Show($"处理提取内容时出错: {ex.Message}", "错误",
-                          MessageBoxButtons.OK, MessageBoxIcon.Error)
+                      MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub
+
+    ' 新增：分块插入大内容的方法
+    Private Sub InsertLargeContent(selection As Microsoft.Office.Interop.Word.Selection, content As String)
+        Try
+            Const chunkSize As Integer = 30000 ' 每块30K字符
+            Dim totalLength = content.Length
+            Dim insertedLength = 0
+
+            ' 显示进度
+            Debug.WriteLine($"开始分块插入，总长度: {totalLength} 字符")
+
+            For i = 0 To content.Length - 1 Step chunkSize
+                Dim chunk = content.Substring(i, Math.Min(chunkSize, content.Length - i))
+
+                Try
+                    selection.TypeText(chunk)
+                    insertedLength += chunk.Length
+
+                    ' 刷新应用程序，防止界面卡死
+                    System.Windows.Forms.Application.DoEvents()
+
+                    Debug.WriteLine($"已插入: {insertedLength}/{totalLength} 字符")
+
+                Catch ex As Exception
+                    Debug.WriteLine($"插入第 {i / chunkSize + 1} 块时出错: {ex.Message}")
+
+                    ' 如果TypeText失败，尝试使用Range.Text
+                    Try
+                        Dim range = selection.Range
+                        range.Text = chunk
+                        selection.Start = range.End
+                        insertedLength += chunk.Length
+                    Catch rangeEx As Exception
+                        Debug.WriteLine($"Range.Text也失败: {rangeEx.Message}")
+
+                        ' 最后尝试使用Insert方法
+                        Try
+                            selection.Range.InsertAfter(chunk)
+                            selection.Start = selection.Range.End
+                            insertedLength += chunk.Length
+                        Catch insertEx As Exception
+                            Debug.WriteLine($"InsertAfter也失败: {insertEx.Message}")
+                            MessageBox.Show($"在第 {i / chunkSize + 1} 块时插入失败: {insertEx.Message}", "警告")
+                            Exit For
+                        End Try
+                    End Try
+                End Try
+            Next
+
+            Debug.WriteLine($"分块插入完成，实际插入: {insertedLength} 字符")
+
+            If insertedLength < totalLength Then
+                MessageBox.Show($"警告：只插入了 {insertedLength}/{totalLength} 字符", "部分插入")
+            End If
+
+        Catch ex As Exception
+            MessageBox.Show($"分块插入失败: {ex.Message}", "错误")
         End Try
     End Sub
 

@@ -141,13 +141,55 @@ Public MustInherit Class BaseChatControl
         End If
     End Function
 
-    ' 存储聊天HTML的文件路径
-    Protected ReadOnly ChatHtmlFilePath As String = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-        ConfigSettings.OfficeAiAppDataFolder,
-        $"saved_chat_{DateTime.Now:yyyyMMdd_HHmmss}.html"
-    )
 
+    ' 动态ChatHtmlFilePath属性
+    Protected ReadOnly Property ChatHtmlFilePath As String
+        Get
+            ' 如果已经生成过文件路径，直接返回缓存的路径
+            If Not String.IsNullOrEmpty(_chatHtmlFilePath) Then
+                Return _chatHtmlFilePath
+            End If
+
+            Dim baseDir As String = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            ConfigSettings.OfficeAiAppDataFolder
+        )
+
+            Dim fileName As String
+            If Not String.IsNullOrEmpty(firstQuestion) Then
+                ' 简单地取前10个字符
+                Dim questionPrefix As String = GetFirst10Characters(firstQuestion)
+                fileName = $"saved_chat_{DateTime.Now:yyyyMMdd_HHmmss}_{questionPrefix}.html"
+            Else
+                fileName = $"saved_chat_{DateTime.Now:yyyyMMdd_HHmmss}.html"
+            End If
+
+            _chatHtmlFilePath = Path.Combine(baseDir, fileName)
+            Return _chatHtmlFilePath
+        End Get
+    End Property
+    Private Function GetFirst10Characters(text As String) As String
+        If String.IsNullOrEmpty(text) Then Return String.Empty
+
+        ' 取前20个字符，如果不足20个则取全部
+        Dim result As String = If(text.Length > 20, text.Substring(0, 20), text)
+
+        ' 移除文件名中不允许的字符，替换为下划线
+        Dim invalidChars As Char() = Path.GetInvalidFileNameChars()
+        For Each invalidChar In invalidChars
+            result = result.Replace(invalidChar, "_"c)
+        Next
+
+        ' 移除一些可能导致问题的字符
+        result = result.Replace(" ", "_")  ' 空格替换为下划线
+        result = result.Replace(".", "_")  ' 点号替换为下划线
+        result = result.Replace(",", "_")  ' 逗号替换为下划线
+        result = result.Replace(":", "_")  ' 冒号替换为下划线
+        result = result.Replace("?", "_")  ' 问号替换为下划线
+        result = result.Replace("!", "_")  ' 感叹号替换为下划线
+
+        Return result
+    End Function
     Private Sub OnWebViewNavigationCompleted(sender As Object, e As CoreWebView2NavigationCompletedEventArgs) Handles ChatBrowser.NavigationCompleted
         If e.IsSuccess Then
             Try
@@ -222,16 +264,90 @@ Public MustInherit Class BaseChatControl
                     HandleCheckedChange(jsonDoc)
                 Case "sendMessage"
                     HandleSendMessage(jsonDoc)
+                Case "stopMessage"
+                    stopReaderStream = True
                 Case "executeCode"
                     HandleExecuteCode(jsonDoc)
                 Case "saveSettings"
                     Debug.Print("保存设置")
                     HandleSaveSettings(jsonDoc)
+                Case "getHistoryFiles"
+                    HandleGetHistoryFiles()
+                Case "openHistoryFile"
+                    HandleOpenHistoryFile(jsonDoc)
                 Case Else
                     Debug.WriteLine($"未知消息类型: {messageType}")
             End Select
         Catch ex As Exception
             Debug.WriteLine($"处理消息出错: {ex.Message}")
+        End Try
+    End Sub
+
+
+    ' 处理获取历史文件列表请求
+    Protected Sub HandleGetHistoryFiles()
+        Try
+            ' 获取历史文件目录
+            Dim historyDir As String = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            ConfigSettings.OfficeAiAppDataFolder
+        )
+
+            Dim historyFiles As New List(Of Object)()
+
+            If Directory.Exists(historyDir) Then
+                ' 查找所有符合条件的HTML文件
+                Dim files As String() = Directory.GetFiles(historyDir, "saved_chat_*.html")
+
+                For Each filePath As String In files
+                    Try
+                        Dim fileInfo As New FileInfo(filePath)
+                        historyFiles.Add(New With {
+                        .fileName = fileInfo.Name,
+                        .fullPath = fileInfo.FullName,
+                        .size = fileInfo.Length,
+                        .lastModified = fileInfo.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
+                    })
+                    Catch ex As Exception
+                        Debug.WriteLine($"处理文件信息时出错: {filePath} - {ex.Message}")
+                    End Try
+                Next
+            End If
+
+            ' 将文件列表序列化为JSON并发送到前端
+            Dim jsonResult As String = JsonConvert.SerializeObject(historyFiles)
+            Dim escapedJson As String = HttpUtility.JavaScriptStringEncode(jsonResult)
+
+            Dim js As String = $"setHistoryFilesList({jsonResult});"
+            ExecuteJavaScriptAsyncJS(js)
+
+        Catch ex As Exception
+            Debug.WriteLine($"获取历史文件列表时出错: {ex.Message}")
+            ' 发送空列表到前端
+            ExecuteJavaScriptAsyncJS("setHistoryFilesList([]);")
+        End Try
+    End Sub
+
+    ' 处理打开历史文件请求
+    Protected Sub HandleOpenHistoryFile(jsonDoc As JObject)
+        Try
+            Dim filePath As String = jsonDoc("filePath").ToString()
+
+            If File.Exists(filePath) Then
+                ' 使用默认浏览器打开HTML文件
+                Process.Start(New ProcessStartInfo() With {
+                .FileName = filePath,
+                .UseShellExecute = True
+            })
+
+                GlobalStatusStrip.ShowInfo("已在浏览器中打开历史记录")
+            Else
+                GlobalStatusStrip.ShowWarning("历史记录文件不存在")
+            End If
+
+        Catch ex As Exception
+            Debug.WriteLine($"打开历史文件时出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning("打开历史记录失败: " & ex.Message)
         End Try
     End Sub
 
@@ -270,6 +386,14 @@ Public MustInherit Class BaseChatControl
         Public Property RawData As Object  ' 原始数据，可用于进一步处理
     End Class
 
+
+    ' 添加存储第一个问题的变量
+    Protected firstQuestion As String = String.Empty
+    Protected isFirstMessage As Boolean = True
+    Private _chatHtmlFilePath As String = String.Empty ' 缓存文件路径
+
+
+
     ' 在 HandleSendMessage 方法中添加文件内容解析逻辑
     Protected Overridable Sub HandleSendMessage(jsonDoc As JObject)
         Dim messageValue As JToken = jsonDoc("value")
@@ -277,14 +401,7 @@ Public MustInherit Class BaseChatControl
         Dim filePaths As List(Of String) = New List(Of String)()
         Dim selectedContents As List(Of SendMessageReferenceContentItem) = New List(Of SendMessageReferenceContentItem)()
 
-        If messageValue.Type = JTokenType.String Then
-            ' Legacy format or simple text message
-            question = messageValue.ToString()
-            If question = "InnerStopBtn_#" Then
-                stopReaderStream = True
-                Return
-            End If
-        ElseIf messageValue.Type = JTokenType.Object Then
+        If messageValue.Type = JTokenType.Object Then
             ' New format with text, potentially filePaths, and selectedContent
             question = messageValue("text")?.ToString()
 
@@ -310,6 +427,16 @@ Public MustInherit Class BaseChatControl
        (selectedContents Is Nothing OrElse selectedContents.Count = 0) Then
             Debug.WriteLine("HandleSendMessage: Empty question, no files, and no selected content.")
             Return ' Nothing to send
+        End If
+
+        ' 保存第一个问题（仅保存一次）
+        If isFirstMessage AndAlso Not String.IsNullOrEmpty(question) Then
+            firstQuestion = question
+            isFirstMessage = False
+            ' 清空缓存的文件路径，强制重新生成
+            _chatHtmlFilePath = String.Empty
+            Debug.WriteLine($"保存第一个问题: {firstQuestion}")
+            Debug.WriteLine($"将生成文件路径: {ChatHtmlFilePath}")
         End If
 
         ' --- 处理选中的内容 ---
@@ -666,45 +793,34 @@ Public MustInherit Class BaseChatControl
     Protected MustOverride Sub GetSelectionContent(target As Object)
 
 
-    '' 执行代码的方法
-    'Private Sub ExecuteCode(code As String, language As String, preview As Boolean)
-    '    ' 根据语言类型执行不同的操作
-    '    Select Case language.ToLower()
-    '        Case "vba", "vb", "vbscript", "language-vba", "language-vbscript", "language-vba hljs language-vbscript", "vba hljs language-vbscript"
-    '            ' 执行 VBA 代码
-    '            ExecuteVBACode(code, preview)
-    '            'RunCode(code, preview)
-    '        Case Else
-    '            'MessageBox.Show("不支持的语言类型: " & language)
-    '            GlobalStatusStrip.ShowWarning("不支持的语言类型: " & language)
-    '    End Select
-    'End Sub
-
     ' 执行代码的方法
     Private Sub ExecuteCode(code As String, language As String, preview As Boolean)
         ' 根据语言类型执行不同的操作
-        Select Case language.ToLower()
-            Case "vba", "vb", "vbscript", "language-vba", "language-vbscript", "language-vba hljs language-vbscript", "vba hljs language-vbscript"
-                ' 执行 VBA 代码
-                ExecuteVBACode(code, preview)
-            Case "js", "javascript", "javascript hljs", "jscript", "language-js", "language-javascript"
-                ' 执行 JavaScript 代码
-                ExecuteJavaScript(code, preview)
-            Case "excel", "formula", "function", "language-excel"
-                ' 执行 Excel 函数/公式
-                ExecuteExcelFormula(code, preview)
-                'Case "sql", "language-sql"
-                '    ' 执行 SQL 查询
-                '    ExecuteSqlQuery(code, preview)
-                'Case "powerquery", "m", "language-powerquery", "language-m"
-                '    ' 执行 PowerQuery/M 语言
-                '    ExecutePowerQuery(code, preview)
-                'Case "python", "py", "language-python"
-                '    ' 执行 Python 代码
-                '    ExecutePython(code, preview)
-            Case Else
-                GlobalStatusStrip.ShowWarning("不支持的语言类型: " & language)
-        End Select
+        Dim lowerLang As String = language.ToLower()
+
+        If lowerLang.Contains("vbnet") OrElse lowerLang.Contains("vbscript") OrElse lowerLang.Contains("vba") Then
+            ' 执行 VBA 代码 (简化匹配逻辑: 包含vb或vba的都识别为VBA)
+            ExecuteVBACode(code, preview)
+        ElseIf lowerLang.Contains("js") OrElse lowerLang.Contains("javascript") Then
+            ' 执行 JavaScript 代码
+            ExecuteJavaScript(code, preview)
+        ElseIf lowerLang.Contains("excel") OrElse lowerLang.Contains("formula") OrElse lowerLang.Contains("function") Then
+            ' 执行 Excel 函数/公式
+            ExecuteExcelFormula(code, preview)
+
+            'Case "sql", "language-sql"
+            '    ' 执行 SQL 查询
+            '    ExecuteSqlQuery(code, preview)
+            'Case "powerquery", "m", "language-powerquery", "language-m"
+            '    ' 执行 PowerQuery/M 语言
+            '    ExecutePowerQuery(code, preview)
+            'Case "python", "py", "language-python"
+            '    ' 执行 Python 代码
+            '    ExecutePython(code, preview)
+        Else
+            GlobalStatusStrip.ShowWarning("不支持的语言类型: " & language)
+        End If
+
     End Sub
 
     ' 执行JavaScript代码 - 专注于操作Office/WPS对象模型，支持Office JS API风格代码
@@ -1389,9 +1505,26 @@ Public MustInherit Class BaseChatControl
                                         Dim decodedHtml As String = UnescapeHtmlContent(rawResult)
                                         decodedHtml = decodedHtml.TrimStart("""").TrimEnd("""")
 
+                                        ' 2. 使用正则表达式移除底部输入栏
+                                        Dim bottomBarPattern As String = "<div[^>]*id=[""']chat-bottom-bar[""'][^>]*>.*?</div>\s*</div>\s*</div>"
+                                        decodedHtml = Regex.Replace(decodedHtml, bottomBarPattern, "", RegexOptions.Singleline)
+
                                         ' 移除 <script> 标签及其内容
                                         Dim scriptPattern As String = "<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>"
                                         decodedHtml = Regex.Replace(decodedHtml, scriptPattern, String.Empty, RegexOptions.IgnoreCase)
+                                        decodedHtml = decodedHtml.Replace("https://officeai.local/css/", "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/")
+
+
+                                        ' 重新注入必要的JavaScript代码
+                                        Dim essentialScript As String = GetEssentialJavaScript()
+
+                                        ' 在 </body> 标签前插入必要的脚本
+                                        If decodedHtml.Contains("</body>") Then
+                                            decodedHtml = decodedHtml.Replace("</body>", essentialScript & Environment.NewLine & "</body>")
+                                        Else
+                                            ' 如果没有 </body> 标签，在末尾添加
+                                            decodedHtml &= essentialScript
+                                        End If
 
                                         tcs.SetResult(decodedHtml)
                                     Catch ex As Exception
@@ -1400,6 +1533,112 @@ Public MustInherit Class BaseChatControl
                                 End Sub)
 
         Return Await tcs.Task
+    End Function
+
+    Private Function GetEssentialJavaScript() As String
+        Return "
+<script>
+// 代码复制功能
+function copyCode(button) {
+    const codeBlock = button.closest('.code-block');
+    const codeElement = codeBlock.querySelector('code');
+    const code = codeElement.textContent;
+
+    const textarea = document.createElement('textarea');
+    textarea.value = code;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+
+    try {
+        textarea.select();
+        textarea.setSelectionRange(0, 99999);
+        document.execCommand('copy');
+
+        const originalText = button.innerHTML;
+        button.innerHTML = '已复制';
+        setTimeout(() => {
+            button.innerHTML = originalText;
+        }, 2000);
+    } catch (err) {
+        console.error('复制失败:', err);
+        alert('复制失败');
+    } finally {
+        document.body.removeChild(textarea);
+    }
+}
+
+// 聊天消息引用展开/折叠功能
+function toggleChatMessageReference(headerElement) {
+    const container = headerElement.closest('.chat-message-references');
+    if (container) {
+        container.classList.toggle('collapsed');
+        
+        // 更新箭头方向
+        const arrow = headerElement.querySelector('.chat-message-reference-arrow');
+        if (arrow) {
+            arrow.innerHTML = container.classList.contains('collapsed') ? '&#9658;' : '&#9660;';
+        }
+    }
+}
+
+// 页面初始化
+document.addEventListener('DOMContentLoaded', function() {
+    // 添加代码块点击事件
+    document.querySelectorAll('.code-toggle-label').forEach(label => {
+        label.onclick = function(e) {
+            e.stopPropagation();
+            const preElement = this.nextElementSibling;
+            if (preElement && preElement.tagName.toLowerCase() === 'pre') {
+                preElement.classList.toggle('collapsed');
+                this.textContent = preElement.classList.contains('collapsed') ? '点击展开代码' : '点击折叠代码';
+            }
+        };
+    });
+    
+    // 添加pre元素点击事件
+    document.querySelectorAll('pre.collapsible').forEach(preElement => {
+        preElement.onclick = function(e) {
+            // 忽略代码按钮点击
+            if (e.target.closest('.code-button') || e.target.closest('.code-buttons')) {
+                return;
+            }
+            e.stopPropagation();
+            this.classList.toggle('collapsed');
+            
+            const toggleLabel = this.previousElementSibling;
+            if (toggleLabel && toggleLabel.classList.contains('code-toggle-label')) {
+                toggleLabel.textContent = this.classList.contains('collapsed') ? '点击展开代码' : '点击折叠代码';
+            }
+        };
+    });
+    
+    // 处理聊天消息引用点击
+    document.querySelectorAll('.chat-message-reference-header').forEach(header => {
+        header.onclick = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleChatMessageReference(this);
+        };
+    });
+    
+    // 处理推理容器点击
+    document.querySelectorAll('.reasoning-header').forEach(header => {
+        header.onclick = function() {
+            const container = this.closest('.reasoning-container');
+            if (container) {
+                container.classList.toggle('collapsed');
+            }
+        };
+    });
+});
+
+// 如果DOM已加载完成，立即执行初始化
+if (document.readyState !== 'loading') {
+    const event = new Event('DOMContentLoaded');
+    document.dispatchEvent(event);
+}
+</script>"
     End Function
 
     Private Async Function EnsureWebView2InitializedAsync() As Task
