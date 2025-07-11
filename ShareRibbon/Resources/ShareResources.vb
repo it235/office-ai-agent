@@ -19,6 +19,11 @@
         End Get
     End Property
 
+    Public Shared ReadOnly Property Mcp1() As System.Drawing.Image
+        Get
+            Return CType(_resourceManager.GetObject("mcp1"), System.Drawing.Image)
+        End Get
+    End Property
     Public Shared ReadOnly Property Chat() As System.Drawing.Image
         Get
             Return CType(_resourceManager.GetObject("chat"), System.Drawing.Image)

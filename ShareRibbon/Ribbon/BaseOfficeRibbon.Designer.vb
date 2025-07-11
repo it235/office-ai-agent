@@ -42,14 +42,16 @@ Partial Class BaseOfficeRibbon
         Me.GroupDeepseek = Me.Factory.CreateRibbonGroup
         Me.DeepseekButton = Me.Factory.CreateRibbonButton()
 
+        ' 新增：MCP 专用 Group
+        Me.GroupMCP = Me.Factory.CreateRibbonGroup
+        Me.MCPButton = Me.Factory.CreateRibbonButton()
+
         ' 第二个Group和按钮
         Me.GroupTools = Me.Factory.CreateRibbonGroup
         Me.WebCaptureButton = Me.Factory.CreateRibbonButton
         Me.SpotlightButton = Me.Factory.CreateRibbonButton
 
-        Me.DeepseekButton = Me.Factory.CreateRibbonButton()
         Me.BatchDataGenButton = Me.Factory.CreateRibbonButton()
-        Me.MCPButton = Me.Factory.CreateRibbonButton()
 
 
         Me.TabAI.SuspendLayout()
@@ -60,6 +62,7 @@ Partial Class BaseOfficeRibbon
         Me.TabAI.Groups.Add(Me.GroupDeepseek)  ' 首先添加Deepseek Group
         Me.TabAI.Groups.Add(Me.GroupAI)
         Me.TabAI.Groups.Add(Me.GroupTools)
+        Me.TabAI.Groups.Add(Me.GroupMCP)
 
         Me.TabAI.Label = "AI助手"
         Me.TabAI.Name = "TabAI"
@@ -77,6 +80,18 @@ Partial Class BaseOfficeRibbon
         Me.DeepseekButton.ScreenTip = "免费增强版"
         Me.DeepseekButton.SuperTip = "在原有对话基础上，增加Agent执行能力"
 
+        ' GroupMCP - 新的MCP专用Group
+        Me.GroupMCP.Items.Add(Me.MCPButton)
+        Me.GroupMCP.Label = "MCP连接"
+        Me.GroupMCP.Name = "GroupMCP"
+
+        ' 配置MCP按钮 - 设置为大图标
+        Me.MCPButton.Label = "MCP"
+        Me.MCPButton.Name = "MCPButton"
+        Me.MCPButton.ControlSize = Microsoft.Office.Core.RibbonControlSize.RibbonControlSizeLarge
+        Me.MCPButton.ShowImage = True
+        Me.MCPButton.ScreenTip = "MCP服务器配置"
+        Me.MCPButton.SuperTip = "配置MCP服务器并作为客户端调用大模型"
 
         ' GroupAI
         Me.GroupAI.Items.Add(Me.ConfigApiButton)
@@ -129,6 +144,7 @@ Partial Class BaseOfficeRibbon
         ' GroupTools
         Me.GroupTools.Items.Add(Me.WebCaptureButton)
         Me.GroupTools.Items.Add(Me.SpotlightButton)
+        Me.GroupTools.Items.Add(Me.BatchDataGenButton)
         Me.GroupTools.Label = "工具箱"
         Me.GroupTools.Name = "GroupTools"
 
@@ -150,15 +166,6 @@ Partial Class BaseOfficeRibbon
         Me.BatchDataGenButton.Name = "BatchDataGenButton"
         Me.BatchDataGenButton.ScreenTip = "配置和生成批量数据"
         Me.BatchDataGenButton.SuperTip = "配置字段、列关系并生成数据到工作簿"
-        Me.GroupTools.Items.Add(Me.BatchDataGenButton)
-
-        ' 配置MCP按钮
-        Me.MCPButton.Label = "MCP"
-        Me.MCPButton.Name = "MCPButton"
-        Me.MCPButton.ScreenTip = "MCP服务器配置"
-        Me.MCPButton.SuperTip = "配置MCP服务器并作为客户端调用大模型"
-        Me.GroupTools.Items.Add(Me.MCPButton)
-
 
         ' BaseOfficeRibbon
         Me.Name = "BaseOfficeRibbon"
@@ -192,5 +199,8 @@ Partial Class BaseOfficeRibbon
     Protected WithEvents SpotlightButton As Microsoft.Office.Tools.Ribbon.RibbonButton
 
     Protected WithEvents BatchDataGenButton As Microsoft.Office.Tools.Ribbon.RibbonButton
+
+    Protected WithEvents GroupMCP As Microsoft.Office.Tools.Ribbon.RibbonGroup
     Protected WithEvents MCPButton As Microsoft.Office.Tools.Ribbon.RibbonButton
+
 End Class

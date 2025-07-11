@@ -1230,6 +1230,156 @@
                 width: 280px;
             }
         }
+
+        /* MCP 按钮样式 */
+        #mcp-toggle-btn {
+            background: none;
+            border: none;
+            padding: 4px;
+            cursor: pointer;
+            display: none; /* 默认隐藏，检测到支持时显示 */
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            transition: color 0.2s, background-color 0.2s;
+        }
+
+            #mcp-toggle-btn:hover {
+                color: #4a6fa5;
+                background-color: #f0f0f0;
+            }
+
+        /* MCP 弹窗样式 */
+        #mcp-dialog {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            width: 300px; /* 从400px改为300px，与settings宽度一致 */
+            max-height: 80vh;
+            overflow-y: auto;
+            z-index: 1000;
+        }
+
+        .mcp-dialog-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .mcp-dialog-title {
+            font-size: 18px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .mcp-close-btn {
+            background: none;
+            border: none;
+            font-size: 20px;
+            color: #666;
+            cursor: pointer;
+        }
+
+        .mcp-list {
+            margin: 0;
+            padding: 0;
+        }
+
+        .mcp-item {
+            border: 1px solid #e0e5eb;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            padding: 12px;
+            background-color: #f8f9fa;
+        }
+
+        .mcp-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .mcp-item-title {
+            font-weight: 500;
+            color: #333;
+        }
+
+        .mcp-item-description {
+            font-size: 13px;
+            color: #666;
+        }
+
+        .mcp-toggle {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 20px;
+        }
+
+            .mcp-toggle input {
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }
+
+        .mcp-toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 20px;
+        }
+
+            .mcp-toggle-slider:before {
+                position: absolute;
+                content: "";
+                height: 16px;
+                width: 16px;
+                left: 2px;
+                bottom: 2px;
+                background-color: white;
+                transition: .4s;
+                border-radius: 50%;
+            }
+
+        input:checked + .mcp-toggle-slider {
+            background-color: #4a6fa5;
+        }
+
+            input:checked + .mcp-toggle-slider:before {
+                transform: translateX(20px);
+            }
+
+        .mcp-dialog-footer {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 15px;
+        }
+
+        .mcp-save-btn {
+            background-color: #4a6fa5;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+            .mcp-save-btn:hover {
+                background-color: #3d5a7c;
+            }
     </style>
 </head>
 <body>
@@ -1310,6 +1460,13 @@
                         </svg>
                     </button>
 
+                    <!-- MCP 按钮 -->
+                    <button id="mcp-toggle-btn" title="配置MCP工具">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                        </svg>
+                    </button>
+
                     <!-- 新增：历史记录按钮，放在取消按钮之后 -->
                     <button id="history-toggle-btn" title="查看历史聊天记录">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1321,6 +1478,23 @@
             </div>
         </div>
     </div>
+
+    <!-- MCP 配置弹窗 -->
+    <div id="mcp-dialog">
+        <div class="mcp-dialog-header">
+            <span class="mcp-dialog-title">MCP工具配置</span>
+            <button class="mcp-close-btn" id="mcp-close-btn">&times;</button>
+        </div>
+        <div id="mcp-list" class="mcp-list">
+            <!-- MCP列表将在这里动态生成 -->
+        </div>
+        <div class="mcp-dialog-footer">
+            <button class="mcp-save-btn" id="mcp-save-btn">保存设置</button>
+        </div>
+    </div>
+
+    <!-- MCP弹窗遮罩 -->
+    <div class="overlay" id="mcp-overlay"></div>
 
     <!-- 历史记录侧边栏 -->
     <div id="history-sidebar" class="sidebar-hidden">
@@ -1413,32 +1587,32 @@
 
             // add button
             return `
-                                                                        <div class="code-block">
-                                                                            ${codeHtml}
-                                                                            <div class="code-buttons">
-                                                                                <button class="code-button copy-button" onclick="copyCode(this)">
-                                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                                                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                                                                                    </svg>
-                                                                                    复制
-                                                                                </button>
-                                                                                <button class="code-button edit-button" onclick="editCode(this)">
-                                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                                                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                                                                                    </svg>
-                                                                                    编辑
-                                                                                </button>
-                                                                                <button class="code-button execute-button" onclick="executeCode(this)">
-                                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                                                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                                                                                    </svg>
-                                                                                    执行
-                                                                                </button>
+                                                                            <div class="code-block">
+                                                                                ${codeHtml}
+                                                                                <div class="code-buttons">
+                                                                                    <button class="code-button copy-button" onclick="copyCode(this)">
+                                                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                                                                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                                                                        </svg>
+                                                                                        复制
+                                                                                    </button>
+                                                                                    <button class="code-button edit-button" onclick="editCode(this)">
+                                                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                                                                        </svg>
+                                                                                        编辑
+                                                                                    </button>
+                                                                                    <button class="code-button execute-button" onclick="executeCode(this)">
+                                                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                                                                        </svg>
+                                                                                        执行
+                                                                                    </button>
+                                                                                </div>
                                                                             </div>
-                                                                        </div>
-                                                                    `;
+                                                                        `;
         };
 
         marked.use({ renderer });
@@ -1462,11 +1636,11 @@
 
                 const originalText = button.innerHTML;
                 button.innerHTML = `
-                                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                                                <polyline points="20 6 9 17 4 12"></polyline>
-                                                                            </svg>
-                                                                            已复制
-                                                                        `;
+                                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                                                                </svg>
+                                                                                已复制
+                                                                            `;
                 setTimeout(() => {
                     button.innerHTML = originalText;
                 }, 2000);
@@ -1505,11 +1679,11 @@
 
                 const originalText = button.innerHTML;
                 button.innerHTML = `
-                                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                                                <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                                                                            </svg>
-                                                                            已执行
-                                                                        `;
+                                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                                                                </svg>
+                                                                                已执行
+                                                                            `;
                 setTimeout(() => {
                     button.innerHTML = originalText;
                 }, 2000);
@@ -1640,18 +1814,18 @@
             const reasoningHeader = document.createElement('div');
             reasoningHeader.className = 'reasoning-header';
             reasoningHeader.innerHTML = `
-                                                                        <span class="reasoning-title">
-                                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                                                                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
-                                                                            </svg>
-                                                                            思考过程
-                                                                        </span>
-                                                                        <span class="reasoning-toggle">
-                                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                                                                                <path d="M7 10l5 5 5-5z"/>
-                                                                            </svg>
-                                                                        </span>
-                                                                    `;
+                                                                            <span class="reasoning-title">
+                                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                                                                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
+                                                                                </svg>
+                                                                                思考过程
+                                                                            </span>
+                                                                            <span class="reasoning-toggle">
+                                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                                                                                    <path d="M7 10l5 5 5-5z"/>
+                                                                                </svg>
+                                                                            </span>
+                                                                        `;
 
             // 添加点击事件以展开/折叠推理内容
             reasoningHeader.addEventListener('click', function () {
@@ -2098,30 +2272,30 @@
             if (selectedSheetContent.length > 0) {
                 let itemsHtml = selectedSheetContent.map(item => `<div>${item.sheetName}: ${item.address}</div>`).join('');
                 htmlContent += `
-                                    <div class="chat-message-references collapsed" id="msg-ref-sel-${uuid}">
-                                        <div class="chat-message-reference-header" onclick="toggleChatMessageReference(this)">
-                                            <span class="chat-message-reference-arrow">&#9658;</span>
-                                            <span class="chat-message-reference-label">引用内容 (${selectedSheetContent.length})</span>
-                                        </div>
-                                        <div class="chat-message-reference-content">
-                                            ${itemsHtml}
-                                        </div>
-                                    </div>`;
+                                        <div class="chat-message-references collapsed" id="msg-ref-sel-${uuid}">
+                                            <div class="chat-message-reference-header" onclick="toggleChatMessageReference(this)">
+                                                <span class="chat-message-reference-arrow">&#9658;</span>
+                                                <span class="chat-message-reference-label">引用内容 (${selectedSheetContent.length})</span>
+                                            </div>
+                                            <div class="chat-message-reference-content">
+                                                ${itemsHtml}
+                                            </div>
+                                        </div>`;
             }
 
             // 3c. 添加可折叠的 "引用文件"
             if (attachedFileObjects.length > 0) {
                 let displayItemsHtml = attachedFileObjects.map(file => `<div>${escapeHtml(file.name)}</div>`).join('');
                 htmlContent += `
-                        <div class="chat-message-references collapsed" id="msg-ref-file-${uuid}">
-                            <div class="chat-message-reference-header" onclick="toggleChatMessageReference(this)">
-                                <span class="chat-message-reference-arrow">&#9658;</span>
-                                <span class="chat-message-reference-label">引用文件 (${attachedFileObjects.length})</span>
-                            </div>
-                            <div class="chat-message-reference-content">
-                                ${displayItemsHtml}
-                            </div>
-                        </div>`;
+                            <div class="chat-message-references collapsed" id="msg-ref-file-${uuid}">
+                                <div class="chat-message-reference-header" onclick="toggleChatMessageReference(this)">
+                                    <span class="chat-message-reference-arrow">&#9658;</span>
+                                    <span class="chat-message-reference-label">引用文件 (${attachedFileObjects.length})</span>
+                                </div>
+                                <div class="chat-message-reference-content">
+                                    ${displayItemsHtml}
+                                </div>
+                            </div>`;
             }
 
             messageContentDiv.innerHTML = htmlContent;
@@ -2557,11 +2731,11 @@
 
                 if (!files || files.length === 0) {
                     historyList.innerHTML = `
-                            <div class="empty-state">
-                                <div class="empty-state-icon">📄</div>
-                                <div class="empty-state-text">您还没有任何历史记录</div>
-                            </div>
-                        `;
+                                <div class="empty-state">
+                                    <div class="empty-state-icon">📄</div>
+                                    <div class="empty-state-text">您还没有任何历史记录</div>
+                                </div>
+                            `;
                     return;
                 }
 
@@ -2570,12 +2744,12 @@
 
                 // 生成文件列表HTML
                 const itemsHtml = files.map(file => `
-                        <div class="history-item" onclick="historyManager.openHistoryFile('${file.fullPath.replace(/\\/g, '\\\\')}')">
-                            <div class="history-item-title">${this.formatFileName(file.fileName)}</div>
-                            <div class="history-item-date">${this.formatFileDate(file.fileName)}</div>
-                            <div class="history-item-size">${this.formatFileSize(file.size)}</div>
-                        </div>
-                    `).join('');
+                            <div class="history-item" onclick="historyManager.openHistoryFile('${file.fullPath.replace(/\\/g, '\\\\')}')">
+                                <div class="history-item-title">${this.formatFileName(file.fileName)}</div>
+                                <div class="history-item-date">${this.formatFileDate(file.fileName)}</div>
+                                <div class="history-item-size">${this.formatFileSize(file.size)}</div>
+                            </div>
+                        `).join('');
 
                 historyList.innerHTML = itemsHtml;
             },
@@ -2658,6 +2832,13 @@
 
         // 页面加载完成后初始化历史记录功能
         document.addEventListener('DOMContentLoaded', function () {
+
+            // 初始化MCP按钮事件
+            document.getElementById('mcp-toggle-btn').addEventListener('click', toggleMcpDialog);
+            document.getElementById('mcp-close-btn').addEventListener('click', closeMcpDialog);
+            document.getElementById('mcp-overlay').addEventListener('click', closeMcpDialog);
+            document.getElementById('mcp-save-btn').addEventListener('click', saveMcpSettings);
+
             historyManager.init();
         });
 
@@ -2665,6 +2846,124 @@
         window.setHistoryFilesList = function (files) {
             historyManager.displayHistoryFiles(files);
         };
+
+        // MCP功能相关变量
+        let mcpConnections = []; // 存储MCP连接列表
+        let enabledMcpList = []; // 存储已启用的MCP列表
+        let mcpSupported = false; // 模型是否支持MCP
+
+
+        // 显示/隐藏MCP弹窗
+        function toggleMcpDialog() {
+            document.getElementById('mcp-dialog').style.display = 'block';
+            document.getElementById('mcp-overlay').style.display = 'block';
+
+            // 如果连接列表为空，则向后端请求数据
+            if (mcpConnections.length === 0) {
+                requestMcpConnections();
+            }
+        }
+
+        // 关闭MCP弹窗
+        function closeMcpDialog() {
+            document.getElementById('mcp-dialog').style.display = 'none';
+            document.getElementById('mcp-overlay').style.display = 'none';
+        }
+
+        // 向后端请求MCP连接列表
+        function requestMcpConnections() {
+            sendMessageToServer({
+                type: 'getMcpConnections'
+            });
+        }
+
+        // 渲染MCP连接列表
+        function renderMcpConnections(connections, enabledList) {
+            mcpConnections = connections;
+            enabledMcpList = enabledList || [];
+
+            const mcpListElement = document.getElementById('mcp-list');
+            mcpListElement.innerHTML = '';
+
+            if (connections.length === 0) {
+                mcpListElement.innerHTML = '<div class="mcp-item">没有找到可用的MCP连接，请先在MCP配置中添加连接</div>';
+                return;
+            }
+
+            connections.forEach(connection => {
+                const isEnabled = enabledMcpList.includes(connection.name);
+
+                const mcpItem = document.createElement('div');
+                mcpItem.className = 'mcp-item';
+
+                mcpItem.innerHTML = `
+            <div class="mcp-item-header">
+                <span class="mcp-item-title">${connection.name}</span>
+                <label class="mcp-toggle">
+                    <input type="checkbox" data-mcp-name="${connection.name}" ${isEnabled ? 'checked' : ''}>
+                    <span class="mcp-toggle-slider"></span>
+                </label>
+            </div>
+            <div class="mcp-item-description">
+                ${connection.description}
+            </div>
+        `;
+
+                mcpListElement.appendChild(mcpItem);
+            });
+        }
+
+        // 保存MCP设置
+        function saveMcpSettings() {
+            const enabledMcps = [];
+
+            // 获取所有已启用的MCP
+            document.querySelectorAll('#mcp-list input[type="checkbox"]:checked').forEach(checkbox => {
+                enabledMcps.push(checkbox.getAttribute('data-mcp-name'));
+            });
+
+            // 保存设置
+            sendMessageToServer({
+                type: 'saveMcpSettings',
+                enabledList: enabledMcps
+            });
+
+            // 更新本地存储的启用列表
+            enabledMcpList = enabledMcps;
+
+            // 关闭弹窗
+            closeMcpDialog();
+        }
+
+        // 设置模型是否支持MCP
+        function setMcpSupport(supported, connections, enabledList) {
+            mcpSupported = supported;
+
+            // 显示或隐藏MCP按钮
+            const mcpButton = document.getElementById('mcp-toggle-btn');
+            mcpButton.style.display = supported ? 'flex' : 'none';
+
+            // 处理属性名称大小写不匹配问题
+            if (connections) {
+                // 将首字母大写的属性名转换为小写开头
+                mcpConnections = connections.map(conn => ({
+                    name: conn.Name || conn.name,
+                    url: conn.Description || conn.description,
+                    connectionType: conn.ConnectionType || conn.connectionType,
+                    enabled: conn.Enabled || conn.enabled,
+                    lastConnected: conn.LastConnected || conn.lastConnected,
+                    environmentVariables: conn.EnvironmentVariables || conn.environmentVariables
+                }));
+
+                // 立即渲染连接列表
+                renderMcpConnections(mcpConnections, enabledList);
+            }
+
+            // 如果有启用列表，更新缓存
+            if (enabledList) {
+                enabledMcpList = enabledList;
+            }
+        }
     </script>
 </body>
 </html>

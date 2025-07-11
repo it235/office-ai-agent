@@ -198,6 +198,7 @@ Public MustInherit Class BaseChatControl
                     ChatBrowser.Invoke(Sub()
                                            Task.Delay(100).Wait() ' 同步等待
                                            InitializeSettings()
+                                           InitializeMcpSettings() ' 添加MCP初始化
 
                                            ' 直接在UI线程移除事件处理器
                                            If ChatBrowser IsNot Nothing AndAlso ChatBrowser.CoreWebView2 IsNot Nothing Then
@@ -207,6 +208,7 @@ Public MustInherit Class BaseChatControl
                 Else
                     Task.Delay(100).Wait() ' 同步等待
                     InitializeSettings()
+                    InitializeMcpSettings() ' 添加MCP初始化
 
                     ' 直接在UI线程移除事件处理器
                     If ChatBrowser IsNot Nothing AndAlso ChatBrowser.CoreWebView2 IsNot Nothing Then
@@ -275,6 +277,10 @@ Public MustInherit Class BaseChatControl
                     HandleGetHistoryFiles()
                 Case "openHistoryFile"
                     HandleOpenHistoryFile(jsonDoc)
+                Case "getMcpConnections"
+                    HandleGetMcpConnections()
+                Case "saveMcpSettings"
+                    HandleSaveMcpSettings(jsonDoc)
                 Case Else
                     Debug.WriteLine($"未知消息类型: {messageType}")
             End Select
@@ -284,6 +290,85 @@ Public MustInherit Class BaseChatControl
     End Sub
 
 
+    ' 处理获取MCP连接列表请求
+    Protected Sub HandleGetMcpConnections()
+        Try
+            ' 获取所有可用的MCP连接
+            Dim connections = MCPConnectionManager.LoadConnections()
+
+            ' 过滤出已启用的连接
+            Dim enabledConnections = connections.Where(Function(c) c.Enabled).ToList()
+
+            ' 获取已启用的MCP列表
+            Dim chatSettings As New ChatSettings(GetApplication())
+            Dim enabledMcpList = chatSettings.EnabledMcpList
+
+            ' 将数据序列化为JSON
+            Dim connectionsJson = JsonConvert.SerializeObject(enabledConnections)
+            Dim enabledListJson = JsonConvert.SerializeObject(enabledMcpList)
+
+            ' 发送到前端
+            Dim js = $"renderMcpConnections({connectionsJson}, {enabledListJson});"
+            ExecuteJavaScriptAsyncJS(js)
+        Catch ex As Exception
+            Debug.WriteLine($"获取MCP连接列表失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ' 处理保存MCP设置请求
+    Protected Sub HandleSaveMcpSettings(jsonDoc As JObject)
+        Try
+            ' 获取启用的MCP列表
+            Dim enabledList As List(Of String) = jsonDoc("enabledList").ToObject(Of List(Of String))()
+
+            ' 保存到设置
+            Dim chatSettings As New ChatSettings(GetApplication())
+            chatSettings.SaveEnabledMcpList(enabledList)
+
+            GlobalStatusStrip.ShowInfo("MCP设置已保存")
+        Catch ex As Exception
+            Debug.WriteLine($"保存MCP设置失败: {ex.Message}")
+            GlobalStatusStrip.ShowWarning("保存MCP设置失败")
+        End Try
+    End Sub
+
+    ' 添加MCP初始化方法
+    Protected Sub InitializeMcpSettings()
+        Try
+            ' 检查当前模型是否支持MCP
+            Dim mcpSupported = False
+
+            ' 从ConfigData中查找当前模型的mcpable属性
+            For Each config In ConfigManager.ConfigData
+                If config.selected Then
+                    For Each model In config.model
+                        If model.selected Then
+                            mcpSupported = model.mcpable
+                            Exit For
+                        End If
+                    Next
+                    Exit For
+                End If
+            Next
+
+            ' 加载MCP连接和启用列表
+            Dim connections = MCPConnectionManager.LoadConnections()
+            Dim enabledConnections = connections.Where(Function(c) c.Enabled).ToList()
+
+            Dim chatSettings As New ChatSettings(GetApplication())
+            Dim enabledMcpList = chatSettings.EnabledMcpList
+
+            ' 序列化为JSON
+            Dim connectionsJson = JsonConvert.SerializeObject(enabledConnections)
+            Dim enabledListJson = JsonConvert.SerializeObject(enabledMcpList)
+
+            ' 向前端传递信息
+            Dim js = $"setMcpSupport({mcpSupported.ToString().ToLower()}, {connectionsJson}, {enabledListJson});"
+            ExecuteJavaScriptAsyncJS(js)
+        Catch ex As Exception
+            Debug.WriteLine($"初始化MCP设置失败: {ex.Message}")
+        End Try
+    End Sub
     ' 处理获取历史文件列表请求
     Protected Sub HandleGetHistoryFiles()
         Try
@@ -440,13 +525,15 @@ Public MustInherit Class BaseChatControl
         End If
 
         ' --- 处理选中的内容 ---
-        question = AppendCurrentSelectedContent("--- 用户的问题：" & question & " 。用户提问结束，后续引用的文件都在同一目录下所以可以放心读取。 ---")
+        question = AppendCurrentSelectedContent("--- 我此次的问题：" & question & " ---")
 
         ' --- 文件内容解析逻辑 ---
         Dim fileContentBuilder As New StringBuilder()
         Dim parsedFiles As New List(Of FileContentResult)()
 
         If filePaths IsNot Nothing AndAlso filePaths.Count > 0 Then
+            question = question & " 用户提问结束，后续引用的文件都在同一目录下所以可以放心读取。 ---"
+
             fileContentBuilder.AppendLine(vbCrLf & "--- 以下是用户引用的其他文件内容 ---")
 
             ' 获取当前工作目录
@@ -1166,6 +1253,8 @@ Public MustInherit Class BaseChatControl
         End While
     End Sub
 
+
+
     Private Function CreateRequestBody(question As String) As String
         Dim result As String = question.Replace("\", "\\").Replace("""", "\""").
                                   Replace(vbCr, "\r").Replace(vbLf, "\n").
@@ -1200,14 +1289,150 @@ Public MustInherit Class BaseChatControl
             messages.Add($"{{""role"": ""{message.role}"", ""content"": ""{message.content}""}}")
         Next
 
+
+        ' 添加MCP工具信息（如果有）
+        Dim toolsArray As JArray = Nothing
+        Dim chatSettings As New ChatSettings(GetApplication())
+
+        ' 如果有启用的MCP连接
+        If ChatSettings.EnabledMcpList IsNot Nothing AndAlso ChatSettings.EnabledMcpList.Count > 0 Then
+            toolsArray = New JArray()
+
+            ' 加载所有MCP连接
+            Dim connections = MCPConnectionManager.LoadConnections()
+
+            ' 找到启用的连接
+            For Each mcpName In ChatSettings.EnabledMcpList
+                Dim connection = connections.FirstOrDefault(Function(c) c.Name = mcpName AndAlso c.Enabled)
+                If connection IsNot Nothing Then
+                    ' 从连接配置中获取已保存的工具列表
+                    If connection.Tools IsNot Nothing AndAlso connection.Tools.Count > 0 Then
+                        ' 将所有工具添加到工具数组
+                        For Each toolObj In connection.Tools
+                            toolsArray.Add(toolObj)
+                        Next
+                        Debug.WriteLine($"从连接 '{connection.Name}' 加载了 {connection.Tools.Count} 个工具")
+                    Else
+                        ' 如果连接中没有保存工具信息，则使用通用的mcp_call工具
+                        Dim toolObj = New JObject()
+                        toolObj("type") = "function"
+                        toolObj("function") = New JObject()
+                        toolObj("function")("name") = "mcp_call"
+                        toolObj("function")("description") = $"Call MCP tool through {connection.Name} connection"
+
+                        ' 添加参数架构
+                        toolObj("function")("parameters") = New JObject()
+                        toolObj("function")("parameters")("type") = "object"
+                        toolObj("function")("parameters")("properties") = New JObject()
+
+                        ' 工具名称参数
+                        toolObj("function")("parameters")("properties")("tool_name") = New JObject()
+                        toolObj("function")("parameters")("properties")("tool_name")("type") = "string"
+                        toolObj("function")("parameters")("properties")("tool_name")("description") = "The name of the MCP tool to call"
+
+                        ' 工具参数
+                        toolObj("function")("parameters")("properties")("arguments") = New JObject()
+                        toolObj("function")("parameters")("properties")("arguments")("type") = "object"
+                        toolObj("function")("parameters")("properties")("arguments")("description") = "The arguments to pass to the MCP tool"
+
+                        ' 添加必需参数
+                        toolObj("function")("parameters")("required") = New JArray({"tool_name", "arguments"})
+
+                        ' 添加到工具数组
+                        toolsArray.Add(toolObj)
+                        Debug.WriteLine($"连接 '{connection.Name}' 没有保存工具信息，使用通用mcp_call工具")
+                    End If
+                End If
+            Next
+        End If
+
         ' 构建 JSON 请求体
         Dim messagesJson = String.Join(",", messages)
-        Dim requestBody = $"{{""model"": ""{ConfigSettings.ModelName}"", ""messages"": [{messagesJson}], ""stream"": true}}"
 
-        Return requestBody
+        ' 如果有工具，添加到请求中
+        If toolsArray IsNot Nothing AndAlso toolsArray.Count > 0 Then
+            Dim toolsJson = toolsArray.ToString(Formatting.None)
+            ' 注意这里没有给tools加额外的引号
+            Dim requestBody = $"{{""model"": ""{ConfigSettings.ModelName}"", ""tools"": {toolsJson}, ""messages"": [{messagesJson}], ""stream"": true}}"
+            Return requestBody
+        Else
+            ' 直接使用JSON数组符号
+            Dim requestBody = $"{{""model"": ""{ConfigSettings.ModelName}"", ""tools"": [], ""messages"": [{messagesJson}], ""stream"": true}}"
+            Return requestBody
+        End If
+
     End Function
 
 
+    ' 添加处理MCP工具调用的方法
+    Private Async Function HandleMcpToolCall(toolName As String, arguments As JObject, mcpConnectionName As String) As Task(Of JObject)
+        Try
+            ' 加载MCP连接
+            Dim connections = MCPConnectionManager.LoadConnections()
+            Dim connection = connections.FirstOrDefault(Function(c) c.Name = mcpConnectionName AndAlso c.Enabled)
+
+            If connection Is Nothing Then
+                Return CreateErrorResponse($"MCP连接 '{mcpConnectionName}' 未找到或未启用")
+            End If
+
+            ' 创建MCP客户端
+            Using client As New StreamJsonRpcMCPClient()
+                ' 配置客户端
+                Await client.ConfigureAsync(connection.Url)
+
+                ' 初始化连接
+                Dim initResult = Await client.InitializeAsync()
+                If Not initResult.Success Then
+                    Return CreateErrorResponse($"初始化MCP连接失败: {initResult.ErrorMessage}")
+                End If
+
+                ' 调用工具
+                Dim result = Await client.CallToolAsync(toolName, arguments)
+
+                ' 处理结果
+                If result.IsError Then
+                    Return CreateErrorResponse($"调用MCP工具失败: {result.ErrorMessage}")
+                End If
+
+                ' 创建成功响应
+                Dim responseObj = New JObject()
+
+                ' 添加内容数组
+                Dim contentArray = New JArray()
+                For Each content In result.Content
+                    Dim contentObj = New JObject()
+                    contentObj("type") = content.Type
+
+                    If Not String.IsNullOrEmpty(content.Text) Then
+                        contentObj("text") = content.Text
+                    End If
+
+                    If Not String.IsNullOrEmpty(content.Data) Then
+                        contentObj("data") = content.Data
+                    End If
+
+                    If Not String.IsNullOrEmpty(content.MimeType) Then
+                        contentObj("mimeType") = content.MimeType
+                    End If
+
+                    contentArray.Add(contentObj)
+                Next
+
+                responseObj("content") = contentArray
+                Return responseObj
+            End Using
+        Catch ex As Exception
+            Return CreateErrorResponse($"MCP工具调用出错: {ex.Message}")
+        End Try
+    End Function
+
+    ' 创建错误响应
+    Private Function CreateErrorResponse(errorMessage As String) As JObject
+        Dim responseObj = New JObject()
+        responseObj("isError") = True
+        responseObj("errorMessage") = errorMessage
+        Return responseObj
+    End Function
     ' 添加一个结构来存储token信息
     Private Structure TokenInfo
         Public PromptTokens As Integer
@@ -1320,7 +1545,9 @@ Public MustInherit Class BaseChatControl
     Private _currentMarkdownBuffer As New StringBuilder()
     Private allMarkdownBuffer As New StringBuilder()
 
-
+    ' 用于收集工具调用参数的变量
+    Private _currentToolCall As JObject
+    Private _currentToolArguments As StringBuilder
 
     Private Sub ProcessStreamChunk(rawChunk As String, uuid As String)
         Try
@@ -1349,6 +1576,20 @@ Public MustInherit Class BaseChatControl
                 }
                 End If
 
+                ' 检查是否有工具调用
+                Dim choices = jsonObj("choices")
+                If choices IsNot Nothing AndAlso choices.Count > 0 Then
+                    Dim delta = choices(0)("delta")
+                    If delta IsNot Nothing Then
+                        ' 检查是否有tool_calls字段
+                        Dim toolCalls = delta("tool_calls")
+                        If toolCalls IsNot Nothing AndAlso toolCalls.Count > 0 Then
+                            ' 处理工具调用
+                            ProcessToolCall(toolCalls, uuid)
+                        End If
+                    End If
+                End If
+
                 Dim reasoning_content As String = jsonObj("choices")(0)("delta")("reasoning_content")?.ToString()
                 If Not String.IsNullOrEmpty(reasoning_content) Then
                     _currentMarkdownBuffer.Append(reasoning_content)
@@ -1363,7 +1604,6 @@ Public MustInherit Class BaseChatControl
                 If Not String.IsNullOrEmpty(content) Then
                     _currentMarkdownBuffer.Append(content)
                     ' 检查是否到达代码块自然分割点（例如换行符）
-                    'If content.Contains(vbLf) OrElse content.TrimEnd().EndsWith("`") Then
                     FlushBuffer("content", uuid)
                     'End If
                 End If
@@ -1374,6 +1614,219 @@ Public MustInherit Class BaseChatControl
         End Try
     End Sub
 
+
+    ' 添加新方法来处理工具调用
+    Private Async Sub ProcessToolCall(toolCalls As JArray, uuid As String)
+        Try
+            ' 获取第一个工具调用
+            Dim toolCall = toolCalls(0)
+
+            ' 检查是否有已经存在的工具调用收集器
+            If _currentToolCall Is Nothing Then
+                ' 创建新的工具调用收集器
+                _currentToolCall = New JObject()
+                _currentToolCall("name") = toolCall("function")("name")?.ToString()
+                _currentToolCall("id") = toolCall("id")?.ToString()
+                _currentToolArguments = New StringBuilder()
+            End If
+
+            ' 追加参数片段
+            Dim arguments = toolCall("function")("arguments")?.ToString()
+            If Not String.IsNullOrEmpty(arguments) Then
+                _currentToolArguments.Append(arguments)
+            End If
+
+            ' 检查是否收到完整的工具调用
+            If toolCall("function")("arguments") IsNot Nothing AndAlso
+           toolCall("function")("arguments").ToString().EndsWith("}") Then
+
+                ' 获取完整的参数
+                Dim fullArguments = _currentToolArguments.ToString()
+
+                ' 解析参数
+                Dim argumentsObj As JObject = Nothing
+                Try
+                    argumentsObj = JObject.Parse(fullArguments)
+                Catch ex As Exception
+                    Debug.WriteLine($"解析工具参数失败: {ex.Message}")
+
+                    ' 如果解析失败，可能参数尚未完全接收，继续等待更多数据
+                    If Not fullArguments.EndsWith("}") Then
+                        Return
+                    End If
+
+                    ' 如果参数格式错误，创建一个空对象
+                    argumentsObj = New JObject()
+                End Try
+
+                ' 获取工具名称
+                Dim toolName = _currentToolCall("name").ToString()
+
+                ' 添加消息到界面，说明正在调用工具
+                Dim toolCallMessage = $"正在调用工具: {toolName}..."
+                _currentMarkdownBuffer.Append(toolCallMessage)
+                FlushBuffer("content", uuid)
+
+                ' 从设置中获取启用的MCP连接
+                Dim chatSettings As New ChatSettings(GetApplication())
+                Dim enabledMcpList = chatSettings.EnabledMcpList
+
+                ' 修改 ProcessToolCall 方法中处理结果的部分
+                If enabledMcpList IsNot Nothing AndAlso enabledMcpList.Count > 0 Then
+                    ' 使用第一个启用的MCP连接
+                    Dim mcpConnectionName = enabledMcpList(0)
+
+                    ' 调用工具
+                    Dim result = Await HandleMcpToolCall(toolName, argumentsObj, mcpConnectionName)
+
+                    ' 处理结果
+                    If result("isError") IsNot Nothing AndAlso CBool(result("isError")) Then
+                        ' 显示错误消息
+                        Dim errorMessage = $"<br/>工具调用失败: {result("errorMessage")}<br/>"
+                        _currentMarkdownBuffer.Append(errorMessage)
+                        FlushBuffer("content", uuid)
+                    Else
+                        ' 不直接显示结果，而是发送给大模型进行润色
+                        Await SendToolResultForFormatting(toolName, argumentsObj, result, uuid)
+                    End If
+                Else
+                    ' 没有启用的MCP连接
+                    Dim errorMessage = "<br/>没有启用的MCP连接，无法调用工具。请在设置中启用MCP连接。<br/>"
+                    _currentMarkdownBuffer.Append(errorMessage)
+                    FlushBuffer("content", uuid)
+                End If
+
+                ' 重置工具调用收集器
+                _currentToolCall = Nothing
+                _currentToolArguments = Nothing
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"处理工具调用时出错: {ex.Message}")
+
+            ' 在UI上显示错误
+            If _currentMarkdownBuffer IsNot Nothing Then
+                _currentMarkdownBuffer.Append($"<br/>处理工具调用时出错: {ex.Message}<br/>")
+                FlushBuffer("content", uuid)
+            End If
+
+            ' 重置工具调用收集器
+            _currentToolCall = Nothing
+            _currentToolArguments = Nothing
+        End Try
+    End Sub
+
+    ' 新增方法：发送工具结果给大模型进行润色
+    Private Async Function SendToolResultForFormatting(toolName As String, arguments As JObject, result As JObject, uuid As String) As Task
+        Try
+            ' 准备发送给大模型的消息内容
+            Dim promptBuilder As New StringBuilder()
+            promptBuilder.AppendLine($"用户使用了 MCP 工具 '{toolName}'，参数为：")
+            promptBuilder.AppendLine("```json")
+            promptBuilder.AppendLine(arguments.ToString(Formatting.Indented))
+            promptBuilder.AppendLine("```")
+            promptBuilder.AppendLine()
+            promptBuilder.AppendLine("工具执行结果为：")
+            promptBuilder.AppendLine("```json")
+            promptBuilder.AppendLine(result.ToString(Formatting.Indented))
+            promptBuilder.AppendLine("```")
+            promptBuilder.AppendLine()
+            promptBuilder.AppendLine("请将上述结果整理成易于理解的格式，并使用合适的Markdown格式化呈现，突出重要信息。不需要解释工具调用过程，只需要呈现结果。不要重复用户的请求内容。")
+
+            ' 构建请求体
+            Dim messagesArray = New JArray()
+            Dim systemMessage = New JObject()
+            systemMessage("role") = "system"
+            systemMessage("content") = "你是一个帮助解释API调用结果的助手。你的任务是将MCP工具返回的JSON结果转换为人类易读的格式，并用Markdown呈现。"
+
+            Dim userMessage = New JObject()
+            userMessage("role") = "user"
+            userMessage("content") = promptBuilder.ToString()
+
+            messagesArray.Add(systemMessage)
+            messagesArray.Add(userMessage)
+
+            Dim requestObj = New JObject()
+            requestObj("model") = ConfigSettings.ModelName
+            requestObj("messages") = messagesArray
+            requestObj("stream") = True
+
+            Dim requestBody = requestObj.ToString(Formatting.None)
+
+            ' 发送请求
+            Using client As New HttpClient()
+                client.Timeout = Timeout.InfiniteTimeSpan
+
+                Dim request As New HttpRequestMessage(HttpMethod.Post, ConfigSettings.ApiUrl)
+                request.Headers.Authorization = New AuthenticationHeaderValue("Bearer", ConfigSettings.ApiKey)
+                request.Content = New StringContent(requestBody, Encoding.UTF8, "application/json")
+
+                Using response As HttpResponseMessage = Await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead)
+                    response.EnsureSuccessStatusCode()
+
+                    ' 处理流响应
+                    Dim formattedBuilder As New StringBuilder()
+                    formattedBuilder.AppendLine("<br/>**工具调用结果：**<br/>")
+
+                    Using responseStream As Stream = Await response.Content.ReadAsStreamAsync()
+                        Using reader As New StreamReader(responseStream, Encoding.UTF8)
+                            Dim stringBuilder As New StringBuilder()
+                            Dim buffer(1023) As Char
+                            Dim readCount As Integer
+
+                            Do
+                                readCount = Await reader.ReadAsync(buffer, 0, buffer.Length)
+                                If readCount = 0 Then Exit Do
+
+                                Dim chunk As String = New String(buffer, 0, readCount)
+                                chunk = chunk.Replace("data:", "")
+                                stringBuilder.Append(chunk)
+
+                                If stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}).EndsWith("}") Then
+                                    Dim lines As String() = stringBuilder.ToString().Split({vbCr, vbLf}, StringSplitOptions.RemoveEmptyEntries)
+
+                                    For Each line In lines
+                                        line = line.Trim()
+                                        If line = "[DONE]" Then
+                                            Continue For
+                                        End If
+                                        If line = "" Then
+                                            Continue For
+                                        End If
+
+                                        Try
+                                            Dim jsonObj As JObject = JObject.Parse(line)
+                                            Dim content As String = jsonObj("choices")(0)("delta")("content")?.ToString()
+
+                                            If Not String.IsNullOrEmpty(content) Then
+                                                formattedBuilder.Append(content)
+                                            End If
+                                        Catch ex As Exception
+                                            ' 忽略解析错误
+                                            Debug.WriteLine($"解析工具结果润色响应出错: {ex.Message}")
+                                        End Try
+                                    Next
+
+                                    stringBuilder.Clear()
+                                End If
+                            Loop
+                        End Using
+                    End Using
+
+                    ' 显示格式化后的结果
+                    _currentMarkdownBuffer.Append(formattedBuilder.ToString())
+                    FlushBuffer("content", uuid)
+                End Using
+            End Using
+        Catch ex As Exception
+            Debug.WriteLine($"格式化工具结果时出错: {ex.Message}")
+
+            ' 如果格式化失败，直接显示原始结果
+            _currentMarkdownBuffer.Append("\n\n**工具调用结果：**\n\n```json\n")
+            _currentMarkdownBuffer.Append(result.ToString(Formatting.Indented))
+            _currentMarkdownBuffer.Append("\n```\n")
+            FlushBuffer("content", uuid)
+        End Try
+    End Function
 
     Private Async Sub FlushBuffer(contentType As String, uuid As String)
         If _currentMarkdownBuffer.Length = 0 Then Return

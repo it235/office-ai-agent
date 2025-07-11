@@ -99,16 +99,13 @@ Namespace My.Resources
         '''&lt;!-- 先加载核心库 --&gt;
         '''&lt;script src=&quot;https://officeai.local/js/highlight.min.js&quot;&gt;&lt;/script&gt;
         '''&lt;link rel=&quot;stylesheet&quot; href=&quot;https://officeai.local/css/github.min.css&quot;&gt;
-        '''&lt;!-- 确保核心库加载完成后再加载语言包 --&gt;
-        '''&lt;script&gt;
-        '''    // 添加调试日志
-        '''    console.log(&apos;Initializing scripts...&apos;);
-        '''    
-        '''    // 检查 highlight.js 是否加载
-        '''    if (typeof hljs !== &apos;undefined&apos;) {
-        '''        console.log(&apos;highlight.js loaded successfully&apos;);
-        '''    } else {
-        '''         [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''&lt;script src=&quot;https://officeai.local/js/marked.min.js&quot;&gt;&lt;/script&gt;
+        '''&lt;script src=&quot;https://officeai.local/js/vbscript.min.js&quot;&gt;&lt;/script&gt;
+        '''
+        '''    &lt;script&gt;
+        '''        hljs.registerAliases(&apos;vba&apos;, { languageName: &apos;vbscript&apos; });
+        '''        hljs.highlightAll();
+        '''    &lt;/ [字符串的其余部分被截断]&quot;; 的本地化字符串。
         '''</summary>
         Public ReadOnly Property chat_template() As String
             Get
@@ -195,6 +192,16 @@ Namespace My.Resources
         Public ReadOnly Property marked_min() As String
             Get
                 Return ResourceManager.GetString("marked_min", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找 System.Drawing.Bitmap 类型的本地化资源。
+        '''</summary>
+        Public ReadOnly Property mcp1() As System.Drawing.Bitmap
+            Get
+                Dim obj As Object = ResourceManager.GetObject("mcp1", resourceCulture)
+                Return CType(obj,System.Drawing.Bitmap)
             End Get
         End Property
         

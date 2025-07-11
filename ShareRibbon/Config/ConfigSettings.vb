@@ -1,4 +1,4 @@
-' ´æ´¢ÅäÖÃµÄapi´óÄ£ĞÍºÍapi key
+ï»¿' å­˜å‚¨é…ç½®çš„apiå¤§æ¨¡å‹å’Œapi key
 Public Class ConfigSettings
     ' Public NotInheritable Class ConfigSettings
     Private Sub New()
@@ -9,7 +9,7 @@ Public Class ConfigSettings
     Public Shared Property ApiKey As String
     Public Shared Property ModelName As String
 
-    ' ÌáÊ¾´ÊÏà¹ØÅäÖÃ
+    ' æç¤ºè¯ç›¸å…³é…ç½®
     Public Shared Property propmtName As String
     Public Shared Property propmtContent As String
 

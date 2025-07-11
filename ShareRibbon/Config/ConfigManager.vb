@@ -1,20 +1,20 @@
-Imports System.IO
+ï»¿Imports System.IO
 Imports Newtonsoft.Json
 
 Public Class ConfigManager
     Public Shared Property ConfigData As List(Of ConfigItem)
 
-    ' Ä¬ÈÏÅäÖÃÎÄ¼şÔÚµ±Ç°ÓÃ»§£¬ÎÒµÄÎÄµµÏÂ
+    ' é»˜è®¤é…ç½®æ–‡ä»¶åœ¨å½“å‰ç”¨æˆ·ï¼Œæˆ‘çš„æ–‡æ¡£ä¸‹
     Private Shared configFileName As String = "office_ai_config.json"
     Private Shared configFilePath As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
         ConfigSettings.OfficeAiAppDataFolder, configFileName)
 
     Public Sub LoadConfig()
-        ' ³õÊ¼»¯ÅäÖÃÊı¾İ
+        ' åˆå§‹åŒ–é…ç½®æ•°æ®
         ConfigData = New List(Of ConfigItem)()
 
         Dim ollama = New ConfigItem() With {
-                .pltform = "Ollama±¾µØÄ£ĞÍ",
+                .pltform = "Ollamaæœ¬åœ°æ¨¡å‹",
                 .url = "http://localhost:11434/v1/chat/completions",
                 .model = New List(Of ConfigItemModel) From {
                     New ConfigItemModel() With {.modelName = "deepseek-r1:1.5b", .selected = True},
@@ -26,7 +26,7 @@ Public Class ConfigManager
             }
 
         Dim ds = New ConfigItem() With {
-                .pltform = "Éî¶ÈÇóË÷",
+                .pltform = "æ·±åº¦æ±‚ç´¢",
                 .url = "https://api.deepseek.com/chat/completions",
                 .model = New List(Of ConfigItemModel) From {
                     New ConfigItemModel() With {.modelName = "deepseek-chat", .selected = True},
@@ -36,7 +36,7 @@ Public Class ConfigManager
                 .selected = True
             }
         Dim aliyun = New ConfigItem() With {
-                .pltform = "°¢ÀïÔÆ°ÙÁ¶",
+                .pltform = "é˜¿é‡Œäº‘ç™¾ç‚¼",
                 .url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
                 .model = New List(Of ConfigItemModel) From {
                     New ConfigItemModel() With {.modelName = "qwen-coder-plus", .selected = True},
@@ -47,7 +47,7 @@ Public Class ConfigManager
                 .selected = False
             }
         Dim volces = New ConfigItem() With {
-            .pltform = "°Ù¶ÈÇ§·«",
+            .pltform = "ç™¾åº¦åƒå¸†",
             .url = "https://qianfan.baidubce.com/v2/chat/completions",
             .model = New List(Of ConfigItemModel) From {
                 New ConfigItemModel() With {.modelName = "deepseek-v3", .selected = True},
@@ -57,7 +57,7 @@ Public Class ConfigManager
             .selected = False
         }
         Dim siliconflow = New ConfigItem() With {
-            .pltform = "»ªÎª¹è»ùÁ÷¶¯",
+            .pltform = "åä¸ºç¡…åŸºæµåŠ¨",
             .url = "https://api.siliconflow.cn/v1/chat/completions",
             .model = New List(Of ConfigItemModel) From {
             New ConfigItemModel() With {.modelName = "deepseek-ai/DeepSeek-V3", .selected = True},
@@ -67,7 +67,7 @@ Public Class ConfigManager
             .selected = False
         }
 
-        ' Ìí¼ÓÄ¬ÈÏÅäÖÃ
+        ' æ·»åŠ é»˜è®¤é…ç½®
         If Not File.Exists(configFilePath) Then
             ConfigData.Add(ds)
             ConfigData.Add(siliconflow)
@@ -75,12 +75,12 @@ Public Class ConfigManager
             ConfigData.Add(ollama)
             ConfigData.Add(volces)
         Else
-            ' ¼ÓÔØ×Ô¶¨ÒåÅäÖÃ
+            ' åŠ è½½è‡ªå®šä¹‰é…ç½®
             Dim json As String = File.ReadAllText(configFilePath)
             ConfigData = JsonConvert.DeserializeObject(Of List(Of ConfigItem))(json)
         End If
 
-        ' ³õÊ¼»¯ÅäÖÃ£¬½«Êı¾İ³õÊ¼»¯µ½ ConfigSettings£¬·½±ãÈ«¾Öµ÷ÓÃ
+        ' åˆå§‹åŒ–é…ç½®ï¼Œå°†æ•°æ®åˆå§‹åŒ–åˆ° ConfigSettingsï¼Œæ–¹ä¾¿å…¨å±€è°ƒç”¨
         For Each item In ConfigData
             If item.selected Then
                 ConfigSettings.ApiUrl = item.url
@@ -96,15 +96,15 @@ Public Class ConfigManager
 
     End Sub
 
-    ' ±£´æµ½ÎÄ¼şÖĞ£¬Ä¬ÈÏ´æÔÚÓÃ»§µÄÎÄµµÄ¿Â¼ÏÂ
+    ' ä¿å­˜åˆ°æ–‡ä»¶ä¸­ï¼Œé»˜è®¤å­˜åœ¨ç”¨æˆ·çš„æ–‡æ¡£ç›®å½•ä¸‹
     Public Shared Sub SaveConfig()
         Dim json As String = JsonConvert.SerializeObject(ConfigData, Formatting.Indented)
-        ' Èç¹ûconfigFilePathµÄÄ¿Â¼²»´æÔÚ¾Í´´½¨
+        ' å¦‚æœconfigFilePathçš„ç›®å½•ä¸å­˜åœ¨å°±åˆ›å»º
         Dim dir = Path.GetDirectoryName(configFilePath)
         If Not Directory.Exists(dir) Then
             Directory.CreateDirectory(dir)
         End If
-        'Èç¹ûÎÄ¼ş²»´æÔÚ¾Í´´½¨
+        'å¦‚æœæ–‡ä»¶ä¸å­˜åœ¨å°±åˆ›å»º
         If Not File.Exists(configFilePath) Then
             File.Create(configFilePath).Dispose()
         End If
@@ -113,7 +113,7 @@ Public Class ConfigManager
     End Sub
 
 
-    ' ApiÅäÖÃ£¨Ã¿´Î½ö¿ÉÊ¹ÓÃ1¸ñ£©
+    ' Apié…ç½®ï¼ˆæ¯æ¬¡ä»…å¯ä½¿ç”¨1æ ¼ï¼‰
     Public Class ConfigItem
         Public Property pltform As String
         Public Property url As String
@@ -121,7 +121,7 @@ Public Class ConfigManager
         Public Property key As String
         Public Property selected As Boolean
 
-        ' ÊÇ·ñÍ¨¹ıÁËAPIÑéÖ¤
+        ' æ˜¯å¦é€šè¿‡äº†APIéªŒè¯
         Public Property validated As Boolean
 
         Public Overrides Function ToString() As String
@@ -129,10 +129,11 @@ Public Class ConfigManager
         End Function
     End Class
 
-    ' ¾ßÌåÄ£ĞÍ£¬Àı£º°¢ÀïÔÆ°ÙÁ¶µÄ qwen-coder-plus
+    ' å…·ä½“æ¨¡å‹ï¼Œä¾‹ï¼šé˜¿é‡Œäº‘ç™¾ç‚¼çš„ qwen-coder-plus
     Public Class ConfigItemModel
         Public Property modelName As String
         Public Property selected As Boolean
+        Public Property mcpable As Boolean = False
         Public Overrides Function ToString() As String
             Return modelName
         End Function

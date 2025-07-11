@@ -1,25 +1,32 @@
-Imports System.IO
+ï»¿Imports System.IO
 Imports Newtonsoft.Json
+Imports Newtonsoft.Json.Linq
 
 Public Class ChatSettings
     Private ReadOnly _applicationInfo As ApplicationInfo
+    Public Property EnabledMcpList As List(Of String)
+
     Public Sub New(applicationInfo As ApplicationInfo)
         _applicationInfo = applicationInfo
+
+        ' åˆå§‹åŒ–MCPåˆ—è¡¨
+        EnabledMcpList = New List(Of String)()
+
         LoadSettings()
     End Sub
 
-    Public Shared Property topicRandomness As Double = 0.8  ' Ä¬ÈÏÖµ¸ÄÎª Double
-    Public Shared Property contextLimit As Integer = 5     ' Ä¬ÈÏÖµ¸ÄÎª Integer
+    Public Shared Property topicRandomness As Double = 0.8  ' é»˜è®¤å€¼æ”¹ä¸º Double
+    Public Shared Property contextLimit As Integer = 5     ' é»˜è®¤å€¼æ”¹ä¸º Integer
     Public Shared Property selectedCellChecked As Boolean = False
-    Public Shared Property executecodePreviewChecked As Boolean = True ' Ö´ĞĞ´úÂëÇ°Ô¤ÀÀµÄÄ¬ÈÏÑ¡Ïî
+    Public Shared Property executecodePreviewChecked As Boolean = True ' æ‰§è¡Œä»£ç å‰é¢„è§ˆçš„é»˜è®¤é€‰é¡¹
     Public Shared Property settingsScrollChecked As Boolean = True
     Public Shared Property chatMode As String = "chat"
 
-    ' ĞŞ¸Ä·½·¨Ç©Ãû£¬²ÎÊıÀàĞÍ¸ÄÎª Double ºÍ Integer
+    ' ä¿®æ”¹æ–¹æ³•ç­¾åï¼Œå‚æ•°ç±»å‹æ”¹ä¸º Double å’Œ Integer
     Public Sub SaveSettings(topicRandomness As Double, contextLimit As Integer,
                           selectedCell As Boolean, settingsScroll As Boolean, executecodePreview As Boolean, chatMode As String)
         Try
-            ' ´´½¨ÉèÖÃ¶ÔÏó
+            ' åˆ›å»ºè®¾ç½®å¯¹è±¡
             Dim settings As New Dictionary(Of String, Object) From {
                 {"topicRandomness", topicRandomness},
                 {"contextLimit", contextLimit},
@@ -29,16 +36,16 @@ Public Class ChatSettings
                 {"chatMode", chatMode}
             }
 
-            ' ½«ÉèÖÃ±£´æµ½JSONÎÄ¼ş
+            ' å°†è®¾ç½®ä¿å­˜åˆ°JSONæ–‡ä»¶
             Dim settingsPath = _applicationInfo.GetChatSettingsFilePath()
 
-            ' È·±£Ä¿Â¼´æÔÚ
+            ' ç¡®ä¿ç›®å½•å­˜åœ¨
             Directory.CreateDirectory(Path.GetDirectoryName(settingsPath))
 
-            ' ½«ÉèÖÃĞòÁĞ»¯ÎªJSON²¢±£´æ
+            ' å°†è®¾ç½®åºåˆ—åŒ–ä¸ºJSONå¹¶ä¿å­˜
             File.WriteAllText(settingsPath, JsonConvert.SerializeObject(settings, Formatting.Indented))
 
-            ' ¸üĞÂ¾²Ì¬ÊôĞÔ
+            ' æ›´æ–°é™æ€å±æ€§
             ChatSettings.topicRandomness = topicRandomness
             ChatSettings.contextLimit = contextLimit
             ChatSettings.selectedCellChecked = selectedCell
@@ -47,21 +54,21 @@ Public Class ChatSettings
             ChatSettings.chatMode = chatMode
 
         Catch ex As Exception
-            Debug.WriteLine($"±£´æÉèÖÃÊ§°Ü: {ex.Message}")
+            Debug.WriteLine($"ä¿å­˜è®¾ç½®å¤±è´¥: {ex.Message}")
         End Try
     End Sub
 
-    ' ¼ÓÔØÉèÖÃÊ±½øĞĞÀàĞÍ×ª»»
+    ' åŠ è½½è®¾ç½®æ—¶è¿›è¡Œç±»å‹è½¬æ¢
     Public Sub LoadSettings()
         Try
             Dim settingsPath = _applicationInfo.GetChatSettingsFilePath()
 
             If File.Exists(settingsPath) Then
-                ' ¶ÁÈ¡JSONÎÄ¼ş
+                ' è¯»å–JSONæ–‡ä»¶
                 Dim json = File.ReadAllText(settingsPath)
                 Dim settings = JsonConvert.DeserializeObject(Of Dictionary(Of String, Object))(json)
 
-                ' ¸üĞÂ¾²Ì¬ÊôĞÔ£¬Ìí¼ÓÀàĞÍ×ª»»
+                ' æ›´æ–°é™æ€å±æ€§ï¼Œæ·»åŠ ç±»å‹è½¬æ¢
                 If settings.ContainsKey("topicRandomness") Then
                     topicRandomness = Convert.ToDouble(settings("topicRandomness"))
                 End If
@@ -80,9 +87,49 @@ Public Class ChatSettings
                 If settings.ContainsKey("chatMode") Then
                     chatMode = Convert.ToString(settings("chatMode"))
                 End If
+                ' åŠ è½½MCPåˆ—è¡¨
+
+                ' åŠ è½½MCPåˆ—è¡¨ - ä¿®å¤äº†é”®ä¸å­˜åœ¨çš„é—®é¢˜
+                If settings.ContainsKey("enableMcpList") AndAlso settings("enableMcpList") IsNot Nothing Then
+                    Try
+                        ' å¤„ç†ä¸åŒå¯èƒ½çš„ç±»å‹
+                        If TypeOf settings("enableMcpList") Is JArray Then
+                            EnabledMcpList = CType(settings("enableMcpList"), JArray).ToObject(Of List(Of String))()
+                        ElseIf TypeOf settings("enableMcpList") Is String Then
+                            EnabledMcpList = JsonConvert.DeserializeObject(Of List(Of String))(settings("enableMcpList").ToString())
+                        Else
+                            ' å°è¯•é€šè¿‡è½¬æ¢å­—ç¬¦ä¸²å†ååºåˆ—åŒ–
+                            EnabledMcpList = JsonConvert.DeserializeObject(Of List(Of String))(JsonConvert.SerializeObject(settings("enableMcpList")))
+                        End If
+                    Catch ex As Exception
+                        Debug.WriteLine($"è§£æenableMcpListå¤±è´¥: {ex.Message}")
+                        EnabledMcpList = New List(Of String)() ' ç¡®ä¿å§‹ç»ˆæœ‰ä¸€ä¸ªæœ‰æ•ˆçš„åˆ—è¡¨
+                    End Try
+                End If
             End If
+
         Catch ex As Exception
-            Debug.WriteLine($"¼ÓÔØChatSettingsÊ§°Ü: {ex.Message}")
+            Debug.WriteLine($"åŠ è½½ChatSettingså¤±è´¥: {ex.Message}")
         End Try
+    End Sub
+
+    Public Sub SaveEnabledMcpList(enabledList As List(Of String))
+        EnabledMcpList = enabledList
+
+        Dim settingsPath = _applicationInfo.GetChatSettingsFilePath()
+        ' è¯»å–ç°æœ‰è®¾ç½®
+        Dim settingsObj As JObject
+        If File.Exists(settingsPath) Then
+            Dim jsonContent = File.ReadAllText(settingsPath)
+            settingsObj = JObject.Parse(jsonContent)
+        Else
+            settingsObj = New JObject()
+        End If
+
+        ' æ›´æ–°MCPåˆ—è¡¨
+        settingsObj("enableMcpList") = JArray.FromObject(enabledList)
+
+        ' ä¿å­˜è®¾ç½®
+        File.WriteAllText(settingsPath, settingsObj.ToString(Formatting.Indented))
     End Sub
 End Class

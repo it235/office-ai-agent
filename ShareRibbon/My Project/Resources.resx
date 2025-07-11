@@ -148,6 +148,9 @@
   <data name="marked_min" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\marked.min.js;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;gb2312</value>
   </data>
+  <data name="mcp1" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\mcp1.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
   <data name="send32" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\send32.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>

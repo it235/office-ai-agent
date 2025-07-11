@@ -1,19 +1,21 @@
+ï»¿Imports System.Diagnostics
 Imports System.Drawing
 Imports System.IO
 Imports System.Net
-Imports System.Security.Policy
-Imports System.Windows.Forms
-Imports Newtonsoft.Json
-Imports ShareRibbon.ConfigManager
 Imports System.Net.Http
 Imports System.Net.Http.Headers
+Imports System.Security.Policy
+Imports System.Text
 Imports System.Threading.Tasks
-Imports System.Diagnostics
+Imports System.Windows.Forms
+Imports Newtonsoft.Json
+Imports Newtonsoft.Json.Linq
+Imports ShareRibbon.ConfigManager
 Public Class ConfigApiForm
     Inherits Form
 
     Private modelComboBox As ComboBox
-    ' ±à¼­°´Å¥
+    ' ç¼–è¾‘æŒ‰é’®
     Private editConfigButton As Button
     Private apiKeyTextBox As TextBox
     Private modelNameComboBox As ComboBox
@@ -34,12 +36,12 @@ Public Class ConfigApiForm
 
 
     Public Sub New()
-        ' ³õÊ¼»¯±íµ¥
-        Me.Text = "ÅäÖÃ´óÄ£ĞÍAPI"
+        ' åˆå§‹åŒ–è¡¨å•
+        Me.Text = "é…ç½®å¤§æ¨¡å‹API"
         Me.Size = New Size(450, 350)
-        Me.StartPosition = FormStartPosition.CenterScreen ' ÉèÖÃ±íµ¥¾ÓÖĞÏÔÊ¾
+        Me.StartPosition = FormStartPosition.CenterScreen ' è®¾ç½®è¡¨å•å±…ä¸­æ˜¾ç¤º
 
-        ' ³õÊ¼»¯Ä£ĞÍÑ¡Ôñ ComboBox
+        ' åˆå§‹åŒ–æ¨¡å‹é€‰æ‹© ComboBox
         modelComboBox = New ComboBox()
         modelComboBox.DisplayMember = "pltform"
         modelComboBox.ValueMember = "url"
@@ -48,26 +50,26 @@ Public Class ConfigApiForm
         AddHandler modelComboBox.SelectedIndexChanged, AddressOf ModelComboBox_SelectedIndexChanged
         Me.Controls.Add(modelComboBox)
 
-        ' ³õÊ¼»¯±à¼­ÅäÖÃ°´Å¥
+        ' åˆå§‹åŒ–ç¼–è¾‘é…ç½®æŒ‰é’®
         editConfigButton = New Button()
-        editConfigButton.Text = "ĞŞ¸Ä"
-        editConfigButton.Font = New Font(editConfigButton.Font.FontFamily, 8) ' ÉèÖÃ×ÖÌå´óĞ¡
+        editConfigButton.Text = "ä¿®æ”¹"
+        editConfigButton.Font = New Font(editConfigButton.Font.FontFamily, 8) ' è®¾ç½®å­—ä½“å¤§å°
         editConfigButton.Location = New Point(280, 10)
         editConfigButton.Size = New Size(80, modelComboBox.Height + 2)
         AddHandler editConfigButton.Click, AddressOf EditConfigButton_Click
         Me.Controls.Add(editConfigButton)
 
-        ' ³õÊ¼»¯»ñÈ¡ApiKey°´Å¥
+        ' åˆå§‹åŒ–è·å–ApiKeyæŒ‰é’®
         getApiKeyButton = New Button()
-        getApiKeyButton.Text = "»ñÈ¡ApiKey"
-        getApiKeyButton.Font = New Font(getApiKeyButton.Font.FontFamily, 8) ' ÉèÖÃ×ÖÌå´óĞ¡
-        getApiKeyButton.Location = New Point(280, 90) ' Î»ÖÃ
-        getApiKeyButton.Size = New Size(80, modelComboBox.Height + 2) ' °´Å¥´óĞ¡
-        'getApiKeyButton.ForeColor = Color.Blue ' Ê¹ÓÃÀ¶É«×ÖÌåÒÔ±íÊ¾ÕâÊÇÒ»¸öÁ´½Ó
+        getApiKeyButton.Text = "è·å–ApiKey"
+        getApiKeyButton.Font = New Font(getApiKeyButton.Font.FontFamily, 8) ' è®¾ç½®å­—ä½“å¤§å°
+        getApiKeyButton.Location = New Point(280, 90) ' ä½ç½®
+        getApiKeyButton.Size = New Size(80, modelComboBox.Height + 2) ' æŒ‰é’®å¤§å°
+        'getApiKeyButton.ForeColor = Color.Blue ' ä½¿ç”¨è“è‰²å­—ä½“ä»¥è¡¨ç¤ºè¿™æ˜¯ä¸€ä¸ªé“¾æ¥
         AddHandler getApiKeyButton.Click, AddressOf GetApiKeyButton_Click
         Me.Controls.Add(getApiKeyButton)
 
-        ' ³õÊ¼»¯Ä£ĞÍÃû³ÆÑ¡Ôñ ComboBox
+        ' åˆå§‹åŒ–æ¨¡å‹åç§°é€‰æ‹© ComboBox
         modelNameComboBox = New ComboBox()
         modelNameComboBox.Location = New Point(10, 50)
         modelNameComboBox.Size = New Size(260, 30)
@@ -75,7 +77,7 @@ Public Class ConfigApiForm
         modelNameComboBox.AutoCompleteSource = AutoCompleteSource.ListItems
         Me.Controls.Add(modelNameComboBox)
 
-        ' ÓÃÀ´½ÓÊÕÖ®Ç°Ñ¡ÔñµÄÄ£ĞÍºÍ API Key
+        ' ç”¨æ¥æ¥æ”¶ä¹‹å‰é€‰æ‹©çš„æ¨¡å‹å’Œ API Key
         Dim platformForDB As String
         Dim apiUrlForDB As String
         Dim apiKeyForDB As String
@@ -94,35 +96,35 @@ Public Class ConfigApiForm
             End If
         Next
 
-        ' ³õÊ¼»¯ API Key ÊäÈë¿ò
+        ' åˆå§‹åŒ– API Key è¾“å…¥æ¡†
         apiKeyTextBox = New TextBox()
-        apiKeyTextBox.Text = If(String.IsNullOrEmpty(apiKeyForDB), "ÊäÈë API Key", apiKeyForDB)
+        apiKeyTextBox.Text = If(String.IsNullOrEmpty(apiKeyForDB), "è¾“å…¥ API Key", apiKeyForDB)
         apiKeyTextBox.ForeColor = If(String.IsNullOrEmpty(apiKeyForDB), Color.Gray, Color.Black)
         apiKeyTextBox.Location = New Point(10, 90)
         apiKeyTextBox.Size = New Size(260, 30)
-        AddHandler apiKeyTextBox.Enter, AddressOf ApiKeyTextBox_Enter ' Ìí¼Ó Enter ÊÂ¼ş´¦Àí³ÌĞò
-        AddHandler apiKeyTextBox.Leave, AddressOf ApiKeyTextBox_Leave ' Ìí¼Ó Leave ÊÂ¼ş´¦Àí³ÌĞò
+        AddHandler apiKeyTextBox.Enter, AddressOf ApiKeyTextBox_Enter ' æ·»åŠ  Enter äº‹ä»¶å¤„ç†ç¨‹åº
+        AddHandler apiKeyTextBox.Leave, AddressOf ApiKeyTextBox_Leave ' æ·»åŠ  Leave äº‹ä»¶å¤„ç†ç¨‹åº
         Me.Controls.Add(apiKeyTextBox)
 
-        ' ³õÊ¼»¯È·ÈÏ°´Å¥
+        ' åˆå§‹åŒ–ç¡®è®¤æŒ‰é’®
         confirmButton = New Button()
-        confirmButton.Text = "È·ÈÏ"
+        confirmButton.Text = "ç¡®è®¤"
         confirmButton.Location = New Point(100, 130)
         confirmButton.Size = New Size(100, 30)
         AddHandler confirmButton.Click, AddressOf ConfirmButton_Click
         Me.Controls.Add(confirmButton)
 
-        ' ³õÊ¼»¯Ìí¼ÓÅäÖÃ°´Å¥
+        ' åˆå§‹åŒ–æ·»åŠ é…ç½®æŒ‰é’®
         addConfigButton = New Button()
-        addConfigButton.Text = "Ìí¼ÓÄ£ĞÍÅäÖÃ"
+        addConfigButton.Text = "æ·»åŠ æ¨¡å‹é…ç½®"
         addConfigButton.Location = New Point(100, 170)
         addConfigButton.Size = New Size(100, 30)
         AddHandler addConfigButton.Click, AddressOf AddConfigButton_Click
         Me.Controls.Add(addConfigButton)
 
-        ' ³õÊ¼»¯ĞÂÅäÖÃ¿Ø¼ş
+        ' åˆå§‹åŒ–æ–°é…ç½®æ§ä»¶
         newModelPlatformTextBox = New TextBox()
-        newModelPlatformTextBox.Text = "Ä£ĞÍÆ½Ì¨"
+        newModelPlatformTextBox.Text = "æ¨¡å‹å¹³å°"
         newModelPlatformTextBox.ForeColor = Color.Gray
         newModelPlatformTextBox.Location = New Point(10, 210)
         newModelPlatformTextBox.Size = New Size(260, 30)
@@ -153,19 +155,19 @@ Public Class ConfigApiForm
         Me.Controls.Add(addModelNameButton)
 
         saveConfigButton = New Button()
-        saveConfigButton.Text = "±£´æ"
+        saveConfigButton.Text = "ä¿å­˜"
         saveConfigButton.Location = New Point(100, 420)
         saveConfigButton.Size = New Size(100, 30)
         saveConfigButton.Visible = False
         AddHandler saveConfigButton.Click, AddressOf SaveConfigButton_Click
         Me.Controls.Add(saveConfigButton)
 
-        ' ¼ÓÔØÅäÖÃµ½¸´Ñ¡¿ò
+        ' åŠ è½½é…ç½®åˆ°å¤é€‰æ¡†
         For Each configItem In ConfigData
             modelComboBox.Items.Add(configItem)
         Next
 
-        ' ÉèÖÃÖ®Ç°Ñ¡ÔñµÄÄ£ĞÍ
+        ' è®¾ç½®ä¹‹å‰é€‰æ‹©çš„æ¨¡å‹
         If Not String.IsNullOrEmpty(platformForDB) Then
             For i As Integer = 0 To modelComboBox.Items.Count - 1
                 If CType(modelComboBox.Items(i), ConfigManager.ConfigItem).pltform = platformForDB Then
@@ -179,7 +181,7 @@ Public Class ConfigApiForm
             End If
         End If
 
-        ' ÉèÖÃÖ®Ç°Ñ¡ÔñµÄÄ£ĞÍÃû³Æ
+        ' è®¾ç½®ä¹‹å‰é€‰æ‹©çš„æ¨¡å‹åç§°
         If Not String.IsNullOrEmpty(modelNameForDB) Then
             For i As Integer = 0 To modelNameComboBox.Items.Count - 1
                 If modelNameComboBox.Items(i).ToString() = modelNameForDB Then
@@ -189,7 +191,7 @@ Public Class ConfigApiForm
             Next
         End If
 
-        ' ÉèÖÃÖ®Ç°µÄ API Key
+        ' è®¾ç½®ä¹‹å‰çš„ API Key
         If Not String.IsNullOrEmpty(apiKeyForDB) Then
             apiKeyTextBox.Text = apiKeyForDB
             apiKeyTextBox.ForeColor = Color.Black
@@ -197,7 +199,7 @@ Public Class ConfigApiForm
     End Sub
 
     Private Sub ApiKeyTextBox_Enter(sender As Object, e As EventArgs)
-        If apiKeyTextBox.Text = "ÊäÈë API Key" Then
+        If apiKeyTextBox.Text = "è¾“å…¥ API Key" Then
             apiKeyTextBox.Text = ""
             apiKeyTextBox.ForeColor = Color.Black
         End If
@@ -205,23 +207,23 @@ Public Class ConfigApiForm
 
     Private Sub ApiKeyTextBox_Leave(sender As Object, e As EventArgs)
         If String.IsNullOrWhiteSpace(apiKeyTextBox.Text) Then
-            apiKeyTextBox.Text = "ÊäÈë API Key"
+            apiKeyTextBox.Text = "è¾“å…¥ API Key"
             apiKeyTextBox.ForeColor = Color.Gray
         End If
     End Sub
 
     Private Sub EditConfigButton_Click(sender As Object, e As EventArgs)
-        ' »ñÈ¡Ñ¡ÖĞµÄÄ£ĞÍºÍ API Key
+        ' è·å–é€‰ä¸­çš„æ¨¡å‹å’Œ API Key
         Dim selectedPlatform As ConfigManager.ConfigItem = CType(modelComboBox.SelectedItem, ConfigManager.ConfigItem)
         Dim selectedModelName As String = If(modelNameComboBox.SelectedItem IsNot Nothing, modelNameComboBox.SelectedItem.ToString(), modelNameComboBox.Text)
 
-        ' ½«Ñ¡ÖĞµÄÊı¾İ´øÈëµ½ĞÂÅäÖÃ¿Ø¼şÖĞ
+        ' å°†é€‰ä¸­çš„æ•°æ®å¸¦å…¥åˆ°æ–°é…ç½®æ§ä»¶ä¸­
         newModelPlatformTextBox.Text = selectedPlatform.pltform
         newModelPlatformTextBox.ForeColor = Color.Black
         newApiUrlTextBox.Text = selectedPlatform.url
         newApiUrlTextBox.ForeColor = Color.Black
 
-        ' Çå¿Õ²¢ÖØĞÂÌí¼Ó newModelNameTextBoxes
+        ' æ¸…ç©ºå¹¶é‡æ–°æ·»åŠ  newModelNameTextBoxes
         For Each textBox In newModelNameTextBoxes
             Me.Controls.Remove(textBox)
         Next
@@ -233,11 +235,11 @@ Public Class ConfigApiForm
             newModelNameTextBox.Text = model.modelName
             newModelNameTextBox.ForeColor = Color.Black
             If model.modelName = selectedModelName Then
-                newModelNameTextBox.BackColor = Color.LightBlue ' ±ê¼ÇÑ¡ÖĞµÄÄ£ĞÍÃû³Æ
+                newModelNameTextBox.BackColor = Color.LightBlue ' æ ‡è®°é€‰ä¸­çš„æ¨¡å‹åç§°
             End If
         Next
 
-        ' ÏÔÊ¾ĞÂÅäÖÃ¿Ø¼ş
+        ' æ˜¾ç¤ºæ–°é…ç½®æ§ä»¶
         Me.Size = New Size(450, 500)
         newModelPlatformTextBox.Visible = True
         newApiUrlTextBox.Visible = True
@@ -248,50 +250,50 @@ Public Class ConfigApiForm
         saveConfigButton.Visible = True
     End Sub
 
-    ' ´¦Àí»ñÈ¡ApiKey°´Å¥µã»÷ÊÂ¼ş
+    ' å¤„ç†è·å–ApiKeyæŒ‰é’®ç‚¹å‡»äº‹ä»¶
     Private Sub GetApiKeyButton_Click(sender As Object, e As EventArgs)
-        ' Ö¸¶¨URL
+        ' æŒ‡å®šURL
         Dim urll As String = "https://cloud.siliconflow.cn/i/PGhr3knx"
         Try
-            ' ³¢ÊÔÊ¹ÓÃEdgeä¯ÀÀÆ÷´ò¿ªURL
+            ' å°è¯•ä½¿ç”¨Edgeæµè§ˆå™¨æ‰“å¼€URL
             Process.Start("microsoft-edge:" & urll)
         Catch ex As Exception
-            ' Èç¹ûÎŞ·¨Ê¹ÓÃEdge£¬ÔòÊ¹ÓÃÄ¬ÈÏä¯ÀÀÆ÷
+            ' å¦‚æœæ— æ³•ä½¿ç”¨Edgeï¼Œåˆ™ä½¿ç”¨é»˜è®¤æµè§ˆå™¨
             Try
                 Process.Start(urll)
             Catch ex2 As Exception
-                MessageBox.Show("ÎŞ·¨´ò¿ªä¯ÀÀÆ÷¡£ÇëÊÖ¶¯·ÃÎÊ: " & urll, "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                MessageBox.Show("æ— æ³•æ‰“å¼€æµè§ˆå™¨ã€‚è¯·æ‰‹åŠ¨è®¿é—®: " & urll, "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Error)
             End Try
         End Try
     End Sub
 
-    ' ÇĞ»»´óÄ£ĞÍºóµÄÈ·ÈÏ°´Å¥
+    ' åˆ‡æ¢å¤§æ¨¡å‹åçš„ç¡®è®¤æŒ‰é’®
     Private Async Sub ConfirmButton_Click(sender As Object, e As EventArgs)
-        ' »ñÈ¡Ñ¡ÖĞµÄÄ£ĞÍºÍAPI Key
+        ' è·å–é€‰ä¸­çš„æ¨¡å‹å’ŒAPI Key
         Dim selectedPlatform As ConfigManager.ConfigItem = CType(modelComboBox.SelectedItem, ConfigManager.ConfigItem)
         Dim apiUrl As String = selectedPlatform.url
         Dim selectedModelName As String = If(modelNameComboBox.SelectedItem IsNot Nothing, modelNameComboBox.SelectedItem.ToString(), modelNameComboBox.Text)
         Dim inputApiKey As String = apiKeyTextBox.Text
 
-        ' ¼ì²éAPI KeyÊÇ·ñÓĞĞ§
-        If inputApiKey = "ÊäÈë API Key" OrElse String.IsNullOrWhiteSpace(inputApiKey) Then
-            MessageBox.Show("ÇëÊäÈëÓĞĞ§µÄAPI Key", "ÑéÖ¤Ê§°Ü", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+        ' æ£€æŸ¥API Keyæ˜¯å¦æœ‰æ•ˆ
+        If inputApiKey = "è¾“å…¥ API Key" OrElse String.IsNullOrWhiteSpace(inputApiKey) Then
+            MessageBox.Show("è¯·è¾“å…¥æœ‰æ•ˆçš„API Key", "éªŒè¯å¤±è´¥", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             Return
         End If
 
-        ' ÅĞ¶ÏÊÇ·ñĞèÒªÑéÖ¤£º
-        ' 1. Èç¹ûÖ®Ç°ÒÑÑéÖ¤¹ıÇÒAPI KeyÎ´±ä¸ü£¬ÔòÎŞĞèÔÙ´ÎÑéÖ¤
-        ' 2. Èç¹ûÖ®Ç°Î´ÑéÖ¤¹ı»òAPI KeyÒÑ±ä¸ü£¬ÔòĞèÒªÑéÖ¤
+        ' åˆ¤æ–­æ˜¯å¦éœ€è¦éªŒè¯ï¼š
+        ' 1. å¦‚æœä¹‹å‰å·²éªŒè¯è¿‡ä¸”API Keyæœªå˜æ›´ï¼Œåˆ™æ— éœ€å†æ¬¡éªŒè¯
+        ' 2. å¦‚æœä¹‹å‰æœªéªŒè¯è¿‡æˆ–API Keyå·²å˜æ›´ï¼Œåˆ™éœ€è¦éªŒè¯
         Dim needValidation As Boolean = True
 
-        ' ¼ì²éÊÇ·ñÒÑÑéÖ¤¹ıÇÒAPI KeyÎ´±ä¸ü
+        ' æ£€æŸ¥æ˜¯å¦å·²éªŒè¯è¿‡ä¸”API Keyæœªå˜æ›´
         If selectedPlatform.validated AndAlso selectedPlatform.key = inputApiKey Then
             needValidation = False
         End If
 
-        ' Èç¹û²»ĞèÒªÑéÖ¤£¬Ö±½Ó±£´æ²¢ÍË³ö
+        ' å¦‚æœä¸éœ€è¦éªŒè¯ï¼Œç›´æ¥ä¿å­˜å¹¶é€€å‡º
         If Not needValidation Then
-            ' ÖØÖÃÑ¡ÔñºóµÄselectedÊôĞÔ
+            ' é‡ç½®é€‰æ‹©åçš„selectedå±æ€§
             For Each config In ConfigData
                 config.selected = False
                 If selectedPlatform.pltform = config.pltform Then
@@ -305,115 +307,167 @@ Public Class ConfigApiForm
                 End If
             Next
 
-            ' ±£´æµ½ÎÄ¼ş
+            ' ä¿å­˜åˆ°æ–‡ä»¶
             SaveConfig()
 
-            ' Ë¢ĞÂÄÚ´æÖĞµÄapiÅäÖÃ
+            ' åˆ·æ–°å†…å­˜ä¸­çš„apié…ç½®
             ConfigSettings.ApiUrl = apiUrl
             ConfigSettings.ApiKey = inputApiKey
             ConfigSettings.platform = selectedPlatform.pltform
             ConfigSettings.ModelName = selectedModelName
 
-            ' ¹Ø±Õ¶Ô»°¿ò
+            ' å…³é—­å¯¹è¯æ¡†
             Me.DialogResult = DialogResult.OK
             Me.Close()
             Return
         End If
 
-        ' ĞèÒªÑéÖ¤£¬ÏÔÊ¾¼ÓÔØÌáÊ¾
+        ' éœ€è¦éªŒè¯ï¼Œæ˜¾ç¤ºåŠ è½½æç¤º
         Cursor = Cursors.WaitCursor
         confirmButton.Enabled = False
-        confirmButton.Text = "ÑéÖ¤ÖĞ..."
+        confirmButton.Text = "éªŒè¯ä¸­..."
 
         Try
-            ' ¹¹½¨Ò»¸ö¼òµ¥µÄÇëÇóÌå
-            Dim requestBody As String = $"{{""model"": ""{selectedModelName}"", ""messages"": [{{""role"": ""user"", ""content"": ""hi""}}]}}"
+            ' æ„å»ºä¸€ä¸ªç®€å•çš„è¯·æ±‚ä½“
+            'Dim requestBody As String = $"{{""model"": ""{selectedModelName}"", ""messages"": [{{""role"": ""user"", ""content"": ""hiï¼Œä½ æ”¯æŒfunction toolèƒ½é‡Œå—ï¼Œæ”¯æŒçš„è¯è¿”å›å‚æ•°ç»™æˆ‘toolsï¼Œä¸ç”¨å…¶ä»–åºŸè¯å›ç­”æˆ‘""}}]}}"
 
-            ' µ÷ÓÃAPIÑéÖ¤
+            ' æ„å»ºä¸€ä¸ªå¸¦toolså®šä¹‰çš„è¯·æ±‚ä½“
+            Dim requestBody As String = "{" &
+            $"""model"": ""{selectedModelName}""," &
+            $"""messages"": [{{""role"": ""user"", ""content"": ""è¯·è®¡ç®—5+7çš„ç»“æœï¼Œå¹¶é€šè¿‡å·¥å…·å‡½æ•°è¿”å›""}}]," &
+            $"""tools"": [" &
+                "{" &
+                    """type"": ""function""," &
+                    """function"": {" &
+                        """name"": ""calculator""," &
+                        """description"": ""è®¡ç®—æ•°å­¦è¡¨è¾¾å¼çš„ç»“æœ""," &
+                        """parameters"": {" &
+                            """type"": ""object""," &
+                            """properties"": {" &
+                                """result"": {" &
+                                    """type"": ""number""," &
+                                    """description"": ""è®¡ç®—ç»“æœ""" &
+                                "}" &
+                            "}," &
+                            """required"": [""result""]" &
+                        "}" &
+                    "}" &
+                "}" &
+            "]," &
+            """tool_choice"": ""auto""" &
+        "}"
+
+            ' è°ƒç”¨APIéªŒè¯
             Dim response As String = Await SendHttpRequestForValidation(apiUrl, inputApiKey, requestBody)
 
-            ' ¼ì²éÏìÓ¦ÊÇ·ñÓĞĞ§
+            ' æ£€æŸ¥å“åº”æ˜¯å¦æœ‰æ•ˆ
             Dim validationSuccess As Boolean = Not String.IsNullOrEmpty(response) AndAlso
                                          (response.Contains("content") OrElse response.Contains("message"))
+            Debug.WriteLine(response)
 
             If validationSuccess Then
-                ' ÑéÖ¤³É¹¦£¬¸üĞÂÅäÖÃ²¢±£´æ
+                ' éªŒè¯æˆåŠŸï¼Œæ›´æ–°é…ç½®å¹¶ä¿å­˜
+                ' æ£€æµ‹MCPåŠŸèƒ½
 
-                ' ÖØÖÃÑ¡ÔñºóµÄselectedÊôĞÔºÍkey£¬ÉèÖÃvalidatedÎªtrue
+                Dim mcpSupported As Boolean = False
+
+                ' æ£€æŸ¥å“åº”ä¸­æ˜¯å¦åŒ…å«å·¥å…·è°ƒç”¨ç›¸å…³å­—æ®µ
+                If Not String.IsNullOrEmpty(response) Then
+                    If response.Contains("""tool_calls""") OrElse
+           response.Contains("""function_call""") Then
+                        Debug.WriteLine("å“åº”åŒ…å«tool_callsæˆ–function_callå­—æ®µ")
+                        mcpSupported = True
+                    End If
+
+                    ' æ£€æŸ¥å“åº”æ˜¯å¦åŒ…å«toolså­—æ®µæˆ–capabilities
+                    If response.Contains("""tools""") OrElse
+           (response.Contains("""capabilities""") AndAlso response.Contains("""tools""")) Then
+                        Debug.WriteLine("å“åº”åŒ…å«toolså­—æ®µæˆ–capabilities")
+                        mcpSupported = True
+                    End If
+                End If
+
+                ' é‡ç½®é€‰æ‹©åçš„selectedå±æ€§å’Œkeyï¼Œè®¾ç½®validatedä¸ºtrue
                 For Each config In ConfigData
                     config.selected = False
                     If selectedPlatform.pltform = config.pltform Then
                         config.selected = True
                         config.key = inputApiKey
-                        config.validated = True ' ±ê¼ÇÎªÒÑÑéÖ¤
+                        config.validated = True ' æ ‡è®°ä¸ºå·²éªŒè¯
                         For Each item_m In config.model
                             item_m.selected = False
+                            item_m.mcpable = False
                             If item_m.modelName = selectedModelName Then
+                                item_m.mcpable = mcpSupported
                                 item_m.selected = True
                             End If
                         Next
                     End If
                 Next
 
-                ' ±£´æµ½ÎÄ¼ş
+                If mcpSupported Then
+                    Debug.WriteLine($"æ£€æµ‹åˆ° {selectedModelName} æ¨¡å‹æ”¯æŒMCPå·¥å…·åŠŸèƒ½ï¼", "MCPåŠŸèƒ½æ”¯æŒ", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                End If
+                ' ä¿å­˜åˆ°æ–‡ä»¶
                 SaveConfig()
 
-                ' Ë¢ĞÂÄÚ´æÖĞµÄapiÅäÖÃ
+                ' åˆ·æ–°å†…å­˜ä¸­çš„apié…ç½®
                 ConfigSettings.ApiUrl = apiUrl
                 ConfigSettings.ApiKey = inputApiKey
                 ConfigSettings.platform = selectedPlatform.pltform
                 ConfigSettings.ModelName = selectedModelName
 
-                ' ¹Ø±Õ¶Ô»°¿ò
+                ' å…³é—­å¯¹è¯æ¡†
                 Me.DialogResult = DialogResult.OK
                 Me.Close()
             Else
-                ' ÑéÖ¤Ê§°Ü£¬ÌáÊ¾ÓÃ»§ĞŞ¸Ä
-                MessageBox.Show("APIÑéÖ¤Ê§°Ü¡£Çë¼ì²éAPI URL¡¢Ä£ĞÍÃû³ÆºÍAPI KeyÊÇ·ñÕıÈ·¡£", "ÑéÖ¤Ê§°Ü",
+                ' éªŒè¯å¤±è´¥ï¼Œæç¤ºç”¨æˆ·ä¿®æ”¹
+                MessageBox.Show("APIéªŒè¯å¤±è´¥ã€‚è¯·æ£€æŸ¥API URLã€æ¨¡å‹åç§°å’ŒAPI Keyæ˜¯å¦æ­£ç¡®ã€‚", "éªŒè¯å¤±è´¥",
                           MessageBoxButtons.OK, MessageBoxIcon.Warning)
 
-                ' ±ê¼ÇÎªÎ´ÑéÖ¤
+                ' æ ‡è®°ä¸ºæœªéªŒè¯
                 selectedPlatform.validated = False
             End If
         Catch ex As Exception
-            ' ´¦ÀíÒì³£
-            MessageBox.Show($"ÑéÖ¤¹ı³ÌÖĞ³ö´í: {ex.Message}", "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            ' å¤„ç†å¼‚å¸¸
+            MessageBox.Show($"éªŒè¯è¿‡ç¨‹ä¸­å‡ºé”™: {ex.Message}", "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Error)
 
-            ' ±ê¼ÇÎªÎ´ÑéÖ¤
+            ' æ ‡è®°ä¸ºæœªéªŒè¯
             selectedPlatform.validated = False
         Finally
-            ' »Ö¸´°´Å¥×´Ì¬
+            ' æ¢å¤æŒ‰é’®çŠ¶æ€
             confirmButton.Enabled = True
-            confirmButton.Text = "È·ÈÏ"
+            confirmButton.Text = "ç¡®è®¤"
             Cursor = Cursors.Default
         End Try
     End Sub
 
-    ' ÓÃÓÚÑéÖ¤µÄAPIÇëÇó·½·¨
+
+    ' ç”¨äºéªŒè¯çš„APIè¯·æ±‚æ–¹æ³•
     Private Async Function SendHttpRequestForValidation(apiUrl As String, apiKey As String, requestBody As String) As Task(Of String)
         Try
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
             Using client As New Net.Http.HttpClient()
-                client.Timeout = TimeSpan.FromSeconds(15) ' ½Ï¶ÌµÄ³¬Ê±Ê±¼ä£¬Ö»ÓÃÓÚÑéÖ¤
+                client.Timeout = TimeSpan.FromSeconds(15) ' è¾ƒçŸ­çš„è¶…æ—¶æ—¶é—´ï¼Œåªç”¨äºéªŒè¯
                 client.DefaultRequestHeaders.Add("Authorization", "Bearer " & apiKey)
                 Dim content As New Net.Http.StringContent(requestBody, System.Text.Encoding.UTF8, "application/json")
                 Dim response As Net.Http.HttpResponseMessage = Await client.PostAsync(apiUrl, content)
 
-                ' Èç¹û·şÎñÆ÷·µ»Ø´íÎó×´Ì¬Âë£¬ÕâÀï»áÅ×³öÒì³£
+                ' å¦‚æœæœåŠ¡å™¨è¿”å›é”™è¯¯çŠ¶æ€ç ï¼Œè¿™é‡Œä¼šæŠ›å‡ºå¼‚å¸¸
                 response.EnsureSuccessStatusCode()
 
-                ' ¶ÁÈ¡²¢·µ»ØÏìÓ¦ÄÚÈİ
+                ' è¯»å–å¹¶è¿”å›å“åº”å†…å®¹
                 Return Await response.Content.ReadAsStringAsync()
             End Using
         Catch ex As Exception
-            ' ÔÚÕâÀï´¦ÀíÒì³£µ«²»ÏÔÊ¾ÏûÏ¢¿ò£¬ÒòÎªÎÒÃÇ»áÔÚµ÷ÓÃ·½·¨ÖĞÏÔÊ¾
-            Debug.WriteLine($"APIÑéÖ¤ÇëÇóÊ§°Ü: {ex.Message}")
+            ' åœ¨è¿™é‡Œå¤„ç†å¼‚å¸¸ä½†ä¸æ˜¾ç¤ºæ¶ˆæ¯æ¡†ï¼Œå› ä¸ºæˆ‘ä»¬ä¼šåœ¨è°ƒç”¨æ–¹æ³•ä¸­æ˜¾ç¤º
+            Debug.WriteLine($"APIéªŒè¯è¯·æ±‚å¤±è´¥: {ex.Message}")
             Return String.Empty
         End Try
     End Function
 
     Private Sub ModelComboBox_SelectedIndexChanged(sender As Object, e As EventArgs)
-        ' ¸ù¾İÑ¡ÖĞµÄÄ£ĞÍ¸üĞÂÄ£ĞÍÃû³ÆÑ¡Ôñ ComboBox
+        ' æ ¹æ®é€‰ä¸­çš„æ¨¡å‹æ›´æ–°æ¨¡å‹åç§°é€‰æ‹© ComboBox
         modelNameComboBox.Items.Clear()
         Dim selectedModel As ConfigManager.ConfigItem = CType(modelComboBox.SelectedItem, ConfigManager.ConfigItem)
         For Each ModelNameT In selectedModel.model
@@ -423,13 +477,13 @@ Public Class ConfigApiForm
             modelNameComboBox.SelectedIndex = 0
         End If
 
-        ' ¸üĞÂ API Key
+        ' æ›´æ–° API Key
         apiKeyTextBox.Text = selectedModel.key
         apiKeyTextBox.ForeColor = If(String.IsNullOrEmpty(selectedModel.key), Color.Gray, Color.Black)
     End Sub
 
     Private Sub AddConfigButton_Click(sender As Object, e As EventArgs)
-        ' ÏÔÊ¾ĞÂÅäÖÃ¿Ø¼ş
+        ' æ˜¾ç¤ºæ–°é…ç½®æ§ä»¶
         Me.Size = New Size(450, 500)
         newModelPlatformTextBox.Visible = True
         newApiUrlTextBox.Visible = True
@@ -447,7 +501,7 @@ Public Class ConfigApiForm
 
     Private Sub AddNewModelNameTextBox(display As Boolean)
         Dim newModelNameTextBox As New TextBox()
-        newModelNameTextBox.Text = "¾ßÌåÄ£ĞÍ"
+        newModelNameTextBox.Text = "å…·ä½“æ¨¡å‹"
         newModelNameTextBox.ForeColor = Color.Gray
         newModelNameTextBox.Location = New Point(10, 290 + newModelNameTextBoxes.Count * 40)
         newModelNameTextBox.Size = New Size(260, 30)
@@ -457,7 +511,7 @@ Public Class ConfigApiForm
         Me.Controls.Add(newModelNameTextBox)
         newModelNameTextBoxes.Add(newModelNameTextBox)
 
-        ' Ö»ÓĞµÚ¶şĞĞ¼°Ö®ºóµÄĞĞ²ÅÌí¼Ó¼õºÅ°´Å¥
+        ' åªæœ‰ç¬¬äºŒè¡ŒåŠä¹‹åçš„è¡Œæ‰æ·»åŠ å‡å·æŒ‰é’®
         If newModelNameTextBoxes.Count > 1 Then
             Dim removeButton As New Button()
             removeButton.Text = "-"
@@ -477,34 +531,34 @@ Public Class ConfigApiForm
 
 
     Private Sub SaveConfigButton_Click(sender As Object, e As EventArgs)
-        ' »ñÈ¡ĞÂÅäÖÃ
+        ' è·å–æ–°é…ç½®
         Dim newModelPlatform As String = newModelPlatformTextBox.Text
         Dim newApiUrl As String = newApiUrlTextBox.Text
         Dim newModels As New List(Of ConfigItemModel)()
         For Each textBox In newModelNameTextBoxes
-            If textBox.Text <> "¾ßÌåÄ£ĞÍ" AndAlso Not String.IsNullOrWhiteSpace(textBox.Text) Then
+            If textBox.Text <> "å…·ä½“æ¨¡å‹" AndAlso Not String.IsNullOrWhiteSpace(textBox.Text) Then
                 newModels.Add(New ConfigItemModel() With {.modelName = textBox.Text, .selected = True})
 
             End If
         Next
 
-        ' Èç¹ûnewApiUrl²»ÊÇÒÔhttp://»òhttps://¿ªÍ·£¬Ôò±¨´íÒì³£ÌáÊ¾
+        ' å¦‚æœnewApiUrlä¸æ˜¯ä»¥http://æˆ–https://å¼€å¤´ï¼Œåˆ™æŠ¥é”™å¼‚å¸¸æç¤º
         If Not newApiUrl.StartsWith("http://") And Not newApiUrl.StartsWith("https://") Then
-            MessageBox.Show("API URL ±ØĞëÒÔ http:// »ò https:// ¿ªÍ·", "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("API URL å¿…é¡»ä»¥ http:// æˆ– https:// å¼€å¤´", "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Error)
             Return
         End If
 
 
 
-        ' ¼ì²éÊÇ·ñ´æÔÚÏàÍ¬µÄ platform
+        ' æ£€æŸ¥æ˜¯å¦å­˜åœ¨ç›¸åŒçš„ platform
         Dim existingItem As ConfigManager.ConfigItem = ConfigData.FirstOrDefault(Function(item) item.pltform = newModelPlatform)
         If existingItem IsNot Nothing Then
-            ' ¸üĞÂÒÑÓĞµÄ platform Êı¾İ
+            ' æ›´æ–°å·²æœ‰çš„ platform æ•°æ®
             existingItem.url = newApiUrl
             existingItem.model = newModels
             existingItem.selected = True
         Else
-            ' ÓÃ»§±¾µØĞÂÔöÄ£ĞÍµ½ ComboBox
+            ' ç”¨æˆ·æœ¬åœ°æ–°å¢æ¨¡å‹åˆ° ComboBox
             Dim newItem As New ConfigManager.ConfigItem() With {
             .pltform = newModelPlatform,
             .url = newApiUrl,
@@ -516,7 +570,7 @@ Public Class ConfigApiForm
             modelComboBox.SelectedItem = newItem
         End If
 
-        ' ±£´æµ½ÎÄ¼ş
+        ' ä¿å­˜åˆ°æ–‡ä»¶
         SaveConfig()
 
         'modelComboBox.Items.Add(newItem)
@@ -531,12 +585,12 @@ Public Class ConfigApiForm
         End If
 
 
-        newModelPlatformTextBox.Text = "Ä£ĞÍÆ½Ì¨"
+        newModelPlatformTextBox.Text = "æ¨¡å‹å¹³å°"
         newModelPlatformTextBox.ForeColor = Color.Gray
         newApiUrlTextBox.Text = "API URL"
         newApiUrlTextBox.ForeColor = Color.Gray
         For Each textBox In newModelNameTextBoxes
-            textBox.Text = "¾ßÌåÄ£ĞÍ"
+            textBox.Text = "å…·ä½“æ¨¡å‹"
             textBox.ForeColor = Color.Gray
         Next
 
@@ -553,7 +607,7 @@ Public Class ConfigApiForm
 
 
     Private Sub NewModelPlatformTextBox_Enter(sender As Object, e As EventArgs)
-        If newModelPlatformTextBox.Text = "Ä£ĞÍÆ½Ì¨" Then
+        If newModelPlatformTextBox.Text = "æ¨¡å‹å¹³å°" Then
             newModelPlatformTextBox.Text = ""
             newModelPlatformTextBox.ForeColor = Color.Black
         End If
@@ -561,7 +615,7 @@ Public Class ConfigApiForm
 
     Private Sub NewModelPlatformTextBox_Leave(sender As Object, e As EventArgs)
         If String.IsNullOrWhiteSpace(newModelPlatformTextBox.Text) Then
-            newModelPlatformTextBox.Text = "Ä£ĞÍÆ½Ì¨"
+            newModelPlatformTextBox.Text = "æ¨¡å‹å¹³å°"
             newModelPlatformTextBox.ForeColor = Color.Gray
         End If
     End Sub
@@ -580,7 +634,7 @@ Public Class ConfigApiForm
         End If
     End Sub
     Private Sub NewModelNameTextBox_Enter(sender As Object, e As EventArgs)
-        If CType(sender, TextBox).Text = "¾ßÌåÄ£ĞÍ" Then
+        If CType(sender, TextBox).Text = "å…·ä½“æ¨¡å‹" Then
             CType(sender, TextBox).Text = ""
             CType(sender, TextBox).ForeColor = Color.Black
         End If
@@ -588,7 +642,7 @@ Public Class ConfigApiForm
 
     Private Sub NewModelNameTextBox_Leave(sender As Object, e As EventArgs)
         If String.IsNullOrWhiteSpace(CType(sender, TextBox).Text) Then
-            CType(sender, TextBox).Text = "¾ßÌåÄ£ĞÍ"
+            CType(sender, TextBox).Text = "å…·ä½“æ¨¡å‹"
             CType(sender, TextBox).ForeColor = Color.Gray
         End If
     End Sub

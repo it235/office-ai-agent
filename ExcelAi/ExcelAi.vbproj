@@ -266,6 +266,7 @@
     <EmbeddedResource Include="Ribbon1.resx">
       <DependentUpon>Ribbon1.vb</DependentUpon>
     </EmbeddedResource>
+    <None Include="app.config" />
     <None Include="ExcelAi_TemporaryKey.pfx" />
     <None Include="ExcelAi-AddIn.dna" />
     <None Include="packages.config" />

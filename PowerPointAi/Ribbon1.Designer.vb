@@ -61,7 +61,7 @@ Partial Class Ribbon1
         ' 设置 RibbonType
         Me.RibbonType = "Microsoft.PowerPoint.Presentation"
 
-        Me.MCPButton.Visible = False
+        Me.MCPButton.Image = ShareRibbon.SharedResources.Mcp1
         Me.BatchDataGenButton.Visible = False
         Me.SpotlightButton.Visible = False
         Me.WebCaptureButton.Visible = False
