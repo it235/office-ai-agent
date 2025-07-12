@@ -32,6 +32,10 @@ Public Class Ribbon1
     End Sub
 
     Protected Overrides Sub MCPButton_Click(sender As Object, e As RibbonControlEventArgs)
-        MessageBox.Show("功能正在开发中...")
+        ' 创建并显示MCP配置表单
+        Dim mcpConfigForm As New MCPConfigForm()
+        If mcpConfigForm.ShowDialog() = DialogResult.OK Then
+            ' 在需要时可以集成到ChatControl调用MCP服务
+        End If
     End Sub
 End Class

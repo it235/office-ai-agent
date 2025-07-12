@@ -2859,9 +2859,9 @@
             document.getElementById('mcp-overlay').style.display = 'block';
 
             // 如果连接列表为空，则向后端请求数据
-            if (mcpConnections.length === 0) {
+            //if (mcpConnections.length === 0) {
                 requestMcpConnections();
-            }
+            //}
         }
 
         // 关闭MCP弹窗
@@ -2879,6 +2879,7 @@
 
         // 渲染MCP连接列表
         function renderMcpConnections(connections, enabledList) {
+            console.log(connections)
             mcpConnections = connections;
             enabledMcpList = enabledList || [];
 
@@ -2891,21 +2892,21 @@
             }
 
             connections.forEach(connection => {
-                const isEnabled = enabledMcpList.includes(connection.name);
+                const isEnabled = enabledMcpList.includes(connection.Name);
 
                 const mcpItem = document.createElement('div');
                 mcpItem.className = 'mcp-item';
 
                 mcpItem.innerHTML = `
             <div class="mcp-item-header">
-                <span class="mcp-item-title">${connection.name}</span>
+                <span class="mcp-item-title">${connection.Name}</span>
                 <label class="mcp-toggle">
-                    <input type="checkbox" data-mcp-name="${connection.name}" ${isEnabled ? 'checked' : ''}>
+                    <input type="checkbox" data-mcp-name="${connection.Name}" ${isEnabled ? 'checked' : ''}>
                     <span class="mcp-toggle-slider"></span>
                 </label>
             </div>
             <div class="mcp-item-description">
-                ${connection.description}
+                ${connection.Description}
             </div>
         `;
 
@@ -2948,7 +2949,7 @@
                 // 将首字母大写的属性名转换为小写开头
                 mcpConnections = connections.map(conn => ({
                     name: conn.Name || conn.name,
-                    url: conn.Description || conn.description,
+                    description: conn.Description || conn.description,
                     connectionType: conn.ConnectionType || conn.connectionType,
                     enabled: conn.Enabled || conn.enabled,
                     lastConnected: conn.LastConnected || conn.lastConnected,

@@ -159,7 +159,7 @@ Public Class MCPConfigForm
         typeCombo.Location = New Point(300, 67)
         typeCombo.Width = 150
         typeCombo.DropDownStyle = ComboBoxStyle.DropDownList
-        typeCombo.Items.AddRange({"HTTP/JSON-RPC", "Stdio (本地进程)"})
+        typeCombo.Items.AddRange({"HTTP/SSE", "Stdio (本地进程)"})
         typeCombo.SelectedIndex = 0
         AddHandler typeCombo.SelectedIndexChanged, AddressOf TypeCombo_SelectedIndexChanged
         Me.Controls.Add(typeCombo)
@@ -457,7 +457,7 @@ Public Class MCPConfigForm
             End Using
         Else
             ' HTTP 模式下可以添加其他设置选项
-            MessageBox.Show("HTTP/JSON-RPC 模式不需要额外配置。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            MessageBox.Show("HTTP/SSE 模式不需要额外配置。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
         End If
     End Sub
 
@@ -466,11 +466,11 @@ Public Class MCPConfigForm
     Private Sub TypeCombo_SelectedIndexChanged(sender As Object, e As EventArgs)
         Dim combo = CType(sender, ComboBox)
         Select Case combo.SelectedIndex
-            Case 0 ' HTTP/JSON-RPC
+            Case 0 ' HTTP/SSE
                 _serverUrlTextBox.ReadOnly = False
                 _serverUrlTextBox.BackColor = SystemColors.Window
                 _serverUrlTextBox.Text = "http://localhost:3000"
-                _statusLabel.Text = "HTTP/JSON-RPC 模式: 输入服务器URL即可连接"
+                _statusLabel.Text = "HTTP/SSE 模式: 输入服务器URL即可连接"
                 _advancedButton.Enabled = False ' 禁用高级设置按钮
             Case 1 ' Stdio
                 ' 使服务器URL文本框只读，突出显示需要配置
