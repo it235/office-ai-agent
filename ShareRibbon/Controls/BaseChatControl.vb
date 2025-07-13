@@ -296,8 +296,8 @@ Public MustInherit Class BaseChatControl
             ' 获取所有可用的MCP连接
             Dim connections = MCPConnectionManager.LoadConnections()
 
-            ' 过滤出已启用的连接
-            Dim enabledConnections = connections.Where(Function(c) c.Enabled).ToList()
+            ' 过滤出已启用的连接 - 使用IsActive而不是Enabled
+            Dim enabledConnections = connections.Where(Function(c) c.IsActive).ToList()
 
             ' 获取已启用的MCP列表
             Dim chatSettings As New ChatSettings(GetApplication())
@@ -309,7 +309,6 @@ Public MustInherit Class BaseChatControl
 
             ' 获取当前配置的模型是否支持mcp
             Dim mcpSupported As Boolean = ConfigSettings.mcpable
-
 
             ' 发送到前端
             Dim js = $"renderMcpConnections({connectionsJson}, {enabledListJson},{mcpSupported.ToString().ToLower()});"
@@ -357,7 +356,8 @@ Public MustInherit Class BaseChatControl
 
             ' 加载MCP连接和启用列表
             Dim connections = MCPConnectionManager.LoadConnections()
-            Dim enabledConnections = connections.Where(Function(c) c.Enabled).ToList()
+            ' 使用IsActive替代Enabled
+            Dim enabledConnections = connections.Where(Function(c) c.IsActive).ToList()
 
             Dim chatSettings As New ChatSettings(GetApplication())
             Dim enabledMcpList = chatSettings.EnabledMcpList
@@ -1310,8 +1310,10 @@ Public MustInherit Class BaseChatControl
             Dim connections = MCPConnectionManager.LoadConnections()
 
             ' 找到启用的连接
-            For Each mcpName In ChatSettings.EnabledMcpList
-                Dim connection = connections.FirstOrDefault(Function(c) c.Name = mcpName AndAlso c.Enabled)
+            ' 找到启用的连接
+            For Each mcpName In chatSettings.EnabledMcpList
+                ' 使用IsActive替代Enabled
+                Dim connection = connections.FirstOrDefault(Function(c) c.Name = mcpName AndAlso c.IsActive)
                 If connection IsNot Nothing Then
                     ' 从连接配置中获取已保存的工具列表
                     If connection.Tools IsNot Nothing AndAlso connection.Tools.Count > 0 Then
@@ -1379,10 +1381,11 @@ Public MustInherit Class BaseChatControl
 
             ' 加载MCP连接
             Dim connections = MCPConnectionManager.LoadConnections()
-            Dim connection = connections.FirstOrDefault(Function(c) c.Name = mcpConnectionName AndAlso c.Enabled)
+            ' 注意这里使用isActive而不是Enabled
+            Dim connection = connections.FirstOrDefault(Function(c) c.Name = mcpConnectionName AndAlso c.IsActive)
 
             If connection Is Nothing Then
-                Return CreateErrorResponse($"MCP连接 '{mcpConnectionName}' 未找到或未启用。可用连接: {String.Join(", ", connections.Where(Function(c) c.Enabled).Select(Function(c) c.Name))}")
+                Return CreateErrorResponse($"MCP连接 '{mcpConnectionName}' 未找到或未启用。可用连接: {String.Join(", ", connections.Where(Function(c) c.IsActive).Select(Function(c) c.Name))}")
             End If
 
             Debug.WriteLine($"找到MCP连接: {connection.Name}, URL: {connection.Url}")

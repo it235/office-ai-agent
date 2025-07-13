@@ -2879,42 +2879,86 @@
         }
 
         // 渲染MCP连接列表
-        function renderMcpConnections(connections, enabledList, mcpable) {
-            mcpSupported = mcpable
-            const mcpButton = document.getElementById('mcp-toggle-btn');
-            mcpButton.style.display = mcpSupported ? 'flex' : 'none';
+        // 修改MCP连接显示逻辑，适应新属性
+        function renderMcpConnections(connections, enabledList, mcpSupported) {
+            // 获取MCP连接列表容器
+            const mcpList = document.getElementById('mcp-list');
+            if (!mcpList) return;
 
-            mcpConnections = connections;
-            enabledMcpList = enabledList || [];
+            // 清空现有内容
+            mcpList.innerHTML = '';
 
-            const mcpListElement = document.getElementById('mcp-list');
-            mcpListElement.innerHTML = '';
-
-            if (connections.length === 0) {
-                mcpListElement.innerHTML = '<div class="mcp-item">没有找到可用的MCP连接，请先在MCP配置中添加连接</div>';
+            // 如果当前模型不支持MCP，显示警告
+            if (!mcpSupported) {
+                mcpList.innerHTML = '<div class="mcp-warning">当前选择的模型不支持MCP功能。</div>';
                 return;
             }
 
+            // 如果没有可用连接，显示提示
+            if (!connections || connections.length === 0) {
+                mcpList.innerHTML = '<div class="mcp-warning">没有可用的MCP连接。请先配置MCP连接。</div>';
+                return;
+            }
+
+            // 为每个连接创建项
             connections.forEach(connection => {
-                const isEnabled = enabledMcpList.includes(connection.Name);
+                const item = document.createElement('div');
+                item.className = 'mcp-item';
 
-                const mcpItem = document.createElement('div');
-                mcpItem.className = 'mcp-item';
+                // 创建项头部（标题和开关）
+                const header = document.createElement('div');
+                header.className = 'mcp-item-header';
 
-                mcpItem.innerHTML = `
-            <div class="mcp-item-header">
-                <span class="mcp-item-title">${connection.Name}</span>
-                <label class="mcp-toggle">
-                    <input type="checkbox" data-mcp-name="${connection.Name}" ${isEnabled ? 'checked' : ''}>
-                    <span class="mcp-toggle-slider"></span>
-                </label>
-            </div>
-            <div class="mcp-item-description">
-                ${connection.Description}
-            </div>
-        `;
+                // 标题
+                const title = document.createElement('div');
+                title.className = 'mcp-item-title';
+                title.textContent = connection.name;
+                header.appendChild(title);
 
-                mcpListElement.appendChild(mcpItem);
+                // 开关
+                const toggleLabel = document.createElement('label');
+                toggleLabel.className = 'mcp-toggle';
+
+                const toggleInput = document.createElement('input');
+                toggleInput.type = 'checkbox';
+                toggleInput.checked = enabledList && enabledList.includes(connection.name);
+                toggleInput.setAttribute('data-mcp-name', connection.name);
+
+                const toggleSlider = document.createElement('span');
+                toggleSlider.className = 'mcp-toggle-slider';
+
+                toggleLabel.appendChild(toggleInput);
+                toggleLabel.appendChild(toggleSlider);
+                header.appendChild(toggleLabel);
+
+                // 添加描述（如果有）
+                if (connection.description) {
+                    const desc = document.createElement('div');
+                    desc.className = 'mcp-item-description';
+                    desc.textContent = connection.description;
+                    item.appendChild(desc);
+                }
+
+                // 添加连接类型信息
+                const typeInfo = document.createElement('div');
+                typeInfo.className = 'mcp-item-description';
+                // 根据是否有command字段判断类型
+                const connectionType = connection.command ? "Stdio" : "HTTP";
+                const connectionUrl = connection.baseUrl || (connection.command ? `${connection.command} ${connection.args.join(' ')}` : "未知URL");
+                typeInfo.textContent = `${connectionType}: ${connectionUrl}`;
+
+                // 组装项
+                item.appendChild(header);
+                if (connection.description) {
+                    const desc = document.createElement('div');
+                    desc.className = 'mcp-item-description';
+                    desc.textContent = connection.description;
+                    item.appendChild(desc);
+                }
+                item.appendChild(typeInfo);
+
+                // 添加到列表
+                mcpList.appendChild(item);
             });
         }
 
@@ -2941,6 +2985,7 @@
         }
 
         // 设置模型是否支持MCP
+        // 修改setMcpSupport方法中的映射代码
         function setMcpSupport(supported, connections, enabledList) {
             mcpSupported = supported;
 
@@ -2948,16 +2993,22 @@
             const mcpButton = document.getElementById('mcp-toggle-btn');
             mcpButton.style.display = supported ? 'flex' : 'none';
 
-            // 处理属性名称大小写不匹配问题
+            // 处理属性名称不匹配问题
             if (connections) {
-                // 将首字母大写的属性名转换为小写开头
+                // 将后端属性映射到前端需要的格式
                 mcpConnections = connections.map(conn => ({
-                    name: conn.Name || conn.name,
-                    description: conn.Description || conn.description,
-                    connectionType: conn.ConnectionType || conn.connectionType,
-                    enabled: conn.Enabled || conn.enabled,
-                    lastConnected: conn.LastConnected || conn.lastConnected,
-                    environmentVariables: conn.EnvironmentVariables || conn.environmentVariables
+                    name: conn.name,
+                    description: conn.description || "",
+                    // 根据command判断连接类型
+                    connectionType: conn.command ? "Stdio" : "HTTP",
+                    // 使用isActive替代enabled
+                    isActive: conn.isActive,
+                    // baseUrl可能为null
+                    baseUrl: conn.baseUrl || "",
+                    command: conn.command,
+                    // 映射参数和环境变量
+                    args: conn.args || [],
+                    env: conn.env || {}
                 }));
 
                 // 立即渲染连接列表

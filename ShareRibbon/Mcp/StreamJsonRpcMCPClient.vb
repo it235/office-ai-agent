@@ -478,17 +478,6 @@ Public Class StreamJsonRpcMCPClient
         End Try
     End Function
 
-    '' 通用方法调用
-    'Private Async Function InvokeMethodAsync(Of T)(method As String, ParamArray arguments() As Object) As Task(Of T)
-    '    EnsureInitialized()
-
-    '    Select Case _transportType
-    '        Case MCPTransportType.Stdio
-    '            Return Await _jsonRpc.InvokeAsync(Of T)(method, arguments)
-    '        Case Else
-    '            Return Await InvokeSSEMethodAsync(Of T)(method, arguments)
-    '    End Select
-    'End Function
 
     ' 标准JSON-RPC请求
     Private Async Function InvokeSSEMethodAsync(Of T)(method As String, arguments() As Object) As Task(Of T)

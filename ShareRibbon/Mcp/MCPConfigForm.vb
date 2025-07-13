@@ -1,4 +1,5 @@
 ﻿Imports System.Drawing
+Imports System.IO
 Imports System.Text
 Imports System.Threading.Tasks
 Imports System.Windows.Forms
@@ -35,7 +36,9 @@ Public Class MCPConfigForm
     Private _addConnectionButton As Button
     Private _removeConnectionButton As Button
     Private _connectionNameTextBox As TextBox
+    ' 修改字段类型
     Private _currentConnections As List(Of MCPConnectionConfig)
+
     Private _currentConnectionName As String = String.Empty
 
     ' 在 CreateConnectionConfigArea 方法中添加成员变量引用
@@ -135,19 +138,6 @@ Public Class MCPConfigForm
         _connectionNameTextBox.Width = 180  ' 缩短宽度从300改为180
         Me.Controls.Add(_connectionNameTextBox)
 
-        ' 添加描述标签和输入框
-        Dim descriptionLabel As New Label()
-        descriptionLabel.Text = "连接描述:"
-        descriptionLabel.Location = New Point(490, 40)
-        descriptionLabel.Width = 80
-        Me.Controls.Add(descriptionLabel)
-
-        ' 添加描述输入框
-        _connectionDescriptionTextBox = New TextBox()
-        _connectionDescriptionTextBox.Location = New Point(580, 37)
-        _connectionDescriptionTextBox.Width = 300
-        Me.Controls.Add(_connectionDescriptionTextBox)
-
         ' 连接类型选择
         Dim typeLabel As New Label()
         typeLabel.Text = "连接类型:"
@@ -177,19 +167,13 @@ Public Class MCPConfigForm
         _serverUrlTextBox.Text = "http://localhost:3000"
         Me.Controls.Add(_serverUrlTextBox)
 
-        ' 预设按钮
-        Dim presetButton = New Button()
-        presetButton.Text = "预设"
-        presetButton.Location = New Point(710, 67)
-        presetButton.Width = 60
-        AddHandler presetButton.Click, AddressOf PresetButton_Click
-        Me.Controls.Add(presetButton)
+        ' 删除预设按钮代码块
 
-        ' 高级设置按钮
+        ' 高级设置按钮 - 调整位置，填补预设按钮的空缺
         _advancedButton = New Button()
         _advancedButton.Text = "高级设置"
-        _advancedButton.Location = New Point(780, 67)
-        _advancedButton.Width = 100
+        _advancedButton.Location = New Point(710, 67)  ' 移到预设按钮的位置
+        _advancedButton.Width = 170  ' 增加宽度
         _advancedButton.Enabled = False ' 默认禁用（HTTP模式）
         AddHandler _advancedButton.Click, AddressOf AdvancedButton_Click
         Me.Controls.Add(_advancedButton)
@@ -205,6 +189,14 @@ Public Class MCPConfigForm
 
     ' 底部按钮移动位置
     Private Sub CreateBottomButtons()
+        ' 添加导入配置按钮
+        Dim importConfigButton As New Button()
+        importConfigButton.Text = "导入配置"
+        importConfigButton.Location = New Point(570, 520)
+        importConfigButton.Width = 100
+        AddHandler importConfigButton.Click, AddressOf ImportConfigButton_Click
+        Me.Controls.Add(importConfigButton)
+
         _saveButton = New Button()
         _saveButton.Text = "保存配置"
         _saveButton.Location = New Point(680, 520)
@@ -218,6 +210,32 @@ Public Class MCPConfigForm
         _cancelButton.Width = 100
         AddHandler _cancelButton.Click, AddressOf CancelButton_Click
         Me.Controls.Add(_cancelButton)
+    End Sub
+    Private Sub ImportConfigButton_Click(sender As Object, e As EventArgs)
+        ' 显示导入配置对话框
+        Using importForm As New ImportConfigForm()
+            If importForm.ShowDialog() = DialogResult.OK Then
+                Try
+                    ' 获取用户输入的JSON配置
+                    Dim jsonConfig = importForm.ConfigJson
+
+                    ' 导入并合并配置
+                    Dim importedCount = MCPConnectionManager.ImportAndMergeConfig(jsonConfig)
+
+                    If importedCount > 0 Then
+                        ' 重新加载连接列表
+                        _currentConnections = MCPConnectionManager.LoadConnections()
+                        LoadConnectionsList()
+
+                        MessageBox.Show($"成功导入并合并了 {importedCount} 个连接配置", "导入成功", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                    Else
+                        MessageBox.Show("没有找到有效的MCP服务器配置", "导入提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                    End If
+                Catch ex As Exception
+                    MessageBox.Show($"导入配置失败: {ex.Message}", "导入错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                End Try
+            End If
+        End Using
     End Sub
 
     ' 修改窗体加载事件，确保选择生效
@@ -246,49 +264,13 @@ Public Class MCPConfigForm
         End If
     End Sub
     ' 修改 PresetButton_Click 方法
-    Private Sub PresetButton_Click(sender As Object, e As EventArgs)
-        Dim presetForm = New MCPPresetForm()
-        If presetForm.ShowDialog() = DialogResult.OK Then
-            Dim selectedUrl = presetForm.SelectedUrl
-            _serverUrlTextBox.Text = selectedUrl
 
-            ' 自动切换连接类型
-            For Each ctrl As Control In Me.Controls
-                If TypeOf ctrl Is ComboBox AndAlso ctrl.Location.Y = 67 Then
-                    Dim combo = CType(ctrl, ComboBox)
-                    If selectedUrl.StartsWith("stdio://") Then
-                        combo.SelectedIndex = 1  ' Stdio 模式
-                        _advancedButton.Enabled = True  ' 启用高级设置按钮
-                    Else
-                        combo.SelectedIndex = 0  ' HTTP 模式
-                        _advancedButton.Enabled = False  ' 禁用高级设置按钮
-                    End If
-                    Exit For
-                End If
-            Next
-
-            ' 如果是新连接，创建一个默认的连接名称
-            If String.IsNullOrEmpty(_currentConnectionName) Then
-                ' 从 URL 中提取一部分作为名称
-                Dim serverPart = selectedUrl.Replace("http://", "").Replace("https://", "").Replace("stdio://", "")
-                If serverPart.Contains("/") Then
-                    serverPart = serverPart.Substring(0, serverPart.IndexOf("/"))
-                End If
-                If serverPart.Contains("?") Then
-                    serverPart = serverPart.Substring(0, serverPart.IndexOf("?"))
-                End If
-
-                _connectionNameTextBox.Text = $"预设连接_{serverPart}_{DateTime.Now:yyyyMMdd}"
-            End If
-        End If
-    End Sub
     Private Sub ConnectionsListView_SelectedIndexChanged(sender As Object, e As EventArgs)
         If _connectionsListView.SelectedItems.Count > 0 Then
             Dim selectedConnection = CType(_connectionsListView.SelectedItems(0).Tag, MCPConnectionConfig)
 
             ' 填充连接信息到表单
             _connectionNameTextBox.Text = selectedConnection.Name
-            _connectionDescriptionTextBox.Text = selectedConnection.Description  ' 加载描述信息
 
             ' 设置连接类型（在设置URL之前）
             Dim connectionType = selectedConnection.ConnectionType
@@ -308,38 +290,74 @@ Public Class MCPConfigForm
                 End If
             Next
 
-            ' 对于Stdio连接，确保重新生成URL，包含环境变量
-            If connectionType.Equals("Stdio", StringComparison.OrdinalIgnoreCase) Then
-                ' 如果是Stdio连接，但URL没有stdio://前缀，重新生成
-                If Not selectedConnection.Url.StartsWith("stdio://") Then
-                    ' 简单的情况：创建一个基本的stdio://
-                    _serverUrlTextBox.Text = "stdio://node"
-                Else
-                    ' 从URL和环境变量重新组装完整URL
-                    Dim options = StdioOptions.Parse(selectedConnection.Url)
-
-                    ' 清除旧的环境变量，加入保存的环境变量
-                    options.EnvironmentVariables.Clear()
-                    For Each kvp In selectedConnection.EnvironmentVariables
-                        options.EnvironmentVariables.Add(kvp.Key, kvp.Value)
-                    Next
-
-                    ' 重新生成URL
-                    _serverUrlTextBox.Text = options.ToUrl()
-                End If
-            Else
-                ' HTTP连接直接使用URL
-                _serverUrlTextBox.Text = selectedConnection.Url
-            End If
+            ' 设置URL
+            _serverUrlTextBox.Text = selectedConnection.Url
 
             ' 保存当前连接名称
             _currentConnectionName = selectedConnection.Name
+
+            ' 加载连接中保存的工具信息
+            LoadToolsFromConnection(selectedConnection)
 
             ' 立即应用更改
             Application.DoEvents()
         End If
     End Sub
+    ' 从保存的连接中加载工具信息
+    Private Sub LoadToolsFromConnection(connection As MCPConnectionConfig)
+        ' 清除当前工具列表
+        _currentTools.Clear()
+        _toolsListView.Items.Clear()
+        _testToolCombo.Items.Clear()
 
+        ' 检查连接中是否有保存的工具
+        If connection.Tools IsNot Nothing AndAlso connection.Tools.Count > 0 Then
+            ' 将保存的工具信息转换为MCPToolInfo对象并添加到列表
+            For Each toolJson In connection.Tools
+                Try
+                    Dim tool As New MCPToolInfo()
+
+                    ' 从function格式提取信息
+                    If toolJson("type")?.ToString() = "function" AndAlso toolJson("function") IsNot Nothing Then
+                        Dim functionObj = toolJson("function")
+
+                        ' 提取工具名称和描述
+                        tool.Name = functionObj("name")?.ToString()
+                        tool.Description = functionObj("description")?.ToString()
+
+                        ' 提取参数架构
+                        If functionObj("parameters") IsNot Nothing Then
+                            tool.InputSchema = functionObj("parameters")
+                        End If
+
+                        ' 添加到工具列表
+                        _currentTools.Add(tool)
+
+                        ' 添加到ListView
+                        Dim item = New ListViewItem(tool.Name)
+                        item.SubItems.Add(If(tool.Description Is Nothing, "", tool.Description))
+                        item.SubItems.Add(If(tool.InputSchema IsNot Nothing, "是", "否"))
+                        item.Tag = tool
+                        _toolsListView.Items.Add(item)
+
+                        ' 添加到测试工具下拉列表
+                        _testToolCombo.Items.Add(tool.Name)
+                    End If
+                Catch ex As Exception
+                    Debug.WriteLine($"加载工具时出错: {ex.Message}")
+                End Try
+            Next
+
+            ' 如果有工具，选择第一个
+            If _testToolCombo.Items.Count > 0 Then
+                _testToolCombo.SelectedIndex = 0
+            End If
+
+            UpdateStatus($"已从保存的连接加载 {_currentTools.Count} 个工具", Color.Green)
+        Else
+            UpdateStatus("此连接没有保存的工具信息，需要重新连接服务器进行探索", Color.Blue)
+        End If
+    End Sub
 
     ' 添加新方法：添加连接按钮处理
     Private Sub AddConnectionButton_Click(sender As Object, e As EventArgs)
@@ -387,17 +405,17 @@ Public Class MCPConfigForm
 
     ' 添加高级设置对话框处理
     Private Sub AdvancedButton_Click(sender As Object, e As EventArgs)
-        ' 如果按钮被禁用，直接返回（防御性编程）
+        ' 如果按钮被禁用，直接返回
         If Not _advancedButton.Enabled Then Return
 
         Dim isStdio = _serverUrlTextBox.Text.StartsWith("stdio://") OrElse
-             (_serverUrlTextBox.Text.Contains("高级设置") AndAlso Not _serverUrlTextBox.Text.StartsWith("http"))
+         (_serverUrlTextBox.Text.Contains("高级设置") AndAlso Not _serverUrlTextBox.Text.StartsWith("http"))
 
         If isStdio Then
-            ' 打开 Stdio 配置对话框
-            Dim options As New StdioOptions() ' 创建新的实例，避免引用问题
+            ' 创建新的StdioOptions对象
+            Dim options As New StdioOptions()
 
-            ' 检查是否已有连接被选中
+            ' 如果有选中的连接，尝试从连接配置加载设置
             If Not String.IsNullOrEmpty(_currentConnectionName) AndAlso
            _currentConnections.Exists(Function(c) c.Name.Equals(_currentConnectionName, StringComparison.OrdinalIgnoreCase)) Then
 
@@ -410,12 +428,12 @@ Public Class MCPConfigForm
                     ' 命令和参数从URL解析，但环境变量从连接配置加载（更可靠）
                     options.EnvironmentVariables.Clear()
 
-                    ' 复制环境变量（创建新字典以避免引用问题）
+                    ' 复制环境变量
                     For Each kvp In connection.EnvironmentVariables
                         options.EnvironmentVariables.Add(kvp.Key, kvp.Value)
                     Next
                 Else
-                    ' 创建新选项
+                    ' 创建新选项，使用基本默认值
                     options.Command = "node"
                     options.Arguments = "-r ts-node/register src/server.ts"
 
@@ -425,7 +443,7 @@ Public Class MCPConfigForm
                     Next
                 End If
             Else
-                ' 没有选中的连接或新连接
+                ' 新连接，使用基本设置或从URL解析
                 If _serverUrlTextBox.Text.StartsWith("stdio://") Then
                     options = StdioOptions.Parse(_serverUrlTextBox.Text)
                 Else
@@ -434,8 +452,10 @@ Public Class MCPConfigForm
                 End If
             End If
 
+            ' 显示Stdio配置对话框
             Using stdioForm As New StdioConfigForm(options)
                 If stdioForm.ShowDialog() = DialogResult.OK Then
+                    ' 更新文本框显示
                     _serverUrlTextBox.Text = stdioForm.Options.ToUrl()
 
                     ' 如果有选中的连接，立即更新其环境变量
@@ -450,17 +470,66 @@ Public Class MCPConfigForm
                             connection.EnvironmentVariables.Add(kvp.Key, kvp.Value)
                         Next
 
-                        ' 立即保存到文件，确保数据不会丢失
+                        ' 立即保存到文件
                         MCPConnectionManager.SaveConnections(_currentConnections)
                     End If
                 End If
             End Using
         Else
-            ' HTTP 模式下可以添加其他设置选项
+            ' HTTP 模式下的设置
             MessageBox.Show("HTTP/SSE 模式不需要额外配置。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
         End If
     End Sub
 
+    Private Sub ImportOfficialConfig_Click(sender As Object, e As EventArgs)
+        ' 直接导入官方格式，无需转换
+        Using openFileDialog As New OpenFileDialog()
+            openFileDialog.Filter = "JSON文件|*.json"
+            openFileDialog.Title = "选择官方MCP配置文件"
+
+            If openFileDialog.ShowDialog() = DialogResult.OK Then
+                Try
+                    Dim json = File.ReadAllText(openFileDialog.FileName)
+                    Dim config = JObject.Parse(json)
+
+                    If config("mcpServers") IsNot Nothing Then
+                        Dim imported = 0
+                        Dim serversObj = config("mcpServers").ToObject(Of JObject)()
+
+                        For Each server In serversObj.Properties()
+                            Dim serverId = server.Name
+                            Dim serverConfig = server.Value.ToObject(Of MCPConnectionConfig)()
+
+                            ' 如果名称为空，使用ID作为名称
+                            If String.IsNullOrEmpty(serverConfig.Name) Then
+                                serverConfig.Name = serverId
+                            End If
+
+                            ' 检查是否已存在同名连接
+                            Dim existingIndex = _currentConnections.FindIndex(Function(c) c.Name.Equals(serverConfig.Name, StringComparison.OrdinalIgnoreCase))
+                            If existingIndex >= 0 Then
+                                _currentConnections(existingIndex) = serverConfig
+                            Else
+                                _currentConnections.Add(serverConfig)
+                            End If
+
+                            imported += 1
+                        Next
+
+                        ' 保存并刷新列表
+                        MCPConnectionManager.SaveConnections(_currentConnections)
+                        LoadConnectionsList()
+
+                        MessageBox.Show($"成功导入 {imported} 个连接", "导入成功", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                    Else
+                        MessageBox.Show("无效的MCP配置文件格式", "导入失败", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                    End If
+                Catch ex As Exception
+                    MessageBox.Show($"导入失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                End Try
+            End If
+        End Using
+    End Sub
 
     ' 更新类型选择处理
     Private Sub TypeCombo_SelectedIndexChanged(sender As Object, e As EventArgs)
@@ -907,7 +976,7 @@ Public Class MCPConfigForm
             If schemaObj("required") IsNot Nothing Then
                 Try
                     requiredProps = schemaObj("required").ToObject(Of List(Of String))()
-                    Debug.WriteLine($"必需参数: {String.Join(", ", requiredProps)}")
+                    'Debug.WriteLine($"必需参数: {String.Join(", ", requiredProps)}")
                 Catch ex As Exception
                     Debug.WriteLine($"解析required数组失败: {ex.Message}")
                 End Try
@@ -1182,7 +1251,7 @@ Public Class MCPConfigForm
         End If
 
         If String.IsNullOrEmpty(_serverUrlTextBox.Text) OrElse
-   (_serverUrlTextBox.Text.Contains("请点击") AndAlso _serverUrlTextBox.Text.Contains("高级设置")) Then
+       (_serverUrlTextBox.Text.Contains("请点击") AndAlso _serverUrlTextBox.Text.Contains("高级设置")) Then
             UpdateStatus("请先配置连接信息", Color.Red)
             Return
         End If
@@ -1208,11 +1277,11 @@ Public Class MCPConfigForm
             ' 更新状态信息，显示详细的服务器信息
             Dim transportText = If(_mcpClient.TransportType = MCPTransportType.Stdio, "Stdio", "HTTP/SSE")
             Dim serverInfo = If(result.ServerInfo IsNot Nothing,
-               $"{result.ServerInfo.Name} v{result.ServerInfo.Version}",
-               "未知服务器")
+           $"{result.ServerInfo.Name} v{result.ServerInfo.Version}",
+           "未知服务器")
             Dim protocolInfo = If(Not String.IsNullOrEmpty(result.ProtocolVersion),
-                $"协议版本: {result.ProtocolVersion}",
-                "")
+            $"协议版本: {result.ProtocolVersion}",
+            "")
 
             UpdateStatus($"连接成功！传输类型: {transportText}, 服务器: {serverInfo} {protocolInfo}", Color.Green)
 
@@ -1221,32 +1290,22 @@ Public Class MCPConfigForm
 
             ' 保存或更新连接配置
             Dim connectionName = _connectionNameTextBox.Text.Trim()
-            Dim connectionDescription = _connectionDescriptionTextBox.Text.Trim()  ' 获取描述信息
+            'Dim connectionDescription = _connectionDescriptionTextBox.Text.Trim()
             Dim connectionType = If(_mcpClient.TransportType = MCPTransportType.Stdio, "Stdio", "HTTP")
 
             ' 创建或更新连接配置
             Dim connection As MCPConnectionConfig
+
+
 
             If Not String.IsNullOrEmpty(_currentConnectionName) AndAlso
        _currentConnections.Exists(Function(c) c.Name.Equals(_currentConnectionName, StringComparison.OrdinalIgnoreCase)) Then
                 ' 更新现有连接
                 connection = _currentConnections.Find(Function(c) c.Name.Equals(_currentConnectionName, StringComparison.OrdinalIgnoreCase))
                 connection.Name = connectionName
-                connection.Description = connectionDescription  ' 保存描述
+                'connection.Description = connectionDescription
                 connection.Url = _serverUrlTextBox.Text
-                connection.ConnectionType = connectionType
-                connection.Enabled = True
-                connection.LastConnected = DateTime.Now
-
-                ' 保存环境变量（如果是Stdio模式）
-                If connectionType = "Stdio" AndAlso _serverUrlTextBox.Text.StartsWith("stdio://") Then
-                    ' 从URL中提取环境变量
-                    Dim options = StdioOptions.Parse(_serverUrlTextBox.Text)
-                    connection.EnvironmentVariables.Clear()
-                    For Each kvp In options.EnvironmentVariables
-                        connection.EnvironmentVariables.Add(kvp.Key, kvp.Value)
-                    Next
-                End If
+                ' 移除 connection.LastConnected = DateTime.Now
 
                 ' 如果名称已变更，需要从列表中移除旧的
                 If Not connectionName.Equals(_currentConnectionName, StringComparison.OrdinalIgnoreCase) Then
@@ -1256,19 +1315,7 @@ Public Class MCPConfigForm
             Else
                 ' 创建新连接
                 connection = New MCPConnectionConfig(connectionName, _serverUrlTextBox.Text, connectionType) With {
-            .Enabled = True,
-            .Description = connectionDescription,  ' 保存描述
-            .LastConnected = DateTime.Now
-        }
-
-                ' 保存环境变量（如果是Stdio模式）
-                If connectionType = "Stdio" AndAlso _serverUrlTextBox.Text.StartsWith("stdio://") Then
-                    ' 从URL中提取环境变量
-                    Dim options = StdioOptions.Parse(_serverUrlTextBox.Text)
-                    For Each kvp In options.EnvironmentVariables
-                        connection.EnvironmentVariables.Add(kvp.Key, kvp.Value)
-                    Next
-                End If
+            .Description = String.Empty}
 
                 ' 检查是否已存在同名连接
                 Dim existingIndex = _currentConnections.FindIndex(Function(c) c.Name.Equals(connectionName, StringComparison.OrdinalIgnoreCase))
@@ -1293,7 +1340,7 @@ Public Class MCPConfigForm
                 Debug.WriteLine("没有可用的工具信息")
             End If
 
-            ' 保存连接配置
+            ' 保存连接配置 - 使用新的保存方法
             MCPConnectionManager.SaveConnections(_currentConnections)
 
             ' 更新当前连接名称
@@ -1311,7 +1358,7 @@ Public Class MCPConfigForm
 
                 If itemConnection.Name.Equals(connectionName, StringComparison.OrdinalIgnoreCase) Then
                     item.Selected = True
-                    _connectionsListView.Focus() ' 确保 ListView 获得焦点以显示选中项
+                    _connectionsListView.Focus() ' 确保ListView获得焦点
                     _connectionsListView.EnsureVisible(i)
                     Exit For
                 End If
@@ -1500,7 +1547,7 @@ Public Class MCPConfigForm
 
         ' 保存连接配置
         Dim connectionName = _connectionNameTextBox.Text.Trim()
-        Dim connectionDescription = _connectionDescriptionTextBox.Text.Trim()  ' 获取描述信息
+        'Dim connectionDescription = _connectionDescriptionTextBox.Text.Trim()  ' 获取描述信息
 
         ' 创建或更新连接配置
         Dim connection As MCPConnectionConfig
@@ -1510,7 +1557,7 @@ Public Class MCPConfigForm
             ' 更新现有连接
             connection = _currentConnections.Find(Function(c) c.Name.Equals(_currentConnectionName, StringComparison.OrdinalIgnoreCase))
             connection.Name = connectionName
-            connection.Description = connectionDescription  ' 保存描述
+            connection.Description = ""  ' 保存描述
             connection.Url = _serverUrlTextBox.Text
             connection.ConnectionType = connectionType
 
@@ -1532,7 +1579,7 @@ Public Class MCPConfigForm
             ' 创建新连接
             connection = New MCPConnectionConfig(connectionName, _serverUrlTextBox.Text, connectionType) With {
         .Enabled = True,
-        .Description = connectionDescription  ' 保存描述
+        .Description = ""
     }
 
             ' 如果是Stdio连接，保存环境变量

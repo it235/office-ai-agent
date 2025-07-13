@@ -217,6 +217,9 @@
     <Compile Include="Mcp\ApiKeyConfigForm.vb">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="Mcp\ImportConfigForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Mcp\MCPConfigForm.vb">
       <SubType>Form</SubType>
     </Compile>

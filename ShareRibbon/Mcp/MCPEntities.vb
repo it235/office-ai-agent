@@ -80,74 +80,140 @@ End Class
 ' Stdio 选项
 ' Stdio 选项
 Public Class StdioOptions
-    Public Property Command As String
-    Public Property Arguments As String
-    Public Property WorkingDirectory As String
-    Public Property EnvironmentVariables As Dictionary(Of String, String)
+    Public Property Command As String = "node"
+    Public Property Arguments As String = ""
+    Public Property WorkingDirectory As String = ""
+    Public Property EnvironmentVariables As New Dictionary(Of String, String)()
 
-    Public Sub New()
-        EnvironmentVariables = New Dictionary(Of String, String)()
-    End Sub
+    ' 将选项转换为URL - 修复反斜杠处理
+    Public Function ToUrl() As String
+        Dim sb As New StringBuilder("stdio://")
+        sb.Append(Command.Replace("\", "\\"))  ' 转义路径中的反斜杠
 
-    ' 从 stdio:// URL 解析 - 改进版本
+        Dim queryParams As New List(Of String)()
+
+        ' 添加参数 - 确保转义路径中的反斜杠
+        If Not String.IsNullOrEmpty(Arguments) Then
+            queryParams.Add($"args={Uri.EscapeDataString(Arguments)}")
+        End If
+
+        ' 添加工作目录 - 确保转义路径中的反斜杠
+        If Not String.IsNullOrEmpty(WorkingDirectory) Then
+            queryParams.Add($"workdir={Uri.EscapeDataString(WorkingDirectory.Replace("\", "\\"))}")
+        End If
+
+        ' 添加环境变量
+        For Each kvp In EnvironmentVariables
+            ' 确保值中的反斜杠也被正确转义
+            Dim escapedValue = kvp.Value.Replace("\", "\\")
+            queryParams.Add($"{Uri.EscapeDataString(kvp.Key)}={Uri.EscapeDataString(escapedValue)}")
+        Next
+
+        If queryParams.Count > 0 Then
+            sb.Append("?").Append(String.Join("&", queryParams))
+        End If
+
+        Return sb.ToString()
+    End Function
+
+    ' 从URL解析选项 - 修复反斜杠处理
     Public Shared Function Parse(stdioUrl As String) As StdioOptions
-        ' 基本格式: stdio://command?args=arguments&workdir=dir&env.VAR1=value1&env.VAR2=value2
-        Dim options = New StdioOptions()
+        Dim options As New StdioOptions()
 
-        If stdioUrl.StartsWith("stdio://") Then
-            Dim parts = stdioUrl.Substring("stdio://".Length).Split("?"c)
-            options.Command = parts(0)
+        If Not stdioUrl.StartsWith("stdio://") Then
+            Return options
+        End If
 
-            If parts.Length > 1 Then
-                Dim queryParams = parts(1).Split("&"c)
-                For Each param In queryParams
-                    If param.Contains("=") Then
-                        ' 修正这里的分割方法，使用 VB.NET 兼容的语法
-                        Dim kvp = param.Split(New Char() {"="c}, 2, StringSplitOptions.None)
-                        If kvp.Length = 2 Then
-                            Dim key = kvp(0)
-                            Dim value = Uri.UnescapeDataString(kvp(1))
+        ' 解析URL
+        Dim urlWithoutScheme = stdioUrl.Substring(8)
+        Dim commandParts = urlWithoutScheme.Split(New Char() {"?"c}, 2)
 
-                            If key = "args" Then
-                                options.Arguments = value
-                            ElseIf key = "workdir" Then
-                                options.WorkingDirectory = value
-                            ElseIf key.StartsWith("env.") Then
-                                Dim envName = key.Substring("env.".Length)
-                                options.EnvironmentVariables(envName) = value
-                            End If
-                        End If
+        ' 恢复命令中的反斜杠
+        options.Command = Uri.UnescapeDataString(commandParts(0)).Replace("\\", "\")
+
+        ' 解析查询参数
+        If commandParts.Length > 1 Then
+            Dim queryString = commandParts(1)
+            Dim pairs = queryString.Split("&"c)
+
+            For Each pair In pairs
+                Dim keyValue = pair.Split(New Char() {"="c}, 2)
+                If keyValue.Length = 2 Then
+                    Dim key = Uri.UnescapeDataString(keyValue(0))
+                    ' 恢复值中的反斜杠
+                    Dim value = Uri.UnescapeDataString(keyValue(1)).Replace("\\", "\")
+
+                    If key = "args" Then
+                        options.Arguments = value
+                    ElseIf key = "workdir" Then
+                        options.WorkingDirectory = value
+                    Else
+                        ' 所有其他参数视为环境变量
+                        options.EnvironmentVariables(key) = value
                     End If
-                Next
-            End If
+                End If
+            Next
         End If
 
         Return options
     End Function
 
-    ' 转换回 stdio:// URL - 改进版本
-    Public Function ToUrl() As String
-        Dim sb = New StringBuilder("stdio://")
-        sb.Append(Command)
 
-        Dim hasQuery = False
-
-        If Not String.IsNullOrEmpty(Arguments) Then
-            sb.Append("?args=").Append(Uri.EscapeDataString(Arguments))
-            hasQuery = True
+    ' 转换成官方格式的args数组
+    ' 将参数字符串转换为数组
+    Public Function GetArgsArray() As String()
+        If String.IsNullOrEmpty(Arguments) Then
+            Return New String() {}
         End If
 
-        If Not String.IsNullOrEmpty(WorkingDirectory) Then
-            sb.Append(If(hasQuery, "&", "?")).Append("workdir=").Append(Uri.EscapeDataString(WorkingDirectory))
-            hasQuery = True
-        End If
+        ' 处理引号内的空格
+        Dim result As New List(Of String)()
+        Dim currentArg As New StringBuilder()
+        Dim inQuotes As Boolean = False
+        Dim escaping As Boolean = False
 
-        ' 环境变量使用单独的参数
-        For Each kvp In EnvironmentVariables
-            sb.Append(If(hasQuery, "&", "?")).Append("env.").Append(Uri.EscapeDataString(kvp.Key)).Append("=").Append(Uri.EscapeDataString(kvp.Value))
-            hasQuery = True
+        For i As Integer = 0 To Arguments.Length - 1
+            Dim c As Char = Arguments(i)
+
+            ' 处理转义字符
+            If escaping Then
+                currentArg.Append(c)
+                escaping = False
+                Continue For
+            End If
+
+            ' 检查是否是转义字符
+            If c = "\"c Then
+                escaping = True
+                Continue For
+            End If
+
+            ' 处理引号
+            If c = """"c Then
+                inQuotes = Not inQuotes
+                ' 保留引号，因为某些命令行需要引号
+                currentArg.Append(c)
+                Continue For
+            End If
+
+            ' 处理空格
+            If c = " "c AndAlso Not inQuotes Then
+                If currentArg.Length > 0 Then
+                    result.Add(currentArg.ToString())
+                    currentArg.Clear()
+                End If
+                Continue For
+            End If
+
+            ' 添加普通字符
+            currentArg.Append(c)
         Next
 
-        Return sb.ToString()
+        ' 添加最后一个参数
+        If currentArg.Length > 0 Then
+            result.Add(currentArg.ToString())
+        End If
+
+        Return result.ToArray()
     End Function
 End Class
