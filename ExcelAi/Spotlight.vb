@@ -1,4 +1,4 @@
-Imports System.Diagnostics
+ï»¿Imports System.Diagnostics
 Imports System.Drawing
 Imports System.Windows.Forms
 Imports Microsoft.Office.Core
@@ -6,31 +6,31 @@ Imports Microsoft.Office.Interop.Excel
 Imports ShareRibbon
 
 Public Class Spotlight
-    ' ÉùÃ÷Àà¼¶±ğ±äÁ¿£¬ÓÃÓÚ¸ú×Ù¾Û¹âµÆ¹¦ÄÜ×´Ì¬
+    ' å£°æ˜ç±»çº§åˆ«å˜é‡ï¼Œç”¨äºè·Ÿè¸ªèšå…‰ç¯åŠŸèƒ½çŠ¶æ€
     Private _spotlightActive As Boolean = False
     Private WithEvents _appEvents As Excel.Application
     Private _currentWorkbook As Excel.Workbook
 
-    ' ¸ú×Ùµ±Ç°¾Û¹âµÆÎ»ÖÃ
+    ' è·Ÿè¸ªå½“å‰èšå…‰ç¯ä½ç½®
     Private _currentRow As Integer = 0
     Private _currentColumn As Integer = 0
 
-    ' Ìõ¼ş¸ñÊ½Ãû³Æ
+    ' æ¡ä»¶æ ¼å¼åç§°
     Private Const ROW_FORMAT_NAME As String = "SpotlightRow"
     Private Const COLUMN_FORMAT_NAME As String = "SpotlightColumn"
     Private Const CELL_FORMAT_NAME As String = "SpotlightCell"
 
-    ' ¾Û¹âµÆÅäÖÃ - ĞŞ¸ÄÄ¬ÈÏÑÕÉ«ÎªÇ³»ÒÉ«
-    Private _rowColor As Integer = RGB(230, 230, 230) ' Ç³»ÒÉ«
-    Private _columnColor As Integer = RGB(230, 230, 230) ' Ç³»ÒÉ«
-    Private _cellColor As Integer = RGB(200, 200, 200) ' ÉÔÉîµÄ»ÒÉ«£¬ÈÃ»î¶¯µ¥Ôª¸ñ¸üÃ÷ÏÔ
-    Private _rowDisplay As Boolean = True ' ÊÇ·ñÏÔÊ¾ĞĞ¸ßÁÁ
-    Private _columnDisplay As Boolean = True ' ÊÇ·ñÏÔÊ¾ÁĞ¸ßÁÁ
+    ' èšå…‰ç¯é…ç½® - ä¿®æ”¹é»˜è®¤é¢œè‰²ä¸ºæµ…ç°è‰²
+    Private _rowColor As Integer = RGB(230, 230, 230) ' æµ…ç°è‰²
+    Private _columnColor As Integer = RGB(230, 230, 230) ' æµ…ç°è‰²
+    Private _cellColor As Integer = RGB(200, 200, 200) ' ç¨æ·±çš„ç°è‰²ï¼Œè®©æ´»åŠ¨å•å…ƒæ ¼æ›´æ˜æ˜¾
+    Private _rowDisplay As Boolean = True ' æ˜¯å¦æ˜¾ç¤ºè¡Œé«˜äº®
+    Private _columnDisplay As Boolean = True ' æ˜¯å¦æ˜¾ç¤ºåˆ—é«˜äº®
 
-    ' µ¥ÀıÄ£Ê½ÊµÏÖ
+    ' å•ä¾‹æ¨¡å¼å®ç°
     Private Shared _instance As Spotlight = Nothing
 
-    ' »ñÈ¡µ¥ÀıÊµÀı
+    ' è·å–å•ä¾‹å®ä¾‹
     Public Shared Function GetInstance() As Spotlight
         If _instance Is Nothing Then
             _instance = New Spotlight()
@@ -38,18 +38,18 @@ Public Class Spotlight
         Return _instance
     End Function
 
-    ' Ë½ÓĞ¹¹Ôìº¯Êı£¬·ÀÖ¹Íâ²¿Ö±½Ó´´½¨ÊµÀı
+    ' ç§æœ‰æ„é€ å‡½æ•°ï¼Œé˜²æ­¢å¤–éƒ¨ç›´æ¥åˆ›å»ºå®ä¾‹
     Private Sub New()
     End Sub
 
-    ' ¼ì²é¾Û¹âµÆÊÇ·ñ¼¤»î
+    ' æ£€æŸ¥èšå…‰ç¯æ˜¯å¦æ¿€æ´»
     Public ReadOnly Property IsActive As Boolean
         Get
             Return _spotlightActive
         End Get
     End Property
 
-    ' ÇĞ»»ĞĞÏÔÊ¾
+    ' åˆ‡æ¢è¡Œæ˜¾ç¤º
     Public Sub ToggleRowDisplay()
         _rowDisplay = Not _rowDisplay
         If _spotlightActive Then
@@ -57,7 +57,7 @@ Public Class Spotlight
         End If
     End Sub
 
-    ' ÇĞ»»ÁĞÏÔÊ¾
+    ' åˆ‡æ¢åˆ—æ˜¾ç¤º
     Public Sub ToggleColumnDisplay()
         _columnDisplay = Not _columnDisplay
         If _spotlightActive Then
@@ -65,243 +65,243 @@ Public Class Spotlight
         End If
     End Sub
 
-    ' ÉèÖÃ¾Û¹âµÆÑÕÉ«
+    ' è®¾ç½®èšå…‰ç¯é¢œè‰²
     Public Sub SetColors(rowColor As Integer, columnColor As Integer, cellColor As Integer)
         _rowColor = rowColor
         _columnColor = columnColor
         _cellColor = cellColor
 
-        ' Èç¹û¾Û¹âµÆÒÑ¼¤»î£¬Á¢¼´Ó¦ÓÃĞÂÑÕÉ«
+        ' å¦‚æœèšå…‰ç¯å·²æ¿€æ´»ï¼Œç«‹å³åº”ç”¨æ–°é¢œè‰²
         If _spotlightActive Then
             ApplyHighlight()
         End If
     End Sub
 
-    ' ÏÔÊ¾ÑÕÉ«Ñ¡Ôñ¶Ô»°¿ò
+    ' æ˜¾ç¤ºé¢œè‰²é€‰æ‹©å¯¹è¯æ¡†
     Public Sub ShowColorDialog()
         Try
-            ' ´´½¨ÑÕÉ«¶Ô»°¿ò
+            ' åˆ›å»ºé¢œè‰²å¯¹è¯æ¡†
             Using colorDialog As New ColorDialog()
-                ' ÉèÖÃ³õÊ¼ÑÕÉ«
+                ' è®¾ç½®åˆå§‹é¢œè‰²
                 colorDialog.Color = System.Drawing.ColorTranslator.FromOle(_rowColor)
-                colorDialog.FullOpen = True ' ÏÔÊ¾ÍêÕûµÄÑÕÉ«¶Ô»°¿ò
+                colorDialog.FullOpen = True ' æ˜¾ç¤ºå®Œæ•´çš„é¢œè‰²å¯¹è¯æ¡†
                 colorDialog.CustomColors = New Integer() {
-                    RGB(230, 230, 230), ' Ç³»ÒÉ«
-                    RGB(255, 255, 150), ' Ç³»ÆÉ«
-                    RGB(200, 255, 200), ' Ç³ÂÌÉ«
-                    RGB(200, 200, 255), ' Ç³À¶É«
-                    RGB(255, 200, 200)  ' Ç³ºìÉ«
+                    RGB(230, 230, 230), ' æµ…ç°è‰²
+                    RGB(255, 255, 150), ' æµ…é»„è‰²
+                    RGB(200, 255, 200), ' æµ…ç»¿è‰²
+                    RGB(200, 200, 255), ' æµ…è“è‰²
+                    RGB(255, 200, 200)  ' æµ…çº¢è‰²
                 }
 
-                ' ÏÔÊ¾¶Ô»°¿ò
+                ' æ˜¾ç¤ºå¯¹è¯æ¡†
                 If colorDialog.ShowDialog() = DialogResult.OK Then
-                    ' ÓÃ»§Ñ¡ÔñÁËÑÕÉ«£¬¸üĞÂ¾Û¹âµÆÑÕÉ«
+                    ' ç”¨æˆ·é€‰æ‹©äº†é¢œè‰²ï¼Œæ›´æ–°èšå…‰ç¯é¢œè‰²
                     Dim selectedColor As Integer = System.Drawing.ColorTranslator.ToOle(colorDialog.Color)
 
-                    ' ĞĞºÍÁĞÊ¹ÓÃÑ¡ÔñµÄÑÕÉ«
+                    ' è¡Œå’Œåˆ—ä½¿ç”¨é€‰æ‹©çš„é¢œè‰²
                     _rowColor = selectedColor
                     _columnColor = selectedColor
 
-                    ' »î¶¯µ¥Ôª¸ñÊ¹ÓÃÉÔÉîµÄÑÕÉ«
+                    ' æ´»åŠ¨å•å…ƒæ ¼ä½¿ç”¨ç¨æ·±çš„é¢œè‰²
                     Dim cellR As Integer = colorDialog.Color.R - 30
                     Dim cellG As Integer = colorDialog.Color.G - 30
                     Dim cellB As Integer = colorDialog.Color.B - 30
 
-                    ' È·±£RGBÖµ²»Ğ¡ÓÚ0
+                    ' ç¡®ä¿RGBå€¼ä¸å°äº0
                     cellR = Math.Max(0, cellR)
                     cellG = Math.Max(0, cellG)
                     cellB = Math.Max(0, cellB)
 
                     _cellColor = RGB(cellR, cellG, cellB)
 
-                    ' Èç¹û¾Û¹âµÆÒÑ¼¤»î£¬Ó¦ÓÃĞÂÑÕÉ«
+                    ' å¦‚æœèšå…‰ç¯å·²æ¿€æ´»ï¼Œåº”ç”¨æ–°é¢œè‰²
                     If _spotlightActive Then
                         ApplyHighlight()
                     End If
 
-                    GlobalStatusStripAll.ShowWarning("¾Û¹âµÆÑÕÉ«ÒÑ¸üĞÂ")
+                    GlobalStatusStripAll.ShowWarning("èšå…‰ç¯é¢œè‰²å·²æ›´æ–°")
                 End If
             End Using
         Catch ex As Exception
-            Debug.WriteLine("ÏÔÊ¾ÑÕÉ«¶Ô»°¿òÊ±³ö´í: " & ex.Message)
-            MessageBox.Show("ÏÔÊ¾ÑÕÉ«¶Ô»°¿òÊ±³ö´í: " & ex.Message, "¾Û¹âµÆÑÕÉ«", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Debug.WriteLine("æ˜¾ç¤ºé¢œè‰²å¯¹è¯æ¡†æ—¶å‡ºé”™: " & ex.Message)
+            MessageBox.Show("æ˜¾ç¤ºé¢œè‰²å¯¹è¯æ¡†æ—¶å‡ºé”™: " & ex.Message, "èšå…‰ç¯é¢œè‰²", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
 
-    ' ÇĞ»»¾Û¹âµÆ×´Ì¬
+    ' åˆ‡æ¢èšå…‰ç¯çŠ¶æ€
     Public Function Toggle() As Boolean
         If _spotlightActive Then
             Deactivate()
-            GlobalStatusStripAll.ShowWarning("¾Û¹âµÆ¹¦ÄÜÒÑ¹Ø±Õ,Ë«»÷¾Û¹âµÆ°´Å¥¿ÉĞŞ¸ÄÑÕÉ«")
+            GlobalStatusStripAll.ShowWarning("èšå…‰ç¯åŠŸèƒ½å·²å…³é—­,åŒå‡»èšå…‰ç¯æŒ‰é’®å¯ä¿®æ”¹é¢œè‰²")
         Else
             Activate()
-            GlobalStatusStripAll.ShowWarning("¾Û¹âµÆ¹¦ÄÜÒÑ¿ªÆô£¬Ë«»÷¾Û¹âµÆ°´Å¥¿ÉĞŞ¸ÄÑÕÉ«")
+            GlobalStatusStripAll.ShowWarning("èšå…‰ç¯åŠŸèƒ½å·²å¼€å¯ï¼ŒåŒå‡»èšå…‰ç¯æŒ‰é’®å¯ä¿®æ”¹é¢œè‰²")
         End If
 
         Return _spotlightActive
     End Function
 
-    ' ¼¤»î¾Û¹âµÆ¹¦ÄÜ
+    ' æ¿€æ´»èšå…‰ç¯åŠŸèƒ½
     Public Sub Activate()
         Try
             If _appEvents Is Nothing Then
                 _appEvents = Globals.ThisAddIn.Application
             End If
 
-            ' ±£´æ¶Ôµ±Ç°»î¶¯¹¤×÷²¾µÄÒıÓÃ
+            ' ä¿å­˜å¯¹å½“å‰æ´»åŠ¨å·¥ä½œç°¿çš„å¼•ç”¨
             _currentWorkbook = _appEvents.ActiveWorkbook
 
-            ' ±£´æÔ­Ê¼ÉèÖÃ
+            ' ä¿å­˜åŸå§‹è®¾ç½®
             _spotlightActive = True
 
-            ' Ìí¼ÓÊÂ¼ş´¦Àí³ÌĞò
+            ' æ·»åŠ äº‹ä»¶å¤„ç†ç¨‹åº
             AddHandler _appEvents.SheetSelectionChange, AddressOf AppEvents_SheetSelectionChange
             AddHandler _appEvents.SheetActivate, AddressOf AppEvents_SheetActivate
             AddHandler _appEvents.SheetDeactivate, AddressOf AppEvents_SheetDeactivate
             AddHandler _appEvents.WorkbookActivate, AddressOf AppEvents_WorkbookActivate
 
-            ' Ó¦ÓÃ¸ßÁÁ
+            ' åº”ç”¨é«˜äº®
             ApplyHighlight()
 
-            ' µ÷ÊÔĞÅÏ¢
-            Debug.WriteLine("¾Û¹âµÆ¹¦ÄÜÒÑ¼¤»î")
+            ' è°ƒè¯•ä¿¡æ¯
+            Debug.WriteLine("èšå…‰ç¯åŠŸèƒ½å·²æ¿€æ´»")
         Catch ex As Exception
-            Debug.WriteLine("¼¤»î¾Û¹âµÆ¹¦ÄÜÊ±³ö´í: " & ex.Message)
-            MessageBox.Show("¼¤»î¾Û¹âµÆ¹¦ÄÜÊ±³ö´í: " & ex.Message, "¾Û¹âµÆ¹¦ÄÜ", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Debug.WriteLine("æ¿€æ´»èšå…‰ç¯åŠŸèƒ½æ—¶å‡ºé”™: " & ex.Message)
+            MessageBox.Show("æ¿€æ´»èšå…‰ç¯åŠŸèƒ½æ—¶å‡ºé”™: " & ex.Message, "èšå…‰ç¯åŠŸèƒ½", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
 
-    ' È¡Ïû¼¤»î¾Û¹âµÆ¹¦ÄÜ
+    ' å–æ¶ˆæ¿€æ´»èšå…‰ç¯åŠŸèƒ½
     Public Sub Deactivate()
         Try
             If _appEvents IsNot Nothing Then
-                ' ÒÆ³ıÊÂ¼ş´¦Àí³ÌĞò
+                ' ç§»é™¤äº‹ä»¶å¤„ç†ç¨‹åº
                 RemoveHandler _appEvents.SheetSelectionChange, AddressOf AppEvents_SheetSelectionChange
                 RemoveHandler _appEvents.SheetActivate, AddressOf AppEvents_SheetActivate
                 RemoveHandler _appEvents.SheetDeactivate, AddressOf AppEvents_SheetDeactivate
                 RemoveHandler _appEvents.WorkbookActivate, AddressOf AppEvents_WorkbookActivate
             End If
 
-            ' ÒÆ³ı¸ßÁÁ
+            ' ç§»é™¤é«˜äº®
             RemoveHighlight()
 
-            ' ¸üĞÂ×´Ì¬
+            ' æ›´æ–°çŠ¶æ€
             _spotlightActive = False
             _currentRow = 0
             _currentColumn = 0
 
-            ' µ÷ÊÔĞÅÏ¢
-            Debug.WriteLine("¾Û¹âµÆ¹¦ÄÜÒÑÍ£ÓÃ")
+            ' è°ƒè¯•ä¿¡æ¯
+            Debug.WriteLine("èšå…‰ç¯åŠŸèƒ½å·²åœç”¨")
         Catch ex As Exception
-            Debug.WriteLine("È¡Ïû¼¤»î¾Û¹âµÆ¹¦ÄÜÊ±³ö´í: " & ex.Message)
+            Debug.WriteLine("å–æ¶ˆæ¿€æ´»èšå…‰ç¯åŠŸèƒ½æ—¶å‡ºé”™: " & ex.Message)
         End Try
     End Sub
 
-    ' ¹¤×÷±íÑ¡Ôñ¸ü¸ÄÊÂ¼ş´¦Àí³ÌĞò
+    ' å·¥ä½œè¡¨é€‰æ‹©æ›´æ”¹äº‹ä»¶å¤„ç†ç¨‹åº
     Private Sub AppEvents_SheetSelectionChange(ByVal Sh As Object, ByVal Target As Excel.Range)
         If _spotlightActive Then
-            Debug.WriteLine("Ñ¡ÔñÎ»ÖÃÒÑ¸ü¸Ä")
+            Debug.WriteLine("é€‰æ‹©ä½ç½®å·²æ›´æ”¹")
             UpdateHighlight()
 
-            ' È·±£Ñ¡ÖĞµ¥Ôª¸ñÈÔÈ»ÊÇÑ¡ÖĞ×´Ì¬
+            ' ç¡®ä¿é€‰ä¸­å•å…ƒæ ¼ä»ç„¶æ˜¯é€‰ä¸­çŠ¶æ€
             Target.Select()
 
-            ' ÈÃExcelÖØĞÂ¼ÆËã¹«Ê½£¬È·±£µ¥Ôª¸ñÊäÈëÓĞĞ§
+            ' è®©Excelé‡æ–°è®¡ç®—å…¬å¼ï¼Œç¡®ä¿å•å…ƒæ ¼è¾“å…¥æœ‰æ•ˆ
             If Target.Count = 1 Then
                 Try
                     Target.Calculate()
                 Catch
-                    ' ºöÂÔ¼ÆËã´íÎó
+                    ' å¿½ç•¥è®¡ç®—é”™è¯¯
                 End Try
             End If
         End If
     End Sub
 
-    ' ¹¤×÷±í¼¤»îÊÂ¼ş´¦Àí³ÌĞò
+    ' å·¥ä½œè¡¨æ¿€æ´»äº‹ä»¶å¤„ç†ç¨‹åº
     Private Sub AppEvents_SheetActivate(ByVal Sh As Object)
         If _spotlightActive Then
-            Debug.WriteLine("¹¤×÷±íÒÑ¼¤»î")
+            Debug.WriteLine("å·¥ä½œè¡¨å·²æ¿€æ´»")
             ApplyHighlight()
         End If
     End Sub
 
-    ' ¹¤×÷±íÍ£ÓÃÊÂ¼ş´¦Àí³ÌĞò
+    ' å·¥ä½œè¡¨åœç”¨äº‹ä»¶å¤„ç†ç¨‹åº
     Private Sub AppEvents_SheetDeactivate(ByVal Sh As Object)
         If _spotlightActive Then
-            Debug.WriteLine("¹¤×÷±íÒÑÍ£ÓÃ")
+            Debug.WriteLine("å·¥ä½œè¡¨å·²åœç”¨")
             RemoveHighlight()
         End If
     End Sub
 
-    ' ¹¤×÷²¾¼¤»îÊÂ¼ş´¦Àí³ÌĞò
+    ' å·¥ä½œç°¿æ¿€æ´»äº‹ä»¶å¤„ç†ç¨‹åº
     Private Sub AppEvents_WorkbookActivate(ByVal Wb As Excel.Workbook)
         If _spotlightActive Then
-            Debug.WriteLine("¹¤×÷²¾ÒÑ¼¤»î")
+            Debug.WriteLine("å·¥ä½œç°¿å·²æ¿€æ´»")
             _currentWorkbook = Wb
             ApplyHighlight()
         End If
     End Sub
 
-    ' Ó¦ÓÃ¸ßÁÁ
+    ' åº”ç”¨é«˜äº®
     Private Sub ApplyHighlight()
         Try
-            ' Ê×ÏÈÒÆ³ıÒÑÓĞµÄ¸ßÁÁ
+            ' é¦–å…ˆç§»é™¤å·²æœ‰çš„é«˜äº®
             RemoveHighlight()
 
-            ' »ñÈ¡µ±Ç°»î¶¯µ¥Ôª¸ñ
+            ' è·å–å½“å‰æ´»åŠ¨å•å…ƒæ ¼
             Dim activeCell As Excel.Range = _appEvents.ActiveCell
             Dim activeSheet As Excel.Worksheet = _appEvents.ActiveSheet
 
-            ' ±£´æµ±Ç°Î»ÖÃ
+            ' ä¿å­˜å½“å‰ä½ç½®
             _currentRow = activeCell.Row
             _currentColumn = activeCell.Column
 
-            Debug.WriteLine("µ±Ç°Î»ÖÃ: ĞĞ=" & _currentRow & ", ÁĞ=" & _currentColumn)
+            'Debug.WriteLine("å½“å‰ä½ç½®: è¡Œ=" & _currentRow & ", åˆ—=" & _currentColumn)
 
-            ' Ó¦ÓÃÌõ¼ş¸ñÊ½
+            ' åº”ç”¨æ¡ä»¶æ ¼å¼
             ApplyConditionalFormatting(activeCell, activeSheet)
         Catch ex As Exception
-            Debug.WriteLine("Ó¦ÓÃ¸ßÁÁÊ±³ö´í: " & ex.Message)
+            Debug.WriteLine("åº”ç”¨é«˜äº®æ—¶å‡ºé”™: " & ex.Message)
         End Try
     End Sub
 
-    ' ¸üĞÂ¸ßÁÁ
+    ' æ›´æ–°é«˜äº®
     Private Sub UpdateHighlight()
         Try
-            ' »ñÈ¡µ±Ç°»î¶¯µ¥Ôª¸ñ
+            ' è·å–å½“å‰æ´»åŠ¨å•å…ƒæ ¼
             Dim activeCell As Excel.Range = _appEvents.ActiveCell
 
-            ' Èç¹ûÎ»ÖÃ±ä»¯ÁË£¬ÖØĞÂÓ¦ÓÃ¸ßÁÁ
+            ' å¦‚æœä½ç½®å˜åŒ–äº†ï¼Œé‡æ–°åº”ç”¨é«˜äº®
             If _currentRow <> activeCell.Row OrElse _currentColumn <> activeCell.Column Then
                 ApplyHighlight()
             End If
         Catch ex As Exception
-            Debug.WriteLine("¸üĞÂ¸ßÁÁÊ±³ö´í: " & ex.Message)
+            Debug.WriteLine("æ›´æ–°é«˜äº®æ—¶å‡ºé”™: " & ex.Message)
         End Try
     End Sub
 
-    ' ÒÆ³ı¸ßÁÁ
+    ' ç§»é™¤é«˜äº®
     Private Sub RemoveHighlight()
         Try
-            ' »ñÈ¡µ±Ç°»î¶¯¹¤×÷±í
+            ' è·å–å½“å‰æ´»åŠ¨å·¥ä½œè¡¨
             Dim activeSheet As Excel.Worksheet = _appEvents.ActiveSheet
 
-            ' É¾³ıÌõ¼ş¸ñÊ½
+            ' åˆ é™¤æ¡ä»¶æ ¼å¼
             activeSheet.Cells.FormatConditions.Delete()
 
-            Debug.WriteLine("¸ßÁÁÒÑÒÆ³ı")
+            Debug.WriteLine("é«˜äº®å·²ç§»é™¤")
         Catch ex As Exception
-            Debug.WriteLine("ÒÆ³ı¸ßÁÁÊ±³ö´í: " & ex.Message)
+            Debug.WriteLine("ç§»é™¤é«˜äº®æ—¶å‡ºé”™: " & ex.Message)
         End Try
     End Sub
 
-    ' Ó¦ÓÃÌõ¼ş¸ñÊ½
+    ' åº”ç”¨æ¡ä»¶æ ¼å¼
     Private Sub ApplyConditionalFormatting(activeCell As Excel.Range, activeSheet As Excel.Worksheet)
         Try
-            ' ÉèÖÃÆÁÄ»¸üĞÂÎªFalse£¬Ìá¸ßĞÔÄÜ
+            ' è®¾ç½®å±å¹•æ›´æ–°ä¸ºFalseï¼Œæé«˜æ€§èƒ½
             _appEvents.ScreenUpdating = False
 
-            ' Ó¦ÓÃĞĞ¸ßÁÁ
+            ' åº”ç”¨è¡Œé«˜äº®
             If _rowDisplay Then
                 Dim entireRow As Excel.Range = activeSheet.Rows(_currentRow)
                 Dim rowFormat As Excel.FormatCondition = entireRow.FormatConditions.Add(
@@ -314,7 +314,7 @@ Public Class Spotlight
                 End With
             End If
 
-            ' Ó¦ÓÃÁĞ¸ßÁÁ
+            ' åº”ç”¨åˆ—é«˜äº®
             If _columnDisplay Then
                 Dim entireColumn As Excel.Range = activeSheet.Columns(_currentColumn)
                 Dim colFormat As Excel.FormatCondition = entireColumn.FormatConditions.Add(
@@ -327,7 +327,7 @@ Public Class Spotlight
                 End With
             End If
 
-            ' Ó¦ÓÃµ¥Ôª¸ñ¸ßÁÁ£¨»á¸²¸ÇĞĞÁĞ¸ßÁÁ£©
+            ' åº”ç”¨å•å…ƒæ ¼é«˜äº®ï¼ˆä¼šè¦†ç›–è¡Œåˆ—é«˜äº®ï¼‰
             Dim cellFormat As Excel.FormatCondition = activeCell.FormatConditions.Add(
                 Type:=XlFormatConditionType.xlExpression,
                 Formula1:="=TRUE")
@@ -337,17 +337,17 @@ Public Class Spotlight
                 .StopIfTrue = False
             End With
 
-            ' »Ö¸´ÆÁÄ»¸üĞÂ
+            ' æ¢å¤å±å¹•æ›´æ–°
             _appEvents.ScreenUpdating = True
 
-            Debug.WriteLine("Ìõ¼ş¸ñÊ½ÒÑÓ¦ÓÃ")
+            Debug.WriteLine("æ¡ä»¶æ ¼å¼å·²åº”ç”¨")
         Catch ex As Exception
             _appEvents.ScreenUpdating = True
-            Debug.WriteLine("Ó¦ÓÃÌõ¼ş¸ñÊ½Ê±³ö´í: " & ex.Message)
+            Debug.WriteLine("åº”ç”¨æ¡ä»¶æ ¼å¼æ—¶å‡ºé”™: " & ex.Message)
         End Try
     End Sub
 
-    ' Ìí¼ÓÒ»¸öÇå³ıËùÓĞ¸ßÁÁµÄ¹«¹²·½·¨
+    ' æ·»åŠ ä¸€ä¸ªæ¸…é™¤æ‰€æœ‰é«˜äº®çš„å…¬å…±æ–¹æ³•
     Public Sub ClearAllHighlights()
         RemoveHighlight()
     End Sub
