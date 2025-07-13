@@ -263,7 +263,7 @@ Public Class StdioConfigForm
                    Not String.IsNullOrEmpty(row.Cells("Name").Value.ToString()) Then
 
                     Dim name = row.Cells("Name").Value.ToString()
-                    Dim value = If(row.Cells("Value").Value Is Nothing, "", row.Cells("Value").ToString())
+                    Dim value = If(row.Cells("Value").Value Is Nothing, "", row.Cells("Value").Value.ToString())
 
                     Options.EnvironmentVariables(name) = value
                 End If

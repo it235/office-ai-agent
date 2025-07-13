@@ -1395,7 +1395,7 @@
                 <p>4.配置大模型提示词能够更快，更准确的得到你想要的答案</p>
                 <p>5.如果没解决你的痛点，<a href="https://jsj.top/f/OZJDfa" target="_blank">点击此处提出需求</a>，下个版本见</p>
                 <p>6.聊天记录存放在“当前用户/文档/OfficeAiAppData”目录下</p>
-                <p>7.当前版本:<span id="version">2.5.1</span>，<a href="https://www.officeso.cn" target="_blank">每月发布新功能</a></p>
+                <p>7.当前版本:<span id="version">2.6.0</span>，<a href="https://www.officeso.cn" target="_blank">每月发布新功能</a></p>
             </div>
         </div>
     </div>
@@ -2852,16 +2852,17 @@
         let enabledMcpList = []; // 存储已启用的MCP列表
         let mcpSupported = false; // 模型是否支持MCP
 
+        // 每5秒执行一次，检查当前模型是否支持MCP
+        setInterval(function () {
+            requestMcpConnections();
+        }, 5000);
 
         // 显示/隐藏MCP弹窗
         function toggleMcpDialog() {
+            //先校验下当前模型是否是否支持mcp
+            requestMcpConnections();
             document.getElementById('mcp-dialog').style.display = 'block';
             document.getElementById('mcp-overlay').style.display = 'block';
-
-            // 如果连接列表为空，则向后端请求数据
-            //if (mcpConnections.length === 0) {
-                requestMcpConnections();
-            //}
         }
 
         // 关闭MCP弹窗
@@ -2878,8 +2879,11 @@
         }
 
         // 渲染MCP连接列表
-        function renderMcpConnections(connections, enabledList) {
-            console.log(connections)
+        function renderMcpConnections(connections, enabledList, mcpable) {
+            mcpSupported = mcpable
+            const mcpButton = document.getElementById('mcp-toggle-btn');
+            mcpButton.style.display = mcpSupported ? 'flex' : 'none';
+
             mcpConnections = connections;
             enabledMcpList = enabledList || [];
 
@@ -2957,7 +2961,7 @@
                 }));
 
                 // 立即渲染连接列表
-                renderMcpConnections(mcpConnections, enabledList);
+                renderMcpConnections(mcpConnections, enabledList, supported);
             }
 
             // 如果有启用列表，更新缓存

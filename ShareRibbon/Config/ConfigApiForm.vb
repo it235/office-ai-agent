@@ -281,13 +281,24 @@ Public Class ConfigApiForm
             Return
         End If
 
+        ' 获取当前选中的模型对象
+        Dim selectedModel As ConfigManager.ConfigItemModel = Nothing
+        For Each model In selectedPlatform.model
+            If model.modelName = selectedModelName Then
+                selectedModel = model
+                Exit For
+            End If
+        Next
+
         ' 判断是否需要验证：
         ' 1. 如果之前已验证过且API Key未变更，则无需再次验证
         ' 2. 如果之前未验证过或API Key已变更，则需要验证
         Dim needValidation As Boolean = True
 
-        ' 检查是否已验证过且API Key未变更
-        If selectedPlatform.validated AndAlso selectedPlatform.key = inputApiKey Then
+
+        ' 检查两层验证状态
+        If selectedPlatform.validated AndAlso selectedPlatform.key = inputApiKey AndAlso
+           selectedModel IsNot Nothing AndAlso selectedModel.mcpValidated Then
             needValidation = False
         End If
 
@@ -315,6 +326,7 @@ Public Class ConfigApiForm
             ConfigSettings.ApiKey = inputApiKey
             ConfigSettings.platform = selectedPlatform.pltform
             ConfigSettings.ModelName = selectedModelName
+            ConfigSettings.mcpable = selectedModel.mcpable
 
             ' 关闭对话框
             Me.DialogResult = DialogResult.OK
@@ -396,9 +408,9 @@ Public Class ConfigApiForm
                         config.validated = True ' 标记为已验证
                         For Each item_m In config.model
                             item_m.selected = False
-                            item_m.mcpable = False
                             If item_m.modelName = selectedModelName Then
                                 item_m.mcpable = mcpSupported
+                                item_m.mcpValidated = True
                                 item_m.selected = True
                             End If
                         Next
@@ -416,6 +428,7 @@ Public Class ConfigApiForm
                 ConfigSettings.ApiKey = inputApiKey
                 ConfigSettings.platform = selectedPlatform.pltform
                 ConfigSettings.ModelName = selectedModelName
+                ConfigSettings.mcpable = mcpSupported
 
                 ' 关闭对话框
                 Me.DialogResult = DialogResult.OK
@@ -427,6 +440,9 @@ Public Class ConfigApiForm
 
                 ' 标记为未验证
                 selectedPlatform.validated = False
+                If selectedModel IsNot Nothing Then
+                    selectedModel.mcpValidated = False
+                End If
             End If
         Catch ex As Exception
             ' 处理异常
@@ -434,6 +450,9 @@ Public Class ConfigApiForm
 
             ' 标记为未验证
             selectedPlatform.validated = False
+            If selectedModel IsNot Nothing Then
+                selectedModel.mcpValidated = False
+            End If
         Finally
             ' 恢复按钮状态
             confirmButton.Enabled = True
@@ -573,9 +592,6 @@ Public Class ConfigApiForm
         ' 保存到文件
         SaveConfig()
 
-        'modelComboBox.Items.Add(newItem)
-        'modelComboBox.SelectedItem = newItem
-
         modelNameComboBox.Items.Clear()
         For Each model In newModels
             modelNameComboBox.Items.Add(model)
@@ -603,8 +619,6 @@ Public Class ConfigApiForm
         addModelNameButton.Visible = False
         saveConfigButton.Visible = False
     End Sub
-
-
 
     Private Sub NewModelPlatformTextBox_Enter(sender As Object, e As EventArgs)
         If newModelPlatformTextBox.Text = "模型平台" Then

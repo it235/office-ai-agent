@@ -44,7 +44,7 @@ Public MustInherit Class BaseOfficeRibbon
     ' 清理缓存配置按钮点击事件
     Private Sub ClearCacheConfig_Click_1(sender As Object, e As RibbonControlEventArgs) Handles ClearCacheButton.Click
         ' 弹出确认框
-        Dim result = MessageBox.Show("将删除文档\" & ConfigSettings.OfficeAiAppDataFolder & "目录下所有的配置，聊天记录信息，您确定要清理吗？", "确认操作", MessageBoxButtons.OKCancel, MessageBoxIcon.Question)
+        Dim result = MessageBox.Show("将彻底删除‘文档\" & ConfigSettings.OfficeAiAppDataFolder & "’目录下所有的配置，历史聊天记录信息，清理后不可恢复，您确定要清理吗？", "确认操作", MessageBoxButtons.OKCancel, MessageBoxIcon.Question)
         If result <> DialogResult.OK Then
             Return
         End If
@@ -56,7 +56,7 @@ Public MustInherit Class BaseOfficeRibbon
                 For Each file In files
                     System.IO.File.Delete(file)
                 Next
-                MsgBox("缓存配置已清理！")
+                MsgBox("缓存配置已清理，请重启Office相关应用！")
             Catch ex As Exception
                 MsgBox("清理缓存配置时出错：" & ex.Message, vbCritical)
             End Try

@@ -1561,7 +1561,7 @@ Public Class MCPConfigForm
         ' 重新加载连接列表
         LoadConnectionsList()
 
-        MessageBox.Show("配置已保存！", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information)
+        'MessageBox.Show("配置已保存！", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information)
         Me.DialogResult = DialogResult.OK
         Me.Close()
     End Sub

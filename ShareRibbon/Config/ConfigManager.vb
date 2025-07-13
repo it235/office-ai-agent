@@ -89,12 +89,13 @@ Public Class ConfigManager
                 For Each item_m In item.model
                     If item_m.selected Then
                         ConfigSettings.ModelName = item_m.modelName
+                        ConfigSettings.mcpable = item_m.mcpable
                     End If
                 Next
             End If
         Next
-
     End Sub
+
 
     ' 保存到文件中，默认存在用户的文档目录下
     Public Shared Sub SaveConfig()
@@ -134,6 +135,7 @@ Public Class ConfigManager
         Public Property modelName As String
         Public Property selected As Boolean
         Public Property mcpable As Boolean = False
+        Public Property mcpValidated As Boolean = False
         Public Overrides Function ToString() As String
             Return modelName
         End Function
