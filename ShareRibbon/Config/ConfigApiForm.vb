@@ -339,10 +339,8 @@ Public Class ConfigApiForm
         confirmButton.Enabled = False
         confirmButton.Text = "验证中..."
 
+        GlobalStatusStripAll.ShowWarning("推理模型比普通模型会更加慢一些，请耐心等待")
         Try
-            ' 构建一个简单的请求体
-            'Dim requestBody As String = $"{{""model"": ""{selectedModelName}"", ""messages"": [{{""role"": ""user"", ""content"": ""hi，你支持function tool能里吗，支持的话返回参数给我tools，不用其他废话回答我""}}]}}"
-
             ' 构建一个带tools定义的请求体
             Dim requestBody As String = "{" &
             $"""model"": ""{selectedModelName}""," &
@@ -371,6 +369,12 @@ Public Class ConfigApiForm
 
             ' 调用API验证
             Dim response As String = Await SendHttpRequestForValidation(apiUrl, inputApiKey, requestBody)
+            If response.Contains("Bad Request") Then
+                ' 如果响应包含特定内容，说明验证成功
+                ' 构建一个简单的请求体
+                requestBody = $"{{""model"": ""{selectedModelName}"", ""messages"": [{{""role"": ""user"", ""content"": ""hi，你支持function tool能里吗，支持的话返回参数给我tools，不用其他废话回答我""}}]}}"
+                response = Await SendHttpRequestForValidation(apiUrl, inputApiKey, requestBody)
+            End If
 
             ' 检查响应是否有效
             Dim validationSuccess As Boolean = Not String.IsNullOrEmpty(response) AndAlso
@@ -467,7 +471,7 @@ Public Class ConfigApiForm
         Try
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
             Using client As New Net.Http.HttpClient()
-                client.Timeout = TimeSpan.FromSeconds(15) ' 较短的超时时间，只用于验证
+                client.Timeout = TimeSpan.FromSeconds(60) ' 较短的超时时间，只用于验证
                 client.DefaultRequestHeaders.Add("Authorization", "Bearer " & apiKey)
                 Dim content As New Net.Http.StringContent(requestBody, System.Text.Encoding.UTF8, "application/json")
                 Dim response As Net.Http.HttpResponseMessage = Await client.PostAsync(apiUrl, content)
@@ -481,7 +485,7 @@ Public Class ConfigApiForm
         Catch ex As Exception
             ' 在这里处理异常但不显示消息框，因为我们会在调用方法中显示
             Debug.WriteLine($"API验证请求失败: {ex.Message}")
-            Return String.Empty
+            Return ex.Message
         End Try
     End Function
 
