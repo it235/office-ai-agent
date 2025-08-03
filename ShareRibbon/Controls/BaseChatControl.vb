@@ -309,6 +309,7 @@ Public MustInherit Class BaseChatControl
 
             ' 获取当前配置的模型是否支持mcp
             Dim mcpSupported As Boolean = ConfigSettings.mcpable
+            Debug.WriteLine($"获取MCP连接列表，当前模型是否支持MCP {mcpSupported}")
 
             ' 发送到前端
             Dim js = $"renderMcpConnections({connectionsJson}, {enabledListJson},{mcpSupported.ToString().ToLower()});"
@@ -1548,7 +1549,6 @@ Public MustInherit Class BaseChatControl
                                 ' 如果chunk不是以data开头，则跳过
                                 chunk = chunk.Replace("data:", "")
                                 stringBuilder.Append(chunk)
-                                'Debug.WriteLine($"[Stream] 接收到块:{stringBuilder}")
                                 ' 判断stringBuilder是否以'}'结尾，如果是则解析
                                 If stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}).EndsWith("}") Then
                                     ProcessStreamChunk(stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}), uuid, originQuestion)

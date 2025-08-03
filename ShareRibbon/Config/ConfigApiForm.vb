@@ -341,67 +341,17 @@ Public Class ConfigApiForm
 
         GlobalStatusStripAll.ShowWarning("推理模型比普通模型会更加慢一些，请耐心等待")
         Try
-            ' 构建一个带tools定义的请求体
-            Dim requestBody As String = "{" &
-            $"""model"": ""{selectedModelName}""," &
-            $"""messages"": [{{""role"": ""user"", ""content"": ""请计算5+7的结果，并通过工具函数返回""}}]," &
-            $"""tools"": [" &
-                "{" &
-                    """type"": ""function""," &
-                    """function"": {" &
-                        """name"": ""calculator""," &
-                        """description"": ""计算数学表达式的结果""," &
-                        """parameters"": {" &
-                            """type"": ""object""," &
-                            """properties"": {" &
-                                """result"": {" &
-                                    """type"": ""number""," &
-                                    """description"": ""计算结果""" &
-                                "}" &
-                            "}," &
-                            """required"": [""result""]" &
-                        "}" &
-                    "}" &
-                "}" &
-            "]," &
-            """tool_choice"": ""auto""" &
-        "}"
-
-            ' 调用API验证
-            Dim response As String = Await SendHttpRequestForValidation(apiUrl, inputApiKey, requestBody)
-            If response.Contains("Bad Request") Then
-                ' 如果响应包含特定内容，说明验证成功
-                ' 构建一个简单的请求体
-                requestBody = $"{{""model"": ""{selectedModelName}"", ""messages"": [{{""role"": ""user"", ""content"": ""hi，你支持function tool能里吗，支持的话返回参数给我tools，不用其他废话回答我""}}]}}"
-                response = Await SendHttpRequestForValidation(apiUrl, inputApiKey, requestBody)
-            End If
+            ' 首先使用简单的请求体进行快速验证
+            Dim simpleRequestBody As String = $"{{""model"": ""{selectedModelName}"", ""stream"": true ,""messages"": [{{""role"": ""user"", ""content"": ""hi""}}]}}"
+            Dim response As String = Await SendHttpRequestForValidation(apiUrl, inputApiKey, simpleRequestBody)
 
             ' 检查响应是否有效
-            Dim validationSuccess As Boolean = Not String.IsNullOrEmpty(response) AndAlso
-                                         (response.Contains("content") OrElse response.Contains("message"))
-            Debug.WriteLine(response)
+            Dim validationSuccess As Boolean = Not String.IsNullOrEmpty(response)
 
             If validationSuccess Then
-                ' 验证成功，更新配置并保存
-                ' 检测MCP功能
 
                 Dim mcpSupported As Boolean = False
 
-                ' 检查响应中是否包含工具调用相关字段
-                If Not String.IsNullOrEmpty(response) Then
-                    If response.Contains("""tool_calls""") OrElse
-           response.Contains("""function_call""") Then
-                        Debug.WriteLine("响应包含tool_calls或function_call字段")
-                        mcpSupported = True
-                    End If
-
-                    ' 检查响应是否包含tools字段或capabilities
-                    If response.Contains("""tools""") OrElse
-           (response.Contains("""capabilities""") AndAlso response.Contains("""tools""")) Then
-                        Debug.WriteLine("响应包含tools字段或capabilities")
-                        mcpSupported = True
-                    End If
-                End If
 
                 ' 重置选择后的selected属性和key，设置validated为true
                 For Each config In ConfigData
@@ -414,18 +364,19 @@ Public Class ConfigApiForm
                             item_m.selected = False
                             If item_m.modelName = selectedModelName Then
                                 item_m.mcpable = mcpSupported
-                                item_m.mcpValidated = True
+                                item_m.mcpValidated = False
                                 item_m.selected = True
                             End If
                         Next
                     End If
                 Next
 
+                ' 保存到文件
+                SaveConfig()
+
                 If mcpSupported Then
                     Debug.WriteLine($"检测到 {selectedModelName} 模型支持MCP工具功能！", "MCP功能支持", MessageBoxButtons.OK, MessageBoxIcon.Information)
                 End If
-                ' 保存到文件
-                SaveConfig()
 
                 ' 刷新内存中的api配置
                 ConfigSettings.ApiUrl = apiUrl
@@ -434,9 +385,45 @@ Public Class ConfigApiForm
                 ConfigSettings.ModelName = selectedModelName
                 ConfigSettings.mcpable = mcpSupported
 
+
+                ' 检测MCP功能
+                ' 验证成功后，异步检查function tools支持
+                ' 注意：这里我们不等待结果，让它在后台运行
+                Task.Run(Async Function()
+                             Try
+
+                                 Dim mcpSupportedTemp As Boolean = Await CheckFunctionToolsSupport(apiUrl, inputApiKey, selectedModelName)
+
+                                 ' 更新配置中的MCP支持状态
+                                 For Each config In ConfigData
+                                     If config.pltform = selectedPlatform.pltform Then
+                                         For Each item_m In config.model
+                                             If item_m.modelName = selectedModelName Then
+                                                 item_m.mcpable = mcpSupportedTemp
+                                                 item_m.mcpValidated = True
+                                                 ConfigSettings.mcpable = mcpSupportedTemp
+                                                 Exit For
+                                             End If
+                                         Next
+                                         Exit For
+                                     End If
+                                 Next
+
+                                 ' 保存更新后的配置
+                                 SaveConfig()
+
+                                 If mcpSupportedTemp Then
+                                     Debug.WriteLine($"检测到 {selectedModelName} 模型支持MCP工具功能！")
+                                 End If
+                             Catch ex As Exception
+                                 Debug.WriteLine($"后台检查MCP支持时出错: {ex.Message}")
+                             End Try
+                         End Function)
+
                 ' 关闭对话框
                 Me.DialogResult = DialogResult.OK
                 Me.Close()
+
             Else
                 ' 验证失败，提示用户修改
                 MessageBox.Show("API验证失败。请检查API URL、模型名称和API Key是否正确。", "验证失败",
@@ -465,27 +452,119 @@ Public Class ConfigApiForm
         End Try
     End Sub
 
+    ' 首先，添加一个异步方法来检查function tools支持
+    Private Async Function CheckFunctionToolsSupport(apiUrl As String, apiKey As String, modelName As String) As Task(Of Boolean)
+        Try
+            ' 构建一个带tools定义的请求体
+            Dim functionToolRequestBody As String = "{" &
+            $"""model"": ""{modelName}"", ""stream"": true," &
+            $"""messages"": [{{""role"": ""user"", ""content"": ""请计算5+7的结果，并通过工具函数返回""}}]," &
+            $"""tools"": [" &
+                "{" &
+                    """type"": ""function""," &
+                    """function"": {" &
+                        """name"": ""calculator""," &
+                        """description"": ""计算数学表达式的结果""," &
+                        """parameters"": {" &
+                            """type"": ""object""," &
+                            """properties"": {" &
+                                """result"": {" &
+                                    """type"": ""number""," &
+                                    """description"": ""计算结果""" &
+                                "}" &
+                            "}," &
+                            """required"": [""result""]" &
+                        "}" &
+                    "}" &
+                "}" &
+            "]," &
+            """tool_choice"": ""auto""" &
+        "}"
+            Dim toolResponse As String = Await SendHttpRequestForValidation(apiUrl, apiKey, functionToolRequestBody, True)
+
+            Return Not String.IsNullOrEmpty(toolResponse)
+
+        Catch ex As Exception
+            Debug.WriteLine($"检查function tools支持时出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
 
     ' 用于验证的API请求方法
-    Private Async Function SendHttpRequestForValidation(apiUrl As String, apiKey As String, requestBody As String) As Task(Of String)
+    Private Async Function SendHttpRequestForValidation(apiUrl As String, apiKey As String, requestBody As String, Optional checkFunctionTool As Boolean = False) As Task(Of String)
         Try
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
             Using client As New Net.Http.HttpClient()
-                client.Timeout = TimeSpan.FromSeconds(60) ' 较短的超时时间，只用于验证
-                client.DefaultRequestHeaders.Add("Authorization", "Bearer " & apiKey)
-                Dim content As New Net.Http.StringContent(requestBody, System.Text.Encoding.UTF8, "application/json")
-                Dim response As Net.Http.HttpResponseMessage = Await client.PostAsync(apiUrl, content)
+                client.Timeout = TimeSpan.FromSeconds(60)
+                Dim request As New Net.Http.HttpRequestMessage(Net.Http.HttpMethod.Post, apiUrl)
+                request.Headers.Authorization = New Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey)
+                request.Content = New Net.Http.StringContent(requestBody, System.Text.Encoding.UTF8, "application/json")
 
-                ' 如果服务器返回错误状态码，这里会抛出异常
-                response.EnsureSuccessStatusCode()
+                Using response As Net.Http.HttpResponseMessage = Await client.SendAsync(request, Net.Http.HttpCompletionOption.ResponseHeadersRead)
+                    response.EnsureSuccessStatusCode()
+                    Debug.WriteLine($"[HTTP] 校验API响应状态码: {response.StatusCode}")
+                    If response.StatusCode <> Net.HttpStatusCode.OK Then
+                        Return String.Empty
+                    End If
 
-                ' 读取并返回响应内容
-                Return Await response.Content.ReadAsStringAsync()
+                    If Not checkFunctionTool Then
+                        Return "OK"
+                    End If
+
+                    Using responseStream As IO.Stream = Await response.Content.ReadAsStreamAsync()
+                        Using reader As New IO.StreamReader(responseStream, System.Text.Encoding.UTF8)
+                            Dim buffer(40960) As Char
+                            Dim readCount As Integer
+                            Dim chunkBuilder As New StringBuilder()
+                            Do
+                                readCount = Await reader.ReadAsync(buffer, 0, buffer.Length)
+                                If readCount = 0 Then Exit Do
+                                Dim chunkT As String = New String(buffer, 0, readCount)
+                                chunkT = chunkT.Replace("data:", "")
+                                chunkBuilder.Append(chunkT)
+                                Dim chunk As String = chunkBuilder.ToString()
+                                If chunk.Trim() = "" Then
+                                    Continue Do
+                                End If
+
+                                ' 按行分割处理
+                                Dim lines = chunk.Split({vbCr, vbLf}, StringSplitOptions.RemoveEmptyEntries)
+                                For Each line In lines
+                                    If line = "[DONE]" OrElse line.Trim() = "" Then Continue For
+                                    If Not line.TrimStart().StartsWith("{") Then Continue For
+                                    Try
+                                        Dim jsonObj = Newtonsoft.Json.Linq.JObject.Parse(line)
+                                        Dim delta = jsonObj("choices")?(0)?("delta")
+                                        If delta IsNot Nothing Then
+                                            ' 推理模型：reasoning_content，普通模型：content
+                                            If Not String.IsNullOrEmpty(delta("reasoning_content")?.ToString()) OrElse
+                                           Not String.IsNullOrEmpty(delta("content")?.ToString()) Then
+                                                Return line ' API验证成功
+                                            End If
+                                            If checkFunctionTool Then
+                                                ' function tool相关字段
+                                                If delta("tool_calls") IsNot Nothing OrElse
+                                               delta("function_call") IsNot Nothing OrElse
+                                               delta("tools") IsNot Nothing OrElse
+                                               (jsonObj("capabilities") IsNot Nothing AndAlso jsonObj("capabilities")("tools") IsNot Nothing) Then
+                                                    Return line ' function tool支持
+                                                End If
+                                            End If
+                                        End If
+                                    Catch ex As Exception
+                                        ' 忽略解析错误
+                                    End Try
+                                Next
+                                chunkBuilder.Clear()
+                            Loop
+                        End Using
+                    End Using
+                End Using
             End Using
+            Return String.Empty
         Catch ex As Exception
-            ' 在这里处理异常但不显示消息框，因为我们会在调用方法中显示
             Debug.WriteLine($"API验证请求失败: {ex.Message}")
-            Return ex.Message
+            Return String.Empty
         End Try
     End Function
 

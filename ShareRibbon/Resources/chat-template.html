@@ -2854,8 +2854,9 @@
 
         // 每5秒执行一次，检查当前模型是否支持MCP
         setInterval(function () {
+            console.log('检测')
             requestMcpConnections();
-        }, 5000);
+        }, 3000);
 
         // 显示/隐藏MCP弹窗
         function toggleMcpDialog() {
@@ -2880,7 +2881,14 @@
 
         // 渲染MCP连接列表
         // 修改MCP连接显示逻辑，适应新属性
-        function renderMcpConnections(connections, enabledList, mcpSupported) {
+        function renderMcpConnections(connections, enabledList, supported) {
+            mcpSupported = supported;
+
+            // 显示或隐藏MCP按钮
+            const mcpButton = document.getElementById('mcp-toggle-btn');
+            mcpButton.style.display = supported ? 'flex' : 'none';
+
+
             // 获取MCP连接列表容器
             const mcpList = document.getElementById('mcp-list');
             if (!mcpList) return;
