@@ -83,7 +83,7 @@ Public MustInherit Class BaseDeepseekChat
                 ' 导航到Deepseek网站
                 ChatBrowser.CoreWebView2.Navigate("https://chat.deepseek.com")
 
-                Debug.WriteLine("WebView2初始化完成，开始导航到Deepseek")
+                SimpleLogger.LogInfo("WebView2初始化完成，开始导航到Deepseek")
             Else
                 MessageBox.Show("WebView2初始化失败，CoreWebView2不可用。", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
             End If
@@ -98,7 +98,7 @@ Public MustInherit Class BaseDeepseekChat
         Try
             ' 确保WebView2环境已正确初始化
             If ChatBrowser Is Nothing OrElse ChatBrowser.CoreWebView2 Is Nothing Then
-                Debug.WriteLine("WebView2未初始化，无法恢复会话")
+                SimpleLogger.LogInfo("WebView2未初始化，无法恢复会话")
                 Return
             End If
 
@@ -107,7 +107,7 @@ Public MustInherit Class BaseDeepseekChat
                 Await RestoreSessionAsync()
             End If
         Catch ex As Exception
-            Debug.WriteLine($"恢复会话时出错: {ex.Message}")
+            SimpleLogger.LogInfo($"恢复会话时出错: {ex.Message}")
         End Try
     End Sub
 
@@ -115,7 +115,7 @@ Public MustInherit Class BaseDeepseekChat
     Private Sub OnWebViewNavigationCompleted(sender As Object, e As CoreWebView2NavigationCompletedEventArgs)
         If e.IsSuccess Then
             Try
-                Debug.WriteLine("导航完成，开始注入脚本")
+                SimpleLogger.LogInfo("导航完成，开始注入脚本")
 
                 ' 确保在UI线程上执行所有WebView2操作
                 If ChatBrowser.InvokeRequired Then
@@ -136,10 +136,10 @@ Public MustInherit Class BaseDeepseekChat
                                                           ' 注入登录监听器
                                                           'Await InjectLoginObserverSafe()
 
-                                                          Debug.WriteLine("所有脚本注入完成")
+                                                          SimpleLogger.LogInfo("所有脚本注入完成")
                                                       Catch ex As Exception
-                                                          Debug.WriteLine($"UI线程脚本注入出错: {ex.Message}")
-                                                          Debug.WriteLine(ex.StackTrace)
+                                                          SimpleLogger.LogInfo($"UI线程脚本注入出错: {ex.Message}")
+                                                          SimpleLogger.LogInfo(ex.StackTrace)
                                                       End Try
                                                   End Sub))
                 Else
@@ -164,23 +164,23 @@ Public MustInherit Class BaseDeepseekChat
                                                                            ' 注入登录监听器
                                                                            'Await InjectLoginObserverSafe()
 
-                                                                           Debug.WriteLine("所有脚本注入完成")
+                                                                           SimpleLogger.LogInfo("所有脚本注入完成")
                                                                        Catch ex As Exception
-                                                                           Debug.WriteLine($"脚本注入出错: {ex.Message}")
-                                                                           Debug.WriteLine(ex.StackTrace)
+                                                                           SimpleLogger.LogInfo($"脚本注入出错: {ex.Message}")
+                                                                           SimpleLogger.LogInfo(ex.StackTrace)
                                                                        End Try
                                                                    End Sub))
                                  Catch ex As Exception
-                                     Debug.WriteLine($"任务执行出错: {ex.Message}")
+                                     SimpleLogger.LogInfo($"任务执行出错: {ex.Message}")
                                  End Try
                              End Function)
                 End If
             Catch ex As Exception
-                Debug.WriteLine($"导航完成事件处理中出错: {ex.Message}")
-                Debug.WriteLine(ex.StackTrace)
+                SimpleLogger.LogInfo($"导航完成事件处理中出错: {ex.Message}")
+                SimpleLogger.LogInfo(ex.StackTrace)
             End Try
         Else
-            Debug.WriteLine($"导航失败: {e.WebErrorStatus}")
+            SimpleLogger.LogInfo($"导航失败: {e.WebErrorStatus}")
         End If
     End Sub
 
@@ -211,12 +211,12 @@ Public MustInherit Class BaseDeepseekChat
             }
         "
                 Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
-                Debug.WriteLine("ConfigureMarked执行完成")
+                SimpleLogger.LogInfo("ConfigureMarked执行完成")
             Else
-                Debug.WriteLine("ConfigureMarked: CoreWebView2为空")
+                SimpleLogger.LogInfo("ConfigureMarked: CoreWebView2为空")
             End If
         Catch ex As Exception
-            Debug.WriteLine($"ConfigureMarked出错: {ex.Message}")
+            SimpleLogger.LogInfo($"ConfigureMarked出错: {ex.Message}")
         End Try
     End Function
 
@@ -276,12 +276,12 @@ Public MustInherit Class BaseDeepseekChat
 
             If ChatBrowser.CoreWebView2 IsNot Nothing Then
                 Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
-                Debug.WriteLine("InitializeWebView2ScriptAsync执行完成")
+                SimpleLogger.LogInfo("InitializeWebView2ScriptAsync执行完成")
             Else
-                Debug.WriteLine("InitializeWebView2ScriptAsync: CoreWebView2为空")
+                SimpleLogger.LogInfo("InitializeWebView2ScriptAsync: CoreWebView2为空")
             End If
         Catch ex As Exception
-            Debug.WriteLine($"InitializeWebView2ScriptAsync出错: {ex.Message}")
+            SimpleLogger.LogInfo($"InitializeWebView2ScriptAsync出错: {ex.Message}")
         End Try
     End Function
 
@@ -289,9 +289,9 @@ Public MustInherit Class BaseDeepseekChat
     Private Async Function InitializeSettingsSafe() As Task
         Try
             Await InjectExecuteButtonsSafe()
-            Debug.WriteLine("InitializeSettings执行完成")
+            SimpleLogger.LogInfo("InitializeSettings执行完成")
         Catch ex As Exception
-            Debug.WriteLine($"InitializeSettings出错: {ex.Message}")
+            SimpleLogger.LogInfo($"InitializeSettings出错: {ex.Message}")
         End Try
     End Function
 
@@ -369,12 +369,12 @@ Public MustInherit Class BaseDeepseekChat
 
             If ChatBrowser.CoreWebView2 IsNot Nothing Then
                 Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
-                Debug.WriteLine("InjectLoginObserver执行完成")
+                SimpleLogger.LogInfo("InjectLoginObserver执行完成")
             Else
-                Debug.WriteLine("InjectLoginObserver: CoreWebView2为空")
+                SimpleLogger.LogInfo("InjectLoginObserver: CoreWebView2为空")
             End If
         Catch ex As Exception
-            Debug.WriteLine($"注入登录观察器时出错: {ex.Message}")
+            SimpleLogger.LogInfo($"注入登录观察器时出错: {ex.Message}")
         End Try
     End Function
 
@@ -382,7 +382,7 @@ Public MustInherit Class BaseDeepseekChat
     Private Async Function InjectExecuteButtonsSafe() As Task
         Try
             If ChatBrowser.CoreWebView2 Is Nothing Then
-                Debug.WriteLine("InjectExecuteButtons: CoreWebView2未初始化")
+                SimpleLogger.LogInfo("InjectExecuteButtons: CoreWebView2未初始化")
                 Return
             End If
 
@@ -684,9 +684,9 @@ Public MustInherit Class BaseDeepseekChat
     "
 
             Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
-            Debug.WriteLine("执行按钮注入脚本已执行")
+            SimpleLogger.LogInfo("执行按钮注入脚本已执行")
         Catch ex As Exception
-            Debug.WriteLine($"注入执行按钮脚本时出错: {ex.Message}")
+            SimpleLogger.LogInfo($"注入执行按钮脚本时出错: {ex.Message}")
         End Try
     End Function
 
@@ -714,10 +714,10 @@ Public MustInherit Class BaseDeepseekChat
 
                 ' 保存到文件
                 File.WriteAllText(SessionFilePath, sessionInfo.ToString())
-                Debug.WriteLine("已保存Deepseek会话信息")
+                SimpleLogger.LogInfo("已保存Deepseek会话信息")
             End If
         Catch ex As Exception
-            Debug.WriteLine($"保存会话信息时出错: {ex.Message}")
+            SimpleLogger.LogInfo($"保存会话信息时出错: {ex.Message}")
         End Try
     End Function
 
@@ -746,12 +746,12 @@ Public MustInherit Class BaseDeepseekChat
                                                                                      cookie.IsSecure = True
                                                                                      cookieManager.AddOrUpdateCookie(cookie)
                                                                                  Catch cookieEx As Exception
-                                                                                     Debug.WriteLine($"添加Cookie '{parts(0)}'时出错: {cookieEx.Message}")
+                                                                                     SimpleLogger.LogInfo($"添加Cookie '{parts(0)}'时出错: {cookieEx.Message}")
                                                                                  End Try
                                                                              End If
                                                                          Next
                                                                      Catch ex As Exception
-                                                                         Debug.WriteLine($"在UI线程恢复Cookies时出错: {ex.Message}")
+                                                                         SimpleLogger.LogInfo($"在UI线程恢复Cookies时出错: {ex.Message}")
                                                                      End Try
                                                                  End Sub))
                                End Sub)
@@ -772,7 +772,7 @@ Public MustInherit Class BaseDeepseekChat
                             cookie.IsSecure = True
                             cookieManager.AddOrUpdateCookie(cookie)
                         Catch cookieEx As Exception
-                            Debug.WriteLine($"添加Cookie '{parts(0)}'时出错: {cookieEx.Message}")
+                            SimpleLogger.LogInfo($"添加Cookie '{parts(0)}'时出错: {cookieEx.Message}")
                         End Try
                     End If
                 Next
@@ -781,7 +781,7 @@ Public MustInherit Class BaseDeepseekChat
             ' 短暂延迟确保Cookie操作完成
             Await Task.Delay(100)
         Catch ex As Exception
-            Debug.WriteLine($"恢复Cookies时出错: {ex.Message}")
+            SimpleLogger.LogInfo($"恢复Cookies时出错: {ex.Message}")
         End Try
     End Function
 
@@ -862,7 +862,7 @@ Public MustInherit Class BaseDeepseekChat
                             result = result.Substring(1, result.Length - 2)
                         End If
                     Catch ex As Exception
-                        Debug.WriteLine("清理令牌格式时出错: " & ex.Message)
+                        SimpleLogger.LogInfo("清理令牌格式时出错: " & ex.Message)
                     End Try
                 End If
 
@@ -876,7 +876,7 @@ Public MustInherit Class BaseDeepseekChat
 
             Return String.Empty
         Catch ex As Exception
-            Debug.WriteLine($"提取授权令牌时出错: {ex.Message}")
+            SimpleLogger.LogInfo($"提取授权令牌时出错: {ex.Message}")
             Return String.Empty
         End Try
     End Function
@@ -918,7 +918,7 @@ Public MustInherit Class BaseDeepseekChat
 
                                            taskCompletionSource.SetResult(resultCookies)
                                        Catch ex As Exception
-                                           Debug.WriteLine($"获取Cookies时出错: {ex.Message}")
+                                           SimpleLogger.LogInfo($"获取Cookies时出错: {ex.Message}")
                                            taskCompletionSource.SetResult("")
                                        End Try
                                    End Sub)
@@ -949,7 +949,7 @@ Public MustInherit Class BaseDeepseekChat
 
             Return String.Empty
         Catch ex As Exception
-            Debug.WriteLine($"获取Cookies时出错: {ex.Message}")
+            SimpleLogger.LogInfo($"获取Cookies时出错: {ex.Message}")
             Return String.Empty
         End Try
     End Function
@@ -1007,7 +1007,7 @@ Public MustInherit Class BaseDeepseekChat
                                                               Dim task = ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
                                                               task.Wait() ' 同步等待完成
                                                           Catch ex As Exception
-                                                              Debug.WriteLine($"执行脚本时出错: {ex.Message}")
+                                                              SimpleLogger.LogInfo($"执行脚本时出错: {ex.Message}")
                                                           End Try
                                                       End Sub)
                                End Sub)
@@ -1015,7 +1015,7 @@ Public MustInherit Class BaseDeepseekChat
                 Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
             End If
         Catch ex As Exception
-            Debug.WriteLine($"注入授权令牌时出错: {ex.Message}")
+            SimpleLogger.LogInfo($"注入授权令牌时出错: {ex.Message}")
         End Try
     End Function
 
@@ -1030,11 +1030,11 @@ Public MustInherit Class BaseDeepseekChat
                 Dim timestamp As DateTime
                 If DateTime.TryParse(sessionInfo("timestamp")?.ToString(), timestamp) Then
                     If (DateTime.Now - timestamp).TotalDays > 7 Then
-                        Debug.WriteLine("会话已过期，需要重新登录")
+                        SimpleLogger.LogInfo("会话已过期，需要重新登录")
                         Return
                     End If
                 Else
-                    Debug.WriteLine("无效的会话时间戳")
+                    SimpleLogger.LogInfo("无效的会话时间戳")
                     Return
                 End If
 
@@ -1042,22 +1042,22 @@ Public MustInherit Class BaseDeepseekChat
                 If sessionInfo.ContainsKey("cookies") AndAlso
                Not String.IsNullOrEmpty(sessionInfo("cookies")?.ToString()) Then
                     Await RestoreCookiesAsync(sessionInfo("cookies").ToString())
-                    Debug.WriteLine("已恢复Cookies")
+                    SimpleLogger.LogInfo("已恢复Cookies")
                 End If
 
                 ' 注入授权令牌
                 If sessionInfo.ContainsKey("authToken") AndAlso
                Not String.IsNullOrEmpty(sessionInfo("authToken")?.ToString()) Then
                     Await InjectAuthTokenAsync(sessionInfo("authToken").ToString())
-                    Debug.WriteLine("已注入授权令牌")
+                    SimpleLogger.LogInfo("已注入授权令牌")
                 End If
 
-                Debug.WriteLine("已恢复Deepseek会话信息")
+                SimpleLogger.LogInfo("已恢复Deepseek会话信息")
             Else
-                Debug.WriteLine("未找到会话文件，需要重新登录")
+                SimpleLogger.LogInfo("未找到会话文件，需要重新登录")
             End If
         Catch ex As Exception
-            Debug.WriteLine($"恢复会话信息时出错: {ex.Message}")
+            SimpleLogger.LogInfo($"恢复会话信息时出错: {ex.Message}")
         End Try
     End Function
 
@@ -1107,10 +1107,10 @@ Public MustInherit Class BaseDeepseekChat
                 Case "executeCode"
                     HandleExecuteCode(jsonDoc)
                 Case Else
-                    Debug.WriteLine($"未知消息类型: {messageType}")
+                    SimpleLogger.LogInfo($"未知消息类型: {messageType}")
             End Select
         Catch ex As Exception
-            Debug.WriteLine($"处理消息出错: {ex.Message}")
+            SimpleLogger.LogInfo($"处理消息出错: {ex.Message}")
         End Try
     End Sub
 

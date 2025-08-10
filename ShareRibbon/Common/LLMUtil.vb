@@ -1,4 +1,4 @@
-Imports System.Net
+ï»¿Imports System.Net
 Imports System.Net.Http
 Imports System.Text
 Imports System.Windows.Forms
@@ -6,19 +6,19 @@ Imports Newtonsoft.Json
 
 Public Class LLMUtil
 
-    ' ´´½¨ÇëÇóÌå
+    ' åˆ›å»ºè¯·æ±‚ä½“
     Public Shared Function CreateRequestBody(question As String) As String
         Dim result As String = question.Replace("\", "\\").Replace("""", "\""").
                                   Replace(vbCr, "\r").Replace(vbLf, "\n").
                                   Replace(vbTab, "\t").Replace(vbBack, "\b").
                                   Replace(Chr(12), "\f")
-        ' Ê¹ÓÃ´Ó ConfigSettings ÖĞ»ñÈ¡µÄÄ£ĞÍÃû³Æ
+        ' ä½¿ç”¨ä» ConfigSettings ä¸­è·å–çš„æ¨¡å‹åç§°
         Return "{""model"": """ & ConfigSettings.ModelName & """, ""messages"": [{""role"": ""user"", ""content"": """ & result & """}]}"
     End Function
 
 
 
-    ' ´´½¨LLM APIÇëÇóÌå
+    ' åˆ›å»ºLLM APIè¯·æ±‚ä½“
     Public Shared Function CreateLlmRequestBody(
         prompt As String,
         modelT As String,
@@ -27,10 +27,10 @@ Public Class LLMUtil
         maxTokens As Integer) As String
 
         Try
-            ' ¹¹½¨ÏûÏ¢Êı×é
+            ' æ„å»ºæ¶ˆæ¯æ•°ç»„
             Dim messagesT As New List(Of Object)()
 
-            ' Ìí¼ÓÏµÍ³ÏûÏ¢£¨Èç¹ûÓĞ£©
+            ' æ·»åŠ ç³»ç»Ÿæ¶ˆæ¯ï¼ˆå¦‚æœæœ‰ï¼‰
             If Not String.IsNullOrEmpty(systemPrompt) Then
                 messagesT.Add(New With {
                     .role = "system",
@@ -38,104 +38,84 @@ Public Class LLMUtil
                 })
             End If
 
-            ' Ìí¼ÓÓÃ»§ÏûÏ¢
+            ' æ·»åŠ ç”¨æˆ·æ¶ˆæ¯
             messagesT.Add(New With {
                 .role = "user",
                 .content = prompt
             })
 
-            ' ¹¹½¨ÍêÕûÇëÇó¶ÔÏó
+            ' æ„å»ºå®Œæ•´è¯·æ±‚å¯¹è±¡
             Dim requestObj = New With {
                 .model = modelT,
                 .messages = messagesT,
                 .temperature = temperatureT,
                 .max_tokens = maxTokens,
-                .stream = False  ' ¹Ø±ÕÁ÷Ê½ÏìÓ¦
+                .stream = False  ' å…³é—­æµå¼å“åº”
             }
 
-            ' ĞòÁĞ»¯ÎªJSON
+            ' åºåˆ—åŒ–ä¸ºJSON
             Return JsonConvert.SerializeObject(requestObj)
 
         Catch ex As Exception
-            Throw New Exception($"´´½¨ÇëÇóÌåÊ±³ö´í: {ex.Message}")
+            Throw New Exception($"åˆ›å»ºè¯·æ±‚ä½“æ—¶å‡ºé”™: {ex.Message}")
         End Try
     End Function
 
-    ' ·¢ËÍ HTTP ÇëÇó
-    'Public Shared Async Function SendHttpRequest(apiUrl As String, apiKey As String, requestBody As String) As Task(Of String)
-    '    Try
-    '        ' Ç¿ÖÆÊ¹ÓÃ TLS 1.2
-    '        ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
-    '        Dim handler As New HttpClientHandler()
-    '        Using client As New HttpClient(handler)
-    '            client.Timeout = TimeSpan.FromSeconds(120) ' ÉèÖÃ³¬Ê±Ê±¼äÎª 120 Ãë
-    '            client.DefaultRequestHeaders.Add("Authorization", "Bearer " & apiKey)
-    '            Dim content As New StringContent(requestBody, Encoding.UTF8, "application/json")
-    '            Dim response As HttpResponseMessage = Await client.PostAsync(apiUrl, content)
-    '            response.EnsureSuccessStatusCode()
-    '            Return Await response.Content.ReadAsStringAsync()
-    '        End Using
-    '    Catch ex As HttpRequestException
-    '        MessageBox.Show("ÇëÇóÊ§°Ü: " & ex.Message, "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
-    '        Return String.Empty
-    '    End Try
-    'End Function
-    ' ·¢ËÍ HTTP ÇëÇó
     Public Shared Async Function SendHttpRequest(apiUrl As String, apiKey As String, requestBody As String) As Task(Of String)
         Try
-            Debug.WriteLine($"¿ªÊ¼·¢ËÍHTTPÇëÇóµ½: {apiUrl}")
-            Debug.WriteLine($"ÇëÇóÍ·Authorization: Bearer {apiKey.Substring(0, Math.Min(10, apiKey.Length))}...")
-            Debug.WriteLine($"ÇëÇóÌå³¤¶È: {requestBody.Length}")
+            SimpleLogger.LogInfo($"å¼€å§‹å‘é€HTTPè¯·æ±‚åˆ°: {apiUrl}")
+            SimpleLogger.LogInfo($"è¯·æ±‚å¤´Authorization: Bearer {apiKey.Substring(0, Math.Min(10, apiKey.Length))}...")
+            SimpleLogger.LogInfo($"è¯·æ±‚ä½“é•¿åº¦: {requestBody.Length}")
 
-            ' Ç¿ÖÆÊ¹ÓÃ TLS 1.2
+            ' å¼ºåˆ¶ä½¿ç”¨ TLS 1.2
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
             Dim handler As New HttpClientHandler()
 
             Using client As New HttpClient(handler)
-                client.Timeout = TimeSpan.FromSeconds(120) ' ÉèÖÃ³¬Ê±Ê±¼äÎª 120 Ãë
+                client.Timeout = TimeSpan.FromSeconds(120) ' è®¾ç½®è¶…æ—¶æ—¶é—´ä¸º 120 ç§’
                 client.DefaultRequestHeaders.Add("Authorization", "Bearer " & apiKey)
 
                 Dim content As New StringContent(requestBody, Encoding.UTF8, "application/json")
-                Debug.WriteLine("ÕıÔÚ·¢ËÍPOSTÇëÇó...")
+                SimpleLogger.LogInfo("æ­£åœ¨å‘é€POSTè¯·æ±‚...")
 
                 Dim response As HttpResponseMessage = Await client.PostAsync(apiUrl, content)
 
-                Debug.WriteLine($"HTTPÏìÓ¦×´Ì¬Âë: {response.StatusCode}")
-                Debug.WriteLine($"HTTPÏìÓ¦Ô­Òò: {response.ReasonPhrase}")
+                SimpleLogger.LogInfo($"HTTPå“åº”çŠ¶æ€ç : {response.StatusCode}")
+                SimpleLogger.LogInfo($"HTTPå“åº”åŸå› : {response.ReasonPhrase}")
 
-                ' ¼ì²éÏìÓ¦×´Ì¬
+                ' æ£€æŸ¥å“åº”çŠ¶æ€
                 If Not response.IsSuccessStatusCode Then
                     Dim errorContent As String = Await response.Content.ReadAsStringAsync()
-                    Debug.WriteLine($"HTTP´íÎóÏìÓ¦ÄÚÈİ: {errorContent}")
-                    Throw New HttpRequestException($"HTTPÇëÇóÊ§°Ü: {response.StatusCode} - {response.ReasonPhrase}. ÏêÏ¸ĞÅÏ¢: {errorContent}")
+                    SimpleLogger.LogInfo($"HTTPé”™è¯¯å“åº”å†…å®¹: {errorContent}")
+                    Throw New HttpRequestException($"HTTPè¯·æ±‚å¤±è´¥: {response.StatusCode} - {response.ReasonPhrase}. è¯¦ç»†ä¿¡æ¯: {errorContent}")
                 End If
 
                 Dim responseContent As String = Await response.Content.ReadAsStringAsync()
-                Debug.WriteLine($"HTTPÏìÓ¦ÄÚÈİ³¤¶È: {responseContent.Length}")
-                Debug.WriteLine($"HTTPÏìÓ¦ÄÚÈİÇ°200×Ö·û: {responseContent.Substring(0, Math.Min(200, responseContent.Length))}")
+                SimpleLogger.LogInfo($"HTTPå“åº”å†…å®¹é•¿åº¦: {responseContent.Length}")
+                SimpleLogger.LogInfo($"HTTPå“åº”å†…å®¹å‰200å­—ç¬¦: {responseContent.Substring(0, Math.Min(200, responseContent.Length))}")
 
                 Return responseContent
             End Using
 
         Catch ex As TaskCanceledException
-            Debug.WriteLine($"HTTPÇëÇó³¬Ê±: {ex.Message}")
-            Return $"´íÎó: ÇëÇó³¬Ê± - {ex.Message}"
+            SimpleLogger.LogInfo($"HTTPè¯·æ±‚è¶…æ—¶: {ex.Message}")
+            Return $"é”™è¯¯: è¯·æ±‚è¶…æ—¶ - {ex.Message}"
         Catch ex As HttpRequestException
-            Debug.WriteLine($"HTTPÇëÇóÒì³£: {ex.Message}")
-            ' ²»ÏÔÊ¾MessageBox£¬Ö±½Ó·µ»Ø´íÎóĞÅÏ¢
-            Return $"´íÎó: HTTPÇëÇóÊ§°Ü - {ex.Message}"
+            SimpleLogger.LogInfo($"HTTPè¯·æ±‚å¼‚å¸¸: {ex.Message}")
+            ' ä¸æ˜¾ç¤ºMessageBoxï¼Œç›´æ¥è¿”å›é”™è¯¯ä¿¡æ¯
+            Return $"é”™è¯¯: HTTPè¯·æ±‚å¤±è´¥ - {ex.Message}"
         Catch ex As Exception
-            Debug.WriteLine($"·¢ËÍHTTPÇëÇóÊ±·¢ÉúÎ´ÖªÒì³£: {ex.Message}")
-            Debug.WriteLine($"Òì³£ÀàĞÍ: {ex.GetType().Name}")
-            Debug.WriteLine($"Òì³£¶ÑÕ»: {ex.StackTrace}")
-            Return $"´íÎó: {ex.Message}"
+            SimpleLogger.LogInfo($"å‘é€HTTPè¯·æ±‚æ—¶å‘ç”ŸæœªçŸ¥å¼‚å¸¸: {ex.Message}")
+            SimpleLogger.LogInfo($"å¼‚å¸¸ç±»å‹: {ex.GetType().Name}")
+            SimpleLogger.LogInfo($"å¼‚å¸¸å †æ ˆ: {ex.StackTrace}")
+            Return $"é”™è¯¯: {ex.Message}"
         End Try
     End Function
-    ' Ìí¼ÓÍ¬²½°æ±¾µÄHTTPÇëÇó·½·¨
+    ' æ·»åŠ åŒæ­¥ç‰ˆæœ¬çš„HTTPè¯·æ±‚æ–¹æ³•
     Public Shared Function SendHttpRequestSync(apiUrl As String, apiKey As String, requestBody As String) As String
         Try
 
-            ' Ç¿ÖÆÊ¹ÓÃ TLS 1.2
+            ' å¼ºåˆ¶ä½¿ç”¨ TLS 1.2
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
 
             Using client As New HttpClient()
@@ -144,15 +124,15 @@ Public Class LLMUtil
 
                 Dim content As New StringContent(requestBody, Encoding.UTF8, "application/json")
 
-                ' Ê¹ÓÃ .Result ½øĞĞÍ¬²½µ÷ÓÃ
+                ' ä½¿ç”¨ .Result è¿›è¡ŒåŒæ­¥è°ƒç”¨
                 Dim response As HttpResponseMessage = client.PostAsync(apiUrl, content).Result
 
-                Debug.WriteLine($"HTTPÏìÓ¦×´Ì¬Âë: {response.StatusCode}")
+                SimpleLogger.LogInfo($"HTTPå“åº”çŠ¶æ€ç : {response.StatusCode}")
 
                 If Not response.IsSuccessStatusCode Then
                     Dim errorContent As String = response.Content.ReadAsStringAsync().Result
-                    Debug.WriteLine($"HTTP´íÎóÏìÓ¦ÄÚÈİ: {errorContent}")
-                    Return $"´íÎó: HTTPÇëÇóÊ§°Ü - {response.StatusCode} {response.ReasonPhrase}"
+                    SimpleLogger.LogInfo($"HTTPé”™è¯¯å“åº”å†…å®¹: {errorContent}")
+                    Return $"é”™è¯¯: HTTPè¯·æ±‚å¤±è´¥ - {response.StatusCode} {response.ReasonPhrase}"
                 End If
 
                 Dim responseContent As String = response.Content.ReadAsStringAsync().Result
@@ -160,12 +140,12 @@ Public Class LLMUtil
             End Using
 
         Catch ex As AggregateException
-            ' ´¦Àí .Result ¿ÉÄÜ²úÉúµÄ AggregateException
+            ' å¤„ç† .Result å¯èƒ½äº§ç”Ÿçš„ AggregateException
             Dim innerEx = ex.GetBaseException()
-            Return $"´íÎó: {innerEx.Message}"
+            Return $"é”™è¯¯: {innerEx.Message}"
         Catch ex As Exception
-            Debug.WriteLine($"Òì³£ÀàĞÍ: {ex.GetType().Name}")
-            Return $"´íÎó: {ex.Message}"
+            SimpleLogger.LogInfo($"å¼‚å¸¸ç±»å‹: {ex.GetType().Name}")
+            Return $"é”™è¯¯: {ex.Message}"
         End Try
     End Function
 End Class

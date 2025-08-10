@@ -309,7 +309,7 @@ Public MustInherit Class BaseChatControl
 
             ' 获取当前配置的模型是否支持mcp
             Dim mcpSupported As Boolean = ConfigSettings.mcpable
-            Debug.WriteLine($"获取MCP连接列表，当前模型是否支持MCP {mcpSupported}")
+            'Debug.WriteLine($"获取MCP连接列表，当前模型是否支持MCP {mcpSupported}")
 
             ' 发送到前端
             Dim js = $"renderMcpConnections({connectionsJson}, {enabledListJson},{mcpSupported.ToString().ToLower()});"
@@ -1221,16 +1221,20 @@ Public MustInherit Class BaseChatControl
 
         If String.IsNullOrWhiteSpace(apiKey) Then
             GlobalStatusStrip.ShowWarning("请先配置大模型ApiKey！")
+            ExecuteJavaScriptAsyncJS($"changeSendButton()")
             Return
         End If
 
         If String.IsNullOrWhiteSpace(apiUrl) Then
             GlobalStatusStrip.ShowWarning("请先配置大模型Api！")
+            ExecuteJavaScriptAsyncJS($"changeSendButton()")
             Return
         End If
 
         If String.IsNullOrWhiteSpace(question) Then
             GlobalStatusStrip.ShowWarning("请输入问题！")
+
+            ExecuteJavaScriptAsyncJS($"changeSendButton()")
             Return
         End If
 

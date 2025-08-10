@@ -67,9 +67,9 @@ Public Class ThisAddIn
     End Sub
 
 
-    '    ' 切换工作表时重新
 
-    Private Sub Application_WorkbookActivate()
+    ' 创建聊天任务窗格
+    Private Sub CreateChatTaskPane()
         Try
             ' 为新工作簿创建任务窗格
             chatControl = New ChatControl()
@@ -78,10 +78,15 @@ Public Class ThisAddIn
             chatTaskPane.Width = 420
             AddHandler chatTaskPane.VisibleChanged, AddressOf ChatTaskPane_VisibleChanged
             chatTaskPane.Visible = False
-
         Catch ex As Exception
             MessageBox.Show($"初始化新建工作簿任务窗格失败: {ex.Message}")
         End Try
+    End Sub
+
+
+    '    ' 切换工作表时重新
+
+    Private Sub Application_WorkbookActivate()
     End Sub
 
     Private widthTimer As Timer
@@ -125,6 +130,7 @@ Public Class ThisAddIn
     Dim loadChatHtml As Boolean = True
 
     Public Async Sub ShowChatTaskPane()
+        CreateChatTaskPane()
         chatTaskPane.Visible = True
         If loadChatHtml Then
             loadChatHtml = False
@@ -133,6 +139,7 @@ Public Class ThisAddIn
     End Sub
 
     Public Async Sub ShowDeepseekTaskPane()
+        CreateDeepseekTaskPane()
         _deepseekTaskPane.Visible = True
     End Sub
 End Class

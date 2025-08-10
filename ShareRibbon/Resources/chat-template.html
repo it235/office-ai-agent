@@ -1952,6 +1952,14 @@
                 type: 'stopMessage'
             });
         };
+        function changeSendButton() {
+            // 强制切换回发送按钮
+            const sendButton = document.getElementById('send-button');
+            const stopButton = document.getElementById('stop-button');
+
+            sendButton.style.setProperty('display', 'flex', 'important');
+            stopButton.style.setProperty('display', 'none', 'important');
+        }
 
         //消息接收完成的通知
         function processStreamComplete(uuid, totalTokens) {

@@ -10,7 +10,13 @@ Public Class DeepseekControl
 
     Public Sub New()
         ' 此调用是设计师所必需的。
-        InitializeComponent()
+        Try
+            InitializeComponent()
+            SimpleLogger.LogInfo("DeepseekControl 初始化完成")
+        Catch ex As Exception
+            SimpleLogger.LogError("DeepseekControl 构造异常", ex)
+            MessageBox.Show("DeepseekControl 加载失败: " & ex.Message)
+        End Try
 
         ' 确保WebView2控件可以正常交互
         ChatBrowser.BringToFront()

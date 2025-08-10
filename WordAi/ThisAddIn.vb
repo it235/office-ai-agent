@@ -26,7 +26,6 @@ Public Class ThisAddIn
         End Try
 
         ' 处理工作表和工作簿切换事件
-        'AddHandler Globals.ThisAddIn.Application.ActiveDocument, AddressOf Me.Application_WorkbookActivate
         Application_WorkbookActivate()
         ' 初始化 Timer，用于WPS中扩大聊天区域的宽度
         widthTimer = New Timer()
@@ -36,7 +35,6 @@ Public Class ThisAddIn
         widthTimer1 = New Timer()
         AddHandler widthTimer1.Tick, AddressOf WidthTimer1_Tick
         widthTimer1.Interval = 100 ' 设置延迟时间，单位为毫秒
-
     End Sub
 
 
@@ -53,9 +51,7 @@ Public Class ThisAddIn
     End Sub
 
 
-    '    ' 切换工作表时重新
-
-    Private Sub Application_WorkbookActivate()
+    Private Sub CreateChatTaskPane()
         Try
             ' 为新工作簿创建任务窗格
             chatControl = New ChatControl()
@@ -68,7 +64,11 @@ Public Class ThisAddIn
         Catch ex As Exception
             MessageBox.Show($"初始化新建工作簿任务窗格失败: {ex.Message}")
         End Try
+    End Sub
 
+    '    ' 切换工作表时重新
+
+    Private Sub Application_WorkbookActivate()
         Try
             ' 为新工作簿创建任务窗格
             dataCapturePane = New WebDataCapturePane()
@@ -78,7 +78,6 @@ Public Class ThisAddIn
             'AddHandler captureTaskPane.VisibleChanged, AddressOf ChatTaskPane_VisibleChanged
             captureTaskPane.Visible = False
 
-            CreateDeepseekTaskPane()
 
         Catch ex As Exception
             MessageBox.Show($"初始化新建工作簿任务窗格失败: {ex.Message}")
@@ -142,6 +141,7 @@ Public Class ThisAddIn
     Dim loadDataCaptureHtml As Boolean = True
 
     Public Async Sub ShowChatTaskPane()
+        CreateChatTaskPane()
         chatTaskPane.Visible = True
         If loadChatHtml Then
             loadChatHtml = False
@@ -154,6 +154,7 @@ Public Class ThisAddIn
     End Sub
 
     Public Async Sub ShowDeepseekTaskPane()
+        CreateDeepseekTaskPane()
         _deepseekTaskPane.Visible = True
     End Sub
 End Class

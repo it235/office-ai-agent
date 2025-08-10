@@ -20,11 +20,11 @@ Public Class ThisAddIn
 
     Private Sub ExcelAi_Startup() Handles Me.Startup
         Try
-            Debug.WriteLine("正在初始化GlobalStatusStrip...")
+            SimpleLogger.LogInfo("正在初始化GlobalStatusStrip...")
             GlobalStatusStripAll.InitializeApplication(Me.Application)
-            Debug.WriteLine("GlobalStatusStrip初始化完成")
+            SimpleLogger.LogInfo("GlobalStatusStrip初始化完成")
         Catch ex As Exception
-            Debug.WriteLine("初始化GlobalStatusStrip时出错: " & ex.Message)
+            SimpleLogger.LogInfo("初始化GlobalStatusStrip时出错: " & ex.Message)
             MessageBox.Show("初始化状态栏时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
         Try
@@ -40,14 +40,14 @@ Public Class ThisAddIn
 
         widthTimer1 = New Timer()
         AddHandler widthTimer1.Tick, AddressOf WidthTimer1_Tick
-        widthTimer1.Interval = 100 ' 设置延迟时间，单位为毫秒
+        widthTimer1.Interval = 200 ' 设置延迟时间，单位为毫秒
 
         ' 等待Excel完全启动
         WaitForExcelReady()
 
         ' 创建任务窗格
-        CreateChatTaskPane()
-        CreateDeepseekTaskPane()
+        'CreateChatTaskPane()
+        'CreateDeepseekTaskPane()
 
         ' 确保有可用的工作簿
         'EnsureWorkbookAvailable()
@@ -56,7 +56,7 @@ Public Class ThisAddIn
         Try
             LoadExcelDnaAddIn()
         Catch ex As Exception
-            Debug.WriteLine($"加载 Excel-DNA 失败: {ex.Message}")
+            SimpleLogger.LogInfo($"加载 Excel-DNA 失败: {ex.Message}")
             ' 继续执行，不要因为这个错误而中断启动
         End Try
     End Sub
@@ -68,9 +68,9 @@ Public Class ThisAddIn
             While Not Application.Ready AndAlso DateTime.Now.Subtract(startTime).TotalSeconds < 10
                 System.Threading.Thread.Sleep(100)
             End While
-            Debug.WriteLine("Excel准备就绪")
+            SimpleLogger.LogInfo("Excel准备就绪")
         Catch ex As Exception
-            Debug.WriteLine($"等待Excel准备就绪时出错: {ex.Message}")
+            SimpleLogger.LogInfo($"等待Excel准备就绪时出错: {ex.Message}")
         End Try
     End Sub
 
@@ -78,12 +78,12 @@ Public Class ThisAddIn
     Private Sub EnsureWorkbookAvailable()
         Try
             ' 记录所有当前工作簿
-            Debug.WriteLine($"当前工作簿数量: {Application.Workbooks.Count}")
+            SimpleLogger.LogInfo($"当前工作簿数量: {Application.Workbooks.Count}")
             If Application.Workbooks.Count > 0 Then
-                Debug.WriteLine("工作簿列表:")
+                SimpleLogger.LogInfo("工作簿列表:")
                 For i As Integer = 1 To Application.Workbooks.Count
                     Dim wb As Workbook = Application.Workbooks(i)
-                    Debug.WriteLine($"  [{i}] 名称: {wb.Name}, 路径: {If(String.IsNullOrEmpty(wb.Path), "(未保存)", wb.Path)}")
+                    SimpleLogger.LogInfo($"  [{i}] 名称: {wb.Name}, 路径: {If(String.IsNullOrEmpty(wb.Path), "(未保存)", wb.Path)}")
                 Next
             End If
 
@@ -100,7 +100,7 @@ Public Class ThisAddIn
                    Not String.IsNullOrEmpty(wb.Path) OrElse
                    wb.Saved = False Then
                         hasRealWorkbook = True
-                        Debug.WriteLine($"找到有效工作簿: {wb.Name}")
+                        SimpleLogger.LogInfo($"找到有效工作簿: {wb.Name}")
                         Exit For
                     End If
                 Next
@@ -108,11 +108,11 @@ Public Class ThisAddIn
 
             ' 仅当没有工作簿或只有临时工作簿且数量=1时才创建新的
             If Application.Workbooks.Count = 0 OrElse (Application.Workbooks.Count = 1 AndAlso Not hasRealWorkbook) Then
-                Debug.WriteLine("需要创建新工作簿...")
+                SimpleLogger.LogInfo("需要创建新工作簿...")
 
                 ' 如果已经有一个临时工作簿，先关闭它
                 If Application.Workbooks.Count = 1 AndAlso Not hasRealWorkbook Then
-                    Debug.WriteLine("关闭现有临时工作簿")
+                    SimpleLogger.LogInfo("关闭现有临时工作簿")
                     ' 不保存关闭
                     Application.DisplayAlerts = False
                     Application.Workbooks(1).Close(SaveChanges:=False)
@@ -120,41 +120,41 @@ Public Class ThisAddIn
                 End If
 
                 Application.Workbooks.Add()
-                Debug.WriteLine("已创建新工作簿")
+                SimpleLogger.LogInfo("已创建新工作簿")
             Else
-                Debug.WriteLine("已存在有效工作簿，无需创建")
+                SimpleLogger.LogInfo("已存在有效工作簿，无需创建")
             End If
 
             ' 确保有活动工作簿
             If Application.ActiveWorkbook Is Nothing AndAlso Application.Workbooks.Count > 0 Then
                 Application.Workbooks(1).Activate()
-                Debug.WriteLine("已激活第一个工作簿")
+                SimpleLogger.LogInfo("已激活第一个工作簿")
             End If
 
             ' 确保Excel是可见的
             If Not Application.Visible Then
                 Application.Visible = True
-                Debug.WriteLine("已设置Excel为可见")
+                SimpleLogger.LogInfo("已设置Excel为可见")
             End If
 
-            Debug.WriteLine("工作簿状态检查完成")
+            SimpleLogger.LogInfo("工作簿状态检查完成")
 
         Catch ex As Exception
-            Debug.WriteLine($"确保工作簿可用时出错: {ex.Message}")
+            SimpleLogger.LogInfo($"确保工作簿可用时出错: {ex.Message}")
             MessageBox.Show($"初始化Excel工作簿时出错: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning)
         End Try
     End Sub
 
     Private Sub LoadExcelDnaAddIn()
         Try
-            Debug.WriteLine("开始查找 XLL 文件...")
+            SimpleLogger.LogInfo("开始查找 XLL 文件...")
 
             ' 获取当前程序集路径
             Dim currentAssemblyPath As String = System.Reflection.Assembly.GetExecutingAssembly().Location
             Dim currentDir As String = Path.GetDirectoryName(currentAssemblyPath)
 
-            Debug.WriteLine($"当前程序集路径: {currentAssemblyPath}")
-            Debug.WriteLine($"当前目录: {currentDir}")
+            SimpleLogger.LogInfo($"当前程序集路径: {currentAssemblyPath}")
+            SimpleLogger.LogInfo($"当前目录: {currentDir}")
 
             ' 创建搜索路径列表
             Dim searchPaths As New List(Of String)
@@ -173,7 +173,7 @@ Public Class ThisAddIn
                 For Each devPath In possibleDevPaths
                     If Directory.Exists(devPath) Then
                         searchPaths.Add(devPath)
-                        Debug.WriteLine($"添加开发路径: {devPath}")
+                        SimpleLogger.LogInfo($"添加开发路径: {devPath}")
                     End If
                 Next
             End If
@@ -194,7 +194,7 @@ Public Class ThisAddIn
                     Dim excelAiPath As String = Path.Combine(currentDirInfo.FullName, "ExcelAi")
                     If Directory.Exists(excelAiPath) Then
                         searchPaths.Add(excelAiPath)
-                        Debug.WriteLine($"添加安装路径: {excelAiPath}")
+                        SimpleLogger.LogInfo($"添加安装路径: {excelAiPath}")
                     End If
 
                     ' 也检查根目录
@@ -215,7 +215,7 @@ Public Class ThisAddIn
             For Each installPath In standardInstallPaths
                 If Directory.Exists(installPath) Then
                     searchPaths.Add(installPath)
-                    Debug.WriteLine($"添加标准安装路径: {installPath}")
+                    SimpleLogger.LogInfo($"添加标准安装路径: {installPath}")
                 End If
             Next
 
@@ -232,13 +232,13 @@ Public Class ThisAddIn
                         For Each customPath In customPaths
                             If Directory.Exists(customPath) Then
                                 searchPaths.Add(customPath)
-                                Debug.WriteLine($"添加自定义路径: {customPath}")
+                                SimpleLogger.LogInfo($"添加自定义路径: {customPath}")
                             End If
                         Next
                     End If
                 Next
             Catch ex As Exception
-                Debug.WriteLine($"搜索自定义路径时出错: {ex.Message}")
+                SimpleLogger.LogInfo($"搜索自定义路径时出错: {ex.Message}")
             End Try
 
             ' 6. 从注册表查找安装路径（如果MSI安装时写入了注册表）
@@ -250,13 +250,13 @@ Public Class ThisAddIn
                             Dim excelAiPath As String = Path.Combine(installPath, "ExcelAi")
                             If Directory.Exists(excelAiPath) Then
                                 searchPaths.Add(excelAiPath)
-                                Debug.WriteLine($"从注册表添加路径: {excelAiPath}")
+                                SimpleLogger.LogInfo($"从注册表添加路径: {excelAiPath}")
                             End If
                         End If
                     End If
                 End Using
             Catch ex As Exception
-                Debug.WriteLine($"从注册表读取安装路径时出错: {ex.Message}")
+                SimpleLogger.LogInfo($"从注册表读取安装路径时出错: {ex.Message}")
             End Try
 
             ' 去除重复路径
@@ -266,17 +266,17 @@ Public Class ThisAddIn
             Dim xllFileName As String = If(IntPtr.Size = 8, "ExcelAi-AddIn64-packed.xll", "ExcelAi-AddIn-packed.xll")
             Dim foundXllPath As String = String.Empty
 
-            Debug.WriteLine($"正在查找文件: {xllFileName}")
-            Debug.WriteLine("搜索路径列表:")
+            SimpleLogger.LogInfo($"正在查找文件: {xllFileName}")
+            SimpleLogger.LogInfo("搜索路径列表:")
 
             For Each searchPath In uniquePaths
-                Debug.WriteLine($"  检查: {searchPath}")
+                SimpleLogger.LogInfo($"  检查: {searchPath}")
 
                 If Directory.Exists(searchPath) Then
                     Dim xllPath As String = Path.Combine(searchPath, xllFileName)
                     If File.Exists(xllPath) Then
                         foundXllPath = xllPath
-                        Debug.WriteLine($"找到XLL文件: {xllPath}")
+                        SimpleLogger.LogInfo($"找到XLL文件: {xllPath}")
                         Exit For
                     End If
 
@@ -285,7 +285,7 @@ Public Class ThisAddIn
                     Dim unpackedXllPath As String = Path.Combine(searchPath, unpackedXllFileName)
                     If File.Exists(unpackedXllPath) Then
                         foundXllPath = unpackedXllPath
-                        Debug.WriteLine($"找到未打包XLL文件: {unpackedXllPath}")
+                        SimpleLogger.LogInfo($"找到未打包XLL文件: {unpackedXllPath}")
                         Exit For
                     End If
                 End If
@@ -294,34 +294,34 @@ Public Class ThisAddIn
             ' 尝试加载XLL文件
             If Not String.IsNullOrEmpty(foundXllPath) Then
                 Try
-                    Debug.WriteLine($"正在加载 Excel-DNA XLL: {foundXllPath}")
+                    SimpleLogger.LogInfo($"正在加载 Excel-DNA XLL: {foundXllPath}")
                     Dim result As Boolean = Application.RegisterXLL(foundXllPath)
                 Catch ex As Exception
-                    Debug.WriteLine($"加载 XLL 时出错: {ex.Message}")
+                    SimpleLogger.LogInfo($"加载 XLL 时出错: {ex.Message}")
                 End Try
             Else
                 For Each searchPath In uniquePaths
                     If Directory.Exists(searchPath) Then
-                        Debug.WriteLine($"路径 {searchPath} 包含的文件:")
+                        SimpleLogger.LogInfo($"路径 {searchPath} 包含的文件:")
                         Try
                             For Each file In Directory.GetFiles(searchPath, "*.xll")
-                                Debug.WriteLine($"  XLL文件: {Path.GetFileName(file)}")
+                                SimpleLogger.LogInfo($"  XLL文件: {Path.GetFileName(file)}")
                             Next
                             For Each file In Directory.GetFiles(searchPath, "ExcelAi*.*")
-                                Debug.WriteLine($"  ExcelAi文件: {Path.GetFileName(file)}")
+                                SimpleLogger.LogInfo($"  ExcelAi文件: {Path.GetFileName(file)}")
                             Next
                         Catch ex As Exception
-                            Debug.WriteLine($"  无法读取目录内容: {ex.Message}")
+                            SimpleLogger.LogInfo($"  无法读取目录内容: {ex.Message}")
                         End Try
                     Else
-                        Debug.WriteLine($"路径不存在: {searchPath}")
+                        SimpleLogger.LogInfo($"路径不存在: {searchPath}")
                     End If
                 Next
             End If
 
         Catch ex As Exception
-            Debug.WriteLine($"LoadExcelDnaAddIn 出错: {ex.Message}")
-            Debug.WriteLine($"堆栈跟踪: {ex.StackTrace}")
+            SimpleLogger.LogInfo($"LoadExcelDnaAddIn 出错: {ex.Message}")
+            SimpleLogger.LogInfo($"堆栈跟踪: {ex.StackTrace}")
         End Try
     End Sub
 
@@ -342,13 +342,18 @@ Public Class ThisAddIn
 
     Private Sub CreateDeepseekTaskPane()
         Try
+            SimpleLogger.LogInfo($"创建聊天任务窗格面板2")
             If _deepseekControl Is Nothing Then
                 ' 为新工作簿创建任务窗格
                 _deepseekControl = New DeepseekControl()
+                SimpleLogger.LogInfo($"创建聊天任务窗格面板3")
                 _deepseekTaskPane = Me.CustomTaskPanes.Add(_deepseekControl, "Deepseek AI智能助手")
+                SimpleLogger.LogInfo($"创建聊天任务窗格面板4")
                 _deepseekTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
+                SimpleLogger.LogInfo($"创建聊天任务窗格面板5")
                 _deepseekTaskPane.Width = 420
                 AddHandler _deepseekTaskPane.VisibleChanged, AddressOf DeepseekTaskPane_VisibleChanged
+                SimpleLogger.LogInfo($"创建聊天任务窗格面板6")
                 _deepseekTaskPane.Visible = False
             End If
         Catch ex As Exception
@@ -415,19 +420,20 @@ Public Class ThisAddIn
 
     Private Sub WidthTimer1_Tick(sender As Object, e As EventArgs)
         widthTimer1.Stop()
+        SimpleLogger.LogInfo($"Deepseek点击定时1")
         If IsWpsActive() AndAlso _deepseekTaskPane IsNot Nothing Then
+            SimpleLogger.LogInfo($"Deepseek点击定时2")
             _deepseekTaskPane.Width = 420
         End If
     End Sub
 
     Private Sub AiHelper_Shutdown() Handles Me.Shutdown
-        ' 清理资源
-        'RemoveHandler Globals.ThisAddIn.Application.WorkbookActivate, AddressOf Me.Application_WorkbookActivate
     End Sub
 
     Dim loadChatHtml As Boolean = True
 
     Public Async Sub ShowChatTaskPane()
+        CreateChatTaskPane()
         chatTaskPane.Visible = True
         If loadChatHtml Then
             loadChatHtml = False
@@ -436,6 +442,8 @@ Public Class ThisAddIn
     End Sub
 
     Public Async Sub ShowDeepseekTaskPane()
+        SimpleLogger.LogInfo($"Deepseek点击事件")
+        CreateDeepseekTaskPane()
         _deepseekTaskPane.Visible = True
     End Sub
 End Class
