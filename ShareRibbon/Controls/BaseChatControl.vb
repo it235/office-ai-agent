@@ -1372,7 +1372,7 @@ Public MustInherit Class BaseChatControl
             Return requestBody
         Else
             ' 直接使用JSON数组符号
-            Dim requestBody = $"{{""model"": ""{ConfigSettings.ModelName}"", ""tools"": [], ""messages"": [{messagesJson}], ""stream"": true}}"
+            Dim requestBody = $"{{""model"": ""{ConfigSettings.ModelName}"",  ""messages"": [{messagesJson}], ""stream"": true}}"
             Return requestBody
         End If
 
@@ -1649,7 +1649,7 @@ Public MustInherit Class BaseChatControl
 
                 ' 获取token信息 - 只保存最后一个响应块的usage信息
                 Dim usage = jsonObj("usage")
-                If usage IsNot Nothing Then
+                If usage IsNot Nothing AndAlso usage.Type = JTokenType.Object Then
                     lastTokenInfo = New TokenInfo With {
                     .PromptTokens = CInt(usage("prompt_tokens")),
                     .CompletionTokens = CInt(usage("completion_tokens")),

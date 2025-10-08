@@ -522,40 +522,43 @@ Public Class ConfigApiForm
                                 Dim chunkT As String = New String(buffer, 0, readCount)
                                 chunkT = chunkT.Replace("data:", "")
                                 chunkBuilder.Append(chunkT)
-                                Dim chunk As String = chunkBuilder.ToString()
-                                If chunk.Trim() = "" Then
-                                    Continue Do
-                                End If
+                                If chunkBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}).EndsWith("}") Then
+                                    Dim chunk As String = chunkBuilder.ToString()
+                                    If chunk.Trim() = "" Then
+                                        Continue Do
+                                    End If
 
-                                ' 按行分割处理
-                                Dim lines = chunk.Split({vbCr, vbLf}, StringSplitOptions.RemoveEmptyEntries)
-                                For Each line In lines
-                                    If line = "[DONE]" OrElse line.Trim() = "" Then Continue For
-                                    If Not line.TrimStart().StartsWith("{") Then Continue For
-                                    Try
-                                        Dim jsonObj = Newtonsoft.Json.Linq.JObject.Parse(line)
-                                        Dim delta = jsonObj("choices")?(0)?("delta")
-                                        If delta IsNot Nothing Then
-                                            ' 推理模型：reasoning_content，普通模型：content
-                                            If Not String.IsNullOrEmpty(delta("reasoning_content")?.ToString()) OrElse
-                                           Not String.IsNullOrEmpty(delta("content")?.ToString()) Then
-                                                Return line ' API验证成功
-                                            End If
-                                            If checkFunctionTool Then
-                                                ' function tool相关字段
-                                                If delta("tool_calls") IsNot Nothing OrElse
-                                               delta("function_call") IsNot Nothing OrElse
-                                               delta("tools") IsNot Nothing OrElse
-                                               (jsonObj("capabilities") IsNot Nothing AndAlso jsonObj("capabilities")("tools") IsNot Nothing) Then
-                                                    Return line ' function tool支持
+                                    ' 按行分割处理
+                                    Dim lines = chunk.Split({vbCr, vbLf}, StringSplitOptions.RemoveEmptyEntries)
+                                    For Each line In lines
+                                        If line = "[DONE]" OrElse line.Trim() = "" Then Continue For
+                                        If Not line.TrimStart().StartsWith("{") Then Continue For
+                                        Try
+                                            Dim jsonObj = Newtonsoft.Json.Linq.JObject.Parse(line)
+                                            Dim delta = jsonObj("choices")?(0)?("delta")
+                                            If delta IsNot Nothing Then
+                                                ' 推理模型：reasoning_content，普通模型：content
+                                                If Not String.IsNullOrEmpty(delta("reasoning_content")?.ToString()) OrElse
+                                               Not String.IsNullOrEmpty(delta("content")?.ToString()) Then
+                                                    Return line ' API验证成功
+                                                End If
+                                                If checkFunctionTool Then
+                                                    ' function tool相关字段
+                                                    If delta("tool_calls") IsNot Nothing OrElse
+                                                   delta("function_call") IsNot Nothing OrElse
+                                                   delta("tools") IsNot Nothing OrElse
+                                                   (jsonObj("capabilities") IsNot Nothing AndAlso jsonObj("capabilities")("tools") IsNot Nothing) Then
+                                                        Return line ' function tool支持
+                                                    End If
                                                 End If
                                             End If
-                                        End If
-                                    Catch ex As Exception
-                                        ' 忽略解析错误
-                                    End Try
-                                Next
-                                chunkBuilder.Clear()
+                                        Catch ex As Exception
+                                            ' 忽略解析错误
+                                        End Try
+                                    Next
+                                    chunkBuilder.Clear()
+                                End If
+
                             Loop
                         End Using
                     End Using
