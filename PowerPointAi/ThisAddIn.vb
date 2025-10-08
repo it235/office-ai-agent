@@ -76,8 +76,8 @@ Public Class ThisAddIn
             chatTaskPane = Me.CustomTaskPanes.Add(chatControl, "PPT AI智能助手")
             chatTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
             chatTaskPane.Width = 420
-            AddHandler chatTaskPane.VisibleChanged, AddressOf ChatTaskPane_VisibleChanged
-            chatTaskPane.Visible = False
+            'AddHandler chatTaskPane.VisibleChanged, AddressOf ChatTaskPane_VisibleChanged
+            'chatTaskPane.Visible = False
         Catch ex As Exception
             MessageBox.Show($"初始化新建工作簿任务窗格失败: {ex.Message}")
         End Try

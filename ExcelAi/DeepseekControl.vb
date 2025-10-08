@@ -12,7 +12,7 @@ Public Class DeepseekControl
         ' 此调用是设计师所必需的。
         Try
             InitializeComponent()
-            SimpleLogger.LogInfo("DeepseekControl 初始化完成")
+            Debug.WriteLine("DeepseekControl 初始化完成")
         Catch ex As Exception
             SimpleLogger.LogError("DeepseekControl 构造异常", ex)
             MessageBox.Show("DeepseekControl 加载失败: " & ex.Message)
