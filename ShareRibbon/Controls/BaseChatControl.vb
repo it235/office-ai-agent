@@ -281,6 +281,8 @@ Public MustInherit Class BaseChatControl
                     HandleGetMcpConnections()
                 Case "saveMcpSettings"
                     HandleSaveMcpSettings(jsonDoc)
+                Case "clearContext"
+                    ClearChatContext()
                 Case Else
                     Debug.WriteLine($"未知消息类型: {messageType}")
             End Select
@@ -289,6 +291,10 @@ Public MustInherit Class BaseChatControl
         End Try
     End Sub
 
+    Private Sub ClearChatContext()
+        historyMessageData.Clear()
+        Debug.WriteLine("已清空聊天记忆（上下文）")
+    End Sub
 
     ' 处理获取MCP连接列表请求
     Protected Sub HandleGetMcpConnections()
