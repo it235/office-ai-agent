@@ -27,6 +27,7 @@ Public Class ConfigApiForm
     Private addModelNameButton As Button
     Private saveConfigButton As Button
     Private getApiKeyButton As Button
+    Private translateSelectedCheckBox As CheckBox
 
 
     Public Property platform As String
@@ -143,6 +144,13 @@ Public Class ConfigApiForm
         AddHandler newApiUrlTextBox.Leave, AddressOf NewApiUrlTextBox_Leave
         Me.Controls.Add(newApiUrlTextBox)
 
+        translateSelectedCheckBox = New CheckBox()
+        translateSelectedCheckBox.Text = "用于翻译"
+        translateSelectedCheckBox.Location = New Point(280, 250)
+        translateSelectedCheckBox.Size = New Size(100, 24)
+        translateSelectedCheckBox.Visible = False
+        Me.Controls.Add(translateSelectedCheckBox)
+
         newModelNameTextBoxes = New List(Of TextBox)()
         AddNewModelNameTextBox(False)
 
@@ -248,6 +256,11 @@ Public Class ConfigApiForm
         Next
         addModelNameButton.Visible = True
         saveConfigButton.Visible = True
+
+        ' 同时显示 translate 复选
+        translateSelectedCheckBox.Visible = True
+        translateSelectedCheckBox.Checked = selectedPlatform.translateSelected
+
     End Sub
 
     ' 处理获取ApiKey按钮点击事件
@@ -349,84 +362,87 @@ Public Class ConfigApiForm
             Dim validationSuccess As Boolean = Not String.IsNullOrEmpty(response)
 
             If validationSuccess Then
+                If response = "Exception" Then
+                    Return
+                End If
 
                 Dim mcpSupported As Boolean = False
 
 
-                ' 重置选择后的selected属性和key，设置validated为true
-                For Each config In ConfigData
-                    config.selected = False
-                    If selectedPlatform.pltform = config.pltform Then
-                        config.selected = True
-                        config.key = inputApiKey
-                        config.validated = True ' 标记为已验证
-                        For Each item_m In config.model
-                            item_m.selected = False
-                            If item_m.modelName = selectedModelName Then
-                                item_m.mcpable = mcpSupported
-                                item_m.mcpValidated = False
-                                item_m.selected = True
-                            End If
-                        Next
+                    ' 重置选择后的selected属性和key，设置validated为true
+                    For Each config In ConfigData
+                        config.selected = False
+                        If selectedPlatform.pltform = config.pltform Then
+                            config.selected = True
+                            config.key = inputApiKey
+                            config.validated = True ' 标记为已验证
+                            For Each item_m In config.model
+                                item_m.selected = False
+                                If item_m.modelName = selectedModelName Then
+                                    item_m.mcpable = mcpSupported
+                                    item_m.mcpValidated = False
+                                    item_m.selected = True
+                                End If
+                            Next
+                        End If
+                    Next
+
+                    ' 保存到文件
+                    SaveConfig()
+
+                    If mcpSupported Then
+                        Debug.WriteLine($"检测到 {selectedModelName} 模型支持MCP工具功能！", "MCP功能支持", MessageBoxButtons.OK, MessageBoxIcon.Information)
                     End If
-                Next
 
-                ' 保存到文件
-                SaveConfig()
-
-                If mcpSupported Then
-                    Debug.WriteLine($"检测到 {selectedModelName} 模型支持MCP工具功能！", "MCP功能支持", MessageBoxButtons.OK, MessageBoxIcon.Information)
-                End If
-
-                ' 刷新内存中的api配置
-                ConfigSettings.ApiUrl = apiUrl
-                ConfigSettings.ApiKey = inputApiKey
-                ConfigSettings.platform = selectedPlatform.pltform
-                ConfigSettings.ModelName = selectedModelName
-                ConfigSettings.mcpable = mcpSupported
+                    ' 刷新内存中的api配置
+                    ConfigSettings.ApiUrl = apiUrl
+                    ConfigSettings.ApiKey = inputApiKey
+                    ConfigSettings.platform = selectedPlatform.pltform
+                    ConfigSettings.ModelName = selectedModelName
+                    ConfigSettings.mcpable = mcpSupported
 
 
-                ' 检测MCP功能
-                ' 验证成功后，异步检查function tools支持
-                ' 注意：这里我们不等待结果，让它在后台运行
-                Task.Run(Async Function()
-                             Try
+                    ' 检测MCP功能
+                    ' 验证成功后，异步检查function tools支持
+                    ' 注意：这里我们不等待结果，让它在后台运行
+                    Task.Run(Async Function()
+                                 Try
 
-                                 Dim mcpSupportedTemp As Boolean = Await CheckFunctionToolsSupport(apiUrl, inputApiKey, selectedModelName)
+                                     Dim mcpSupportedTemp As Boolean = Await CheckFunctionToolsSupport(apiUrl, inputApiKey, selectedModelName)
 
-                                 ' 更新配置中的MCP支持状态
-                                 For Each config In ConfigData
-                                     If config.pltform = selectedPlatform.pltform Then
-                                         For Each item_m In config.model
-                                             If item_m.modelName = selectedModelName Then
-                                                 item_m.mcpable = mcpSupportedTemp
-                                                 item_m.mcpValidated = True
-                                                 ConfigSettings.mcpable = mcpSupportedTemp
-                                                 Exit For
-                                             End If
-                                         Next
-                                         Exit For
+                                     ' 更新配置中的MCP支持状态
+                                     For Each config In ConfigData
+                                         If config.pltform = selectedPlatform.pltform Then
+                                             For Each item_m In config.model
+                                                 If item_m.modelName = selectedModelName Then
+                                                     item_m.mcpable = mcpSupportedTemp
+                                                     item_m.mcpValidated = True
+                                                     ConfigSettings.mcpable = mcpSupportedTemp
+                                                     Exit For
+                                                 End If
+                                             Next
+                                             Exit For
+                                         End If
+                                     Next
+
+                                     ' 保存更新后的配置
+                                     SaveConfig()
+
+                                     If mcpSupportedTemp Then
+                                         Debug.WriteLine($"检测到 {selectedModelName} 模型支持MCP工具功能！")
                                      End If
-                                 Next
+                                 Catch ex As Exception
+                                     Debug.WriteLine($"后台检查MCP支持时出错: {ex.Message}")
+                                 End Try
+                             End Function)
 
-                                 ' 保存更新后的配置
-                                 SaveConfig()
+                    ' 关闭对话框
+                    Me.DialogResult = DialogResult.OK
+                    Me.Close()
 
-                                 If mcpSupportedTemp Then
-                                     Debug.WriteLine($"检测到 {selectedModelName} 模型支持MCP工具功能！")
-                                 End If
-                             Catch ex As Exception
-                                 Debug.WriteLine($"后台检查MCP支持时出错: {ex.Message}")
-                             End Try
-                         End Function)
-
-                ' 关闭对话框
-                Me.DialogResult = DialogResult.OK
-                Me.Close()
-
-            Else
-                ' 验证失败，提示用户修改
-                MessageBox.Show("API验证失败。请检查API URL、模型名称和API Key是否正确。", "验证失败",
+                Else
+                    ' 验证失败，提示用户修改
+                    MessageBox.Show("API验证失败。请检查API URL、模型名称和API Key是否正确。", "验证失败",
                           MessageBoxButtons.OK, MessageBoxIcon.Warning)
 
                 ' 标记为未验证
@@ -566,8 +582,8 @@ Public Class ConfigApiForm
             End Using
             Return String.Empty
         Catch ex As Exception
-            Debug.WriteLine($"API验证请求失败: {ex.Message}")
-            Return String.Empty
+            MessageBox.Show($"验证过程中出错: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Return "Exception"
         End Try
     End Function
 
@@ -597,6 +613,7 @@ Public Class ConfigApiForm
         Next
         addModelNameButton.Visible = True
         saveConfigButton.Visible = True
+        translateSelectedCheckBox.Visible = True
 
     End Sub
 
@@ -662,14 +679,33 @@ Public Class ConfigApiForm
             existingItem.url = newApiUrl
             existingItem.model = newModels
             existingItem.selected = True
+
+            ' 处理 translateSelected（保证唯一）
+            If translateSelectedCheckBox.Checked Then
+                For Each cfg In ConfigData
+                    cfg.translateSelected = False
+                Next
+                existingItem.translateSelected = True
+            Else
+                existingItem.translateSelected = False
+            End If
         Else
             ' 用户本地新增模型到 ComboBox
             Dim newItem As New ConfigManager.ConfigItem() With {
             .pltform = newModelPlatform,
             .url = newApiUrl,
             .model = newModels,
-            .selected = True
+            .selected = True,
+            .translateSelected = translateSelectedCheckBox.Checked
         }
+
+            ' 如果新项要求作为翻译平台，先清除其他已设置
+            If newItem.translateSelected Then
+                For Each cfg In ConfigData
+                    cfg.translateSelected = False
+                Next
+            End If
+
             ConfigData.Add(newItem)
             modelComboBox.Items.Add(newItem)
             modelComboBox.SelectedItem = newItem
@@ -704,6 +740,7 @@ Public Class ConfigApiForm
         Next
         addModelNameButton.Visible = False
         saveConfigButton.Visible = False
+        translateSelectedCheckBox.Visible = False
     End Sub
 
     Private Sub NewModelPlatformTextBox_Enter(sender As Object, e As EventArgs)

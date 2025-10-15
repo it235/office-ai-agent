@@ -188,11 +188,21 @@
     </Compile>
     <Compile Include="Config\ChatSettings.vb" />
     <Compile Include="Config\ConfigSettings.vb" />
-    <Compile Include="Config\GlobalStatusBar.vb" />
     <Compile Include="Config\GlobalStatusStripAll.vb">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Config\GlobalStatusStrip.vb" />
+    <Compile Include="Config\GlobalTips.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Translate\BaseTranslateService.vb" />
+    <Compile Include="Translate\TranslateConfigForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Translate\TranslateGlobalSettingsForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Translate\TranslateSettings.vb" />
     <Compile Include="Config\WebView2Loader.vb" />
     <Compile Include="Controls\BaseChatControl.Designer.vb">
       <DependentUpon>BaseChatControl.vb</DependentUpon>

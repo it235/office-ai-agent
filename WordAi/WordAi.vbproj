@@ -275,6 +275,7 @@
     <Compile Include="WebDataCapturePane.vb">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Include="WordTranslateService.vb" />
     <EmbeddedResource Include="ChatControl.resx">
       <DependentUpon>ChatControl.vb</DependentUpon>
     </EmbeddedResource>

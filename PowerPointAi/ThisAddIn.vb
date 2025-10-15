@@ -9,6 +9,7 @@ Public Class ThisAddIn
 
     Private chatTaskPane As Microsoft.Office.Tools.CustomTaskPane
     Public Shared chatControl As ChatControl
+    Private translateService As PowerPointTranslateService
 
 
     ' 在类中添加以下变量
@@ -36,6 +37,7 @@ Public Class ThisAddIn
         widthTimer1.Interval = 100 ' 设置延迟时间，单位为毫秒
         CreateDeepseekTaskPane()
 
+        translateService = New PowerPointTranslateService()
     End Sub
 
     Private Sub CreateDeepseekTaskPane()

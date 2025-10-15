@@ -53,6 +53,8 @@ Partial Class BaseOfficeRibbon
 
         Me.BatchDataGenButton = Me.Factory.CreateRibbonButton()
 
+        ' 新增：翻译配置按钮
+        Me.TranslateConfigButton = Me.Factory.CreateRibbonButton
 
         Me.TabAI.SuspendLayout()
         Me.GroupAI.SuspendLayout()
@@ -99,6 +101,7 @@ Partial Class BaseOfficeRibbon
         Me.GroupAI.Items.Add(Me.Separator1)
         Me.GroupAI.Items.Add(Me.PromptConfigButton)
         Me.GroupAI.Items.Add(Me.ChatButton)
+        Me.GroupAI.Items.Add(Me.TranslateConfigButton)
         Me.GroupAI.Items.Add(Me.Separator2)
         Me.GroupAI.Items.Add(Me.AboutButton)
         Me.GroupAI.Items.Add(Me.ClearCacheButton)
@@ -125,6 +128,13 @@ Partial Class BaseOfficeRibbon
         Me.ChatButton.Label = "Chat AI"
         Me.ChatButton.Name = "ChatButton"
         Me.ChatButton.ShowImage = True
+
+        ' TranslateConfigButton
+        Me.TranslateConfigButton.Label = "翻译配置"
+        Me.TranslateConfigButton.Name = "TranslateConfigButton"
+        Me.TranslateConfigButton.ShowImage = True
+        Me.TranslateConfigButton.ScreenTip = "配置翻译功能与平台"
+        Me.TranslateConfigButton.SuperTip = "启用/配置翻译、选择翻译平台与模型"
 
         ' AboutButton
         Me.AboutButton.Label = "关于"
@@ -203,4 +213,6 @@ Partial Class BaseOfficeRibbon
     Protected WithEvents GroupMCP As Microsoft.Office.Tools.Ribbon.RibbonGroup
     Protected WithEvents MCPButton As Microsoft.Office.Tools.Ribbon.RibbonButton
 
+    ' 新增翻译配置按钮声明
+    Protected WithEvents TranslateConfigButton As Microsoft.Office.Tools.Ribbon.RibbonButton
 End Class

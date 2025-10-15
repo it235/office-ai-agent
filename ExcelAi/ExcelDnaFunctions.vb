@@ -1,4 +1,4 @@
-Imports System.Diagnostics
+ï»¿Imports System.Diagnostics
 Imports System.Threading.Tasks
 Imports ExcelDna.Integration
 Imports Newtonsoft.Json.Linq
@@ -6,67 +6,65 @@ Imports ShareRibbon
 
 Public Module ExcelDnaFunctions
 
-    ' ÅäÖÃ¹ÜÀíÆ÷ÊµÀı
+    ' é…ç½®ç®¡ç†å™¨å®ä¾‹
     Private configManager As ConfigManager = Nothing
 
-    ' ĞŞ¸´AutoOpen·½·¨ - ÒÆ³ıMenuNameºÍMenuText²ÎÊı
+    ' ä¿®å¤AutoOpenæ–¹æ³• - ç§»é™¤MenuNameå’ŒMenuTextå‚æ•°
     <ExcelDna.Integration.ExcelCommand()>
     Public Sub AutoOpen()
         Try
-            Debug.WriteLine("=== Excel-DNA AutoOpen ¿ªÊ¼Ö´ĞĞ ===")
-            Console.WriteLine("=== Excel-DNA AutoOpen ¿ªÊ¼Ö´ĞĞ ===")
+            Debug.WriteLine("=== Excel-DNA AutoOpen å¼€å§‹æ‰§è¡Œ ===")
+            Console.WriteLine("=== Excel-DNA AutoOpen å¼€å§‹æ‰§è¡Œ ===")
 
-            '' ÔÚExcel-DNAÓòÖĞ³õÊ¼»¯GlobalStatusBar
             'Try
             '    Dim excelApp As Object = ExcelDna.Integration.ExcelDnaUtil.Application
             '    If excelApp IsNot Nothing Then
-            '        GlobalStatusBar.InitializeApplication(excelApp)
-            '        Debug.WriteLine("Excel-DNAÓòÖĞGlobalStatusStrip³õÊ¼»¯³É¹¦")
+            '        Debug.WriteLine("Excel-DNAåŸŸä¸­GlobalStatusStripåˆå§‹åŒ–æˆåŠŸ")
 
-            '        ' ²âÊÔ×´Ì¬À¸ÊÇ·ñ¹¤×÷
+            '        ' æµ‹è¯•çŠ¶æ€æ æ˜¯å¦å·¥ä½œ
             '        Try
-            '            excelApp.StatusBar = "Excel-DNAÒÑ¼ÓÔØ"
-            '            Debug.WriteLine("Excel-DNA×´Ì¬À¸²âÊÔ³É¹¦")
+            '            excelApp.StatusBar = "Excel-DNAå·²åŠ è½½"
+            '            Debug.WriteLine("Excel-DNAçŠ¶æ€æ æµ‹è¯•æˆåŠŸ")
             '            Threading.Thread.Sleep(2000)
             '            excelApp.StatusBar = False
             '        Catch statusEx As Exception
-            '            Debug.WriteLine($"Excel-DNA×´Ì¬À¸²âÊÔÊ§°Ü: {statusEx.Message}")
+            '            Debug.WriteLine($"Excel-DNAçŠ¶æ€æ æµ‹è¯•å¤±è´¥: {statusEx.Message}")
             '        End Try
             '    Else
-            '        Debug.WriteLine("Excel-DNAÓòÖĞÎŞ·¨»ñÈ¡ExcelÓ¦ÓÃ³ÌĞò¶ÔÏó")
+            '        Debug.WriteLine("Excel-DNAåŸŸä¸­æ— æ³•è·å–Excelåº”ç”¨ç¨‹åºå¯¹è±¡")
             '    End If
             'Catch ex As Exception
-            '    Debug.WriteLine($"Excel-DNAÓòÖĞGlobalStatusStrip³õÊ¼»¯Ê§°Ü: {ex.Message}")
+            '    Debug.WriteLine($"Excel-DNAåŸŸä¸­GlobalStatusStripåˆå§‹åŒ–å¤±è´¥: {ex.Message}")
             'End Try
 
-            ' ³õÊ¼»¯ÅäÖÃ¹ÜÀíÆ÷
+            ' åˆå§‹åŒ–é…ç½®ç®¡ç†å™¨
             Try
                 configManager = New ConfigManager()
                 configManager.LoadConfig()
-                Debug.WriteLine($"Excel-DNA ÅäÖÃÒÑ¼ÓÔØ - API URL: {ConfigSettings.ApiUrl}")
-                Debug.WriteLine($"Excel-DNA ÅäÖÃÒÑ¼ÓÔØ - Model: {ConfigSettings.ModelName}")
+                Debug.WriteLine($"Excel-DNA é…ç½®å·²åŠ è½½ - API URL: {ConfigSettings.ApiUrl}")
+                Debug.WriteLine($"Excel-DNA é…ç½®å·²åŠ è½½ - Model: {ConfigSettings.ModelName}")
             Catch ex As Exception
-                Debug.WriteLine($"Excel-DNA ÅäÖÃ¼ÓÔØÊ§°Ü: {ex.Message}")
+                Debug.WriteLine($"Excel-DNA é…ç½®åŠ è½½å¤±è´¥: {ex.Message}")
             End Try
 
-            ' Çå³ı»º´æ
+            ' æ¸…é™¤ç¼“å­˜
             FunctionCache.Clear()
 
-            ' ×¢²áÎ´´¦ÀíÒì³£´¦Àí³ÌĞò
+            ' æ³¨å†Œæœªå¤„ç†å¼‚å¸¸å¤„ç†ç¨‹åº
             ExcelDna.Integration.ExcelIntegration.RegisterUnhandledExceptionHandler(
-            Function(ex) $"´íÎó: {ex.Message}")
+            Function(ex) $"é”™è¯¯: {ex.Message}")
 
-            Debug.WriteLine("=== Excel-DNA AutoOpen Ö´ĞĞÍê³É ===")
-            Console.WriteLine("=== Excel-DNA AutoOpen Ö´ĞĞÍê³É ===")
+            Debug.WriteLine("=== Excel-DNA AutoOpen æ‰§è¡Œå®Œæˆ ===")
+            Console.WriteLine("=== Excel-DNA AutoOpen æ‰§è¡Œå®Œæˆ ===")
 
         Catch ex As Exception
-            Debug.WriteLine($"Excel-DNA AutoOpen Ö´ĞĞÊ§°Ü: {ex.Message}")
-            Console.WriteLine($"Excel-DNA AutoOpen Ö´ĞĞÊ§°Ü: {ex.Message}")
+            Debug.WriteLine($"Excel-DNA AutoOpen æ‰§è¡Œå¤±è´¥: {ex.Message}")
+            Console.WriteLine($"Excel-DNA AutoOpen æ‰§è¡Œå¤±è´¥: {ex.Message}")
         End Try
     End Sub
 
 
-    ' È·±£ÅäÖÃÒÑ¼ÓÔØ
+    ' ç¡®ä¿é…ç½®å·²åŠ è½½
     Private Sub EnsureConfigLoaded()
         If configManager Is Nothing Then
             configManager = New ConfigManager()
@@ -74,175 +72,174 @@ Public Module ExcelDnaFunctions
         End If
     End Sub
 
-    ' »ù±¾ LLM º¯Êı
-    <ExcelFunction(Description:="Ê¹ÓÃAIÄ£ĞÍÉú³ÉÎÄ±¾",
-                  Category:="Excel AI º¯Êı",
+    ' åŸºæœ¬ LLM å‡½æ•°
+    <ExcelFunction(Description:="ä½¿ç”¨AIæ¨¡å‹ç”Ÿæˆæ–‡æœ¬",
+                  Category:="Excel AI å‡½æ•°",
                   Name:="ELLM",
                   IsVolatile:=False,
                   IsThreadSafe:=True)>
     Public Function ELLM(
-        <ExcelArgument(Description:="ÌáÊ¾´Ê»òÎÊÌâ")> prompt As String) As Object
+        <ExcelArgument(Description:="æç¤ºè¯æˆ–é—®é¢˜")> prompt As String) As Object
 
-        ' Ê¹ÓÃ»º´æ±ÜÃâÖØ¸´¼ÆËã
+        ' ä½¿ç”¨ç¼“å­˜é¿å…é‡å¤è®¡ç®—
         Dim cacheKey As String = $"ELLM|{prompt}"
         If FunctionCache.ContainsKey(cacheKey) Then
             Return FunctionCache(cacheKey)
         End If
 
         Try
-            ' µ÷ÓÃÍêÕû°æº¯Êı
+            ' è°ƒç”¨å®Œæ•´ç‰ˆå‡½æ•°
             Dim result As String = ADLLM(prompt, "", "", 0.7, 1000)
 
-            ' »º´æ½á¹û
-            If Not result.StartsWith("´íÎó:") Then
+            ' ç¼“å­˜ç»“æœ
+            If Not result.StartsWith("é”™è¯¯:") Then
                 FunctionCache(cacheKey) = result
             End If
 
             Return result
         Catch ex As Exception
-            Return $"´íÎó: {ex.Message}"
+            Return $"é”™è¯¯: {ex.Message}"
         End Try
     End Function
 
-    ' ¸ß¼¶ LLM º¯Êı
-    <ExcelFunction(Description:="Ê¹ÓÃAIÄ£ĞÍÉú³ÉÎÄ±¾(¸ß¼¶°æ)",
-                  Category:="Excel AI º¯Êı",
+    ' é«˜çº§ LLM å‡½æ•°
+    <ExcelFunction(Description:="ä½¿ç”¨AIæ¨¡å‹ç”Ÿæˆæ–‡æœ¬(é«˜çº§ç‰ˆ)",
+                  Category:="Excel AI å‡½æ•°",
                   Name:="ADLLM",
                   IsVolatile:=False,
                   IsThreadSafe:=True)>
     Public Function ADLLM(
-        <ExcelArgument(Description:="ÌáÊ¾´Ê»òÎÊÌâ")> prompt As String,
-        <ExcelArgument(Description:="¿ÉÑ¡: Ä£ĞÍÃû³Æ")> Optional model As String = "",
-        <ExcelArgument(Description:="¿ÉÑ¡: ÏµÍ³ÌáÊ¾´Ê")> Optional systemPrompt As String = "",
-        <ExcelArgument(Description:="¿ÉÑ¡: ÎÂ¶È²ÎÊı (0.0-1.0)")> Optional temperature As Double = 0.7,
-        <ExcelArgument(Description:="¿ÉÑ¡: ×î´óÉú³ÉÁîÅÆÊı")> Optional maxTokens As Integer = 1000) As Object
+        <ExcelArgument(Description:="æç¤ºè¯æˆ–é—®é¢˜")> prompt As String,
+        <ExcelArgument(Description:="å¯é€‰: æ¨¡å‹åç§°")> Optional model As String = "",
+        <ExcelArgument(Description:="å¯é€‰: ç³»ç»Ÿæç¤ºè¯")> Optional systemPrompt As String = "",
+        <ExcelArgument(Description:="å¯é€‰: æ¸©åº¦å‚æ•° (0.0-1.0)")> Optional temperature As Double = 0.7,
+        <ExcelArgument(Description:="å¯é€‰: æœ€å¤§ç”Ÿæˆä»¤ç‰Œæ•°")> Optional maxTokens As Integer = 1000) As Object
 
-        ' Ê¹ÓÃ»º´æ±ÜÃâÖØ¸´¼ÆËã
+        ' ä½¿ç”¨ç¼“å­˜é¿å…é‡å¤è®¡ç®—
         Dim cacheKey As String = $"ADLLM|{prompt}|{model}|{systemPrompt}|{temperature}|{maxTokens}"
         If FunctionCache.ContainsKey(cacheKey) Then
             Return FunctionCache(cacheKey)
         End If
 
         Try
-            ' ÑéÖ¤ÊäÈë
+            ' éªŒè¯è¾“å…¥
             If String.IsNullOrEmpty(prompt) Then
-                Return "´íÎó: ÌáÊ¾´Ê²»ÄÜÎª¿Õ"
+                Return "é”™è¯¯: æç¤ºè¯ä¸èƒ½ä¸ºç©º"
             End If
 
-            ' È·±£ÅäÖÃÒÑ¼ÓÔØ
+            ' ç¡®ä¿é…ç½®å·²åŠ è½½
             EnsureConfigLoaded()
-            ' Ê¹ÓÃÄ¬ÈÏÖµ£¨Èç¹ûÎ´Ìá¹©£©
+            ' ä½¿ç”¨é»˜è®¤å€¼ï¼ˆå¦‚æœæœªæä¾›ï¼‰
             Dim apiKey As String = ConfigSettings.ApiKey
             Dim apiUrl As String = ConfigSettings.ApiUrl
 
             If String.IsNullOrEmpty(apiKey) Then
-                Return "´íÎó: Î´ÅäÖÃAPIÃÜÔ¿"
+                Return "é”™è¯¯: æœªé…ç½®APIå¯†é’¥"
             End If
 
             If String.IsNullOrEmpty(apiUrl) Then
-                Return "´íÎó: Î´ÅäÖÃAPI URL"
+                Return "é”™è¯¯: æœªé…ç½®API URL"
             End If
 
-            ' Ê¹ÓÃÖ¸¶¨µÄÄ£ĞÍ»òÄ¬ÈÏÄ£ĞÍ
+            ' ä½¿ç”¨æŒ‡å®šçš„æ¨¡å‹æˆ–é»˜è®¤æ¨¡å‹
             Dim useModel As String = If(String.IsNullOrEmpty(model), GetDefaultModel(), model)
 
-            'GlobalStatusBar.ShowWarning($"ÕıÔÚÍ¬²½ÇëÇó´óÄ£ĞÍÖĞ£¬ÇëÄÍĞÄµÈ´ı")
 
-            ' ´´½¨ÇëÇóÌå
+            ' åˆ›å»ºè¯·æ±‚ä½“
             Dim requestBody As String = LLMUtil.CreateLlmRequestBody(prompt, useModel, systemPrompt, temperature, maxTokens)
 
-            ' µ÷ÓÃAPI²¢»ñÈ¡½á¹û
+            ' è°ƒç”¨APIå¹¶è·å–ç»“æœ
             Dim response As String = LLMUtil.SendHttpRequest(apiUrl, apiKey, requestBody).Result
 
-            ' Èç¹ûÏìÓ¦Îª¿Õ£¬·µ»Ø´íÎóĞÅÏ¢
+            ' å¦‚æœå“åº”ä¸ºç©ºï¼Œè¿”å›é”™è¯¯ä¿¡æ¯
             If String.IsNullOrEmpty(response) Then
-                Return "´íÎó: APIÎ´·µ»ØÏìÓ¦"
+                Return "é”™è¯¯: APIæœªè¿”å›å“åº”"
             End If
 
             Dim parsedResponse As JObject = JObject.Parse(response)
             Dim cellValue As String = parsedResponse("choices")(0)("message")("content").ToString()
 
-            ' »º´æ½á¹û
+            ' ç¼“å­˜ç»“æœ
             FunctionCache(cacheKey) = cellValue
 
             Return cellValue
         Catch ex As Exception
-            Return $"´íÎó: {ex.Message}"
+            Return $"é”™è¯¯: {ex.Message}"
         End Try
     End Function
 
-    ' Òì²½ LLM º¯Êı - ĞŞ¸´°æ±¾£¬È¥µôÎ´¶¨ÒåµÄ½Ó¿Ú
-    <ExcelFunction(Description:="Òì²½µ÷ÓÃAIÄ£ĞÍÉú³ÉÎÄ±¾",
-                  Category:="Excel AI º¯Êı",
+    ' å¼‚æ­¥ LLM å‡½æ•° - ä¿®å¤ç‰ˆæœ¬ï¼Œå»æ‰æœªå®šä¹‰çš„æ¥å£
+    <ExcelFunction(Description:="å¼‚æ­¥è°ƒç”¨AIæ¨¡å‹ç”Ÿæˆæ–‡æœ¬",
+                  Category:="Excel AI å‡½æ•°",
                   Name:="ALLM",
                   IsVolatile:=False,
                   IsThreadSafe:=True)>
     Public Function ALLM(
-        <ExcelArgument(Description:="ÌáÊ¾´Ê»òÎÊÌâ")> prompt As String,
-        <ExcelArgument(Description:="¿ÉÑ¡: Ä£ĞÍÃû³Æ")> Optional model As String = "",
-        <ExcelArgument(Description:="¿ÉÑ¡: ÏµÍ³ÌáÊ¾´Ê")> Optional systemPrompt As String = "",
-        <ExcelArgument(Description:="¿ÉÑ¡: ÎÂ¶È²ÎÊı (0.0-1.0)")> Optional temperature As Double = 0.7,
-        <ExcelArgument(Description:="¿ÉÑ¡: ×î´óÉú³ÉÁîÅÆÊı")> Optional maxTokens As Integer = 1000) As Object
+        <ExcelArgument(Description:="æç¤ºè¯æˆ–é—®é¢˜")> prompt As String,
+        <ExcelArgument(Description:="å¯é€‰: æ¨¡å‹åç§°")> Optional model As String = "",
+        <ExcelArgument(Description:="å¯é€‰: ç³»ç»Ÿæç¤ºè¯")> Optional systemPrompt As String = "",
+        <ExcelArgument(Description:="å¯é€‰: æ¸©åº¦å‚æ•° (0.0-1.0)")> Optional temperature As Double = 0.7,
+        <ExcelArgument(Description:="å¯é€‰: æœ€å¤§ç”Ÿæˆä»¤ç‰Œæ•°")> Optional maxTokens As Integer = 1000) As Object
 
         If temperature = 0.0 Then temperature = 0.7
         If maxTokens = 0 Then maxTokens = 1000
 
-        ' Ê¹ÓÃExcel-DNAÌØÓĞµÄÏß³Ì°²È«·½·¨ÉèÖÃ×´Ì¬À¸
+        ' ä½¿ç”¨Excel-DNAç‰¹æœ‰çš„çº¿ç¨‹å®‰å…¨æ–¹æ³•è®¾ç½®çŠ¶æ€æ 
         Try
             Dim displayPrompt As String = If(prompt.Length > 25, prompt.Substring(0, 25) + "...", prompt)
-            SetExcelStatusBarDirectly($"´óÄ£ĞÍÕıÔÚË¼¿¼£º¡¸{displayPrompt}¡¹...")
+            SetExcelStatusBarDirectly($"å¤§æ¨¡å‹æ­£åœ¨æ€è€ƒï¼šã€Œ{displayPrompt}ã€...")
         Catch ex As Exception
-            Debug.WriteLine($"ÏÔÊ¾×´Ì¬ÌáÊ¾Ê§°Ü: {ex.Message}")
+            Debug.WriteLine($"æ˜¾ç¤ºçŠ¶æ€æç¤ºå¤±è´¥: {ex.Message}")
         End Try
 
-        ' ¼ì²é»º´æ£¬Èç¹ûÓĞ»º´æÖ±½Ó·µ»Ø
+        ' æ£€æŸ¥ç¼“å­˜ï¼Œå¦‚æœæœ‰ç¼“å­˜ç›´æ¥è¿”å›
         Dim cacheKey As String = $"ALLM|{prompt}|{model}|{systemPrompt}|{temperature}|{maxTokens}"
         If FunctionCache.ContainsKey(cacheKey) Then
             Return FunctionCache(cacheKey)
         End If
 
 
-        ' Ê¹ÓÃ ExcelAsyncUtil.Run Ö´ĞĞÒì²½²Ù×÷
+        ' ä½¿ç”¨ ExcelAsyncUtil.Run æ‰§è¡Œå¼‚æ­¥æ“ä½œ
         Return ExcelAsyncUtil.Run("ALLM", New Object() {prompt, model, systemPrompt, temperature, maxTokens},
             Function()
                 Try
                     Dim result As String = ProcessLLMRequestSync(prompt, model, systemPrompt, temperature, maxTokens)
 
-                    ' Çå³ı×´Ì¬À¸
+                    ' æ¸…é™¤çŠ¶æ€æ 
                     ClearExcelStatusBar()
                     Return result
                 Catch ex As Exception
                     ClearExcelStatusBar()
-                    Return $"´íÎó: {ex.Message}"
+                    Return $"é”™è¯¯: {ex.Message}"
                 End Try
             End Function)
     End Function
 
-    ' ×¨ÃÅÓÃÓÚExcel-DNAµÄÏß³Ì°²È«×´Ì¬À¸ÉèÖÃ
+    ' ä¸“é—¨ç”¨äºExcel-DNAçš„çº¿ç¨‹å®‰å…¨çŠ¶æ€æ è®¾ç½®
     Private Sub SetExcelStatusBarDirectly(message As String)
         Try
-            Debug.WriteLine($"ÕıÔÚ³¢ÊÔ°²È«ÉèÖÃ×´Ì¬À¸: {message}")
+            Debug.WriteLine($"æ­£åœ¨å°è¯•å®‰å…¨è®¾ç½®çŠ¶æ€æ : {message}")
 
-            ' Ê¹ÓÃExcel-DNAµÄQueueAsMacroÈ·±£ÔÚExcelÖ÷Ïß³ÌÉÏÖ´ĞĞ
+            ' ä½¿ç”¨Excel-DNAçš„QueueAsMacroç¡®ä¿åœ¨Excelä¸»çº¿ç¨‹ä¸Šæ‰§è¡Œ
             ExcelAsyncUtil.QueueAsMacro(Sub()
                                             Try
                                                 Dim excelApp As Object = ExcelDna.Integration.ExcelDnaUtil.Application
                                                 If excelApp IsNot Nothing Then
                                                     excelApp.StatusBar = message
-                                                    Debug.WriteLine($"×´Ì¬À¸ÉèÖÃ³É¹¦: {message}")
+                                                    Debug.WriteLine($"çŠ¶æ€æ è®¾ç½®æˆåŠŸ: {message}")
                                                 Else
-                                                    Debug.WriteLine("ÎŞ·¨»ñÈ¡ExcelÓ¦ÓÃ³ÌĞò¶ÔÏó")
+                                                    Debug.WriteLine("æ— æ³•è·å–Excelåº”ç”¨ç¨‹åºå¯¹è±¡")
                                                 End If
                                             Catch innerEx As Exception
-                                                Debug.WriteLine($"ÔÚExcelÖ÷Ïß³ÌÉÏÉèÖÃ×´Ì¬À¸Ê§°Ü: {innerEx.Message}")
+                                                Debug.WriteLine($"åœ¨Excelä¸»çº¿ç¨‹ä¸Šè®¾ç½®çŠ¶æ€æ å¤±è´¥: {innerEx.Message}")
                                             End Try
                                         End Sub)
         Catch ex As Exception
-            Debug.WriteLine($"¶ÓÁĞ×´Ì¬À¸²Ù×÷Ê§°Ü: {ex.Message}")
+            Debug.WriteLine($"é˜Ÿåˆ—çŠ¶æ€æ æ“ä½œå¤±è´¥: {ex.Message}")
         End Try
     End Sub
 
-    ' ÔÚProcessLLMRequestSyncÍê³ÉºóÇå³ı×´Ì¬À¸
+    ' åœ¨ProcessLLMRequestSyncå®Œæˆåæ¸…é™¤çŠ¶æ€æ 
     Private Sub ClearExcelStatusBar()
         Try
             ExcelAsyncUtil.QueueAsMacro(Sub()
@@ -250,24 +247,24 @@ Public Module ExcelDnaFunctions
                                                 Dim excelApp As Object = ExcelDna.Integration.ExcelDnaUtil.Application
                                                 If excelApp IsNot Nothing Then
                                                     excelApp.StatusBar = False
-                                                    Debug.WriteLine("×´Ì¬À¸ÒÑÇå³ı")
+                                                    Debug.WriteLine("çŠ¶æ€æ å·²æ¸…é™¤")
                                                 End If
                                             Catch ex As Exception
-                                                Debug.WriteLine($"Çå³ı×´Ì¬À¸Ê§°Ü: {ex.Message}")
+                                                Debug.WriteLine($"æ¸…é™¤çŠ¶æ€æ å¤±è´¥: {ex.Message}")
                                             End Try
                                         End Sub)
         Catch ex As Exception
-            Debug.WriteLine($"¶ÓÁĞÇå³ı×´Ì¬À¸²Ù×÷Ê§°Ü: {ex.Message}")
+            Debug.WriteLine($"é˜Ÿåˆ—æ¸…é™¤çŠ¶æ€æ æ“ä½œå¤±è´¥: {ex.Message}")
         End Try
     End Sub
 
-    ' Í¬²½´¦ÀíLLMÇëÇó - ÒÆ³ıÌØÊâ×Ö·û
+    ' åŒæ­¥å¤„ç†LLMè¯·æ±‚ - ç§»é™¤ç‰¹æ®Šå­—ç¬¦
     Private Function ProcessLLMRequestSync(prompt As String, model As String, systemPrompt As String,
                                          temperature As Double, maxTokens As Integer) As String
         Try
-            ' ÑéÖ¤ÊäÈë
+            ' éªŒè¯è¾“å…¥
             If String.IsNullOrEmpty(prompt) Then
-                Return "´íÎó: ÌáÊ¾´Ê²»ÄÜÎª¿Õ"
+                Return "é”™è¯¯: æç¤ºè¯ä¸èƒ½ä¸ºç©º"
             End If
 
             EnsureConfigLoaded()
@@ -275,56 +272,56 @@ Public Module ExcelDnaFunctions
             Dim apiUrl As String = ConfigSettings.ApiUrl
 
             If String.IsNullOrEmpty(apiKey) Then
-                Return "´íÎó: Î´ÅäÖÃAPIÃÜÔ¿"
+                Return "é”™è¯¯: æœªé…ç½®APIå¯†é’¥"
             End If
 
             If String.IsNullOrEmpty(apiUrl) Then
-                Return "´íÎó: Î´ÅäÖÃAPI URL"
+                Return "é”™è¯¯: æœªé…ç½®API URL"
             End If
 
-            ' Ê¹ÓÃÖ¸¶¨µÄÄ£ĞÍ»òÄ¬ÈÏÄ£ĞÍ
+            ' ä½¿ç”¨æŒ‡å®šçš„æ¨¡å‹æˆ–é»˜è®¤æ¨¡å‹
             Dim useModel As String = If(String.IsNullOrEmpty(model), GetDefaultModel(), model)
 
-            ' ´´½¨ÇëÇóÌå
+            ' åˆ›å»ºè¯·æ±‚ä½“
             Dim requestBody As String = LLMUtil.CreateLlmRequestBody(prompt, useModel, systemPrompt, temperature, maxTokens)
-            Debug.WriteLine($"ÇëÇóÌå: {requestBody}")
+            Debug.WriteLine($"è¯·æ±‚ä½“: {requestBody}")
 
-            ' Ê¹ÓÃÍ¬²½HTTPÇëÇó
+            ' ä½¿ç”¨åŒæ­¥HTTPè¯·æ±‚
             Dim response As String = LLMUtil.SendHttpRequestSync(apiUrl, apiKey, requestBody)
-            Debug.WriteLine($"ÊÕµ½HTTPÏìÓ¦: {response}")
+            Debug.WriteLine($"æ”¶åˆ°HTTPå“åº”: {response}")
 
-            ' Èç¹ûÏìÓ¦Îª¿Õ»òÊÇ´íÎóĞÅÏ¢£¬Ö±½Ó·µ»Ø
+            ' å¦‚æœå“åº”ä¸ºç©ºæˆ–æ˜¯é”™è¯¯ä¿¡æ¯ï¼Œç›´æ¥è¿”å›
             If String.IsNullOrEmpty(response) Then
-                Return "´íÎó: APIÎ´·µ»ØÏìÓ¦"
+                Return "é”™è¯¯: APIæœªè¿”å›å“åº”"
             End If
 
-            If response.StartsWith("´íÎó:") Then
+            If response.StartsWith("é”™è¯¯:") Then
                 Return response
             End If
 
-            ' ³¢ÊÔ½âÎöJSONÏìÓ¦
+            ' å°è¯•è§£æJSONå“åº”
             Dim parsedResponse As JObject = JObject.Parse(response)
             Dim cellValue As String = parsedResponse("choices")(0)("message")("content").ToString()
-            Debug.WriteLine($"½âÎöµÄÏìÓ¦ÄÚÈİ: {cellValue}")
+            Debug.WriteLine($"è§£æçš„å“åº”å†…å®¹: {cellValue}")
 
-            ' »º´æ½á¹û
+            ' ç¼“å­˜ç»“æœ
             Dim cacheKey As String = $"ALLM|{prompt}|{model}|{systemPrompt}|{temperature}|{maxTokens}"
             FunctionCache(cacheKey) = cellValue
 
             Return cellValue
 
         Catch ex As Exception
-            Debug.WriteLine($"ProcessLLMRequestSyncÒì³£: {ex.Message}")
-            Return $"´íÎó: {ex.Message}"
+            Debug.WriteLine($"ProcessLLMRequestSyncå¼‚å¸¸: {ex.Message}")
+            Return $"é”™è¯¯: {ex.Message}"
         End Try
     End Function
-    ' »º´æÊµÏÖ
+    ' ç¼“å­˜å®ç°
     Private FunctionCache As New Dictionary(Of String, String)
 
-    ' »ñÈ¡Ä¬ÈÏÄ£ĞÍ
+    ' è·å–é»˜è®¤æ¨¡å‹
     Private Function GetDefaultModel() As String
         Try
-            ' ´ÓÅäÖÃ¹ÜÀíÆ÷»ñÈ¡Ä¬ÈÏÄ£ĞÍ
+            ' ä»é…ç½®ç®¡ç†å™¨è·å–é»˜è®¤æ¨¡å‹
             Dim model As String = ConfigSettings.ModelName
             Return model
         Catch ex As Exception

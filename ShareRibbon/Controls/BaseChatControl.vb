@@ -19,6 +19,7 @@ Imports System.Windows.Forms
 Imports System.Windows.Forms.ListBox
 Imports System.Windows.Forms.VisualStyles.VisualStyleElement.StartPanel
 Imports Markdig
+Imports Microsoft.Office.Tools.Ribbon
 Imports Microsoft.Vbe.Interop
 Imports Microsoft.Web.WebView2.Core
 Imports Microsoft.Web.WebView2.WinForms

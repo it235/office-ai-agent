@@ -9,6 +9,7 @@ Public Class ThisAddIn
 
     Public Shared chatTaskPane As Microsoft.Office.Tools.CustomTaskPane
     Public Shared chatControl As ChatControl
+    Private translateService As WordTranslateService
 
     Private captureTaskPane As Microsoft.Office.Tools.CustomTaskPane
     Public Shared dataCapturePane As WebDataCapturePane
@@ -35,6 +36,9 @@ Public Class ThisAddIn
         widthTimer1 = New Timer()
         AddHandler widthTimer1.Tick, AddressOf WidthTimer1_Tick
         widthTimer1.Interval = 100 ' 设置延迟时间，单位为毫秒
+
+        translateService = New WordTranslateService()
+
     End Sub
 
 

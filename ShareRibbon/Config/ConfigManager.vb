@@ -22,7 +22,8 @@ Public Class ConfigManager
                     New ConfigItemModel() With {.modelName = "deepseek-r1:14b", .selected = False}
                 },
                 .key = "",
-                .selected = False
+                .selected = False,
+                .translateSelected = False
             }
 
         Dim ds = New ConfigItem() With {
@@ -33,7 +34,8 @@ Public Class ConfigManager
                     New ConfigItemModel() With {.modelName = "deepseek-reasoner", .selected = False}
                 },
                 .key = "",
-                .selected = True
+                .selected = True,
+                .translateSelected = True
             }
         Dim aliyun = New ConfigItem() With {
                 .pltform = "阿里云百炼",
@@ -44,7 +46,8 @@ Public Class ConfigManager
                     New ConfigItemModel() With {.modelName = "qwen-plus", .selected = False}
                 },
                 .key = "",
-                .selected = False
+                .selected = False,
+                .translateSelected = False
             }
         Dim volces = New ConfigItem() With {
             .pltform = "百度千帆",
@@ -54,7 +57,8 @@ Public Class ConfigManager
                 New ConfigItemModel() With {.modelName = "deepseek-r1", .selected = False}
             },
             .key = "",
-            .selected = False
+            .selected = False,
+            .translateSelected = False
         }
         Dim siliconflow = New ConfigItem() With {
             .pltform = "华为硅基流动",
@@ -64,7 +68,8 @@ Public Class ConfigManager
             New ConfigItemModel() With {.modelName = "deepseek-ai/DeepSeek-R1", .selected = False}
             },
             .key = "",
-            .selected = False
+            .selected = False,
+            .translateSelected = False
         }
 
         ' 添加默认配置
@@ -122,6 +127,9 @@ Public Class ConfigManager
         Public Property key As String
         Public Property selected As Boolean
 
+        ' 是否被选为翻译专用平台（在 UI 中为单选，仅允许一个 true）
+        Public Property translateSelected As Boolean = False
+
         ' 是否通过了API验证
         Public Property validated As Boolean
 
@@ -134,6 +142,9 @@ Public Class ConfigManager
     Public Class ConfigItemModel
         Public Property modelName As String
         Public Property selected As Boolean
+
+        ' 是否被选为翻译专用平台（在 UI 中为单选，仅允许一个 true）
+        Public Property translateSelected As Boolean = False
         Public Property mcpable As Boolean = False
         Public Property mcpValidated As Boolean = False
         Public Overrides Function ToString() As String
