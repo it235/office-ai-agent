@@ -13,6 +13,10 @@
 </div>
 
 > **注意**: 本项目50%以上代码基于Cursor + Copilot编程工具开发
+>
+> 源码本地运行教程：https://www.bilibili.com/cheese/play/ep2098181
+>
+> Excel/Word/PPT插件三合一部署打包教程：https://www.bilibili.com/cheese/play/ep2098188
 
 ## 📖 目录
 

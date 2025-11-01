@@ -13,6 +13,12 @@
 </div>
 
 > **Note**: This project is developed with 50%+ code using Cursor + Copilot programming tools
+>
+> Source code local running tutorial：https://www.bilibili.com/cheese/play/ep2098181
+>
+> Excel/Word/PPT Plugin Tri-Pack Deployment Packaging Tutorial：https://www.bilibili.com/cheese/play/ep2098188
+>
+> 
 
 ## 📖 Table of Contents
 
