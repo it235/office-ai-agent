@@ -39,7 +39,7 @@ Public MustInherit Class BaseChatControl
 
 
     ' ai的历史回复
-    Protected historyMessageData As New List(Of HistoryMessage)
+    Protected systemHistoryMessageData As New List(Of HistoryMessage)
 
     Protected loadingPictureBox As PictureBox
 
@@ -240,7 +240,7 @@ Public MustInherit Class BaseChatControl
             document.getElementById('context-limit-value').textContent = '{ChatSettings.contextLimit}';
             document.getElementById('settings-scroll-checked').checked = {ChatSettings.settingsScrollChecked.ToString().ToLower()};
             document.getElementById('settings-selected-cell').checked = {ChatSettings.selectedCellChecked.ToString().ToLower()};
-            document.getElementById('settings-executecode-preview').checked = {chatSettings.executecodePreviewChecked.ToString().ToLower()};
+            document.getElementById('settings-executecode-preview').checked = {ChatSettings.executecodePreviewChecked.ToString().ToLower()};
             
             var selectElement = document.getElementById('chatMode');
             if (selectElement) {{
@@ -284,6 +284,10 @@ Public MustInherit Class BaseChatControl
                     HandleSaveMcpSettings(jsonDoc)
                 Case "clearContext"
                     ClearChatContext()
+                Case "acceptAnswer"
+                    HandleAcceptAnswer(jsonDoc)
+                Case "rejectAnswer"
+                    HandleRejectAnswer(jsonDoc)
                 Case Else
                     Debug.WriteLine($"未知消息类型: {messageType}")
             End Select
@@ -292,8 +296,92 @@ Public MustInherit Class BaseChatControl
         End Try
     End Sub
 
+
+    ' 新增：处理用户接受答案
+    Protected Sub HandleAcceptAnswer(jsonDoc As JObject)
+        Try
+            Dim uuid As String = If(jsonDoc("uuid") IsNot Nothing, jsonDoc("uuid").ToString(), String.Empty)
+            Dim content As String = If(jsonDoc("content") IsNot Nothing, jsonDoc("content").ToString(), String.Empty)
+
+            ' 简单记录与提示（可扩展为在历史中设置标记或持久化）
+            Debug.WriteLine($"用户接受回答: UUID={uuid}")
+            Debug.WriteLine(content)
+
+            ' 将接受操作写入 history（这里以 assistant message 记录，便于后续审计）
+            '    systemHistoryMessageData.Add(New HistoryMessage() With {
+            '    .role = "user",
+            '    .content = $"用户接受了回答 (uuid={uuid})"
+            '})
+
+            ' 你也可以向前端反馈已接受（可选）
+            GlobalStatusStrip.ShowInfo("用户已接受 AI 回答")
+        Catch ex As Exception
+            Debug.WriteLine($"HandleAcceptAnswer 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ' 新增：处理用户拒绝答案并发起改进
+    Protected Sub HandleRejectAnswer(jsonDoc As JObject)
+        Try
+            Dim uuid As String = If(jsonDoc("uuid") IsNot Nothing, jsonDoc("uuid").ToString(), String.Empty)
+            Dim rejectedContent As String = If(jsonDoc("content") IsNot Nothing, jsonDoc("content").ToString(), String.Empty)
+            Dim reason As String = If(jsonDoc("reason") IsNot Nothing, jsonDoc("reason").ToString(), String.Empty)
+
+            Debug.WriteLine($"用户拒绝回答: UUID={uuid}; reason={reason}")
+
+            '' 将用户的拒绝反馈作为 user 消息加入历史（便于 LLM 在下一次请求中使用）
+            'Dim feedbackMsg As New StringBuilder()
+            'feedbackMsg.AppendLine("用户标记此前回答为不接受。")
+            'If Not String.IsNullOrWhiteSpace(reason) Then
+            '    feedbackMsg.AppendLine("改进诉求: " & reason)
+            'Else
+            '    feedbackMsg.AppendLine("用户未给出具体改进细节。")
+            'End If
+            'feedbackMsg.AppendLine($"(被拒绝回答 UUID={uuid})")
+
+            'systemHistoryMessageData.Add(New HistoryMessage() With {
+            '    .role = "user",
+            '    .content = feedbackMsg.ToString()
+            '})
+
+            ' 构建用于改进的大模型提示（包含用户理由）
+            Dim refinementPrompt As New StringBuilder()
+            refinementPrompt.AppendLine("用户标记之前的回答为不接受，请基于当前会话历史与以下被拒绝的回答进行改进：")
+            refinementPrompt.AppendLine()
+            refinementPrompt.AppendLine("【用户改进诉求】")
+            If Not String.IsNullOrWhiteSpace(reason) Then
+                refinementPrompt.AppendLine(reason)
+            Else
+                refinementPrompt.AppendLine("[无具体改进诉求，用户仅标记为不接受]")
+            End If
+            refinementPrompt.AppendLine()
+            refinementPrompt.AppendLine("请按以下格式返回：")
+            refinementPrompt.AppendLine("1) 改进点（1-3 行），说明要如何修正；")
+            refinementPrompt.AppendLine("2) Plan：简短列出修正步骤（要点式，最多6条）；")
+            refinementPrompt.AppendLine("3) Answer：给出修正后的、尽可能准确的答案（使用 Markdown，必要时给出示例/代码）；")
+            refinementPrompt.AppendLine("4) Clarifying Questions：如需更多信息，请在最后以简短问题列出并暂停执行；")
+            'refinementPrompt.AppendLine()
+            'refinementPrompt.AppendLine("---- 被拒绝的回答开始 ----")
+            'refinementPrompt.AppendLine(rejectedContent)
+            'refinementPrompt.AppendLine("---- 被拒绝的回答结束 ----")
+            refinementPrompt.AppendLine()
+            refinementPrompt.AppendLine("[注意]：回答要简洁、可验证，优先给出可直接执行的结论与验证方法，不要重复冗长的背景说明。")
+
+            ' 管理历史大小，保证不会无限增长
+            ManageHistoryMessageSize()
+
+            ' 将该改进请求当作新的用户问题发起（会走你已有的 SendChatMessage 流程）
+            SendChatMessage(refinementPrompt.ToString())
+
+            GlobalStatusStrip.ShowInfo("已触发改进请求，正在向模型发起新一轮改进")
+        Catch ex As Exception
+            Debug.WriteLine($"HandleRejectAnswer 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning("触发改进请求时出错")
+        End Try
+    End Sub
+
     Private Sub ClearChatContext()
-        historyMessageData.Clear()
+        systemHistoryMessageData.Clear()
         Debug.WriteLine("已清空聊天记忆（上下文）")
     End Sub
 
@@ -1248,7 +1336,7 @@ Public MustInherit Class BaseChatControl
         Dim uuid As String = Guid.NewGuid().ToString()
 
         Try
-            Dim requestBody As String = CreateRequestBody(question)
+            Dim requestBody As String = CreateRequestBody(uuid, question)
             Await SendHttpRequestStream(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody, StripQuestion(question))
             Await SaveFullWebPageAsync2()
         Catch ex As Exception
@@ -1259,12 +1347,12 @@ Public MustInherit Class BaseChatControl
     End Function
 
     Private Sub ManageHistoryMessageSize()
-        ' 如果历史消息数超过限制，有一条system，所以+1
-        While historyMessageData.Count > contextLimit + 1
+        ' 如果历史消息数超过限制，有一条system和assistant，所以+2
+        While systemHistoryMessageData.Count > contextLimit + 2
             ' 保留系统消息（第一条消息）
-            If historyMessageData.Count > 1 Then
+            If systemHistoryMessageData.Count > 2 Then
                 ' 移除第二条消息（最早的非系统消息）
-                historyMessageData.RemoveAt(1)
+                systemHistoryMessageData.RemoveAt(2)
             End If
         End While
     End Sub
@@ -1278,44 +1366,56 @@ Public MustInherit Class BaseChatControl
         Return result
     End Function
 
-    Private Function CreateRequestBody(question As String) As String
+    Private Function CreateRequestBody(uuid As String, question As String) As String
         Dim result As String = StripQuestion(question)
 
         ' 构建 messages 数组
         Dim messages As New List(Of String)()
 
-        ' 添加 system 消息
-        Dim systemMessage = historyMessageData.FirstOrDefault(Function(m) m.role = "system")
-        If systemMessage IsNot Nothing Then
-            historyMessageData.Remove(systemMessage)
+        ' 添加或替换 system 消息（保证只有一条 system）
+        Dim existingSystem = systemHistoryMessageData.FirstOrDefault(Function(m) m.role = "system")
+        If existingSystem IsNot Nothing Then
+            systemHistoryMessageData.Remove(existingSystem)
         End If
-        systemMessage = New HistoryMessage() With {
-            .role = "system",
-            .content = ConfigSettings.propmtContent
-        }
-        historyMessageData.Insert(0, systemMessage)
+
+        ' 组合更强的 system 提示，要求先给 Plan 再给 Answer，并在信息不足时提出澄清问题
+        Dim systemPrompt As String =
+        "系统指令（必读）：" & vbCrLf & ConfigSettings.propmtContent & vbCrLf & vbCrLf &
+        "1) 首先输出一个名为 'Plan' 的简短计划，按步骤列出解决路径（要点式，最多6条）。" & vbCrLf &
+        "2) 然后输出名为 'Answer' 的部分，给出最终可执行的解决方案或操作步骤，使用 Markdown，必要时给出代码/示例或差异说明。" & vbCrLf &
+        "3) 如果信息不足，请不要猜测；在最后输出名为 'Clarifying Questions' 的部分，列出需要用户回答的问题并暂停执行。" & vbCrLf &
+        "4) 对于用户请求的改进（用户标记当前回答为不接受），在回复开头先写明 '改进点'（1-3 行），然后给出修正的 Plan 与 Answer。" & vbCrLf &
+        "5) 保持回答简洁、有条理，优先提供可直接执行的结论和示例。"
+
+
+        Dim systemMessage = New HistoryMessage() With {
+        .role = "system",
+        .content = systemPrompt
+    }
+        systemHistoryMessageData.Insert(0, systemMessage)
 
         Dim q = New HistoryMessage() With {
                 .role = "user",
                 .content = result
             }
-        historyMessageData.Add(q)
+        systemHistoryMessageData.Add(q)
 
         ' 管理历史消息大小
         ManageHistoryMessageSize()
 
-        ' 添加历史消息
-        For Each message In historyMessageData
-            messages.Add($"{{""role"": ""{message.role}"", ""content"": ""{message.content}""}}")
+        ' 将历史消息转换为 JSON messages（对内容做基础转义，避免字符串破坏 JSON）
+        For Each message In systemHistoryMessageData
+            Dim safeContent As String = If(message.content, String.Empty)
+            safeContent = safeContent.Replace("\", "\\").Replace("""", "\""").Replace(vbCr, "\r").Replace(vbLf, "\n")
+            messages.Add($"{{""role"": ""{message.role}"", ""content"": ""{safeContent}""}}")
         Next
-
 
         ' 添加MCP工具信息（如果有）
         Dim toolsArray As JArray = Nothing
         Dim chatSettings As New ChatSettings(GetApplication())
 
         ' 如果有启用的MCP连接
-        If ChatSettings.EnabledMcpList IsNot Nothing AndAlso ChatSettings.EnabledMcpList.Count > 0 Then
+        If chatSettings.EnabledMcpList IsNot Nothing AndAlso chatSettings.EnabledMcpList.Count > 0 Then
             toolsArray = New JArray()
 
             ' 加载所有MCP连接
@@ -1596,9 +1696,9 @@ Public MustInherit Class BaseChatControl
             ' 记录全局上下文中，方便后续使用
             Dim answer = New HistoryMessage() With {
                 .role = "assistant",
-                .content = allMarkdownBuffer.ToString()
+                .content = $"这是大模型基于用户问题的答复作为历史参考：{allMarkdownBuffer.ToString()}"
             }
-            historyMessageData.Add(answer)
+            systemHistoryMessageData.Add(answer)
             ' 管理历史消息大小
             ManageHistoryMessageSize()
 

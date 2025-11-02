@@ -1419,7 +1419,7 @@
                 <p>4.配置大模型提示词能够更快，更准确的得到你想要的答案</p>
                 <p>5.如果没解决你的痛点，<a href="https://jsj.top/f/OZJDfa" target="_blank">点击此处提出需求</a>，下个版本见</p>
                 <p>6.聊天记录存放在“当前用户/文档/OfficeAiAppData”目录下</p>
-                <p>7.当前版本:<span id="version">2.6.3</span>，<a href="https://www.officeso.cn" target="_blank">每月发布新功能</a></p>
+                <p>7.当前版本:<span id="version">2.6.4</span>，<a href="https://www.officeso.cn" target="_blank">每月发布新功能</a></p>
             </div>
         </div>
     </div>
@@ -1776,6 +1776,9 @@
             chatContainer.className = 'chat-container';
             chatContainer.id = 'chat-' + uuid;
 
+            // 记录 sender，以便后续判断（'Me' 或 AI）
+            chatContainer.dataset.sender = sender;
+
             // 创建发送者信息区域
             const messageHeader = document.createElement('div');
             messageHeader.className = 'message-header';
@@ -1815,7 +1818,7 @@
             contentContainer.id = 'content-' + uuid;
             chatContainer.appendChild(contentContainer);
 
-            // 添加footer区域
+            // 添加footer区域（用于 token / accept-reject 按钮）
             const footerContainer = document.createElement('div');
             footerContainer.className = 'message-footer';
             footerContainer.id = 'footer-' + uuid;
@@ -2066,6 +2069,125 @@
                 if (executeBtns) {
                     executeBtns.click();
                 }
+            }
+
+            // 新：为 AI 消息渲染 接受/拒绝 按钮（只针对非 Me 的消息）
+            try {
+                renderAcceptRejectButtons(uuid);
+            } catch (err) {
+                console.error('renderAcceptRejectButtons error:', err);
+            }
+        }
+
+        // 渲染接受/拒绝按钮（仅对非 Me 的 AI 消息显示）
+        function renderAcceptRejectButtons(uuid) {
+            try {
+                const chatDiv = document.getElementById('chat-' + uuid);
+                if (!chatDiv) return;
+                // 如果 sender 未设置，尝试从内容判断（保险）
+                const sender = chatDiv.dataset && chatDiv.dataset.sender ? chatDiv.dataset.sender : (chatDiv.querySelector('.sender-name') ? chatDiv.querySelector('.sender-name').textContent : '');
+
+                // 仅对 AI 消息显示按钮
+                if (!sender || sender === 'Me') return;
+
+                const footer = document.getElementById('footer-' + uuid);
+                if (!footer) return;
+
+                // 如果已经存在按钮则跳过（避免重复渲染）
+                if (footer.querySelector('.accept-btn') || footer.querySelector('.reject-btn')) return;
+
+                const btnAccept = document.createElement('button');
+                btnAccept.className = 'code-button accept-btn';
+                btnAccept.style.backgroundColor = '#4CAF50';
+                btnAccept.style.marginRight = '8px';
+                btnAccept.textContent = '接受该答案';
+                btnAccept.onclick = function () { acceptAnswer(uuid); };
+
+                const btnReject = document.createElement('button');
+                btnReject.className = 'code-button reject-btn';
+                btnReject.style.backgroundColor = '#E9525F';
+                btnReject.textContent = '不接受，继续改进';
+                btnReject.onclick = function () { rejectAnswer(uuid); };
+
+                // 将按钮插入到 footer 左侧（token-count 保持在右侧）
+                footer.insertBefore(btnReject, footer.firstChild);
+                //footer.insertBefore(btnAccept, footer.firstChild);
+            } catch (err) {
+                console.error('renderAcceptRejectButtons error:', err);
+            }
+        }
+
+        // --- 新增：用户点击“接受”后发送到后端（包含 uuid 与回答文本） ---
+        function acceptAnswer(uuid) {
+            try {
+                const contentDiv = document.getElementById('content-' + uuid);
+                const plainText = contentDiv ? (contentDiv.innerText || contentDiv.textContent || '') : '';
+
+                // 发送到后端
+                sendMessageToServer({
+                    type: 'acceptAnswer',
+                    uuid: uuid,
+                    content: plainText
+                });
+
+                // 更新 UI：禁用按钮并显示已接受
+                const footer = document.getElementById('footer-' + uuid);
+                if (footer) {
+                    footer.querySelectorAll('.accept-btn, .reject-btn').forEach(b => b.disabled = true);
+                    const statusSpan = document.createElement('span');
+                    statusSpan.className = 'token-count';
+                    statusSpan.textContent = '已接受';
+                    // 清除原有文本显示（可根据需求保留 token 显示）
+                    footer.appendChild(statusSpan);
+                }
+            } catch (err) {
+                console.error('acceptAnswer error:', err);
+            }
+        }
+
+        // --- 新增：用户点击“拒绝/继续改进”后发送到后端（包含 uuid 与回答文本） ---
+        function rejectAnswer(uuid) {
+            try {
+                const contentDiv = document.getElementById('content-' + uuid);
+                const plainText = contentDiv ? (contentDiv.innerText || contentDiv.textContent || '') : '';
+
+                // 弹出可选说明，用户可以留空
+                let reason = '';
+                try {
+                    reason = prompt('请简要说明希望如何改进（可留空）：', '');
+                    if (reason === null) {
+                        // 用户取消 prompt，视作不进行改进请求
+                        return;
+                    }
+                } catch (e) {
+                    reason = '';
+                }
+
+                // 发送到后端，后端会把它当作新的 user 请求来发起改进
+                sendMessageToServer({
+                    type: 'rejectAnswer',
+                    uuid: uuid,
+                    content: plainText,
+                    reason: reason
+                });
+
+                // 更新 UI：显示正在请求改进
+                const footer = document.getElementById('footer-' + uuid);
+                if (footer) {
+                    footer.querySelectorAll('.accept-btn, .reject-btn').forEach(b => b.disabled = true);
+                    const statusSpan = document.createElement('span');
+                    statusSpan.className = 'token-count';
+                    statusSpan.textContent = '已请求改进，等待新结果…';
+                    footer.appendChild(statusSpan);
+                }
+
+                // 可选：高亮 reasoning 容器以提示用户我们将进行新的推理（如果存在）
+                const reasoning = document.getElementById('reasoning-' + uuid);
+                if (reasoning) {
+                    reasoning.classList.remove('collapsed');
+                }
+            } catch (err) {
+                console.error('rejectAnswer error:', err);
             }
         }
 
