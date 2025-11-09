@@ -1,4 +1,4 @@
-Imports System.Diagnostics
+ï»¿Imports System.Diagnostics
 Imports System.Drawing
 Imports System.IO
 Imports System.Linq
@@ -30,44 +30,44 @@ Public Class ChatControl
 
 
     Public Sub New()
-        ' ´Ëµ÷ÓÃÊÇÉè¼ÆÊ¦Ëù±ØĞèµÄ¡£
+        ' æ­¤è°ƒç”¨æ˜¯è®¾è®¡å¸ˆæ‰€å¿…éœ€çš„ã€‚
         InitializeComponent()
 
-        ' È·±£WebView2¿Ø¼ş¿ÉÒÔÕı³£½»»¥
+        ' ç¡®ä¿WebView2æ§ä»¶å¯ä»¥æ­£å¸¸äº¤äº’
         ChatBrowser.BringToFront()
 
-        '¼ÓÈëµ×²¿¸æ¾¯À¸
+        'åŠ å…¥åº•éƒ¨å‘Šè­¦æ 
         Me.Controls.Add(GlobalStatusStrip.StatusStrip)
 
-        ' ¶©ÔÄWordµÄSelectionChange ÊÂ¼ş
-        ' °ïÎÒ²¹È«wordÑ¡ÔñµÄÄÚÈİÊÂ¼ş
+        ' è®¢é˜…Wordçš„SelectionChange äº‹ä»¶
+        ' å¸®æˆ‘è¡¥å…¨wordé€‰æ‹©çš„å†…å®¹äº‹ä»¶
         AddHandler Globals.ThisAddIn.Application.WindowSelectionChange, AddressOf GetSelectionContent
     End Sub
 
-    '»ñÈ¡Ñ¡ÖĞµÄÄÚÈİ
+    'è·å–é€‰ä¸­çš„å†…å®¹
     Protected Overrides Sub GetSelectionContent(target As Object)
         Try
             If Not Me.Visible OrElse Not selectedCellChecked Then
                 Return
             End If
 
-            ' ×ª»»Îª PowerPoint.Selection ¶ÔÏó
+            ' è½¬æ¢ä¸º PowerPoint.Selection å¯¹è±¡
             Dim selection = Globals.ThisAddIn.Application.ActiveWindow.Selection
             If selection Is Nothing Then
                 Return
             End If
 
-            ' »ñÈ¡Ñ¡ÖĞÄÚÈİµÄÏêÏ¸ĞÅÏ¢
+            ' è·å–é€‰ä¸­å†…å®¹çš„è¯¦ç»†ä¿¡æ¯
             Dim content As String = String.Empty
 
-            ' ¸ù¾İÑ¡ÔñÀàĞÍ´¦ÀíÄÚÈİ
+            ' æ ¹æ®é€‰æ‹©ç±»å‹å¤„ç†å†…å®¹
             If selection.Type = Microsoft.Office.Interop.PowerPoint.PpSelectionType.ppSelectionShapes Then
-                ' ´¦ÀíĞÎ×´Ñ¡Ôñ
+                ' å¤„ç†å½¢çŠ¶é€‰æ‹©
                 Dim shapeRange = selection.ShapeRange
                 If shapeRange.Count > 0 Then
-                    ' ¼ì²éÊÇ·ñÊÇ±í¸ñ
+                    ' æ£€æŸ¥æ˜¯å¦æ˜¯è¡¨æ ¼
                     If shapeRange(1).HasTable = Microsoft.Office.Core.MsoTriState.msoTrue Then
-                        ' ´¦Àí±í¸ñ
+                        ' å¤„ç†è¡¨æ ¼
                         Dim table = shapeRange(1).Table
                         Dim sb As New StringBuilder()
                         For row As Integer = 1 To table.Rows.Count
@@ -79,8 +79,8 @@ Public Class ChatControl
                         Next
                         content = sb.ToString()
                     Else
-                        ' ´¦ÀíÆÕÍ¨ĞÎ×´
-                        content = "[ÒÑÑ¡ÖĞ " & shapeRange.Count & " ¸öĞÎ×´]"
+                        ' å¤„ç†æ™®é€šå½¢çŠ¶
+                        content = "[å·²é€‰ä¸­ " & shapeRange.Count & " ä¸ªå½¢çŠ¶]"
                         For i = 1 To shapeRange.Count
                             If shapeRange(i).HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue Then
                                 content &= vbCrLf & shapeRange(i).TextFrame.TextRange.Text
@@ -90,27 +90,27 @@ Public Class ChatControl
                 End If
 
             ElseIf selection.Type = Microsoft.Office.Interop.PowerPoint.PpSelectionType.ppSelectionText Then
-                ' ´¦ÀíÎÄ±¾Ñ¡Ôñ
+                ' å¤„ç†æ–‡æœ¬é€‰æ‹©
                 content = selection.TextRange.Text
 
             ElseIf selection.Type = Microsoft.Office.Interop.PowerPoint.PpSelectionType.ppSelectionSlides Then
-                ' ´¦Àí»ÃµÆÆ¬Ñ¡Ôñ
-                content = "[ÒÑÑ¡ÖĞ " & selection.SlideRange.Count & " ÕÅ»ÃµÆÆ¬]"
+                ' å¤„ç†å¹»ç¯ç‰‡é€‰æ‹©
+                content = "[å·²é€‰ä¸­ " & selection.SlideRange.Count & " å¼ å¹»ç¯ç‰‡]"
             End If
 
             If Not String.IsNullOrEmpty(content) Then
-                ' Ìí¼Óµ½Ñ¡ÖĞÄÚÈİÁĞ±í
+                ' æ·»åŠ åˆ°é€‰ä¸­å†…å®¹åˆ—è¡¨
                 AddSelectedContentItem(
-                "PowerPoint»ÃµÆÆ¬",  ' Ê¹ÓÃÎÄµµÃû³Æ×÷Îª±êÊ¶
+                "PowerPointå¹»ç¯ç‰‡",  ' ä½¿ç”¨æ–‡æ¡£åç§°ä½œä¸ºæ ‡è¯†
                 content.Substring(0, Math.Min(content.Length, 50)) & If(content.Length > 50, "...", "")
             )
             Else
-                ' Ñ¡ÖĞÃ»ÓĞÄÚÈİ£¬Çå³ıÏàÍ¬ sheetName µÄÒıÓÃ
-                ClearSelectedContentBySheetName("PowerPoint»ÃµÆÆ¬")
+                ' é€‰ä¸­æ²¡æœ‰å†…å®¹ï¼Œæ¸…é™¤ç›¸åŒ sheetName çš„å¼•ç”¨
+                ClearSelectedContentBySheetName("PowerPointå¹»ç¯ç‰‡")
             End If
 
         Catch ex As Exception
-            Debug.WriteLine($"»ñÈ¡PowerPointÑ¡ÖĞÄÚÈİÊ±³ö´í: {ex.Message}")
+            Debug.WriteLine($"è·å–PowerPointé€‰ä¸­å†…å®¹æ—¶å‡ºé”™: {ex.Message}")
         End Try
     End Sub
 
@@ -120,48 +120,48 @@ Public Class ChatControl
             Dim ppSelection = TryCast(selection, Microsoft.Office.Interop.PowerPoint.Selection)
 
             If ppSelection Is Nothing Then
-                Return "Î´Ñ¡ÖĞÈÎºÎÄÚÈİ"
+                Return "æœªé€‰ä¸­ä»»ä½•å†…å®¹"
             End If
 
-            ' Ìí¼Ó»ù±¾ĞÅÏ¢
-            details.AppendLine($"Ñ¡ÔñÀàĞÍ: {ppSelection.Type}")
+            ' æ·»åŠ åŸºæœ¬ä¿¡æ¯
+            details.AppendLine($"é€‰æ‹©ç±»å‹: {ppSelection.Type}")
 
             If ppSelection.Type = Microsoft.Office.Interop.PowerPoint.PpSelectionType.ppSelectionShapes Then
                 Dim shapeRange = ppSelection.ShapeRange
-                details.AppendLine($"ĞÎ×´ÊıÁ¿: {shapeRange.Count}")
+                details.AppendLine($"å½¢çŠ¶æ•°é‡: {shapeRange.Count}")
                 For i = 1 To shapeRange.Count
-                    details.AppendLine($"ĞÎ×´ {i} ÀàĞÍ: {shapeRange(i).Type}")
-                    ' ¼ì²éÊÇ·ñÊÇ±í¸ñ
+                    details.AppendLine($"å½¢çŠ¶ {i} ç±»å‹: {shapeRange(i).Type}")
+                    ' æ£€æŸ¥æ˜¯å¦æ˜¯è¡¨æ ¼
                     If shapeRange(i).HasTable = Microsoft.Office.Core.MsoTriState.msoTrue Then
                         Dim table = shapeRange(i).Table
-                        details.AppendLine($"±í¸ñ´óĞ¡: {table.Rows.Count}ĞĞ x {table.Columns.Count}ÁĞ")
+                        details.AppendLine($"è¡¨æ ¼å¤§å°: {table.Rows.Count}è¡Œ x {table.Columns.Count}åˆ—")
                     ElseIf shapeRange(i).HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue Then
-                        details.AppendLine($"ĞÎ×´ {i} ÎÄ±¾³¤¶È: {shapeRange(i).TextFrame.TextRange.Length}")
+                        details.AppendLine($"å½¢çŠ¶ {i} æ–‡æœ¬é•¿åº¦: {shapeRange(i).TextFrame.TextRange.Length}")
                     End If
                 Next
 
             ElseIf ppSelection.Type = Microsoft.Office.Interop.PowerPoint.PpSelectionType.ppSelectionText Then
                 Dim textRange = ppSelection.TextRange
-                details.AppendLine($"ÎÄ±¾³¤¶È: {textRange.Length}")
-                details.AppendLine($"×Ö·ûÊı: {textRange.Length}")
+                details.AppendLine($"æ–‡æœ¬é•¿åº¦: {textRange.Length}")
+                details.AppendLine($"å­—ç¬¦æ•°: {textRange.Length}")
 
             ElseIf ppSelection.Type = Microsoft.Office.Interop.PowerPoint.PpSelectionType.ppSelectionSlides Then
                 Dim slideRange = ppSelection.SlideRange
-                details.AppendLine($"Ñ¡ÖĞ»ÃµÆÆ¬Êı: {slideRange.Count}")
+                details.AppendLine($"é€‰ä¸­å¹»ç¯ç‰‡æ•°: {slideRange.Count}")
                 For i = 1 To slideRange.Count
-                    details.AppendLine($"»ÃµÆÆ¬ {i} ±êÌâ: {slideRange(i).Name}")
+                    details.AppendLine($"å¹»ç¯ç‰‡ {i} æ ‡é¢˜: {slideRange(i).Name}")
                 Next
             End If
 
             Return details.ToString()
         Catch ex As Exception
-            Return $"»ñÈ¡Ñ¡ÔñÏêÇéÊ±³ö´í: {ex.Message}"
+            Return $"è·å–é€‰æ‹©è¯¦æƒ…æ—¶å‡ºé”™: {ex.Message}"
         End Try
     End Function
 
-    ' ³õÊ¼»¯Ê±×¢Èë»ù´¡ HTML ½á¹¹
+    ' åˆå§‹åŒ–æ—¶æ³¨å…¥åŸºç¡€ HTML ç»“æ„
     Private Async Sub MainForm_Load(sender As Object, e As EventArgs) Handles MyBase.Load
-        ' ³õÊ¼»¯ WebView2
+        ' åˆå§‹åŒ– WebView2
         Await InitializeWebView2()
         InitializeWebView2Script()
     End Sub
@@ -185,13 +185,13 @@ Public Class ChatControl
             VBAxceptionHandle(ex)
             Return False
         Catch ex As Exception
-            MessageBox.Show("Ö´ĞĞ´úÂëÊ±³ö´í: " & ex.Message, "´íÎó", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("æ‰§è¡Œä»£ç æ—¶å‡ºé”™: " & ex.Message, "é”™è¯¯", MessageBoxButtons.OK, MessageBoxIcon.Error)
             Return False
         End Try
     End Function
 
-    ' Ö´ĞĞÇ°Ô¤ÀÀ´úÂë
-    Protected Overrides Function RunCodePreview(vbaCode As String, preview As Boolean)
+    ' æ‰§è¡Œå‰é¢„è§ˆä»£ç 
+    Protected Overrides Function RunCodePreview(vbaCode As String, preview As Boolean) As Boolean
         Return True
     End Function
 
@@ -199,14 +199,14 @@ Public Class ChatControl
         Return New ApplicationInfo("PowerPoint", OfficeApplicationType.PowerPoint)
     End Function
 
-    ' Ìá¹©PowerPointÓ¦ÓÃ³ÌĞò¶ÔÏó
+    ' æä¾›PowerPointåº”ç”¨ç¨‹åºå¯¹è±¡
     Protected Overrides Function GetOfficeApplicationObject() As Object
         Return Globals.ThisAddIn.Application
     End Function
 
     Protected Overrides Sub SendChatMessage(message As String)
-        ' ÕâÀï¿ÉÒÔÊµÏÖwordµÄÌØÊâÂß¼­
-        Send(message)
+        ' è¿™é‡Œå¯ä»¥å®ç°wordçš„ç‰¹æ®Šé€»è¾‘
+        Send(message, "", True, "")
     End Sub
 
     Protected Overrides Function ParseFile(filePath As String) As FileContentResult
@@ -214,55 +214,55 @@ Public Class ChatControl
     End Function
     Protected Overrides Function AppendCurrentSelectedContent(message As String) As String
         Try
-            ' ¼ì²éÊÇ·ñÆôÓÃÁËÑ¡Ôñ¹¦ÄÜ
+            ' æ£€æŸ¥æ˜¯å¦å¯ç”¨äº†é€‰æ‹©åŠŸèƒ½
             If Not selectedCellChecked Then
                 Return message
             End If
 
-            ' »ñÈ¡µ±Ç° PowerPoint ÖĞµÄÑ¡Ôñ
+            ' è·å–å½“å‰ PowerPoint ä¸­çš„é€‰æ‹©
             Dim selection = Globals.ThisAddIn.Application.ActiveWindow.Selection
             If selection Is Nothing Then
                 Return message
             End If
 
-            ' ´´½¨ÄÚÈİ¹¹½¨Æ÷£¬¸ñÊ½»¯Ñ¡ÖĞÄÚÈİ
+            ' åˆ›å»ºå†…å®¹æ„å»ºå™¨ï¼Œæ ¼å¼åŒ–é€‰ä¸­å†…å®¹
             Dim contentBuilder As New StringBuilder()
-            contentBuilder.AppendLine(vbCrLf & "--- ÓÃ»§Ñ¡ÖĞµÄ PowerPoint ÄÚÈİ ---")
+            contentBuilder.AppendLine(vbCrLf & "--- ç”¨æˆ·é€‰ä¸­çš„ PowerPoint å†…å®¹ ---")
 
-            ' Ìí¼ÓÑİÊ¾ÎÄ¸åĞÅÏ¢
+            ' æ·»åŠ æ¼”ç¤ºæ–‡ç¨¿ä¿¡æ¯
             Dim activePresentation = Globals.ThisAddIn.Application.ActivePresentation
             If activePresentation IsNot Nothing Then
-                contentBuilder.AppendLine($"ÑİÊ¾ÎÄ¸å: {Path.GetFileName(activePresentation.FullName)}")
-                contentBuilder.AppendLine($"µ±Ç°»ÃµÆÆ¬: {Globals.ThisAddIn.Application.ActiveWindow.View.Slide.SlideIndex}")
+                contentBuilder.AppendLine($"æ¼”ç¤ºæ–‡ç¨¿: {Path.GetFileName(activePresentation.FullName)}")
+                contentBuilder.AppendLine($"å½“å‰å¹»ç¯ç‰‡: {Globals.ThisAddIn.Application.ActiveWindow.View.Slide.SlideIndex}")
             End If
 
-            ' ¸ù¾İÑ¡ÔñÀàĞÍ´¦ÀíÄÚÈİ
+            ' æ ¹æ®é€‰æ‹©ç±»å‹å¤„ç†å†…å®¹
             Select Case selection.Type
                 Case Microsoft.Office.Interop.PowerPoint.PpSelectionType.ppSelectionShapes
-                    ' ´¦ÀíĞÎ×´Ñ¡Ôñ£¨°üÀ¨±í¸ñ£©
+                    ' å¤„ç†å½¢çŠ¶é€‰æ‹©ï¼ˆåŒ…æ‹¬è¡¨æ ¼ï¼‰
                     Dim shapeRange = selection.ShapeRange
-                    contentBuilder.AppendLine($"Ñ¡ÔñÀàĞÍ: ĞÎ×´ (¹² {shapeRange.Count} ¸ö)")
+                    contentBuilder.AppendLine($"é€‰æ‹©ç±»å‹: å½¢çŠ¶ (å…± {shapeRange.Count} ä¸ª)")
 
                     For i = 1 To shapeRange.Count
-                        contentBuilder.AppendLine($"ĞÎ×´ {i}:")
+                        contentBuilder.AppendLine($"å½¢çŠ¶ {i}:")
 
-                        ' ¼ì²éÊÇ·ñÊÇ±í¸ñ
+                        ' æ£€æŸ¥æ˜¯å¦æ˜¯è¡¨æ ¼
                         If shapeRange(i).HasTable = Microsoft.Office.Core.MsoTriState.msoTrue Then
                             Dim table = shapeRange(i).Table
-                            contentBuilder.AppendLine($"  ±í¸ñ: {table.Rows.Count} ĞĞ ¡Á {table.Columns.Count} ÁĞ")
+                            contentBuilder.AppendLine($"  è¡¨æ ¼: {table.Rows.Count} è¡Œ Ã— {table.Columns.Count} åˆ—")
 
-                            ' Ìí¼Ó±í¸ñÄÚÈİ
+                            ' æ·»åŠ è¡¨æ ¼å†…å®¹
                             Dim maxRows As Integer = Math.Min(table.Rows.Count, 20)
                             Dim maxCols As Integer = Math.Min(table.Columns.Count, 10)
 
-                            ' ´¦Àí±í¸ñÍ·²¿
+                            ' å¤„ç†è¡¨æ ¼å¤´éƒ¨
                             Dim headerBuilder As New StringBuilder("  ")
                             Dim separatorBuilder As New StringBuilder("  ")
 
                             For col = 1 To maxCols
                                 Try
                                     Dim cellText = table.Cell(1, col).Shape.TextFrame.TextRange.Text.Trim()
-                                    ' ÏŞÖÆµ¥Ôª¸ñÎÄ±¾³¤¶È
+                                    ' é™åˆ¶å•å…ƒæ ¼æ–‡æœ¬é•¿åº¦
                                     If cellText.Length > 20 Then
                                         cellText = cellText.Substring(0, 17) & "..."
                                     End If
@@ -286,14 +286,14 @@ Public Class ChatControl
                             contentBuilder.AppendLine(headerBuilder.ToString())
                             contentBuilder.AppendLine(separatorBuilder.ToString())
 
-                            ' ´¦Àí±í¸ñÊı¾İĞĞ
+                            ' å¤„ç†è¡¨æ ¼æ•°æ®è¡Œ
                             For row = 2 To maxRows
                                 Dim rowBuilder As New StringBuilder("  ")
 
                                 For col = 1 To maxCols
                                     Try
                                         Dim cellText = table.Cell(row, col).Shape.TextFrame.TextRange.Text.Trim()
-                                        ' ÏŞÖÆµ¥Ôª¸ñÎÄ±¾³¤¶È
+                                        ' é™åˆ¶å•å…ƒæ ¼æ–‡æœ¬é•¿åº¦
                                         If cellText.Length > 20 Then
                                             cellText = cellText.Substring(0, 17) & "..."
                                         End If
@@ -313,75 +313,75 @@ Public Class ChatControl
                                 contentBuilder.AppendLine(rowBuilder.ToString())
                             Next
 
-                            ' Ìí¼Ó±í¸ñËµÃ÷
+                            ' æ·»åŠ è¡¨æ ¼è¯´æ˜
                             If table.Rows.Count > maxRows Then
-                                contentBuilder.AppendLine($"  ... ¹²ÓĞ {table.Rows.Count} ĞĞ£¬½öÏÔÊ¾Ç° {maxRows} ĞĞ")
+                                contentBuilder.AppendLine($"  ... å…±æœ‰ {table.Rows.Count} è¡Œï¼Œä»…æ˜¾ç¤ºå‰ {maxRows} è¡Œ")
                             End If
 
                             If table.Columns.Count > maxCols Then
-                                contentBuilder.AppendLine($"  ... ¹²ÓĞ {table.Columns.Count} ÁĞ£¬½öÏÔÊ¾Ç° {maxCols} ÁĞ")
+                                contentBuilder.AppendLine($"  ... å…±æœ‰ {table.Columns.Count} åˆ—ï¼Œä»…æ˜¾ç¤ºå‰ {maxCols} åˆ—")
                             End If
                         ElseIf shapeRange(i).HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue Then
-                            ' ´¦ÀíÎÄ±¾¿ò
+                            ' å¤„ç†æ–‡æœ¬æ¡†
                             Dim textFrame = shapeRange(i).TextFrame
                             If textFrame.HasText = Microsoft.Office.Core.MsoTriState.msoTrue Then
                                 Dim text = textFrame.TextRange.Text.Trim()
-                                ' ÏŞÖÆÎÄ±¾³¤¶È
+                                ' é™åˆ¶æ–‡æœ¬é•¿åº¦
                                 If text.Length > 500 Then
-                                    contentBuilder.AppendLine($"  ÎÄ±¾: {text.Substring(0, 500)}...")
-                                    contentBuilder.AppendLine($"  [ÎÄ±¾Ì«³¤£¬½öÏÔÊ¾Ç°500¸ö×Ö·û£¬×Ü¼Æ: {text.Length}¸ö×Ö·û]")
+                                    contentBuilder.AppendLine($"  æ–‡æœ¬: {text.Substring(0, 500)}...")
+                                    contentBuilder.AppendLine($"  [æ–‡æœ¬å¤ªé•¿ï¼Œä»…æ˜¾ç¤ºå‰500ä¸ªå­—ç¬¦ï¼Œæ€»è®¡: {text.Length}ä¸ªå­—ç¬¦]")
                                 Else
-                                    contentBuilder.AppendLine($"  ÎÄ±¾: {text}")
+                                    contentBuilder.AppendLine($"  æ–‡æœ¬: {text}")
                                 End If
                             Else
-                                contentBuilder.AppendLine("  [¿ÕÎÄ±¾¿ò]")
+                                contentBuilder.AppendLine("  [ç©ºæ–‡æœ¬æ¡†]")
                             End If
                         ElseIf shapeRange(i).Type = Microsoft.Office.Core.MsoShapeType.msoPicture Then
-                            ' ´¦ÀíÍ¼Æ¬
-                            contentBuilder.AppendLine("  [Í¼Æ¬]")
+                            ' å¤„ç†å›¾ç‰‡
+                            contentBuilder.AppendLine("  [å›¾ç‰‡]")
                             If shapeRange(i).AlternativeText <> "" Then
-                                contentBuilder.AppendLine($"  Ìæ´úÎÄ±¾: {shapeRange(i).AlternativeText}")
+                                contentBuilder.AppendLine($"  æ›¿ä»£æ–‡æœ¬: {shapeRange(i).AlternativeText}")
                             End If
                         Else
-                            ' ÆäËûÀàĞÍµÄĞÎ×´
-                            contentBuilder.AppendLine($"  [ĞÎ×´ÀàĞÍ: {shapeRange(i).Type}]")
+                            ' å…¶ä»–ç±»å‹çš„å½¢çŠ¶
+                            contentBuilder.AppendLine($"  [å½¢çŠ¶ç±»å‹: {shapeRange(i).Type}]")
                         End If
 
-                        ' ÔÚĞÎ×´Ö®¼äÌí¼Ó·Ö¸ôÏß
+                        ' åœ¨å½¢çŠ¶ä¹‹é—´æ·»åŠ åˆ†éš”çº¿
                         contentBuilder.AppendLine("  ---")
                     Next
 
                 Case Microsoft.Office.Interop.PowerPoint.PpSelectionType.ppSelectionText
-                    ' ´¦ÀíÎÄ±¾Ñ¡Ôñ
-                    contentBuilder.AppendLine("Ñ¡ÔñÀàĞÍ: ÎÄ±¾")
+                    ' å¤„ç†æ–‡æœ¬é€‰æ‹©
+                    contentBuilder.AppendLine("é€‰æ‹©ç±»å‹: æ–‡æœ¬")
 
                     Dim textRange = selection.TextRange
                     If textRange IsNot Nothing Then
                         Dim text = textRange.Text.Trim()
-                        ' ÏŞÖÆÎÄ±¾³¤¶È
+                        ' é™åˆ¶æ–‡æœ¬é•¿åº¦
                         If text.Length > 1000 Then
                             contentBuilder.AppendLine(text.Substring(0, 1000) & "...")
-                            contentBuilder.AppendLine($"[ÎÄ±¾Ì«³¤£¬½öÏÔÊ¾Ç°1000¸ö×Ö·û£¬×Ü¼Æ: {text.Length}¸ö×Ö·û]")
+                            contentBuilder.AppendLine($"[æ–‡æœ¬å¤ªé•¿ï¼Œä»…æ˜¾ç¤ºå‰1000ä¸ªå­—ç¬¦ï¼Œæ€»è®¡: {text.Length}ä¸ªå­—ç¬¦]")
                         Else
                             contentBuilder.AppendLine(text)
                         End If
                     Else
-                        contentBuilder.AppendLine("[ÎŞ·¨»ñÈ¡ÎÄ±¾ÄÚÈİ]")
+                        contentBuilder.AppendLine("[æ— æ³•è·å–æ–‡æœ¬å†…å®¹]")
                     End If
 
                 Case Microsoft.Office.Interop.PowerPoint.PpSelectionType.ppSelectionSlides
-                    ' ´¦Àí»ÃµÆÆ¬Ñ¡Ôñ
+                    ' å¤„ç†å¹»ç¯ç‰‡é€‰æ‹©
                     Dim slideRange = selection.SlideRange
-                    contentBuilder.AppendLine($"Ñ¡ÔñÀàĞÍ: »ÃµÆÆ¬ (¹² {slideRange.Count} ÕÅ)")
+                    contentBuilder.AppendLine($"é€‰æ‹©ç±»å‹: å¹»ç¯ç‰‡ (å…± {slideRange.Count} å¼ )")
 
-                    ' ÏŞÖÆ´¦ÀíµÄ»ÃµÆÆ¬ÊıÁ¿
+                    ' é™åˆ¶å¤„ç†çš„å¹»ç¯ç‰‡æ•°é‡
                     Dim maxSlides = Math.Min(slideRange.Count, 5)
 
                     For i = 1 To maxSlides
                         Dim slide = slideRange(i)
-                        contentBuilder.AppendLine($"»ÃµÆÆ¬ {slide.SlideIndex}:")
+                        contentBuilder.AppendLine($"å¹»ç¯ç‰‡ {slide.SlideIndex}:")
 
-                        ' »ñÈ¡»ÃµÆÆ¬±êÌâ
+                        ' è·å–å¹»ç¯ç‰‡æ ‡é¢˜
                         Dim title As String = ""
                         For Each shape In slide.Shapes
                             If shape.Type = Microsoft.Office.Core.MsoShapeType.msoPlaceholder Then
@@ -395,138 +395,138 @@ Public Class ChatControl
                         Next
 
                         If title <> "" Then
-                            contentBuilder.AppendLine($"  ±êÌâ: {title}")
+                            contentBuilder.AppendLine($"  æ ‡é¢˜: {title}")
                         Else
-                            contentBuilder.AppendLine("  [ÎŞ±êÌâ]")
+                            contentBuilder.AppendLine("  [æ— æ ‡é¢˜]")
                         End If
 
-                        ' »ñÈ¡»ÃµÆÆ¬ÉÏµÄÄÚÈİ
+                        ' è·å–å¹»ç¯ç‰‡ä¸Šçš„å†…å®¹
                         Dim textShapesCount = 0
 
                         For Each shape In slide.Shapes
-                            ' Ìø¹ı±êÌâĞÎ×´
+                            ' è·³è¿‡æ ‡é¢˜å½¢çŠ¶
                             If shape.Type = Microsoft.Office.Core.MsoShapeType.msoPlaceholder AndAlso
                            shape.PlaceholderFormat.Type = Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderTitle Then
                                 Continue For
                             End If
 
-                            ' ´¦ÀíÎÄ±¾ĞÎ×´
+                            ' å¤„ç†æ–‡æœ¬å½¢çŠ¶
                             If shape.HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue AndAlso
                            shape.TextFrame.HasText = Microsoft.Office.Core.MsoTriState.msoTrue Then
 
                                 textShapesCount += 1
-                                If textShapesCount > 3 Then Continue For ' Ã¿ÕÅ»ÃµÆÆ¬×î¶à´¦Àí3¸öÎÄ±¾¿ò
+                                If textShapesCount > 3 Then Continue For ' æ¯å¼ å¹»ç¯ç‰‡æœ€å¤šå¤„ç†3ä¸ªæ–‡æœ¬æ¡†
 
                                 Dim text = shape.TextFrame.TextRange.Text.Trim()
                                 If text.Length > 0 Then
-                                    ' ÏŞÖÆÎÄ±¾³¤¶È
+                                    ' é™åˆ¶æ–‡æœ¬é•¿åº¦
                                     If text.Length > 200 Then
-                                        contentBuilder.AppendLine($"  ÎÄ±¾: {text.Substring(0, 200)}...")
+                                        contentBuilder.AppendLine($"  æ–‡æœ¬: {text.Substring(0, 200)}...")
                                     Else
-                                        contentBuilder.AppendLine($"  ÎÄ±¾: {text}")
+                                        contentBuilder.AppendLine($"  æ–‡æœ¬: {text}")
                                     End If
                                 End If
                             ElseIf shape.HasTable = Microsoft.Office.Core.MsoTriState.msoTrue Then
-                                contentBuilder.AppendLine("  [°üº¬±í¸ñ]")
+                                contentBuilder.AppendLine("  [åŒ…å«è¡¨æ ¼]")
                             ElseIf shape.Type = Microsoft.Office.Core.MsoShapeType.msoPicture Then
-                                contentBuilder.AppendLine("  [°üº¬Í¼Æ¬]")
+                                contentBuilder.AppendLine("  [åŒ…å«å›¾ç‰‡]")
                             End If
                         Next
 
                         contentBuilder.AppendLine("  ---")
                     Next
 
-                    ' Èç¹ûÓĞ¸ü¶à»ÃµÆÆ¬Î´ÏÔÊ¾£¬Ìí¼ÓÌáÊ¾
+                    ' å¦‚æœæœ‰æ›´å¤šå¹»ç¯ç‰‡æœªæ˜¾ç¤ºï¼Œæ·»åŠ æç¤º
                     If slideRange.Count > maxSlides Then
-                        contentBuilder.AppendLine($"[¹²Ñ¡ÖĞ {slideRange.Count} ÕÅ»ÃµÆÆ¬£¬½öÏÔÊ¾Ç° {maxSlides} ÕÅ]")
+                        contentBuilder.AppendLine($"[å…±é€‰ä¸­ {slideRange.Count} å¼ å¹»ç¯ç‰‡ï¼Œä»…æ˜¾ç¤ºå‰ {maxSlides} å¼ ]")
                     End If
 
                 Case Else
-                    contentBuilder.AppendLine($"Ñ¡ÔñÀàĞÍ: Î´Öª ({selection.Type})")
-                    contentBuilder.AppendLine("[ÎŞ·¨Ê¶±ğµÄÑ¡ÔñÀàĞÍ]")
+                    contentBuilder.AppendLine($"é€‰æ‹©ç±»å‹: æœªçŸ¥ ({selection.Type})")
+                    contentBuilder.AppendLine("[æ— æ³•è¯†åˆ«çš„é€‰æ‹©ç±»å‹]")
             End Select
 
-            contentBuilder.AppendLine("--- Ñ¡ÖĞÄÚÈİ½áÊø ---" & vbCrLf)
+            contentBuilder.AppendLine("--- é€‰ä¸­å†…å®¹ç»“æŸ ---" & vbCrLf)
 
-            ' ·µ»ØÔ­Ê¼ÏûÏ¢¼ÓÉÏÑ¡ÖĞÄÚÈİ
+            ' è¿”å›åŸå§‹æ¶ˆæ¯åŠ ä¸Šé€‰ä¸­å†…å®¹
             Return message & contentBuilder.ToString()
 
         Catch ex As Exception
-            Debug.WriteLine($"´¦ÀíPowerPointÑ¡ÖĞÄÚÈİÊ±³ö´í: {ex.Message}")
-            Return message ' ³ö´íÊ±·µ»ØÔ­Ê¼ÏûÏ¢
+            Debug.WriteLine($"å¤„ç†PowerPointé€‰ä¸­å†…å®¹æ—¶å‡ºé”™: {ex.Message}")
+            Return message ' å‡ºé”™æ—¶è¿”å›åŸå§‹æ¶ˆæ¯
         End Try
     End Function
 
-    ' ´¦ÀíĞÎ×´Ñ¡Ôñ£¨°üÀ¨±í¸ñ£©
+    ' å¤„ç†å½¢çŠ¶é€‰æ‹©ï¼ˆåŒ…æ‹¬è¡¨æ ¼ï¼‰
     Private Sub ProcessShapeSelection(builder As StringBuilder, selection As Microsoft.Office.Interop.PowerPoint.Selection)
         Try
             Dim shapeRange = selection.ShapeRange
-            builder.AppendLine($"ĞÎ×´ÊıÁ¿: {shapeRange.Count}")
+            builder.AppendLine($"å½¢çŠ¶æ•°é‡: {shapeRange.Count}")
 
-            ' ±éÀúÑ¡ÖĞµÄĞÎ×´
+            ' éå†é€‰ä¸­çš„å½¢çŠ¶
             For i = 1 To shapeRange.Count
-                builder.AppendLine($"ĞÎ×´ {i}:")
+                builder.AppendLine($"å½¢çŠ¶ {i}:")
 
-                ' ¼ì²éÊÇ·ñÊÇ±í¸ñ
+                ' æ£€æŸ¥æ˜¯å¦æ˜¯è¡¨æ ¼
                 If shapeRange(i).HasTable = Microsoft.Office.Core.MsoTriState.msoTrue Then
                     ProcessTable(builder, shapeRange(i).Table)
                 ElseIf shapeRange(i).HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue Then
-                    ' ´¦Àí°üº¬ÎÄ±¾µÄĞÎ×´
+                    ' å¤„ç†åŒ…å«æ–‡æœ¬çš„å½¢çŠ¶
                     Dim textFrame = shapeRange(i).TextFrame
                     If textFrame.HasText = Microsoft.Office.Core.MsoTriState.msoTrue Then
                         Dim text = textFrame.TextRange.Text.Trim()
-                        ' ÏŞÖÆÎÄ±¾³¤¶È
+                        ' é™åˆ¶æ–‡æœ¬é•¿åº¦
                         If text.Length > 1000 Then
                             builder.AppendLine(text.Substring(0, 1000) & "...")
-                            builder.AppendLine($"[ÎÄ±¾Ì«³¤£¬½öÏÔÊ¾Ç°1000¸ö×Ö·û£¬×Ü¼Æ: {text.Length}¸ö×Ö·û]")
+                            builder.AppendLine($"[æ–‡æœ¬å¤ªé•¿ï¼Œä»…æ˜¾ç¤ºå‰1000ä¸ªå­—ç¬¦ï¼Œæ€»è®¡: {text.Length}ä¸ªå­—ç¬¦]")
                         Else
                             builder.AppendLine(text)
                         End If
                     Else
-                        builder.AppendLine("[¿ÕÎÄ±¾¿ò]")
+                        builder.AppendLine("[ç©ºæ–‡æœ¬æ¡†]")
                     End If
                 ElseIf shapeRange(i).Type = Microsoft.Office.Core.MsoShapeType.msoPicture Then
-                    ' ´¦ÀíÍ¼Æ¬
-                    builder.AppendLine("[Í¼Æ¬]")
-                    ' ³¢ÊÔ»ñÈ¡Í¼Æ¬µÄÌæ´úÎÄ±¾£¨Èç¹ûÓĞ£©
+                    ' å¤„ç†å›¾ç‰‡
+                    builder.AppendLine("[å›¾ç‰‡]")
+                    ' å°è¯•è·å–å›¾ç‰‡çš„æ›¿ä»£æ–‡æœ¬ï¼ˆå¦‚æœæœ‰ï¼‰
                     If shapeRange(i).AlternativeText <> "" Then
-                        builder.AppendLine($"Ìæ´úÎÄ±¾: {shapeRange(i).AlternativeText}")
+                        builder.AppendLine($"æ›¿ä»£æ–‡æœ¬: {shapeRange(i).AlternativeText}")
                     End If
                 ElseIf shapeRange(i).Type = Microsoft.Office.Core.MsoShapeType.msoChart Then
-                    ' ´¦ÀíÍ¼±í
-                    builder.AppendLine("[Í¼±í]")
+                    ' å¤„ç†å›¾è¡¨
+                    builder.AppendLine("[å›¾è¡¨]")
                     If shapeRange(i).AlternativeText <> "" Then
-                        builder.AppendLine($"Í¼±íËµÃ÷: {shapeRange(i).AlternativeText}")
+                        builder.AppendLine($"å›¾è¡¨è¯´æ˜: {shapeRange(i).AlternativeText}")
                     End If
                 ElseIf shapeRange(i).Type = Microsoft.Office.Core.MsoShapeType.msoSmartArt Then
-                    ' ´¦ÀíSmartArt
-                    builder.AppendLine("[SmartArtÍ¼ĞÎ]")
+                    ' å¤„ç†SmartArt
+                    builder.AppendLine("[SmartArtå›¾å½¢]")
                 Else
-                    ' ÆäËûÀàĞÍµÄĞÎ×´
-                    builder.AppendLine($"[ĞÎ×´ÀàĞÍ: {shapeRange(i).Type}]")
+                    ' å…¶ä»–ç±»å‹çš„å½¢çŠ¶
+                    builder.AppendLine($"[å½¢çŠ¶ç±»å‹: {shapeRange(i).Type}]")
                 End If
 
-                ' ĞÎ×´Ö®¼äÌí¼Ó·Ö¸ôÏß
+                ' å½¢çŠ¶ä¹‹é—´æ·»åŠ åˆ†éš”çº¿
                 builder.AppendLine("---")
             Next
 
         Catch ex As Exception
-            builder.AppendLine($"[´¦ÀíĞÎ×´Ê±³ö´í: {ex.Message}]")
+            builder.AppendLine($"[å¤„ç†å½¢çŠ¶æ—¶å‡ºé”™: {ex.Message}]")
         End Try
     End Sub
 
-    ' ´¦Àí±í¸ñÄÚÈİ
+    ' å¤„ç†è¡¨æ ¼å†…å®¹
     Private Sub ProcessTable(builder As StringBuilder, table As Microsoft.Office.Interop.PowerPoint.Table)
         Try
-            builder.AppendLine($"±í¸ñ: {table.Rows.Count}ĞĞ ¡Á {table.Columns.Count}ÁĞ")
+            builder.AppendLine($"è¡¨æ ¼: {table.Rows.Count}è¡Œ Ã— {table.Columns.Count}åˆ—")
 
-            ' ÏŞÖÆÏÔÊ¾µÄĞĞÁĞÊı
+            ' é™åˆ¶æ˜¾ç¤ºçš„è¡Œåˆ—æ•°
             Dim maxRows As Integer = Math.Min(table.Rows.Count, 20)
             Dim maxCols As Integer = Math.Min(table.Columns.Count, 10)
 
-            ' ´¦Àí±í¸ñÍ·²¿£¨±í¸ñµÚÒ»ĞĞ£©
+            ' å¤„ç†è¡¨æ ¼å¤´éƒ¨ï¼ˆè¡¨æ ¼ç¬¬ä¸€è¡Œï¼‰
             If table.Rows.Count > 0 Then
-                ' ¹¹½¨±íÍ·ºÍ·Ö¸ôÏß
+                ' æ„å»ºè¡¨å¤´å’Œåˆ†éš”çº¿
                 Dim headerBuilder As New StringBuilder()
                 Dim separatorBuilder As New StringBuilder()
 
@@ -534,12 +534,12 @@ Public Class ChatControl
                     Try
                         Dim cellText As String = table.Cell(1, col).Shape.TextFrame.TextRange.Text.Trim()
 
-                        ' ÏŞÖÆµ¥Ôª¸ñÎÄ±¾³¤¶È
+                        ' é™åˆ¶å•å…ƒæ ¼æ–‡æœ¬é•¿åº¦
                         If cellText.Length > 20 Then
                             cellText = cellText.Substring(0, 17) & "..."
                         End If
 
-                        ' Ìî³ä±íÍ·
+                        ' å¡«å……è¡¨å¤´
                         If col > 1 Then
                             headerBuilder.Append(" | ")
                             separatorBuilder.Append("-+-")
@@ -547,7 +547,7 @@ Public Class ChatControl
                         headerBuilder.Append(cellText)
                         separatorBuilder.Append(New String("-"c, Math.Max(cellText.Length, 3)))
                     Catch ex As Exception
-                        ' ºöÂÔµ¥Ôª¸ñ´¦Àí´íÎó
+                        ' å¿½ç•¥å•å…ƒæ ¼å¤„ç†é”™è¯¯
                         If col > 1 Then
                             headerBuilder.Append(" | ")
                             separatorBuilder.Append("-+-")
@@ -557,31 +557,31 @@ Public Class ChatControl
                     End Try
                 Next
 
-                ' Ìí¼Ó±íÍ·ºÍ·Ö¸ôÏß
+                ' æ·»åŠ è¡¨å¤´å’Œåˆ†éš”çº¿
                 builder.AppendLine(headerBuilder.ToString())
                 builder.AppendLine(separatorBuilder.ToString())
             End If
 
-            ' ´¦Àí±í¸ñÊı¾İĞĞ
-            For row As Integer = 2 To maxRows ' ´ÓµÚ2ĞĞ¿ªÊ¼£¨Ìø¹ı±íÍ·£©
+            ' å¤„ç†è¡¨æ ¼æ•°æ®è¡Œ
+            For row As Integer = 2 To maxRows ' ä»ç¬¬2è¡Œå¼€å§‹ï¼ˆè·³è¿‡è¡¨å¤´ï¼‰
                 Dim rowBuilder As New StringBuilder()
 
                 For col As Integer = 1 To maxCols
                     Try
                         Dim cellText As String = table.Cell(row, col).Shape.TextFrame.TextRange.Text.Trim()
 
-                        ' ÏŞÖÆµ¥Ôª¸ñÎÄ±¾³¤¶È
+                        ' é™åˆ¶å•å…ƒæ ¼æ–‡æœ¬é•¿åº¦
                         If cellText.Length > 20 Then
                             cellText = cellText.Substring(0, 17) & "..."
                         End If
 
-                        ' Ìî³äĞĞÊı¾İ
+                        ' å¡«å……è¡Œæ•°æ®
                         If col > 1 Then
                             rowBuilder.Append(" | ")
                         End If
                         rowBuilder.Append(cellText)
                     Catch ex As Exception
-                        ' ºöÂÔµ¥Ôª¸ñ´¦Àí´íÎó
+                        ' å¿½ç•¥å•å…ƒæ ¼å¤„ç†é”™è¯¯
                         If col > 1 Then
                             rowBuilder.Append(" | ")
                         End If
@@ -589,94 +589,94 @@ Public Class ChatControl
                     End Try
                 Next
 
-                ' Ìí¼ÓĞĞÊı¾İ
+                ' æ·»åŠ è¡Œæ•°æ®
                 builder.AppendLine(rowBuilder.ToString())
             Next
 
-            ' Èç¹ûÓĞ¸ü¶àĞĞÎ´ÏÔÊ¾£¬Ìí¼ÓÌáÊ¾
+            ' å¦‚æœæœ‰æ›´å¤šè¡Œæœªæ˜¾ç¤ºï¼Œæ·»åŠ æç¤º
             If table.Rows.Count > maxRows Then
-                builder.AppendLine($"... [±í¸ñ¹²ÓĞ {table.Rows.Count} ĞĞ£¬½öÏÔÊ¾Ç° {maxRows} ĞĞ]")
+                builder.AppendLine($"... [è¡¨æ ¼å…±æœ‰ {table.Rows.Count} è¡Œï¼Œä»…æ˜¾ç¤ºå‰ {maxRows} è¡Œ]")
             End If
 
-            ' Èç¹ûÓĞ¸ü¶àÁĞÎ´ÏÔÊ¾£¬Ìí¼ÓÌáÊ¾
+            ' å¦‚æœæœ‰æ›´å¤šåˆ—æœªæ˜¾ç¤ºï¼Œæ·»åŠ æç¤º
             If table.Columns.Count > maxCols Then
-                builder.AppendLine($"... [±í¸ñ¹²ÓĞ {table.Columns.Count} ÁĞ£¬½öÏÔÊ¾Ç° {maxCols} ÁĞ]")
+                builder.AppendLine($"... [è¡¨æ ¼å…±æœ‰ {table.Columns.Count} åˆ—ï¼Œä»…æ˜¾ç¤ºå‰ {maxCols} åˆ—]")
             End If
 
         Catch ex As Exception
-            builder.AppendLine($"[´¦Àí±í¸ñÄÚÈİÊ±³ö´í: {ex.Message}]")
+            builder.AppendLine($"[å¤„ç†è¡¨æ ¼å†…å®¹æ—¶å‡ºé”™: {ex.Message}]")
         End Try
     End Sub
 
-    ' ´¦ÀíÎÄ±¾Ñ¡Ôñ
+    ' å¤„ç†æ–‡æœ¬é€‰æ‹©
     Private Sub ProcessTextSelection(builder As StringBuilder, selection As Microsoft.Office.Interop.PowerPoint.Selection)
         Try
             Dim textRange = selection.TextRange
 
             If textRange IsNot Nothing Then
-                builder.AppendLine($"ÎÄ±¾³¤¶È: {textRange.Length} ¸ö×Ö·û")
+                builder.AppendLine($"æ–‡æœ¬é•¿åº¦: {textRange.Length} ä¸ªå­—ç¬¦")
 
-                ' »ñÈ¡ÎÄ±¾ÄÚÈİ²¢ÏŞÖÆ³¤¶È
+                ' è·å–æ–‡æœ¬å†…å®¹å¹¶é™åˆ¶é•¿åº¦
                 Dim text = textRange.Text.Trim()
                 Dim maxLength As Integer = 2000
 
                 If text.Length > maxLength Then
                     builder.AppendLine(text.Substring(0, maxLength) & "...")
-                    builder.AppendLine($"[ÎÄ±¾Ì«³¤£¬½öÏÔÊ¾Ç°{maxLength}¸ö×Ö·û£¬×Ü¼Æ: {text.Length}¸ö×Ö·û]")
+                    builder.AppendLine($"[æ–‡æœ¬å¤ªé•¿ï¼Œä»…æ˜¾ç¤ºå‰{maxLength}ä¸ªå­—ç¬¦ï¼Œæ€»è®¡: {text.Length}ä¸ªå­—ç¬¦]")
                 Else
                     builder.AppendLine(text)
                 End If
             Else
-                builder.AppendLine("[ÎŞ·¨»ñÈ¡ÎÄ±¾ÄÚÈİ]")
+                builder.AppendLine("[æ— æ³•è·å–æ–‡æœ¬å†…å®¹]")
             End If
 
         Catch ex As Exception
-            builder.AppendLine($"[´¦ÀíÎÄ±¾Ñ¡ÔñÊ±³ö´í: {ex.Message}]")
+            builder.AppendLine($"[å¤„ç†æ–‡æœ¬é€‰æ‹©æ—¶å‡ºé”™: {ex.Message}]")
         End Try
     End Sub
 
-    ' ´¦Àí»ÃµÆÆ¬Ñ¡Ôñ
+    ' å¤„ç†å¹»ç¯ç‰‡é€‰æ‹©
     Private Sub ProcessSlideSelection(builder As StringBuilder, selection As Microsoft.Office.Interop.PowerPoint.Selection)
         Try
             Dim slideRange = selection.SlideRange
-            builder.AppendLine($"Ñ¡ÖĞ»ÃµÆÆ¬Êı: {slideRange.Count}")
+            builder.AppendLine($"é€‰ä¸­å¹»ç¯ç‰‡æ•°: {slideRange.Count}")
 
-            ' ÏŞÖÆ´¦ÀíµÄ»ÃµÆÆ¬ÊıÁ¿
+            ' é™åˆ¶å¤„ç†çš„å¹»ç¯ç‰‡æ•°é‡
             Dim maxSlides As Integer = Math.Min(slideRange.Count, 10)
 
             For i = 1 To maxSlides
                 Dim slide = slideRange(i)
-                builder.AppendLine($"»ÃµÆÆ¬ {slide.SlideIndex}:")
+                builder.AppendLine($"å¹»ç¯ç‰‡ {slide.SlideIndex}:")
 
-                ' »ñÈ¡»ÃµÆÆ¬±êÌâ
+                ' è·å–å¹»ç¯ç‰‡æ ‡é¢˜
                 Dim title As String = GetSlideTitle(slide)
                 If Not String.IsNullOrEmpty(title) Then
-                    builder.AppendLine($"±êÌâ: {title}")
+                    builder.AppendLine($"æ ‡é¢˜: {title}")
                 End If
 
-                ' »ñÈ¡»ÃµÆÆ¬ÉÏµÄÄÚÈİ
-                builder.AppendLine("ÄÚÈİ:")
+                ' è·å–å¹»ç¯ç‰‡ä¸Šçš„å†…å®¹
+                builder.AppendLine("å†…å®¹:")
                 Dim slideContent = GetSlideContent(slide)
                 builder.AppendLine(slideContent)
 
-                ' Ìí¼Ó·Ö¸ôÏß
+                ' æ·»åŠ åˆ†éš”çº¿
                 builder.AppendLine("---")
             Next
 
-            ' Èç¹ûÓĞ¸ü¶à»ÃµÆÆ¬Î´ÏÔÊ¾£¬Ìí¼ÓÌáÊ¾
+            ' å¦‚æœæœ‰æ›´å¤šå¹»ç¯ç‰‡æœªæ˜¾ç¤ºï¼Œæ·»åŠ æç¤º
             If slideRange.Count > maxSlides Then
-                builder.AppendLine($"... [¹²Ñ¡ÖĞ {slideRange.Count} ÕÅ»ÃµÆÆ¬£¬½öÏÔÊ¾Ç° {maxSlides} ÕÅ]")
+                builder.AppendLine($"... [å…±é€‰ä¸­ {slideRange.Count} å¼ å¹»ç¯ç‰‡ï¼Œä»…æ˜¾ç¤ºå‰ {maxSlides} å¼ ]")
             End If
 
         Catch ex As Exception
-            builder.AppendLine($"[´¦Àí»ÃµÆÆ¬Ñ¡ÔñÊ±³ö´í: {ex.Message}]")
+            builder.AppendLine($"[å¤„ç†å¹»ç¯ç‰‡é€‰æ‹©æ—¶å‡ºé”™: {ex.Message}]")
         End Try
     End Sub
 
-    ' »ñÈ¡»ÃµÆÆ¬±êÌâ
+    ' è·å–å¹»ç¯ç‰‡æ ‡é¢˜
     Private Function GetSlideTitle(slide As Microsoft.Office.Interop.PowerPoint.Slide) As String
         Try
-            ' ¼ì²é»ÃµÆÆ¬ÊÇ·ñÓĞ±êÌâÕ¼Î»·û
+            ' æ£€æŸ¥å¹»ç¯ç‰‡æ˜¯å¦æœ‰æ ‡é¢˜å ä½ç¬¦
             For Each shape In slide.Shapes
                 If shape.Type = Microsoft.Office.Core.MsoShapeType.msoPlaceholder Then
                     If shape.PlaceholderFormat.Type = Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderTitle Then
@@ -687,99 +687,104 @@ Public Class ChatControl
                 End If
             Next
 
-            ' Èç¹ûÃ»ÓĞÕÒµ½±êÌâÕ¼Î»·û£¬³¢ÊÔ²éÕÒÈÎºÎ¿ÉÄÜµÄ±êÌâ
+            ' å¦‚æœæ²¡æœ‰æ‰¾åˆ°æ ‡é¢˜å ä½ç¬¦ï¼Œå°è¯•æŸ¥æ‰¾ä»»ä½•å¯èƒ½çš„æ ‡é¢˜
             For Each shape In slide.Shapes
                 If shape.HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue Then
                     Dim text = shape.TextFrame.TextRange.Text.Trim()
                     If Not String.IsNullOrEmpty(text) AndAlso text.Length < 100 Then
-                        Return text ' ¼ÙÉèµÚÒ»¸ö¼ò¶ÌÎÄ±¾ÊÇ±êÌâ
+                        Return text ' å‡è®¾ç¬¬ä¸€ä¸ªç®€çŸ­æ–‡æœ¬æ˜¯æ ‡é¢˜
                     End If
                 End If
             Next
 
-            Return "[ÎŞ±êÌâ]"
+            Return "[æ— æ ‡é¢˜]"
         Catch ex As Exception
-            Debug.WriteLine($"»ñÈ¡»ÃµÆÆ¬±êÌâÊ±³ö´í: {ex.Message}")
-            Return "[»ñÈ¡±êÌâ³ö´í]"
+            Debug.WriteLine($"è·å–å¹»ç¯ç‰‡æ ‡é¢˜æ—¶å‡ºé”™: {ex.Message}")
+            Return "[è·å–æ ‡é¢˜å‡ºé”™]"
         End Try
     End Function
 
-    ' »ñÈ¡»ÃµÆÆ¬ÄÚÈİ
+    ' è·å–å¹»ç¯ç‰‡å†…å®¹
     Private Function GetSlideContent(slide As Microsoft.Office.Interop.PowerPoint.Slide) As String
         Try
             Dim contentBuilder As New StringBuilder()
             Dim processedTextShapes As Integer = 0
-            Dim maxTextShapes As Integer = 5 ' ÏŞÖÆÃ¿ÕÅ»ÃµÆÆ¬´¦ÀíµÄÎÄ±¾ĞÎ×´ÊıÁ¿
+            Dim maxTextShapes As Integer = 5 ' é™åˆ¶æ¯å¼ å¹»ç¯ç‰‡å¤„ç†çš„æ–‡æœ¬å½¢çŠ¶æ•°é‡
 
-            ' ´¦Àí»ÃµÆÆ¬ÉÏµÄĞÎ×´
+            ' å¤„ç†å¹»ç¯ç‰‡ä¸Šçš„å½¢çŠ¶
             For Each shape In slide.Shapes
-                ' Ìø¹ı±êÌâĞÎ×´£¬ÒòÎªÒÑ¾­µ¥¶À´¦Àí¹ıÁË
+                ' è·³è¿‡æ ‡é¢˜å½¢çŠ¶ï¼Œå› ä¸ºå·²ç»å•ç‹¬å¤„ç†è¿‡äº†
                 If shape.Type = Microsoft.Office.Core.MsoShapeType.msoPlaceholder AndAlso
                shape.PlaceholderFormat.Type = Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderTitle Then
                     Continue For
                 End If
 
-                ' ´¦ÀíÎÄ±¾ĞÎ×´
+                ' å¤„ç†æ–‡æœ¬å½¢çŠ¶
                 If shape.HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue AndAlso
                shape.TextFrame.HasText = Microsoft.Office.Core.MsoTriState.msoTrue Then
 
                     If processedTextShapes >= maxTextShapes Then
-                        contentBuilder.AppendLine("  [¸ü¶àÎÄ±¾ÄÚÈİÎ´ÏÔÊ¾...]")
+                        contentBuilder.AppendLine("  [æ›´å¤šæ–‡æœ¬å†…å®¹æœªæ˜¾ç¤º...]")
                         Exit For
                     End If
 
                     Dim text = shape.TextFrame.TextRange.Text.Trim()
                     If Not String.IsNullOrEmpty(text) Then
-                        ' ÏŞÖÆÎÄ±¾³¤¶È
+                        ' é™åˆ¶æ–‡æœ¬é•¿åº¦
                         If text.Length > 200 Then
-                            contentBuilder.AppendLine($"  ÎÄ±¾: {text.Substring(0, 200)}...")
+                            contentBuilder.AppendLine($"  æ–‡æœ¬: {text.Substring(0, 200)}...")
                         Else
-                            contentBuilder.AppendLine($"  ÎÄ±¾: {text}")
+                            contentBuilder.AppendLine($"  æ–‡æœ¬: {text}")
                         End If
                         processedTextShapes += 1
                     End If
-                    ' ´¦Àí±í¸ñĞÎ×´
+                    ' å¤„ç†è¡¨æ ¼å½¢çŠ¶
                 ElseIf shape.HasTable = Microsoft.Office.Core.MsoTriState.msoTrue Then
-                    contentBuilder.AppendLine("  [°üº¬±í¸ñ]")
-                    ' ´¦ÀíÍ¼Æ¬ĞÎ×´
+                    contentBuilder.AppendLine("  [åŒ…å«è¡¨æ ¼]")
+                    ' å¤„ç†å›¾ç‰‡å½¢çŠ¶
                 ElseIf shape.Type = Microsoft.Office.Core.MsoShapeType.msoPicture Then
-                    contentBuilder.AppendLine("  [°üº¬Í¼Æ¬]")
+                    contentBuilder.AppendLine("  [åŒ…å«å›¾ç‰‡]")
                     If shape.AlternativeText <> "" Then
-                        contentBuilder.AppendLine($"  Í¼Æ¬ËµÃ÷: {shape.AlternativeText}")
+                        contentBuilder.AppendLine($"  å›¾ç‰‡è¯´æ˜: {shape.AlternativeText}")
                     End If
-                    ' ´¦ÀíÍ¼±íĞÎ×´
+                    ' å¤„ç†å›¾è¡¨å½¢çŠ¶
                 ElseIf shape.Type = Microsoft.Office.Core.MsoShapeType.msoChart Then
-                    contentBuilder.AppendLine("  [°üº¬Í¼±í]")
-                    ' ´¦ÀíSmartArtĞÎ×´
+                    contentBuilder.AppendLine("  [åŒ…å«å›¾è¡¨]")
+                    ' å¤„ç†SmartArtå½¢çŠ¶
                 ElseIf shape.Type = Microsoft.Office.Core.MsoShapeType.msoSmartArt Then
-                    contentBuilder.AppendLine("  [°üº¬SmartArtÍ¼ĞÎ]")
+                    contentBuilder.AppendLine("  [åŒ…å«SmartArtå›¾å½¢]")
                 End If
             Next
 
-            ' Èç¹ûÃ»ÓĞÕÒµ½ÈÎºÎÄÚÈİ
+            ' å¦‚æœæ²¡æœ‰æ‰¾åˆ°ä»»ä½•å†…å®¹
             If contentBuilder.Length = 0 Then
-                Return "  [»ÃµÆÆ¬ÎŞ¿ÉÌáÈ¡µÄÎÄ±¾ÄÚÈİ]"
+                Return "  [å¹»ç¯ç‰‡æ— å¯æå–çš„æ–‡æœ¬å†…å®¹]"
             End If
 
             Return contentBuilder.ToString()
         Catch ex As Exception
-            Debug.WriteLine($"»ñÈ¡»ÃµÆÆ¬ÄÚÈİÊ±³ö´í: {ex.Message}")
-            Return $"  [»ñÈ¡ÄÚÈİ³ö´í: {ex.Message}]"
+            Debug.WriteLine($"è·å–å¹»ç¯ç‰‡å†…å®¹æ—¶å‡ºé”™: {ex.Message}")
+            Return $"  [è·å–å†…å®¹å‡ºé”™: {ex.Message}]"
         End Try
     End Function
 
     Protected Overrides Function GetCurrentWorkingDirectory() As String
         Try
-            ' »ñÈ¡µ±Ç°»î¶¯¹¤×÷²¾µÄÂ·¾¶
+            ' è·å–å½“å‰æ´»åŠ¨å·¥ä½œç°¿çš„è·¯å¾„
             If Globals.ThisAddIn.Application.ActiveWorkbook IsNot Nothing Then
                 Return Globals.ThisAddIn.Application.ActiveWorkbook.Path
             End If
         Catch ex As Exception
-            Debug.WriteLine($"»ñÈ¡µ±Ç°¹¤×÷Ä¿Â¼Ê±³ö´í: {ex.Message}")
+            Debug.WriteLine($"è·å–å½“å‰å·¥ä½œç›®å½•æ—¶å‡ºé”™: {ex.Message}")
         End Try
 
-        ' Èç¹ûÎŞ·¨»ñÈ¡¹¤×÷²¾Â·¾¶£¬Ôò·µ»ØÓ¦ÓÃ³ÌĞòÄ¿Â¼
+        ' å¦‚æœæ— æ³•è·å–å·¥ä½œç°¿è·¯å¾„ï¼Œåˆ™è¿”å›åº”ç”¨ç¨‹åºç›®å½•
         Return System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)
     End Function
+
+
+    Protected Overrides Sub CheckAndCompleteProcessingHook(_finalUuid As String, allPlainMarkdownBuffer As StringBuilder)
+
+    End Sub
 End Class
 

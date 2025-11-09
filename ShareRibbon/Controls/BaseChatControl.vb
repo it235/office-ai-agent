@@ -43,14 +43,30 @@ Public MustInherit Class BaseChatControl
 
     Protected loadingPictureBox As PictureBox
 
+    ' ========== 选区对比与写回相关字段 ==========
+    Protected Class SelectionInfo
+        Public Property DocumentPath As String
+        Public Property StartPos As Integer
+        Public Property EndPos As Integer
+        Public Property SelectedText As String
+    End Class
+
+    Protected PendingSelectionInfo As SelectionInfo = Nothing
+    Protected _selectionPendingMap As New Dictionary(Of String, SelectionInfo)()
+    Private allPlainMarkdownBuffer As New StringBuilder()
+    ' =======================================================
+
+    Protected _responseToRequestMap As New Dictionary(Of String, String)() ' responseUuid -> requestUuid
+
+    ' 新增：存储解析到的修订（responseUuid -> JArray）
+    Protected _revisionsMap As New Dictionary(Of String, JArray)()
+
     Protected Overrides Sub WndProc(ByRef m As Message)
         Const WM_PASTE As Integer = &H302
         If m.Msg = WM_PASTE Then
             ' 在此处理粘贴操作，比如：
             If Clipboard.ContainsText() Then
                 Dim txt As String = Clipboard.GetText()
-
-                'QuestionTextBox.Text &= txt ' 将粘贴内容直接写入当前光标位置
             End If
             ' 不把消息传递给基类，从而拦截后续处理  
             Return
@@ -272,9 +288,9 @@ Public MustInherit Class BaseChatControl
                 Case "executeCode"
                     HandleExecuteCode(jsonDoc)
                 Case "saveSettings"
-                    Debug.Print("保存设置")
                     HandleSaveSettings(jsonDoc)
                 Case "getHistoryFiles"
+                    'TestX()
                     HandleGetHistoryFiles()
                 Case "openHistoryFile"
                     HandleOpenHistoryFile(jsonDoc)
@@ -288,12 +304,47 @@ Public MustInherit Class BaseChatControl
                     HandleAcceptAnswer(jsonDoc)
                 Case "rejectAnswer"
                     HandleRejectAnswer(jsonDoc)
+                Case "applyRevisionAll"
+                    HandleApplyRevisionAll(jsonDoc)
+                Case "applyRevisionSegment"
+                    HandleApplyRevisionSegment(jsonDoc)
+                Case "applyDocumentPlanItem"
+                    HandleApplyDocumentPlanItem(jsonDoc)
+                Case "applyRevisionAccept" ' 前端请求接受单个 Revision
+                    HandleApplyRevisionAccept(jsonDoc)
+                Case "applyRevisionReject" ' 前端请求拒绝单个 Revision
+                    HandleApplyRevisionReject(jsonDoc)
+
                 Case Else
                     Debug.WriteLine($"未知消息类型: {messageType}")
             End Select
         Catch ex As Exception
             Debug.WriteLine($"处理消息出错: {ex.Message}")
         End Try
+    End Sub
+
+    ' 添加：在基类提供可覆盖的 CaptureCurrentSelectionInfo（默认返回 Nothing，Word 子类会覆写）
+    Protected Overridable Function CaptureCurrentSelectionInfo(mode As String) As SelectionInfo
+        Return Nothing
+    End Function
+
+
+    ' 在基类提供默认的 applyRevision 处理（子类可覆盖）
+    Protected Overridable Sub HandleApplyRevisionAll(jsonDoc As JObject)
+    End Sub
+
+    ' 替换原有 HandleApplyRevisionSegment，且新增两个类级私有辅助函数
+    Protected Overridable Sub HandleApplyRevisionSegment(jsonDoc As JObject)
+        Debug.Print(jsonDoc.ToString)
+    End Sub
+
+
+    Protected Overridable Sub HandleApplyRevisionReject(jsonDoc As JObject)
+        Debug.WriteLine("收到 applyRevisionReject 请求（基类默认不做写回）")
+        GlobalStatusStrip.ShowInfo("用户拒绝了该修订（未在基类执行写回）")
+    End Sub
+
+    Protected Overridable Sub HandleApplyRevisionAccept(jsonDoc As JObject)
     End Sub
 
 
@@ -306,12 +357,6 @@ Public MustInherit Class BaseChatControl
             ' 简单记录与提示（可扩展为在历史中设置标记或持久化）
             Debug.WriteLine($"用户接受回答: UUID={uuid}")
             Debug.WriteLine(content)
-
-            ' 将接受操作写入 history（这里以 assistant message 记录，便于后续审计）
-            '    systemHistoryMessageData.Add(New HistoryMessage() With {
-            '    .role = "user",
-            '    .content = $"用户接受了回答 (uuid={uuid})"
-            '})
 
             ' 你也可以向前端反馈已接受（可选）
             GlobalStatusStrip.ShowInfo("用户已接受 AI 回答")
@@ -329,20 +374,6 @@ Public MustInherit Class BaseChatControl
 
             Debug.WriteLine($"用户拒绝回答: UUID={uuid}; reason={reason}")
 
-            '' 将用户的拒绝反馈作为 user 消息加入历史（便于 LLM 在下一次请求中使用）
-            'Dim feedbackMsg As New StringBuilder()
-            'feedbackMsg.AppendLine("用户标记此前回答为不接受。")
-            'If Not String.IsNullOrWhiteSpace(reason) Then
-            '    feedbackMsg.AppendLine("改进诉求: " & reason)
-            'Else
-            '    feedbackMsg.AppendLine("用户未给出具体改进细节。")
-            'End If
-            'feedbackMsg.AppendLine($"(被拒绝回答 UUID={uuid})")
-
-            'systemHistoryMessageData.Add(New HistoryMessage() With {
-            '    .role = "user",
-            '    .content = feedbackMsg.ToString()
-            '})
 
             ' 构建用于改进的大模型提示（包含用户理由）
             Dim refinementPrompt As New StringBuilder()
@@ -360,10 +391,6 @@ Public MustInherit Class BaseChatControl
             refinementPrompt.AppendLine("2) Plan：简短列出修正步骤（要点式，最多6条）；")
             refinementPrompt.AppendLine("3) Answer：给出修正后的、尽可能准确的答案（使用 Markdown，必要时给出示例/代码）；")
             refinementPrompt.AppendLine("4) Clarifying Questions：如需更多信息，请在最后以简短问题列出并暂停执行；")
-            'refinementPrompt.AppendLine()
-            'refinementPrompt.AppendLine("---- 被拒绝的回答开始 ----")
-            'refinementPrompt.AppendLine(rejectedContent)
-            'refinementPrompt.AppendLine("---- 被拒绝的回答结束 ----")
             refinementPrompt.AppendLine()
             refinementPrompt.AppendLine("[注意]：回答要简洁、可验证，优先给出可直接执行的结论与验证方法，不要重复冗长的背景说明。")
 
@@ -726,7 +753,6 @@ Public MustInherit Class BaseChatControl
     Protected MustOverride Function AppendCurrentSelectedContent(message As String) As String
 
     ' 通用的文本文件解析方法
-    ' 通用的文本文件解析方法
     Protected Function ParseTextFile(filePath As String) As FileContentResult
         Try
             Dim extension As String = Path.GetExtension(filePath).ToLower()
@@ -973,7 +999,7 @@ Public MustInherit Class BaseChatControl
 
     Protected MustOverride Function GetApplication() As ApplicationInfo
     Protected MustOverride Function GetVBProject() As VBProject
-    Protected MustOverride Function RunCodePreview(vbaCode As String, preview As Boolean)
+    Protected MustOverride Function RunCodePreview(vbaCode As String, preview As Boolean) As Boolean
     Protected MustOverride Function RunCode(vbaCode As String)
 
     Protected MustOverride Sub SendChatMessage(message As String)
@@ -981,7 +1007,7 @@ Public MustInherit Class BaseChatControl
 
 
     ' 执行代码的方法
-    Private Sub ExecuteCode(code As String, language As String, preview As Boolean)
+    Public Sub ExecuteCode(code As String, language As String, preview As Boolean)
         ' 根据语言类型执行不同的操作
         Dim lowerLang As String = language.ToLower()
 
@@ -1310,7 +1336,71 @@ Public MustInherit Class BaseChatControl
         End Try
     End Function
 
-    Public Async Function Send(question As String) As Task
+    ' 在类字段区：新增 response mode 映射
+    Protected _responseModeMap As New Dictionary(Of String, String)() ' responseUuid -> mode (e.g. "reformat","proofread","revisions_only","comparison_only")
+
+    '测试方法
+    Public Async Function TestX() As Task(Of String)
+        ' 前端提示
+        'Dim responseUuid As String = "6e2dc857-f0de-498e-8cfa-1bc6ffbd83d4"
+        'Try
+        '    Dim aiName As String = ConfigSettings.platform & " " & ConfigSettings.ModelName
+        '    Dim jsCreate As String = $"createChatSection('{aiName}', formatDateTime(new Date()), '{responseUuid}');"
+        '    Await ExecuteJavaScriptAsyncJS(jsCreate)
+        '    Dim js1 = $"appendRenderer('{responseUuid}','正在向模型发起校对请求，请耐心等待');"
+        '    Await ExecuteJavaScriptAsyncJS(js1)
+        'Catch ex As Exception
+        '    Debug.WriteLine("ExecuteJavaScriptAsyncJS 调用失败: " & ex.Message)
+        'End Try
+
+        'Dim configFileName As String = "formattest.json"
+        'Dim configFilePath As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        'ConfigSettings.OfficeAiAppDataFolder, configFileName)
+        'Dim aiFinal As String = File.ReadAllText(configFilePath)
+        'Dim js As String = $"showComparison('{responseUuid}', '123', {JsonConvert.SerializeObject(aiFinal)});"
+        'Await ExecuteJavaScriptAsyncJS(js)
+        'Debug.Print(js)
+
+
+
+        'Dim configFileName As String = "retest.json"
+        'Dim configFilePath As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        'ConfigSettings.OfficeAiAppDataFolder, configFileName)
+        'Dim aiText As String = File.ReadAllText(configFilePath)
+        'Dim revisions As JArray = TryExtractJsonArrayFromText(aiText)
+        'If revisions IsNot Nothing AndAlso revisions.Count > 0 Then
+        '    Dim jsRev As String = $"showRevisions('{responseUuid}', {revisions.ToString(Formatting.None)});"
+        '    ExecuteJavaScriptAsyncJS(jsRev)
+        '    Debug.Print(jsRev)
+        'End If
+
+        Return ""
+    End Function
+
+    Private Function TryExtractJsonArrayFromText(text As String) As JArray
+        Try
+            If String.IsNullOrWhiteSpace(text) Then Return Nothing
+
+            ' 尝试用正则抽取第一个 [...] 数组块（Singleline 允许跨行）
+            Dim m As Match = Regex.Match(text, "\[.*\]", RegexOptions.Singleline)
+            If m.Success Then
+                Dim jsonCandidate As String = m.Value.Trim()
+                ' 验证并解析为 JArray
+                Try
+                    Dim arr As JArray = JArray.Parse(jsonCandidate)
+                    Return arr
+                Catch ex As Exception
+                    Debug.WriteLine("解析 JSON 数组失败: " & ex.Message)
+                    Return Nothing
+                End Try
+            End If
+        Catch ex As Exception
+            Debug.WriteLine("TryExtractJsonArrayFromText 出错: " & ex.Message)
+        End Try
+        Return Nothing
+    End Function
+
+    Public Async Function Send(question As String, systemPrompt As String, addHistory As Boolean, responseMode As String) As Task
         Dim apiUrl As String = ConfigSettings.ApiUrl
         Dim apiKey As String = ConfigSettings.ApiKey
 
@@ -1328,16 +1418,55 @@ Public MustInherit Class BaseChatControl
 
         If String.IsNullOrWhiteSpace(question) Then
             GlobalStatusStrip.ShowWarning("请输入问题！")
-
             ExecuteJavaScriptAsyncJS($"changeSendButton()")
             Return
         End If
 
         Dim uuid As String = Guid.NewGuid().ToString()
+        ' 这里生成 requestUuid（用于绑定选区）
+        Dim requestUuid As String = Guid.NewGuid().ToString()
+
+
+        ' 将 PendingSelectionInfo 绑定到 requestUuid
+        Try
+            If PendingSelectionInfo Is Nothing Then
+                Dim captured As SelectionInfo = Nothing
+                Try
+                    captured = CaptureCurrentSelectionInfo(responseMode)
+                Catch ex As Exception
+                    Debug.WriteLine("CaptureCurrentSelectionInfo 异常: " & ex.Message)
+                End Try
+                If captured IsNot Nothing Then
+                    PendingSelectionInfo = captured
+                End If
+            End If
+
+            ' 将 PendingSelectionInfo 绑定到 requestUuid（原有逻辑）
+            If PendingSelectionInfo IsNot Nothing Then
+                Try
+                    _selectionPendingMap(requestUuid) = PendingSelectionInfo
+                Catch ex As Exception
+                    Debug.WriteLine($"绑定 PendingSelectionInfo 到 requestUuid 失败: {ex.Message}")
+                End Try
+                ' 清空 PendingSelectionInfo，避免被下一个请求误用
+                PendingSelectionInfo = Nothing
+            End If
+        Catch
+        End Try
 
         Try
-            Dim requestBody As String = CreateRequestBody(uuid, question)
-            Await SendHttpRequestStream(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody, StripQuestion(question))
+            If String.IsNullOrWhiteSpace(systemPrompt) Then
+                ' 组合更强的 system 提示，要求先给 Plan 再给 Answer，并在信息不足时提出澄清问题
+                systemPrompt =
+                "系统指令（必读）：" & vbCrLf & ConfigSettings.propmtContent & vbCrLf & vbCrLf &
+                "1) 首先输出一个名为 'Plan' 的简短计划，按步骤列出解决路径（要点式，最多6条）。" & vbCrLf &
+                "2) 然后输出名为 'Answer' 的部分，给出最终可执行的解决方案或操作步骤，使用 Markdown，必要时给出代码/示例或差异说明。" & vbCrLf &
+                "3) 如果信息不足，请不要猜测；在最后输出名为 'Clarifying Questions' 的部分，列出需要用户回答的问题并暂停执行。" & vbCrLf &
+                "4) 对于用户请求的改进（用户标记当前回答为不接受），在回复开头先写明 '改进点'（1-3 行），然后给出修正的 Plan 与 Answer。" & vbCrLf &
+                "5) 保持回答简洁、有条理，优先提供可直接执行的结论和示例。"
+            End If
+            Dim requestBody As String = CreateRequestBody(requestUuid, question, systemPrompt, addHistory)
+            Await SendHttpRequestStream(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody, StripQuestion(question), requestUuid, addHistory, responseMode)
             Await SaveFullWebPageAsync2()
         Catch ex As Exception
             MessageBox.Show("请求失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
@@ -1366,49 +1495,52 @@ Public MustInherit Class BaseChatControl
         Return result
     End Function
 
-    Private Function CreateRequestBody(uuid As String, question As String) As String
+    Private Function CreateRequestBody(uuid As String, question As String, systemPrompt As String, addHistory As Boolean) As String
         Dim result As String = StripQuestion(question)
 
         ' 构建 messages 数组
         Dim messages As New List(Of String)()
 
-        ' 添加或替换 system 消息（保证只有一条 system）
-        Dim existingSystem = systemHistoryMessageData.FirstOrDefault(Function(m) m.role = "system")
-        If existingSystem IsNot Nothing Then
-            systemHistoryMessageData.Remove(existingSystem)
-        End If
-
-        ' 组合更强的 system 提示，要求先给 Plan 再给 Answer，并在信息不足时提出澄清问题
-        Dim systemPrompt As String =
-        "系统指令（必读）：" & vbCrLf & ConfigSettings.propmtContent & vbCrLf & vbCrLf &
-        "1) 首先输出一个名为 'Plan' 的简短计划，按步骤列出解决路径（要点式，最多6条）。" & vbCrLf &
-        "2) 然后输出名为 'Answer' 的部分，给出最终可执行的解决方案或操作步骤，使用 Markdown，必要时给出代码/示例或差异说明。" & vbCrLf &
-        "3) 如果信息不足，请不要猜测；在最后输出名为 'Clarifying Questions' 的部分，列出需要用户回答的问题并暂停执行。" & vbCrLf &
-        "4) 对于用户请求的改进（用户标记当前回答为不接受），在回复开头先写明 '改进点'（1-3 行），然后给出修正的 Plan 与 Answer。" & vbCrLf &
-        "5) 保持回答简洁、有条理，优先提供可直接执行的结论和示例。"
-
-
         Dim systemMessage = New HistoryMessage() With {
-        .role = "system",
-        .content = systemPrompt
-    }
-        systemHistoryMessageData.Insert(0, systemMessage)
-
+            .role = "system",
+            .content = systemPrompt
+        }
         Dim q = New HistoryMessage() With {
                 .role = "user",
                 .content = result
             }
-        systemHistoryMessageData.Add(q)
 
-        ' 管理历史消息大小
-        ManageHistoryMessageSize()
+        If addHistory Then
+            ' 添加或替换 system 消息（保证只有一条 system）
+            Dim existingSystem = systemHistoryMessageData.FirstOrDefault(Function(m) m.role = "system")
+            If existingSystem IsNot Nothing Then
+                systemHistoryMessageData.Remove(existingSystem)
+            End If
+            systemHistoryMessageData.Insert(0, systemMessage)
+            systemHistoryMessageData.Add(q)
 
-        ' 将历史消息转换为 JSON messages（对内容做基础转义，避免字符串破坏 JSON）
-        For Each message In systemHistoryMessageData
-            Dim safeContent As String = If(message.content, String.Empty)
-            safeContent = safeContent.Replace("\", "\\").Replace("""", "\""").Replace(vbCr, "\r").Replace(vbLf, "\n")
-            messages.Add($"{{""role"": ""{message.role}"", ""content"": ""{safeContent}""}}")
-        Next
+            ' 管理历史消息大小
+            ManageHistoryMessageSize()
+
+            ' 将历史消息转换为 JSON messages（对内容做基础转义，避免字符串破坏 JSON）
+            For Each message In systemHistoryMessageData
+                Dim safeContent As String = If(message.content, String.Empty)
+                safeContent = safeContent.Replace("\", "\\").Replace("""", "\""").Replace(vbCr, "\r").Replace(vbLf, "\n")
+                messages.Add($"{{""role"": ""{message.role}"", ""content"": ""{safeContent}""}}")
+            Next
+        Else
+            ' 仅使用当前消息，不添加历史
+            Dim tempMessageData As New List(Of HistoryMessage)
+            tempMessageData.Insert(0, systemMessage)
+            tempMessageData.Add(q)
+            For Each message In tempMessageData
+                Dim safeContent As String = If(message.content, String.Empty)
+                safeContent = safeContent.Replace("\", "\\").Replace("""", "\""").Replace(vbCr, "\r").Replace(vbLf, "\n")
+                messages.Add($"{{""role"": ""{message.role}"", ""content"": ""{safeContent}""}}")
+            Next
+        End If
+
+
 
         ' 添加MCP工具信息（如果有）
         Dim toolsArray As JArray = Nothing
@@ -1421,7 +1553,6 @@ Public MustInherit Class BaseChatControl
             ' 加载所有MCP连接
             Dim connections = MCPConnectionManager.LoadConnections()
 
-            ' 找到启用的连接
             ' 找到启用的连接
             For Each mcpName In chatSettings.EnabledMcpList
                 ' 使用IsActive替代Enabled
@@ -1594,12 +1725,39 @@ Public MustInherit Class BaseChatControl
     Private _pendingMcpTasks As Integer = 0
     Private _mainStreamCompleted As Boolean = False
     Private _finalUuid As String = String.Empty
-    Private Async Function SendHttpRequestStream(apiUrl As String, apiKey As String, requestBody As String, originQuestion As String) As Task
 
-        ' 组装ai答复头部
-        Dim uuid As String = Guid.NewGuid().ToString()
 
-        _finalUuid = uuid
+    ' 现在接收 requestUuid，内部生成 responseUuid（用于前端展示），并建立 response->request 映射
+    Private Async Function SendHttpRequestStream(apiUrl As String, apiKey As String, requestBody As String, originQuestion As String, requestUuid As String, addHistory As Boolean, responseMode As String) As Task
+
+        ' responseUuid 用于前端显示（与 requestUuid 分离）
+        Dim responseUuid As String = Guid.NewGuid().ToString()
+
+        ' 保存映射：response -> request
+        Try
+            _responseToRequestMap(responseUuid) = requestUuid
+            ' 保存 response -> mode 映射（用于决定 showComparison/showRevisions 行为）
+            If Not String.IsNullOrEmpty(responseMode) Then
+                _responseModeMap(responseUuid) = responseMode
+            End If
+
+            ' 如果之前在 request 级别有选区信息（旧逻辑可能把选区存到 _selectionPendingMap(requestUuid)），
+            ' 则立即把选区迁移到以 responseUuid 为键的映射，后续完成阶段直接用 responseUuid 查找。
+            If Not String.IsNullOrEmpty(requestUuid) AndAlso _selectionPendingMap.ContainsKey(requestUuid) Then
+                Try
+                    _responseSelectionMap(responseUuid) = _selectionPendingMap(requestUuid)
+                    ' 可选地从 request map 中移除，避免内存泄露
+                    _selectionPendingMap.Remove(requestUuid)
+                Catch ex As Exception
+                    Debug.WriteLine("迁移选区信息到 responseSelectionMap 失败: " & ex.Message)
+                End Try
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"保存 response->request/response->mode 映射失败: {ex.Message}")
+        End Try
+
+        ' 保持以前使用的 _finalUuid 用于现有完成逻辑（注意：这是 responseUuid）
+        _finalUuid = responseUuid
         _mainStreamCompleted = False
         _pendingMcpTasks = 0
 
@@ -1607,62 +1765,60 @@ Public MustInherit Class BaseChatControl
         currentSessionTotalTokens = 0
 
         Try
-
-            ' 强制使用 TLS 1.2
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
 
             Using client As New HttpClient()
                 client.Timeout = Timeout.InfiniteTimeSpan
 
-                ' 准备请求 ---
                 Dim request As New HttpRequestMessage(HttpMethod.Post, apiUrl)
                 request.Headers.Authorization = New AuthenticationHeaderValue("Bearer", apiKey)
                 request.Content = New StringContent(requestBody, Encoding.UTF8, "application/json")
 
-                ' 打印请求日志 ---
                 Debug.WriteLine("[HTTP] 开始发送流式请求...")
-                Debug.WriteLine($"[HTTP] Request Body: {requestBody}")
-
+                Debug.WriteLine($"[HTTP] Request Body (for requestUuid={requestUuid}): {requestBody}")
 
                 Dim aiName As String = ConfigSettings.platform & " " & ConfigSettings.ModelName
 
-                ' 发送请求 ---
                 Using response As HttpResponseMessage = Await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead)
                     response.EnsureSuccessStatusCode()
                     Debug.WriteLine($"[HTTP] 响应状态码: {response.StatusCode}")
 
-                    Dim js As String = $"createChatSection('{aiName}', formatDateTime(new Date()), '{uuid}');"
+                    ' 创建前端聊天节（使用 responseUuid 作为显示 id）
+                    Dim jsCreate As String = $"createChatSection('{aiName}', formatDateTime(new Date()), '{responseUuid}');"
                     If ChatBrowser.InvokeRequired Then
-                        ChatBrowser.Invoke(Sub() ChatBrowser.ExecuteScriptAsync(js))
+                        ChatBrowser.Invoke(Sub() ChatBrowser.ExecuteScriptAsync(jsCreate))
                     Else
-                        Await ChatBrowser.ExecuteScriptAsync(js)
+                        Await ChatBrowser.ExecuteScriptAsync(jsCreate)
                     End If
 
-                    ' 处理流 ---
+                    ' 在前端 DOM 的 chat 节上设置 dataset.requestId，以便前端后续执行时可以把 requestUuid 发回
+                    Dim jsSetMapping As String = $"(function(){{ var el = document.getElementById('chat-{responseUuid}'); if(el) el.dataset.requestId = '{requestUuid}'; }})();"
+                    If ChatBrowser.InvokeRequired Then
+                        ChatBrowser.Invoke(Sub() ChatBrowser.ExecuteScriptAsync(jsSetMapping))
+                    Else
+                        Await ChatBrowser.ExecuteScriptAsync(jsSetMapping)
+                    End If
+
+                    ' 处理流（后续逻辑不变，但使用 responseUuid 进行 flush 等操作）
                     Dim stringBuilder As New StringBuilder()
                     Using responseStream As Stream = Await response.Content.ReadAsStreamAsync()
                         Using reader As New StreamReader(responseStream, Encoding.UTF8)
                             Dim buffer(102300) As Char
                             Dim readCount As Integer
                             Do
-                                ' 检查是否需要停止读取
                                 If stopReaderStream Then
                                     Debug.WriteLine("[Stream] 用户手动停止流读取")
-                                    ' 清空当前缓冲区
                                     _currentMarkdownBuffer.Clear()
                                     allMarkdownBuffer.Clear()
-                                    ' 停止读取并退出循环
                                     Exit Do
                                 End If
                                 readCount = Await reader.ReadAsync(buffer, 0, buffer.Length)
                                 If readCount = 0 Then Exit Do
                                 Dim chunk As String = New String(buffer, 0, readCount)
-                                ' 如果chunk不是以data开头，则跳过
                                 chunk = chunk.Replace("data:", "")
                                 stringBuilder.Append(chunk)
-                                ' 判断stringBuilder是否以'}'结尾，如果是则解析
                                 If stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}).EndsWith("}") Then
-                                    ProcessStreamChunk(stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}), uuid, originQuestion)
+                                    ProcessStreamChunk(stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}), responseUuid, originQuestion)
                                     stringBuilder.Clear()
                                 End If
                             Loop
@@ -1675,39 +1831,36 @@ Public MustInherit Class BaseChatControl
             Debug.WriteLine($"[ERROR] 请求过程中出错: {ex.ToString()}")
             MessageBox.Show("请求失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         Finally
-            ' 标记主流已完成
             _mainStreamCompleted = True
 
-            ' 使用累加后的总token数（包含主调用和MCP润色调用）
             Dim finalTokens As Integer = currentSessionTotalTokens
             If lastTokenInfo.HasValue Then
-                ' 添加主要调用的tokens
                 finalTokens += lastTokenInfo.Value.TotalTokens
                 currentSessionTotalTokens += lastTokenInfo.Value.TotalTokens
             End If
 
-            Debug.WriteLine($"finally 主要调用tokens: {If(lastTokenInfo.HasValue, lastTokenInfo.Value.TotalTokens, 0)}")
             Debug.WriteLine($"finally 当前会话总tokens: {currentSessionTotalTokens}")
 
-            ' 检查是否可以完成处理
+            ' Check 完成：会使用 _finalUuid（即 responseUuid）
             CheckAndCompleteProcessing()
 
-
-            ' 记录全局上下文中，方便后续使用
             Dim answer = New HistoryMessage() With {
-                .role = "assistant",
-                .content = $"这是大模型基于用户问题的答复作为历史参考：{allMarkdownBuffer.ToString()}"
-            }
-            systemHistoryMessageData.Add(answer)
-            ' 管理历史消息大小
-            ManageHistoryMessageSize()
+            .role = "assistant",
+            .content = $"这是大模型基于用户问题的答复作为历史参考：{allMarkdownBuffer.ToString()}"
+        }
+
+            If addHistory Then
+                systemHistoryMessageData.Add(answer)
+                ManageHistoryMessageSize()
+            End If
 
             allMarkdownBuffer.Clear()
-            ' 重置token信息
             lastTokenInfo = Nothing
         End Try
     End Function
 
+    ' 在类字段区：新增 response -> selection 映射（用于在 responseUuid 可用时快速查找选区）
+    Protected _responseSelectionMap As New Dictionary(Of String, SelectionInfo)() ' responseUuid -> SelectionInfo
 
     ' 检查并完成处理
     Private Sub CheckAndCompleteProcessing()
@@ -1717,8 +1870,15 @@ Public MustInherit Class BaseChatControl
         If _mainStreamCompleted AndAlso _pendingMcpTasks = 0 Then
             Debug.WriteLine("所有处理完成，调用 processStreamComplete")
             ExecuteJavaScriptAsyncJS($"processStreamComplete('{_finalUuid}',{currentSessionTotalTokens});")
+            CheckAndCompleteProcessingHook(_finalUuid, allPlainMarkdownBuffer)
         End If
     End Sub
+
+
+    ' 会话完成的钩子，可自行实现
+    Protected Overridable Sub CheckAndCompleteProcessingHook(_finalUuid As String, allPlainMarkdownBuffer As StringBuilder)
+    End Sub
+
 
     Private ReadOnly markdownPipeline As MarkdownPipeline = New MarkdownPipelineBuilder() _
     .UseAdvancedExtensions() _      ' 启用表格、代码块等扩展
@@ -2111,6 +2271,7 @@ Public MustInherit Class BaseChatControl
 
     Private Async Sub FlushBuffer(contentType As String, uuid As String)
         If _currentMarkdownBuffer.Length = 0 Then Return
+        Dim plainContent As String = _currentMarkdownBuffer.ToString()
 
         Dim escapedContent = HttpUtility.JavaScriptStringEncode(_currentMarkdownBuffer.ToString())
         _currentMarkdownBuffer.Clear()
@@ -2120,6 +2281,7 @@ Public MustInherit Class BaseChatControl
         Else
             js = $"appendRenderer('{uuid}','{escapedContent}');"
             allMarkdownBuffer.Append(escapedContent)
+            allPlainMarkdownBuffer.Append(plainContent)
         End If
 
         Await ExecuteJavaScriptAsyncJS(js)
@@ -2127,7 +2289,7 @@ Public MustInherit Class BaseChatControl
 
 
     ' 执行js脚本的异步方法
-    Private Async Function ExecuteJavaScriptAsyncJS(js As String) As Task
+    Public Async Function ExecuteJavaScriptAsyncJS(js As String) As Task
         If ChatBrowser.InvokeRequired Then
             ChatBrowser.Invoke(Sub() ChatBrowser.ExecuteScriptAsync(js))
         Else
@@ -2473,4 +2635,9 @@ if (document.readyState !== 'loading') {
                         MessageBoxIcon.Warning)
     End Sub
 
+
+    ' 排版重构新增：后端逐项应用 documentPlan 项（骨架实现，可按需扩展）
+    Protected Overridable Sub HandleApplyDocumentPlanItem(jsonDoc As JObject)
+        Debug.Print("父类")
+    End Sub
 End Class

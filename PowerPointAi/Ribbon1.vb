@@ -40,4 +40,12 @@ Public Class Ribbon1
             ' 在需要时可以集成到ChatControl调用MCP服务
         End If
     End Sub
+
+    Protected Overrides Sub ProofreadButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Throw New NotImplementedException()
+    End Sub
+
+    Protected Overrides Sub ReformatButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Throw New NotImplementedException()
+    End Sub
 End Class

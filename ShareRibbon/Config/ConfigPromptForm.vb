@@ -1,16 +1,16 @@
-Imports System.Drawing
+ï»¿Imports System.Drawing
 Imports System.Windows.Forms
 Imports System.IO
 Imports Newtonsoft.Json
 
-' ´óÄ£ĞÍÌáÊ¾´ÊÅäÖÃ
+' å¤§æ¨¡å‹æç¤ºè¯é…ç½®
 Public Class ConfigPromptForm
     Inherits Form
     Private ReadOnly _applicationInfo As ApplicationInfo
 
     Public Shared Property ConfigPromptData As List(Of PromptConfigItem)
 
-    '' Ä¬ÈÏÅäÖÃÎÄ¼şÔÚµ±Ç°ÓÃ»§£¬ÎÒµÄÎÄµµÏÂ
+    '' é»˜è®¤é…ç½®æ–‡ä»¶åœ¨å½“å‰ç”¨æˆ·ï¼Œæˆ‘çš„æ–‡æ¡£ä¸‹
     'Private Shared configFileName As String = "office_ai_prompt_config.json"
     'Private Shared configFilePath As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
     '    ConfigSettings.OfficeAiAppDataFolder, configFileName)
@@ -29,48 +29,48 @@ Public Class ConfigPromptForm
 
     Public Property propmtName As String
     Public Property propmtContent As String
-    Public Property VBA_Q As String = "ÄãÊÇÒ»ÃûÓÅĞãµÄExcel×ÊÉî×¨¼Ò£¬ÉÃ³¤Ğ´VBA´úÂë¡£Èç¹ûÄãÓĞÊä³ö´úÂë£¬ÇëÄã×ĞÏ¸Ë¼¿¼ºÍ¼ì²é£¬Ã»ÓĞÊı¾İ»ò¸ñÊ½²»¶ÔµÄĞĞ¿ÉÒÔÌø¹ıÓÃ´¦Àí£¬Í¬Ê±ÎÒ²»ĞèÒªÈÎºÎÍ¨Æª´óÂÛµÄ·Ï»°£¬ÇëÄãÖÇÄÜ¿ìËÙÒ»µã¡£"
+    Public Property VBA_Q As String = "ä½ æ˜¯ä¸€åä¼˜ç§€çš„Officeèµ„æ·±ä¸“å®¶ï¼Œæ“…é•¿å†™VBAä»£ç ã€‚å¦‚æœä½ æœ‰è¾“å‡ºä»£ç ï¼Œè¯·ä½ ä»”ç»†æ€è€ƒå’Œæ£€æŸ¥ï¼Œæ²¡æœ‰æ•°æ®æˆ–æ ¼å¼ä¸å¯¹çš„è¡Œå¯ä»¥è·³è¿‡ç”¨å¤„ç†ï¼ŒåŒæ—¶æˆ‘ä¸éœ€è¦ä»»ä½•é€šç¯‡å¤§è®ºçš„åºŸè¯ï¼Œè¯·ä½ æ™ºèƒ½å¿«é€Ÿä¸€ç‚¹ã€‚"
 
-    Public Property EXCEL_TAB_Q As String = "ÄãÊÇÒ»ÃûÓÅĞãµÄExcel×ÊÉî×¨¼Ò£¬ÉÃ³¤Í¨¹ıVBA´úÂë¸ù¾İÊı¾İÉú³É¸÷ÖÖÍ¼±í£¬ÀıÈç£º±ıÍ¼¡¢ÕÛÏßÍ¼¡¢Öù×´Í¼£¬Çë¸ù¾İÎÒµÄÎÊÌâ¸ø³öÎÒĞèÒªµÄVBA´úÂë¡£Í¬Ê±ÎÒ²»ĞèÒªÈÎºÎÍ¨Æª´óÂÛµÄ·Ï»°£¬ÇëÄãÖÇÄÜ¿ìËÙÒ»µã¡£"
+    Public Property EXCEL_TAB_Q As String = "ä½ æ˜¯ä¸€åä¼˜ç§€çš„Officeèµ„æ·±ä¸“å®¶ï¼Œæ“…é•¿é€šè¿‡VBAä»£ç æ ¹æ®æ•°æ®ç”Ÿæˆå„ç§å›¾è¡¨ï¼Œä¾‹å¦‚ï¼šé¥¼å›¾ã€æŠ˜çº¿å›¾ã€æŸ±çŠ¶å›¾ï¼Œè¯·æ ¹æ®æˆ‘çš„é—®é¢˜ç»™å‡ºæˆ‘éœ€è¦çš„VBAä»£ç ã€‚åŒæ—¶æˆ‘ä¸éœ€è¦ä»»ä½•é€šç¯‡å¤§è®ºçš„åºŸè¯ï¼Œè¯·ä½ æ™ºèƒ½å¿«é€Ÿä¸€ç‚¹ã€‚"
 
     Public Sub LoadConfig()
-        ' ³õÊ¼»¯ÅäÖÃÊı¾İ
+        ' åˆå§‹åŒ–é…ç½®æ•°æ®
         ConfigPromptData = New List(Of PromptConfigItem)()
 
-        ' ¸ù¾İÓ¦ÓÃÀàĞÍÉèÖÃÄ¬ÈÏÌáÊ¾´Ê
+        ' æ ¹æ®åº”ç”¨ç±»å‹è®¾ç½®é»˜è®¤æç¤ºè¯
         Dim defaultPrompt = GetDefaultPrompt()
 
-        ' Ìí¼ÓÄ¬ÈÏÅäÖÃ
+        ' æ·»åŠ é»˜è®¤é…ç½®
         If Not File.Exists(configFilePath) Then
             ConfigPromptData.Add(defaultPrompt)
         Else
-            ' ¼ÓÔØ×Ô¶¨ÒåÅäÖÃ
+            ' åŠ è½½è‡ªå®šä¹‰é…ç½®
             Dim json As String = File.ReadAllText(configFilePath)
             ConfigPromptData = JsonConvert.DeserializeObject(Of List(Of PromptConfigItem))(json)
         End If
 
         Dim vbap = New PromptConfigItem() With {
-                .name = "VBA×¨¼ÒÉí·İ",
+                .name = "VBAä¸“å®¶èº«ä»½",
                 .content = VBA_Q,
                 .selected = True
             }
 
         Dim excelTabP = New PromptConfigItem() With {
-                .name = "Excel±í¸ñ×¨¼ÒÉí·İ",
+                .name = "Excelè¡¨æ ¼ä¸“å®¶èº«ä»½",
                 .content = EXCEL_TAB_Q,
                 .selected = False
             }
-        ' Ìí¼ÓÄ¬ÈÏÅäÖÃ
+        ' æ·»åŠ é»˜è®¤é…ç½®
         If Not File.Exists(configFilePath) Then
             ConfigPromptData.Add(vbap)
             ConfigPromptData.Add(excelTabP)
         Else
-            ' ¼ÓÔØ×Ô¶¨ÒåÅäÖÃ
+            ' åŠ è½½è‡ªå®šä¹‰é…ç½®
             Dim json As String = File.ReadAllText(configFilePath)
             ConfigPromptData = JsonConvert.DeserializeObject(Of List(Of PromptConfigItem))(json)
         End If
 
-        ' ³õÊ¼»¯ÅäÖÃ£¬½«Êı¾İ³õÊ¼»¯µ½ ConfigSettings£¬·½±ãÈ«¾Öµ÷ÓÃ
+        ' åˆå§‹åŒ–é…ç½®ï¼Œå°†æ•°æ®åˆå§‹åŒ–åˆ° ConfigSettingsï¼Œæ–¹ä¾¿å…¨å±€è°ƒç”¨
         For Each item In ConfigPromptData
             If item.selected Then
                 ConfigSettings.propmtName = item.name
@@ -83,26 +83,26 @@ Public Class ConfigPromptForm
         Select Case _applicationInfo.Type
             Case OfficeApplicationType.Word
                 Return New PromptConfigItem() With {
-                    .name = "WordÎÄµµ×¨¼Ò",
-                    .content = "ÄãÊÇÒ»ÃûWordÎÄµµ´¦Àí×¨¼Ò£¬ÉÃ³¤´¦Àí¸÷ÖÖÎÄµµÏà¹ØµÄÎÊÌâ¡£",
+                    .name = "Wordæ–‡æ¡£ä¸“å®¶",
+                    .content = "ä½ æ˜¯ä¸€åWordæ–‡æ¡£å¤„ç†ä¸“å®¶ï¼Œæ“…é•¿å¤„ç†å„ç§æ–‡æ¡£ç›¸å…³çš„é—®é¢˜ã€‚",
                     .selected = True
                 }
             Case OfficeApplicationType.Excel
                 Return New PromptConfigItem() With {
-                    .name = "Excel VBA×¨¼Ò",
+                    .name = "Excel VBAä¸“å®¶",
                     .content = VBA_Q,
                     .selected = True
                 }
             Case OfficeApplicationType.PowerPoint
                 Return New PromptConfigItem() With {
-                    .name = "PPTÖÆ×÷×¨¼Ò",
-                    .content = "ÄãÊÇÒ»ÃûPowerPointÑİÊ¾ÎÄ¸åÖÆ×÷×¨¼Ò£¬ÉÃ³¤´¦Àí¸÷ÖÖPPTÏà¹ØµÄÎÊÌâ¡£",
+                    .name = "PPTåˆ¶ä½œä¸“å®¶",
+                    .content = "ä½ æ˜¯ä¸€åPowerPointæ¼”ç¤ºæ–‡ç¨¿åˆ¶ä½œä¸“å®¶ï¼Œæ“…é•¿å¤„ç†å„ç§PPTç›¸å…³çš„é—®é¢˜ã€‚",
                     .selected = True
                 }
             Case Else
                 Return New PromptConfigItem() With {
-                    .name = "OfficeÖúÊÖ",
-                    .content = "ÄãÊÇÒ»ÃûOffice°ì¹«×¨¼Ò¡£",
+                    .name = "OfficeåŠ©æ‰‹",
+                    .content = "ä½ æ˜¯ä¸€åOfficeåŠå…¬ä¸“å®¶ã€‚",
                     .selected = True
                 }
         End Select
@@ -112,20 +112,20 @@ Public Class ConfigPromptForm
         _applicationInfo = applicationInfo
         LoadConfig()
 
-        ' ³õÊ¼»¯±íµ¥
-        Me.Text = "ÅäÖÃÁÄÌì´óÄ£ĞÍÌáÊ¾´Ê"
+        ' åˆå§‹åŒ–è¡¨å•
+        Me.Text = "é…ç½®èŠå¤©å¤§æ¨¡å‹æç¤ºè¯"
         Me.Size = New Size(480, 550)
-        Me.StartPosition = FormStartPosition.CenterScreen ' ÉèÖÃ±íµ¥¾ÓÖĞÏÔÊ¾
+        Me.StartPosition = FormStartPosition.CenterScreen ' è®¾ç½®è¡¨å•å±…ä¸­æ˜¾ç¤º
 
         descriptionLabel1 = New Label()
-        descriptionLabel1.Text = "ÌáÊ¾´ÊÏàµ±ÓÚ¸øAIÉè¶¨¶ÔÓ¦µÄÉí·İ£¬ÕâÑù²ÅÄÜÕÒµ½¸ÃÁìÓòµÄÎÊÌâ£¬»Ø´ğÆğÀ´¸ü×¨Òµ£¬ÀıÈç£ºÄãÊÇÒ»ÃûExcel VBA×¨¼Ò£¬½ÓÏÂÀ´µÄÎÊÌâ¶¼ºÍExcelÒÔ¼°VBAÏà¹Ø"
+        descriptionLabel1.Text = "æç¤ºè¯ç›¸å½“äºç»™AIè®¾å®šå¯¹åº”çš„èº«ä»½ï¼Œè¿™æ ·æ‰èƒ½æ‰¾åˆ°è¯¥é¢†åŸŸçš„é—®é¢˜ï¼Œå›ç­”èµ·æ¥æ›´ä¸“ä¸šï¼Œä¾‹å¦‚ï¼šä½ æ˜¯ä¸€åExcel VBAä¸“å®¶ï¼Œæ¥ä¸‹æ¥çš„é—®é¢˜éƒ½å’ŒExcelä»¥åŠVBAç›¸å…³"
         descriptionLabel1.Dock = DockStyle.Top
         descriptionLabel1.Height = 40
         descriptionLabel1.Margin = New Padding(10, 10, 10, 10)
         descriptionLabel1.TextAlign = ContentAlignment.MiddleLeft
         Me.Controls.Add(descriptionLabel1)
 
-        ' ³õÊ¼»¯Ä£ĞÍÑ¡Ôñ ComboBox
+        ' åˆå§‹åŒ–æ¨¡å‹é€‰æ‹© ComboBox
         currentPromptComboBox = New ComboBox()
         currentPromptComboBox.DisplayMember = "name"
         currentPromptComboBox.ValueMember = "value"
@@ -134,10 +134,10 @@ Public Class ConfigPromptForm
         AddHandler currentPromptComboBox.SelectedIndexChanged, AddressOf propmtCombBox_SelectedIndexChanged
         Me.Controls.Add(currentPromptComboBox)
 
-        ' ³õÊ¼»¯±à¼­ÅäÖÃ°´Å¥
+        ' åˆå§‹åŒ–ç¼–è¾‘é…ç½®æŒ‰é’®
         editConfigButton = New Button()
-        editConfigButton.Text = "ĞŞ¸Ä"
-        editConfigButton.Font = New Font(editConfigButton.Font.FontFamily, 8) ' ÉèÖÃ×ÖÌå´óĞ¡
+        editConfigButton.Text = "ä¿®æ”¹"
+        editConfigButton.Font = New Font(editConfigButton.Font.FontFamily, 8) ' è®¾ç½®å­—ä½“å¤§å°
         editConfigButton.Location = New Point(280, 50)
         editConfigButton.Size = New Size(40, currentPromptComboBox.Height + 2)
         AddHandler editConfigButton.Click, AddressOf EditConfigButton_Click
@@ -145,7 +145,7 @@ Public Class ConfigPromptForm
         Me.Controls.Add(editConfigButton)
 
 
-        ' ÓÃÀ´½ÓÊÕÖ®Ç°Ñ¡ÔñµÄÌáÊ¾´ÊÃû³ÆºÍÌáÊ¾´ÊÄÚÈİ
+        ' ç”¨æ¥æ¥æ”¶ä¹‹å‰é€‰æ‹©çš„æç¤ºè¯åç§°å’Œæç¤ºè¯å†…å®¹
         Dim propmtNameForDB As String
         Dim propmtContentForDB As String
 
@@ -156,7 +156,7 @@ Public Class ConfigPromptForm
             End If
         Next
 
-        ' ÌáÊ¾´ÊÄÚÈİÔ¤ÀÀ¿ò
+        ' æç¤ºè¯å†…å®¹é¢„è§ˆæ¡†
         promptContentBox = New TextBox()
         promptContentBox.Multiline = True
         promptContentBox.ScrollBars = ScrollBars.Vertical
@@ -168,23 +168,23 @@ Public Class ConfigPromptForm
         Me.Controls.Add(promptContentBox)
 
 
-        ' ³õÊ¼»¯È·ÈÏ°´Å¥
+        ' åˆå§‹åŒ–ç¡®è®¤æŒ‰é’®
         confirmButton = New Button()
-        confirmButton.Text = "Ê¹ÓÃ¸ÃÌáÊ¾´Ê"
+        confirmButton.Text = "ä½¿ç”¨è¯¥æç¤ºè¯"
         confirmButton.Location = New Point(50, 210)
         confirmButton.Size = New Size(100, 30)
         AddHandler confirmButton.Click, AddressOf ConfirmButton_Click
         Me.Controls.Add(confirmButton)
 
-        ' ³õÊ¼»¯Ìí¼ÓÅäÖÃ°´Å¥
+        ' åˆå§‹åŒ–æ·»åŠ é…ç½®æŒ‰é’®
         addConfigButton = New Button()
-        addConfigButton.Text = "Ìí¼ÓĞÂÌáÊ¾´Ê"
+        addConfigButton.Text = "æ·»åŠ æ–°æç¤ºè¯"
         addConfigButton.Location = New Point(170, 210)
         addConfigButton.Size = New Size(100, 30)
         AddHandler addConfigButton.Click, AddressOf AddConfigButton_Click
         Me.Controls.Add(addConfigButton)
 
-        ' ³õÊ¼»¯ĞÂÅäÖÃ¿Ø¼ş
+        ' åˆå§‹åŒ–æ–°é…ç½®æ§ä»¶
         newPromptComboBox = New TextBox()
         newPromptComboBox.Text = NEW_NAME_C
         newPromptComboBox.ForeColor = Color.Gray
@@ -198,29 +198,29 @@ Public Class ConfigPromptForm
         newPromptContent = New TextBox()
         newPromptContent.Multiline = True
         newPromptContent.ScrollBars = ScrollBars.Vertical
-        'newPromptContent.Text = If(String.IsNullOrEmpty(propmtContentForDB), "ÊäÈëÌáÊ¾´ÊÄÚÈİ", propmtContentForDB)
+        'newPromptContent.Text = If(String.IsNullOrEmpty(propmtContentForDB), "è¾“å…¥æç¤ºè¯å†…å®¹", propmtContentForDB)
         newPromptContent.ForeColor = If(String.IsNullOrEmpty(propmtContentForDB), Color.Gray, Color.Black)
         newPromptContent.Location = New Point(10, 290)
         newPromptContent.Size = New Size(360, 120)
         newPromptContent.Visible = False
-        AddHandler newPromptContent.Enter, AddressOf ApiKeyTextBox_Enter ' Ìí¼Ó Enter ÊÂ¼ş´¦Àí³ÌĞò
-        AddHandler newPromptContent.Leave, AddressOf ApiKeyTextBox_Leave ' Ìí¼Ó Leave ÊÂ¼ş´¦Àí³ÌĞò
+        AddHandler newPromptContent.Enter, AddressOf ApiKeyTextBox_Enter ' æ·»åŠ  Enter äº‹ä»¶å¤„ç†ç¨‹åº
+        AddHandler newPromptContent.Leave, AddressOf ApiKeyTextBox_Leave ' æ·»åŠ  Leave äº‹ä»¶å¤„ç†ç¨‹åº
         Me.Controls.Add(newPromptContent)
 
         saveConfigButton = New Button()
-        saveConfigButton.Text = "±£´æ"
+        saveConfigButton.Text = "ä¿å­˜"
         saveConfigButton.Location = New Point(100, 420)
         saveConfigButton.Size = New Size(100, 30)
         saveConfigButton.Visible = False
         AddHandler saveConfigButton.Click, AddressOf SaveConfigButton_Click
         Me.Controls.Add(saveConfigButton)
 
-        ' ¼ÓÔØÅäÖÃµ½¸´Ñ¡¿ò
+        ' åŠ è½½é…ç½®åˆ°å¤é€‰æ¡†
         For Each configItem In ConfigPromptData
             currentPromptComboBox.Items.Add(configItem)
         Next
 
-        ' ÉèÖÃÖ®Ç°Ñ¡ÔñµÄÄ£ĞÍ
+        ' è®¾ç½®ä¹‹å‰é€‰æ‹©çš„æ¨¡å‹
         If Not String.IsNullOrEmpty(propmtNameForDB) Then
             For i As Integer = 0 To currentPromptComboBox.Items.Count - 1
                 If CType(currentPromptComboBox.Items(i), PromptConfigItem).name = propmtNameForDB Then
@@ -238,7 +238,7 @@ Public Class ConfigPromptForm
     End Sub
 
 
-    ' ĞŞ¸ÄÅäÖÃÎÄ¼şÂ·¾¶»ñÈ¡·½Ê½
+    ' ä¿®æ”¹é…ç½®æ–‡ä»¶è·¯å¾„è·å–æ–¹å¼
     Private ReadOnly Property configFilePath As String
         Get
             Return _applicationInfo.GetPromptConfigFilePath()
@@ -246,17 +246,17 @@ Public Class ConfigPromptForm
     End Property
 
     Private Sub EditConfigButton_Click(sender As Object, e As EventArgs)
-        ' »ñÈ¡Ñ¡ÖĞµÄÄ£ĞÍÌáÊ¾´Ê
+        ' è·å–é€‰ä¸­çš„æ¨¡å‹æç¤ºè¯
         Dim selectedPlatform As PromptConfigItem = CType(currentPromptComboBox.SelectedItem, PromptConfigItem)
 
-        ' ½«Ñ¡ÖĞµÄÊı¾İ´øÈëµ½ĞÂÅäÖÃ¿Ø¼şÖĞ
+        ' å°†é€‰ä¸­çš„æ•°æ®å¸¦å…¥åˆ°æ–°é…ç½®æ§ä»¶ä¸­
         newPromptComboBox.Text = selectedPlatform.name
         newPromptComboBox.ForeColor = Color.Black
 
         newPromptContent.Text = selectedPlatform.content
         newPromptContent.ForeColor = Color.Black
 
-        ' ÏÔÊ¾ĞÂÅäÖÃ¿Ø¼ş
+        ' æ˜¾ç¤ºæ–°é…ç½®æ§ä»¶
         Me.Size = New Size(480, 550)
         newPromptComboBox.Visible = True
         newPromptContent.Visible = True
@@ -264,15 +264,15 @@ Public Class ConfigPromptForm
     End Sub
 
 
-    ' ÇĞ»»ÌáÊ¾´ÊºóµÄÈ·ÈÏ°´Å¥
+    ' åˆ‡æ¢æç¤ºè¯åçš„ç¡®è®¤æŒ‰é’®
     Private Sub ConfirmButton_Click(sender As Object, e As EventArgs)
 
-        ' »ñÈ¡Ñ¡ÖĞµÄÌáÊ¾´ÊÃû³ÆºÍÌáÉı´ÊÄÚÈİ
+        ' è·å–é€‰ä¸­çš„æç¤ºè¯åç§°å’Œæå‡è¯å†…å®¹
         Dim selectedPlatform As PromptConfigItem = CType(currentPromptComboBox.SelectedItem, PromptConfigItem)
         Dim name As String = selectedPlatform.name
         Dim content As String = selectedPlatform.content
 
-        ' ÖØÖÃÑ¡ÔñºóµÄselectedÊôĞÔºÍkey
+        ' é‡ç½®é€‰æ‹©åçš„selectedå±æ€§å’Œkey
         For Each config In ConfigPromptData
             config.selected = False
             If selectedPlatform.name = config.name Then
@@ -282,14 +282,14 @@ Public Class ConfigPromptForm
             End If
         Next
 
-        ' ±£´æµ½ÎÄ¼ş
+        ' ä¿å­˜åˆ°æ–‡ä»¶
         SaveConfig()
 
-        ' Ë¢ĞÂÄÚ´æÖĞµÄapiÅäÖÃ
+        ' åˆ·æ–°å†…å­˜ä¸­çš„apié…ç½®
         ConfigSettings.propmtName = name
         ConfigSettings.propmtContent = content
 
-        ' ¹Ø±Õ¶Ô»°¿ò
+        ' å…³é—­å¯¹è¯æ¡†
         Me.DialogResult = DialogResult.OK
         Me.Close()
     End Sub
@@ -297,12 +297,12 @@ Public Class ConfigPromptForm
 
     Public Sub SaveConfig()
         Dim json As String = JsonConvert.SerializeObject(ConfigPromptData, Formatting.Indented)
-        ' Èç¹ûconfigFilePathµÄÄ¿Â¼²»´æÔÚ¾Í´´½¨
+        ' å¦‚æœconfigFilePathçš„ç›®å½•ä¸å­˜åœ¨å°±åˆ›å»º
         Dim dir = Path.GetDirectoryName(configFilePath)
         If Not Directory.Exists(dir) Then
             Directory.CreateDirectory(dir)
         End If
-        'Èç¹ûÎÄ¼ş²»´æÔÚ¾Í´´½¨
+        'å¦‚æœæ–‡ä»¶ä¸å­˜åœ¨å°±åˆ›å»º
         If Not File.Exists(configFilePath) Then
             File.Create(configFilePath).Dispose()
         End If
@@ -311,7 +311,7 @@ Public Class ConfigPromptForm
 
 
     Private Sub propmtCombBox_SelectedIndexChanged(sender As Object, e As EventArgs)
-        ' ¸ù¾İÑ¡ÖĞµÄÌáÊ¾´ÊÃû³ÆÏÔÊ¾²»Í¬µÄÄÚÈİ
+        ' æ ¹æ®é€‰ä¸­çš„æç¤ºè¯åç§°æ˜¾ç¤ºä¸åŒçš„å†…å®¹
         Dim selectedModel As PromptConfigItem = CType(currentPromptComboBox.SelectedItem, PromptConfigItem)
         promptContentBox.Clear()
         promptContentBox.Text = selectedModel.content
@@ -319,7 +319,7 @@ Public Class ConfigPromptForm
     End Sub
 
     Private Sub AddConfigButton_Click(sender As Object, e As EventArgs)
-        ' ÏÔÊ¾ĞÂÅäÖÃ¿Ø¼ş
+        ' æ˜¾ç¤ºæ–°é…ç½®æ§ä»¶
         Me.Size = New Size(480, 550)
         newPromptComboBox.Visible = True
         newPromptContent.Visible = True
@@ -328,29 +328,29 @@ Public Class ConfigPromptForm
 
 
     Private Sub SaveConfigButton_Click(sender As Object, e As EventArgs)
-        ' »ñÈ¡ĞÂÅäÖÃ
+        ' è·å–æ–°é…ç½®
         Dim name As String = newPromptComboBox.Text
         Dim content As String = newPromptContent.Text
 
         If String.IsNullOrWhiteSpace(name) Or name = NEW_NAME_C Then
-            GlobalStatusStrip.ShowWarning("ÇëÊäÈëÌáÊ¾´ÊÃû³Æ£¡")
+            GlobalStatusStrip.ShowWarning("è¯·è¾“å…¥æç¤ºè¯åç§°ï¼")
             Return
         End If
 
         If String.IsNullOrWhiteSpace(content) Then
-            GlobalStatusStrip.ShowWarning("ÇëÊäÈëÌáÊ¾´ÊÄÚÈİ£¡")
+            GlobalStatusStrip.ShowWarning("è¯·è¾“å…¥æç¤ºè¯å†…å®¹ï¼")
             Return
         End If
 
-        ' ¼ì²éÊÇ·ñ´æÔÚÏàÍ¬µÄ propmtName
+        ' æ£€æŸ¥æ˜¯å¦å­˜åœ¨ç›¸åŒçš„ propmtName
         Dim existingItem As PromptConfigItem = ConfigPromptData.FirstOrDefault(Function(item) item.name = name)
         If existingItem IsNot Nothing Then
-            ' ¸üĞÂÒÑÓĞµÄ propmtName Êı¾İ
+            ' æ›´æ–°å·²æœ‰çš„ propmtName æ•°æ®
             existingItem.name = name
             existingItem.content = content
             existingItem.selected = True
         Else
-            ' ÓÃ»§±¾µØĞÂÔöÄ£ĞÍµ½ ComboBox
+            ' ç”¨æˆ·æœ¬åœ°æ–°å¢æ¨¡å‹åˆ° ComboBox
             Dim newItem As New PromptConfigItem() With {
                 .name = name,
                 .content = content,
@@ -366,7 +366,7 @@ Public Class ConfigPromptForm
         newPromptComboBox.Clear()
         newPromptContent.Clear()
 
-        ' ±£´æµ½ÎÄ¼ş
+        ' ä¿å­˜åˆ°æ–‡ä»¶
         SaveConfig()
 
         ConfigSettings.propmtContent = content
@@ -379,7 +379,7 @@ Public Class ConfigPromptForm
         saveConfigButton.Visible = False
     End Sub
 
-    Private Property NEW_NAME_C As String = "È¡¸öÏìÁÁµÄÃû³Æ£¬ÀıÈç£ºExcelº¯Êı×¨¼Ò"
+    Private Property NEW_NAME_C As String = "å–ä¸ªå“äº®çš„åç§°ï¼Œä¾‹å¦‚ï¼šExcelå‡½æ•°ä¸“å®¶"
 
     Private Sub NewModelPlatformTextBox_Enter(sender As Object, e As EventArgs)
         If newPromptComboBox.Text = NEW_NAME_C Then
@@ -395,7 +395,7 @@ Public Class ConfigPromptForm
         End If
     End Sub
 
-    Private Property NEW_CONTENT_C As String = "ÊäÈë´óÄ£ĞÍÌáÊ¾´ÊÄÚÈİ£¬ÎªÆäÉè¶¨Ò»¸öÉí·İ£¬ÀıÈç£ºÄãÊÇÒ»¸ö·Ç³£À÷º¦µÄExcel´óÊ¦£¬ÉÃ³¤¸÷ÖÖVBA´úÂë"
+    Private Property NEW_CONTENT_C As String = "è¾“å…¥å¤§æ¨¡å‹æç¤ºè¯å†…å®¹ï¼Œä¸ºå…¶è®¾å®šä¸€ä¸ªèº«ä»½ï¼Œä¾‹å¦‚ï¼šä½ æ˜¯ä¸€ä¸ªéå¸¸å‰å®³çš„Excelå¤§å¸ˆï¼Œæ“…é•¿å„ç§VBAä»£ç "
     Private Sub ApiKeyTextBox_Enter(sender As Object, e As EventArgs)
         If newPromptContent.Text = NEW_CONTENT_C Then
             newPromptContent.Text = ""
@@ -411,7 +411,7 @@ Public Class ConfigPromptForm
     End Sub
 
 
-    ' ÌáÊ¾´ÊÅäÖÃ£¨Ã¿´Î½ö¿ÉÊ¹ÓÃ1¸ö£©
+    ' æç¤ºè¯é…ç½®ï¼ˆæ¯æ¬¡ä»…å¯ä½¿ç”¨1ä¸ªï¼‰
     Public Class PromptConfigItem
         Public Property name As String
         Public Property content As String

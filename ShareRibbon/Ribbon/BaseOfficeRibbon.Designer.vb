@@ -56,6 +56,10 @@ Partial Class BaseOfficeRibbon
         ' 新增：翻译配置按钮
         Me.TranslateConfigButton = Me.Factory.CreateRibbonButton
 
+        ' 新增：校对与排版按钮
+        Me.ProofreadButton = Me.Factory.CreateRibbonButton
+        Me.ReformatButton = Me.Factory.CreateRibbonButton
+
         Me.TabAI.SuspendLayout()
         Me.GroupAI.SuspendLayout()
         Me.SuspendLayout()
@@ -102,6 +106,8 @@ Partial Class BaseOfficeRibbon
         Me.GroupAI.Items.Add(Me.PromptConfigButton)
         Me.GroupAI.Items.Add(Me.ChatButton)
         Me.GroupAI.Items.Add(Me.TranslateConfigButton)
+        Me.GroupAI.Items.Add(Me.ProofreadButton)
+        Me.GroupAI.Items.Add(Me.ReformatButton)
         Me.GroupAI.Items.Add(Me.Separator2)
         Me.GroupAI.Items.Add(Me.AboutButton)
         Me.GroupAI.Items.Add(Me.ClearCacheButton)
@@ -128,6 +134,19 @@ Partial Class BaseOfficeRibbon
         Me.ChatButton.Label = "Chat AI"
         Me.ChatButton.Name = "ChatButton"
         Me.ChatButton.ShowImage = True
+        ' 校对按钮
+        Me.ProofreadButton.Label = "校对"
+        Me.ProofreadButton.Name = "ProofreadButton"
+        Me.ProofreadButton.ShowImage = True
+        Me.ProofreadButton.ScreenTip = "对选中或全文进行语言校对"
+        Me.ProofreadButton.SuperTip = "校正语法、拼写并返回可解析的修订JSON"
+
+        ' 排版按钮
+        Me.ReformatButton.Label = "排版"
+        Me.ReformatButton.Name = "ReformatButton"
+        Me.ReformatButton.ShowImage = True
+        Me.ReformatButton.ScreenTip = "对选中或全文进行结构化排版"
+        Me.ReformatButton.SuperTip = "优化标题、段落与列表并返回可解析的修订JSON"
 
         ' TranslateConfigButton
         Me.TranslateConfigButton.Label = "翻译配置"
@@ -215,4 +234,8 @@ Partial Class BaseOfficeRibbon
 
     ' 新增翻译配置按钮声明
     Protected WithEvents TranslateConfigButton As Microsoft.Office.Tools.Ribbon.RibbonButton
+
+    ' 新增：校对/排版按钮声明
+    Protected WithEvents ProofreadButton As Microsoft.Office.Tools.Ribbon.RibbonButton
+    Protected WithEvents ReformatButton As Microsoft.Office.Tools.Ribbon.RibbonButton
 End Class

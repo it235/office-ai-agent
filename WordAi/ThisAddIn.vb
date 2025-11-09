@@ -55,15 +55,13 @@ Public Class ThisAddIn
     End Sub
 
 
+    ' 为新工作簿创建任务窗格
     Private Sub CreateChatTaskPane()
         Try
-            ' 为新工作簿创建任务窗格
             chatControl = New ChatControl()
             chatTaskPane = Me.CustomTaskPanes.Add(chatControl, "Word AI智能助手")
-            chatTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
-            chatTaskPane.Width = 420
-            'AddHandler chatTaskPane.VisibleChanged, AddressOf ChatTaskPane_VisibleChanged
-            'chatTaskPane.Visible = False
+                chatTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
+                chatTaskPane.Width = 420
 
         Catch ex As Exception
             MessageBox.Show($"初始化新建工作簿任务窗格失败: {ex.Message}")

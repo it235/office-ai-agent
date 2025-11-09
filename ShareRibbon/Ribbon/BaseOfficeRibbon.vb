@@ -154,6 +154,10 @@ Public MustInherit Class BaseOfficeRibbon
     Protected MustOverride Function GetApplication() As ApplicationInfo
 
 
+    ' 新增：校对与排版按钮的抽象事件（由子类实现具体流程）
+    Protected MustOverride Sub ProofreadButton_Click(sender As Object, e As RibbonControlEventArgs) Handles ProofreadButton.Click
+    Protected MustOverride Sub ReformatButton_Click(sender As Object, e As RibbonControlEventArgs) Handles ReformatButton.Click
+
     ' Deepseek按钮点击事件
     Protected MustOverride Sub DeepseekButton_Click(sender As Object, e As RibbonControlEventArgs) Handles DeepseekButton.Click
 

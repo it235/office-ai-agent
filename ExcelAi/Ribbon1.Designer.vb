@@ -67,6 +67,8 @@ Partial Class Ribbon1
         Me.SpotlightButton.Image = ShareRibbon.SharedResources.Wait
         Me.BatchDataGenButton.Visible = False
         Me.WebCaptureButton.Visible = False
+        Me.ProofreadButton.Visible = False
+        Me.ReformatButton.Visible = False
     End Sub
 
 End Class

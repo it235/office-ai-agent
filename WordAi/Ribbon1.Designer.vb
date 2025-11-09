@@ -67,6 +67,7 @@ Partial Class Ribbon1
 
         Me.DeepseekButton.Image = ShareRibbon.SharedResources.Deepseek
         Me.WebCaptureButton.Image = ShareRibbon.SharedResources.Send32
+
     End Sub
 
 End Class

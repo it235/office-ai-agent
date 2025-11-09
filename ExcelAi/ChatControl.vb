@@ -130,7 +130,7 @@ Public Class ChatControl
     End Function
 
 
-    Protected Overrides Function RunCodePreview(vbaCode As String, preview As Boolean)
+    Protected Overrides Function RunCodePreview(vbaCode As String, preview As Boolean) As Boolean
         ' 如果需要预览
         Dim previewTool As New EnhancedPreviewAndConfirm()
         ' 允许用户预览代码变更
@@ -455,7 +455,7 @@ Public Class ChatControl
     Protected Overrides Sub SendChatMessage(message As String)
         ' 这里可以实现word的特殊逻辑
         Debug.Print(message)
-        Send(message)
+        Send(message, "", True, "")
     End Sub
 
     Protected Overrides Function AppendCurrentSelectedContent(message As String) As String
@@ -663,5 +663,10 @@ Public Class ChatControl
         ' 如果无法获取工作簿路径，则返回应用程序目录
         Return System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)
     End Function
+
+
+    Protected Overrides Sub CheckAndCompleteProcessingHook(_finalUuid As String, allPlainMarkdownBuffer As StringBuilder)
+
+    End Sub
 End Class
 

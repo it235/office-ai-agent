@@ -658,7 +658,7 @@
         }
 
         .reference-container {
-            margin: 8px 0 0 42px;
+/*            margin: 8px 0 0 42px;*/
             background: #f8fafc;
             border-radius: 8px;
             border: 1px solid #e0e5eb;
@@ -747,7 +747,7 @@
             font-size: 12px;
             color: #888;
             display: flex;
-            justify-content: flex-end;
+/*            justify-content: flex-end;*/
         }
 
         .token-count {
@@ -1398,6 +1398,96 @@
             /* 展开时箭头向下 */
             transform: translateY(-50%) rotate(0deg);
         }
+
+        /* ====== 校对、排版 ====== */
+/*        .revisions-footer-wrapper {
+            margin-right: 8px;
+            margin-left: 48px;
+        }*/
+
+        .revisions-list-inner {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 260px;
+            overflow: auto;
+            width: 100%;
+        }
+
+        .revisions-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-right: 12px;
+            max-width: 640px;
+        }
+
+        .revisions-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .revision-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 8px;
+            background: #fafafa;
+            border: 1px solid #f0f0f0;
+            border-radius: 6px;
+        }
+
+            .revision-item .rev-summary {
+                flex: 1;
+                font-size: 12px;
+                color: #333;
+                white-space: pre-wrap;
+            }
+
+        .revision-checkbox {
+            margin-top: 6px;
+            flex: 0 0 20px;
+        }
+
+        .rev-accept-btn {
+            background: #4CAF50;
+            color: #fff;
+            border: none;
+            padding: 6px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+            .rev-accept-btn[disabled] {
+                opacity: 0.6;
+                cursor: default;
+            }
+
+        .revision-item.rev-accepted {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        .revisions-bottom {
+            margin-top: 8px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        .revisions-action-secondary {
+            background: #E9525F;
+            color: #fff;
+            border: none;
+            padding: 6px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        /* ====== 校对、排版 end====== */
     </style>
 </head>
 <body>
@@ -1638,32 +1728,32 @@
 
             // add button
             return `
-                                                                                        <div class="code-block">
-                                                                                            ${codeHtml}
-                                                                                            <div class="code-buttons">
-                                                                                                <button class="code-button copy-button" onclick="copyCode(this)">
-                                                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                                                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                                                                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                                                                                                    </svg>
-                                                                                                    复制
-                                                                                                </button>
-                                                                                                <button class="code-button edit-button" onclick="editCode(this)">
-                                                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                                                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                                                                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                                                                                                    </svg>
-                                                                                                    编辑
-                                                                                                </button>
-                                                                                                <button class="code-button execute-button" onclick="executeCode(this)">
-                                                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                                                                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                                                                                                    </svg>
-                                                                                                    执行
-                                                                                                </button>
+                                                                                            <div class="code-block">
+                                                                                                ${codeHtml}
+                                                                                                <div class="code-buttons">
+                                                                                                    <button class="code-button copy-button" onclick="copyCode(this)">
+                                                                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                                                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                                                                                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                                                                                        </svg>
+                                                                                                        复制
+                                                                                                    </button>
+                                                                                                    <button class="code-button edit-button" onclick="editCode(this)">
+                                                                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                                                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                                                                                        </svg>
+                                                                                                        编辑
+                                                                                                    </button>
+                                                                                                    <button class="code-button execute-button" onclick="executeCode(this)">
+                                                                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                                                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                                                                                        </svg>
+                                                                                                        执行
+                                                                                                    </button>
+                                                                                                </div>
                                                                                             </div>
-                                                                                        </div>
-                                                                                    `;
+                                                                                        `;
         };
 
         marked.use({ renderer });
@@ -1687,11 +1777,11 @@
 
                 const originalText = button.innerHTML;
                 button.innerHTML = `
-                                                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                                                                <polyline points="20 6 9 17 4 12"></polyline>
-                                                                                            </svg>
-                                                                                            已复制
-                                                                                        `;
+                                                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                                                                                </svg>
+                                                                                                已复制
+                                                                                            `;
                 setTimeout(() => {
                     button.innerHTML = originalText;
                 }, 2000);
@@ -1709,32 +1799,44 @@
             const codeElement = codeBlock.querySelector('code');
             const code = codeElement.textContent;
             const language = codeElement.className.replace('language-', '');
-            let preview = document.getElementById('settings-executecode-preview').checked
+            let preview = document.getElementById('settings-executecode-preview').checked;
 
             try {
-                // check env is WebView2
+                // 找到所属 chat 容器，读取 responseUuid 与 requestUuid
+                const chatContainer = button.closest('.chat-container');
+                let responseUuid = null;
+                let requestUuid = null;
+                if (chatContainer && chatContainer.id && chatContainer.id.startsWith('chat-')) {
+                    responseUuid = chatContainer.id.replace('chat-', '');
+                    requestUuid = chatContainer.dataset ? chatContainer.dataset.requestId : null;
+                }
+
+                const payload = {
+                    type: 'executeCode',
+                    code: code,
+                    language: language,
+                    executecodePreview: preview,
+                    responseUuid: responseUuid,
+                    requestUuid: requestUuid
+                };
+
                 if (window.chrome && window.chrome.webview) {
-                    // ues WebView2
-                    window.chrome.webview.postMessage({
-                        type: 'executeCode',
-                        code: code,
-                        language: language,
-                        executecodePreview: preview
-                    });
+                    window.chrome.webview.postMessage(payload);
                 } else if (window.vsto) {
-                    // user inject vsto object
+                    // vsto 调用兼容
                     window.vsto.executeCode(code, language, preview);
                 } else {
                     alert('无法执行代码：未检测到支持的通信接口');
                 }
 
+                // UI 反馈
                 const originalText = button.innerHTML;
                 button.innerHTML = `
-                                                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                                                                <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                                                                                            </svg>
-                                                                                            已执行
-                                                                                        `;
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                已执行
+            `;
                 setTimeout(() => {
                     button.innerHTML = originalText;
                 }, 2000);
@@ -1868,18 +1970,18 @@
             const reasoningHeader = document.createElement('div');
             reasoningHeader.className = 'reasoning-header';
             reasoningHeader.innerHTML = `
-                                                                                        <span class="reasoning-title">
-                                                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                                                                                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
-                                                                                            </svg>
-                                                                                            思考过程
-                                                                                        </span>
-                                                                                        <span class="reasoning-toggle">
-                                                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                                                                                                <path d="M7 10l5 5 5-5z"/>
-                                                                                            </svg>
-                                                                                        </span>
-                                                                                    `;
+                                                                                            <span class="reasoning-title">
+                                                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                                                                                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
+                                                                                                </svg>
+                                                                                                思考过程
+                                                                                            </span>
+                                                                                            <span class="reasoning-toggle">
+                                                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                                                                                                    <path d="M7 10l5 5 5-5z"/>
+                                                                                                </svg>
+                                                                                            </span>
+                                                                                        `;
 
             // 添加点击事件以展开/折叠推理内容
             reasoningHeader.addEventListener('click', function () {
@@ -2453,30 +2555,30 @@
             if (selectedSheetContent.length > 0) {
                 let itemsHtml = selectedSheetContent.map(item => `<div>${item.sheetName}: ${item.address}</div>`).join('');
                 htmlContent += `
-                                                    <div class="chat-message-references collapsed" id="msg-ref-sel-${uuid}">
-                                                        <div class="chat-message-reference-header" onclick="toggleChatMessageReference(this)">
-                                                            <span class="chat-message-reference-arrow">&#9658;</span>
-                                                            <span class="chat-message-reference-label">引用内容 (${selectedSheetContent.length})</span>
-                                                        </div>
-                                                        <div class="chat-message-reference-content">
-                                                            ${itemsHtml}
-                                                        </div>
-                                                    </div>`;
+                                                        <div class="chat-message-references collapsed" id="msg-ref-sel-${uuid}">
+                                                            <div class="chat-message-reference-header" onclick="toggleChatMessageReference(this)">
+                                                                <span class="chat-message-reference-arrow">&#9658;</span>
+                                                                <span class="chat-message-reference-label">引用内容 (${selectedSheetContent.length})</span>
+                                                            </div>
+                                                            <div class="chat-message-reference-content">
+                                                                ${itemsHtml}
+                                                            </div>
+                                                        </div>`;
             }
 
             // 3c. 添加可折叠的 "引用文件"
             if (attachedFileObjects.length > 0) {
                 let displayItemsHtml = attachedFileObjects.map(file => `<div>${escapeHtml(file.name)}</div>`).join('');
                 htmlContent += `
-                                        <div class="chat-message-references collapsed" id="msg-ref-file-${uuid}">
-                                            <div class="chat-message-reference-header" onclick="toggleChatMessageReference(this)">
-                                                <span class="chat-message-reference-arrow">&#9658;</span>
-                                                <span class="chat-message-reference-label">引用文件 (${attachedFileObjects.length})</span>
-                                            </div>
-                                            <div class="chat-message-reference-content">
-                                                ${displayItemsHtml}
-                                            </div>
-                                        </div>`;
+                                            <div class="chat-message-references collapsed" id="msg-ref-file-${uuid}">
+                                                <div class="chat-message-reference-header" onclick="toggleChatMessageReference(this)">
+                                                    <span class="chat-message-reference-arrow">&#9658;</span>
+                                                    <span class="chat-message-reference-label">引用文件 (${attachedFileObjects.length})</span>
+                                                </div>
+                                                <div class="chat-message-reference-content">
+                                                    ${displayItemsHtml}
+                                                </div>
+                                            </div>`;
             }
 
             messageContentDiv.innerHTML = htmlContent;
@@ -2707,6 +2809,7 @@
             } else {
                 referencesWrapper.style.display = 'none';
             }
+
         }
 
         // --- Attachment Logic ---
@@ -2913,11 +3016,11 @@
 
                 if (!files || files.length === 0) {
                     historyList.innerHTML = `
-                                            <div class="empty-state">
-                                                <div class="empty-state-icon">📄</div>
-                                                <div class="empty-state-text">您还没有任何历史记录</div>
-                                            </div>
-                                        `;
+                                                <div class="empty-state">
+                                                    <div class="empty-state-icon">📄</div>
+                                                    <div class="empty-state-text">您还没有任何历史记录</div>
+                                                </div>
+                                            `;
                     return;
                 }
 
@@ -2926,12 +3029,12 @@
 
                 // 生成文件列表HTML
                 const itemsHtml = files.map(file => `
-                                        <div class="history-item" onclick="historyManager.openHistoryFile('${file.fullPath.replace(/\\/g, '\\\\')}')">
-                                            <div class="history-item-title">${this.formatFileName(file.fileName)}</div>
-                                            <div class="history-item-date">${this.formatFileDate(file.fileName)}</div>
-                                            <div class="history-item-size">${this.formatFileSize(file.size)}</div>
-                                        </div>
-                                    `).join('');
+                                            <div class="history-item" onclick="historyManager.openHistoryFile('${file.fullPath.replace(/\\/g, '\\\\')}')">
+                                                <div class="history-item-title">${this.formatFileName(file.fileName)}</div>
+                                                <div class="history-item-date">${this.formatFileDate(file.fileName)}</div>
+                                                <div class="history-item-size">${this.formatFileSize(file.size)}</div>
+                                            </div>
+                                        `).join('');
 
                 historyList.innerHTML = itemsHtml;
             },
@@ -3253,9 +3356,9 @@
                 actionsDiv.id = 'delete-chat-actions';
                 actionsDiv.style = 'display:block; position:fixed; bottom:80px; left:50%; transform:translateX(-50%); z-index:999;';
                 actionsDiv.innerHTML = `
-            <button id="confirm-delete-chat" style="background:#e9525f;color:white;border:none;padding:6px 16px;border-radius:6px;margin-right:10px;">确定删除</button>
-            <button id="cancel-delete-chat" style="background:#f5f5f5;color:#333;border:none;padding:6px 16px;border-radius:6px;">取消</button>
-        `;
+                <button id="confirm-delete-chat" style="background:#e9525f;color:white;border:none;padding:6px 16px;border-radius:6px;margin-right:10px;">确定删除</button>
+                <button id="cancel-delete-chat" style="background:#f5f5f5;color:#333;border:none;padding:6px 16px;border-radius:6px;">取消</button>
+            `;
                 document.body.appendChild(actionsDiv);
             } else {
                 document.getElementById('delete-chat-actions').style.display = 'block';
@@ -3309,6 +3412,500 @@
                 arrow.style.transform = 'rotate(-90deg)';
             }
         });
+
+        // 新增：展示对比预览并支持操作
+        function markdownToPlain(md) {
+            try {
+                const html = marked.parse(md || "");
+                const tmp = document.createElement('div');
+                tmp.innerHTML = html;
+                return tmp.innerText || tmp.textContent || "";
+            } catch (err) {
+                console.error('markdownToPlain error', err);
+                return md;
+            }
+        }
+
+
+        // 前端收到后端 markRevisionHandled 调用时更新 UI（简单灰显）
+        function markRevisionHandled(responseUuid, globalIndex, status) {
+            try {
+                const container = document.getElementById('revisions-' + responseUuid);
+                if (!container) return;
+                const item = Array.from(container.querySelectorAll('div')).find(d => d.innerText && d.innerText.startsWith('#' + globalIndex + ' '));
+                if (item) {
+                    item.style.opacity = '0.5';
+                    const badge = document.createElement('span');
+                    badge.className = 'token-count';
+                    badge.style.marginLeft = '8px';
+                    badge.textContent = status === 'accepted' ? '已接受' : '已拒绝';
+                    item.appendChild(badge);
+                    // 禁用按钮
+                    item.querySelectorAll('button').forEach(b => b.disabled = true);
+                }
+            } catch (err) {
+                console.error('markRevisionHandled error', err);
+            }
+        }
+    </script>
+    <script>
+        (function () {
+            if (!window._oa) window._oa = {};
+            window._oa._comparisonCache = window._oa._comparisonCache || {};
+
+            function stripHtml(html) {
+                try {
+                    const tmp = document.createElement('div');
+                    tmp.innerHTML = html || '';
+                    return (tmp.textContent || tmp.innerText || '').trim();
+                } catch (e) {
+                    return html || '';
+                }
+            }
+
+            //排版预览
+            //排版预览（已修改：支持每项前复选框并在 acceptAll 时跳过已执行项）
+            window.showComparison = function (uuid, originalText, aiPreviewOrPlan) {
+                console.log(aiPreviewOrPlan)
+                try {
+                    const container = document.getElementById('content-' + uuid);
+                    if (!container) return;
+
+                    const footer = document.getElementById('footer-' + uuid);
+                    if (footer) {
+                        try {
+                            const oldReject = footer.querySelector('.reject-btn');
+                            if (oldReject) oldReject.style.display = 'none';
+                            const tokenCount = footer.querySelector('.token-count');
+                            if (tokenCount) tokenCount.style.display = 'none';
+                            const codeButtons = footer.querySelector('.code-buttons');
+                            if (codeButtons) codeButtons.style.display = 'none';
+                        } catch (e) { }
+                    }
+
+                    console.log(1)
+                    let raw = aiPreviewOrPlan;
+                    if (typeof raw === 'string') {
+                        raw = raw.trim();
+                        const fenceMatch = raw.match(/^\s*```([^\n]*)\n([\s\S]*?)\n```\s*$/);
+                        if (fenceMatch && fenceMatch.length >= 3) {
+                            raw = fenceMatch[2];
+                        } else {
+                            if (raw.startsWith('```')) {
+                                raw = raw.replace(/^\s*```[^\n]*\n?/, '');
+                                raw = raw.replace(/\n?```\s*$/, '');
+                            }
+                        }
+                    }
+
+                    console.log(2)
+                    let planObj = null;
+                    try {
+                        if (typeof raw === 'string' && raw.length > 0) {
+                            planObj = JSON.parse(raw);
+                        } else if (typeof raw === 'object' && raw !== null) {
+                            planObj = raw;
+                        }
+                    } catch (e) {
+                        planObj = null;
+                    }
+
+                    const previewHtmlMap = planObj && planObj.previewHtmlMap ? planObj.previewHtmlMap : null;
+                    const documentPlan = planObj && Array.isArray(planObj.documentPlan) ? planObj.documentPlan : null;
+
+                    if (!previewHtmlMap || Object.keys(previewHtmlMap).length === 0) {
+                        const wrapEmpty = document.createElement('div');
+                        wrapEmpty.id = 'compare-' + uuid;
+                        wrapEmpty.className = 'reference-container';
+                        wrapEmpty.style.padding = '12px';
+                        wrapEmpty.style.marginTop = '12px';
+                        wrapEmpty.style.background = '#f6f8fa';
+                        wrapEmpty.innerHTML = '<div style="color:#666;padding:8px;">大模型返回格式有问题，无法预览排版，请重试。</div>';
+                        container.appendChild(wrapEmpty);
+                        return;
+                    }
+
+                    function renderPreviewFragment(text) {
+                        if (text === null || text === undefined) return '';
+                        const rawText = String(text);
+                        const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(rawText);
+                        if (looksLikeHtml) return rawText;
+                        const esc = rawText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                        return esc.replace(/\r?\n/g, '<br>');
+                    }
+
+                    let orderedBlockIds = [];
+                    if (documentPlan && documentPlan.length > 0) {
+                        documentPlan.forEach(item => {
+                            const id = item.blockId || item.id;
+                            if (id && previewHtmlMap[id] && !orderedBlockIds.includes(id)) orderedBlockIds.push(id);
+                        });
+                        Object.keys(previewHtmlMap).forEach(k => { if (!orderedBlockIds.includes(k)) orderedBlockIds.push(k); });
+                    } else {
+                        orderedBlockIds = Object.keys(previewHtmlMap);
+                    }
+
+                    // 持久化已执行集合（跨多次 showComparison 保留）
+                    window._oa = window._oa || {};
+                    window._oa._comparisonCache = window._oa._comparisonCache || {};
+                    const cache = window._oa._comparisonCache[uuid] = window._oa._comparisonCache[uuid] || {};
+                    cache.executedSet = cache.executedSet || new Set();
+                    const executedSet = cache.executedSet;
+
+                    // 在展示时，从 orderedBlockIds 中移除已执行的（避免 acceptAll 重复执行）
+                    orderedBlockIds = orderedBlockIds.filter(id => !executedSet.has(id));
+
+                    const wrap = document.createElement('div');
+                    wrap.id = 'compare-' + uuid;
+                    wrap.className = 'reference-container';
+                    wrap.style.padding = '12px';
+                    wrap.style.marginTop = '12px';
+                    wrap.style.background = '#f6f8fa';
+                    wrap.style.display = 'flex';
+                    wrap.style.flexDirection = 'column';
+                    wrap.style.gap = '10px';
+
+                    // 预先创建 listWrap，方便上层按钮访问
+                    const listWrap = document.createElement('div');
+                    listWrap.style.display = 'flex';
+                    listWrap.style.flexDirection = 'column';
+                    listWrap.style.gap = '8px';
+
+                    const header = document.createElement('div');
+                    header.style.display = 'flex';
+                    header.style.justifyContent = 'space-between';
+                    header.style.alignItems = 'center';
+
+                    const title = document.createElement('div');
+                    title.style.fontWeight = '600';
+                    title.textContent = '模型渲染预览';
+                    header.appendChild(title);
+
+                    // ops 顺序： 接受全部 | 接受选中（同一行）
+                    const ops = document.createElement('div');
+                    ops.style.display = 'flex';
+                    ops.style.gap = '8px';
+                    ops.style.alignItems = 'center';
+
+                    const acceptAllBtn = document.createElement('button');
+                    acceptAllBtn.className = 'code-button';
+                    acceptAllBtn.style.backgroundColor = '#4CAF50';
+                    acceptAllBtn.textContent = '接受全部变更';
+                    acceptAllBtn.onclick = function () {
+                        const pending = orderedBlockIds.filter(bid => !executedSet.has(bid));
+                        if (pending.length === 0) {
+                            acceptAllBtn.disabled = true;
+                            acceptAllBtn.textContent = '已无可执行项';
+                            return;
+                        }
+                        pending.forEach(bid => {
+                            let planItem = null;
+                            if (documentPlan) planItem = documentPlan.find(p => (p.blockId || p.id) === bid);
+                            if (!planItem) planItem = { blockId: bid, action: 'insert_html', attributes: { previewHtml: previewHtmlMap[bid] } };
+                            sendMessageToServer({ type: 'applyDocumentPlanItem', uuid: uuid, planItem: planItem });
+                            executedSet.add(bid);
+                            const cb = listWrap.querySelector(`input.preview-select-checkbox[data-block-id="${bid}"]`);
+                            const blockEl = listWrap.querySelector(`.preview-block[data-block-id="${bid}"]`);
+                            if (cb) { cb.disabled = true; cb.checked = true; }
+                            if (blockEl) blockEl.style.opacity = '0.6';
+                        });
+                        acceptAllBtn.disabled = true;
+                        acceptAllBtn.textContent = '已触发全部';
+                        acceptSelectedBtn.disabled = true;
+                    };
+                    ops.appendChild(acceptAllBtn);
+
+                    const acceptSelectedBtn = document.createElement('button');
+                    acceptSelectedBtn.className = 'code-button';
+                    acceptSelectedBtn.style.backgroundColor = '#4a6fa5';
+                    acceptSelectedBtn.textContent = '接受选中';
+                    acceptSelectedBtn.onclick = function () {
+                        const checkedBoxes = Array.from(listWrap.querySelectorAll('input.preview-select-checkbox:checked'));
+                        const toApply = checkedBoxes.map(cb => cb.getAttribute('data-block-id')).filter(Boolean).filter(bid => !executedSet.has(bid));
+                        if (toApply.length === 0) {
+                            alert('请先勾选要接受的项');
+                            return;
+                        }
+                        toApply.forEach(bid => {
+                            let planItem = null;
+                            if (documentPlan) planItem = documentPlan.find(p => (p.blockId || p.id) === bid);
+                            if (!planItem) planItem = { blockId: bid, action: 'insert_html', attributes: { previewHtml: previewHtmlMap[bid] } };
+                            sendMessageToServer({ type: 'applyDocumentPlanItem', uuid: uuid, planItem: planItem });
+                            executedSet.add(bid);
+                            const blockEl = listWrap.querySelector('.preview-block[data-block-id="' + bid + '"]');
+                            const cb = listWrap.querySelector(`input.preview-select-checkbox[data-block-id="${bid}"]`);
+                            if (blockEl) blockEl.style.opacity = '0.6';
+                            if (cb) { cb.disabled = true; cb.checked = true; }
+                        });
+                        // 如果所有项均已执行，禁用全部按钮
+                        const remaining = orderedBlockIds.filter(id => !executedSet.has(id));
+                        if (remaining.length === 0) {
+                            acceptAllBtn.disabled = true;
+                            acceptSelectedBtn.disabled = true;
+                        }
+                    };
+                    ops.appendChild(acceptSelectedBtn);
+
+                    header.appendChild(ops);
+                    wrap.appendChild(header);
+
+                    const previewArea = document.createElement('div');
+                    previewArea.style.background = '#fff';
+                    previewArea.style.padding = '8px';
+                    previewArea.style.border = '1px solid #e6e6e6';
+                    previewArea.style.borderRadius = '4px';
+                    previewArea.style.display = 'flex';
+                    previewArea.style.flexDirection = 'column';
+                    previewArea.style.gap = '8px';
+                    previewArea.style.maxHeight = '48vh';
+                    previewArea.style.overflow = 'auto';
+
+                    // 构建列表项（带复选框）
+                    orderedBlockIds.forEach((bid, idx) => {
+                        // 如果已执行则跳过（保险）
+                        if (executedSet.has(bid)) return;
+
+                        const frag = previewHtmlMap[bid];
+
+                        const blockContainer = document.createElement('div');
+                        blockContainer.className = 'preview-block';
+                        blockContainer.style.padding = '8px';
+                        blockContainer.style.border = '1px solid #f0f0f0';
+                        blockContainer.style.borderRadius = '4px';
+                        blockContainer.style.background = '#fff';
+                        blockContainer.dataset.blockId = bid;
+
+                        const blockRow = document.createElement('div');
+                        blockRow.className = 'block-row';
+                        blockRow.style.display = 'flex';
+                        blockRow.style.alignItems = 'flex-start';
+                        blockRow.style.gap = '8px';
+
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.className = 'preview-select-checkbox';
+                        checkbox.setAttribute('data-block-id', bid);
+                        checkbox.title = '选中后，点击上方“接受选中”应用此块';
+                        checkbox.checked = false;
+                        checkbox.addEventListener('change', function () {
+                            if (this.checked) blockContainer.style.boxShadow = '0 1px 6px rgba(74,111,165,0.12)';
+                            else blockContainer.style.boxShadow = 'none';
+                        });
+
+                        const contentCol = document.createElement('div');
+                        contentCol.style.flex = '1 1 auto';
+
+                        const blockHeader = document.createElement('div');
+                        blockHeader.style.display = 'flex';
+                        blockHeader.style.justifyContent = 'space-between';
+                        blockHeader.style.alignItems = 'center';
+                        blockHeader.style.marginBottom = '6px';
+
+                        const leftMeta = document.createElement('div');
+                        leftMeta.style.fontSize = '12px';
+                        leftMeta.style.color = '#444';
+                        let noteText = '';
+                        if (documentPlan) {
+                            const item = documentPlan.find(p => (p.blockId || p.id) === bid);
+                            if (item && item.note) noteText = item.note;
+                        }
+                        leftMeta.textContent = `${bid}${noteText ? ' — ' + noteText : ''}`;
+                        blockHeader.appendChild(leftMeta);
+
+                        const rightBtns = document.createElement('div');
+                        rightBtns.style.display = 'flex';
+                        rightBtns.style.gap = '6px';
+
+                        const acceptBtn = document.createElement('button');
+                        acceptBtn.className = 'code-button';
+                        acceptBtn.style.backgroundColor = '#4CAF50';
+                        acceptBtn.textContent = '接受';
+                        acceptBtn.onclick = function () {
+                            let planItem = null;
+                            if (documentPlan) planItem = documentPlan.find(p => (p.blockId || p.id) === bid);
+                            if (!planItem) planItem = { blockId: bid, action: 'insert_html', attributes: { previewHtml: previewHtmlMap[bid] } };
+                            sendMessageToServer({ type: 'applyDocumentPlanItem', uuid: uuid, planItem: planItem });
+                            executedSet.add(bid);
+                            acceptBtn.disabled = true;
+                            blockContainer.style.opacity = '0.6';
+                            checkbox.disabled = true;
+                            checkbox.checked = true;
+                            const remaining = orderedBlockIds.filter(id => !executedSet.has(id));
+                            if (remaining.length === 0) { acceptAllBtn.disabled = true; acceptSelectedBtn.disabled = true; }
+                        };
+                        rightBtns.appendChild(acceptBtn);
+                        blockHeader.appendChild(rightBtns);
+
+                        const contentDiv = document.createElement('div');
+                        const text = previewHtmlMap[bid];
+                        const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(String(text || ''));
+                        if (looksLikeHtml) contentDiv.innerHTML = text || '';
+                        else contentDiv.innerHTML = renderPreviewFragment(text);
+
+                        contentCol.appendChild(blockHeader);
+                        contentCol.appendChild(contentDiv);
+
+                        blockRow.appendChild(checkbox);
+                        blockRow.appendChild(contentCol);
+
+                        blockContainer.appendChild(blockRow);
+                        listWrap.appendChild(blockContainer);
+                    });
+
+                    previewArea.appendChild(listWrap);
+                    wrap.appendChild(previewArea);
+                    container.appendChild(wrap);
+                    wrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                } catch (err) {
+                    console.error('showComparison error', err);
+                }
+            }
+
+            //审阅修正建议列表
+            window.showRevisions = function (responseUuid, revisions) {
+                try {
+                    let revs = [];
+                    if (!revisions) revs = [];
+                    else if (typeof revisions === 'string') {
+                        try { revs = JSON.parse(revisions); } catch (e) { revs = []; }
+                    } else revs = revisions;
+
+                    const footer = document.getElementById('footer-' + responseUuid);
+                    if (!footer) return;
+
+                    // 隐藏 footer 的 reject 和 token计算、代码操作按钮
+                    try {
+                        const oldReject = footer.querySelector('.reject-btn');
+                        if (oldReject) oldReject.style.display = 'none';
+                        const tokenCount = footer.querySelector('.token-count');
+                        if (tokenCount) tokenCount.style.display = 'none';
+                        const codeButtons = footer.querySelector('.code-buttons');
+                        if (codeButtons) codeButtons.style.display = 'none';
+
+                    } catch (e) { }
+
+                    // 移除已有容器
+                    const exist = document.getElementById('revisions-' + responseUuid);
+                    if (exist) exist.remove();
+
+                    // 外层 wrapper，作为 footer 的内联 flex item，避免挤占右侧 token 显示
+                    const footerWrapper = document.createElement('div');
+                    footerWrapper.id = 'revisions-' + responseUuid;
+                    footerWrapper.className = 'revisions-footer-wrapper';
+
+                    // 顶部控件（插入到 footerWrapper 内部）
+                    const controls = document.createElement('div');
+                    controls.className = 'revisions-controls';
+
+                    const btnAcceptAll = document.createElement('button');
+                    btnAcceptAll.className = 'code-button';
+                    btnAcceptAll.style.backgroundColor = '#4CAF50';
+                    btnAcceptAll.textContent = '接受全部规则';
+                    btnAcceptAll.onclick = function () {
+                        // 顺序触发每个 accept 按钮
+                        footerWrapper.querySelectorAll('.rev-accept-btn:not([disabled])').forEach(b => b.click());
+                    };
+
+                    const btnAcceptSelected = document.createElement('button');
+                    btnAcceptSelected.className = 'code-button';
+                    btnAcceptSelected.style.backgroundColor = '#4a6fa5';
+                    btnAcceptSelected.textContent = '接受选中规则';
+                    btnAcceptSelected.onclick = function () {
+                        const checked = Array.from(footerWrapper.querySelectorAll('.rev-checkbox:checked'));
+                        checked.forEach(chk => {
+                            const idx = chk.getAttribute('data-idx');
+                            const acceptBtn = footerWrapper.querySelector('.rev-accept-btn[data-idx="' + idx + '"]');
+                            if (acceptBtn && !acceptBtn.disabled) acceptBtn.click();
+                        });
+                    };
+
+                    controls.appendChild(btnAcceptAll);
+                    controls.appendChild(btnAcceptSelected);
+                    footerWrapper.appendChild(controls);
+
+                    // 列表容器（垂直）
+                    const listInner = document.createElement('div');
+                    listInner.className = 'revisions-list-inner';
+
+                    revs.forEach((item, idx) => {
+                        const row = document.createElement('div');
+                        row.className = 'revision-item';
+                        row.id = `rev-${responseUuid}-${idx}`;
+
+                        // checkbox
+                        const cbWrap = document.createElement('div');
+                        cbWrap.className = 'revision-checkbox';
+                        const cb = document.createElement('input');
+                        cb.type = 'checkbox';
+                        cb.className = 'rev-checkbox';
+                        cb.setAttribute('data-idx', idx);
+                        cbWrap.appendChild(cb);
+
+                        // summary: 包含 rule 和 note（更易读）
+                        const summary = document.createElement('div');
+                        summary.className = 'rev-summary';
+                        const baseText = item.result || item.replaceWith || item.text || JSON.stringify(item);
+                        const notePart = item.note ? (' — ' + item.note) : '';
+                        summary.textContent = `#${idx+1} ${item.rule ? ('[' + item.rule + '] ') : ''}${baseText}${notePart}`;
+
+                        // accept button
+                        const accept = document.createElement('button');
+                        accept.className = 'rev-accept-btn';
+                        accept.textContent = '接受';
+                        accept.setAttribute('data-idx', idx);
+                        accept.onclick = function () {
+                            // 禁用，避免重复触发
+                            accept.disabled = true;
+                            cb.disabled = true;
+                            // payload
+                            const payload = {
+                                type: 'applyRevisionSegment',
+                                uuid: responseUuid,
+                                index: (item.index != null) ? item.index : idx,
+                                action: item.action || 'replace',
+                                matchText: item.matchText || '',
+                                contextBefore: item.contextBefore || '',
+                                contextAfter: item.contextAfter || '',
+                                replaceWith: item.replaceWith || item.result || baseText
+                            };
+
+                            // 发送
+                            sendMessageToServer(payload);
+
+                            // 标记 UI 已接受
+                            row.classList.add('rev-accepted');
+                        };
+
+                        row.appendChild(cbWrap);
+                        row.appendChild(summary);
+                        row.appendChild(accept);
+                        listInner.appendChild(row);
+                    });
+
+                    footerWrapper.appendChild(listInner);
+
+                    // 插入 footerWrapper 到 footer 左侧（不覆盖 token 区）
+                    footer.insertBefore(footerWrapper, footer.firstChild);
+
+                } catch (err) {
+                    console.error('showRevisions error', err);
+                }
+            };
+
+            // 兼容 fallback：从前端主动触发请求给后端
+            window.applyRevisionAccept = function (responseUuid, globalIndex) {
+                if (window.chrome && window.chrome.webview) {
+                    window.chrome.webview.postMessage({ type: 'applyRevisionAccept', responseUuid: responseUuid, globalIndex: globalIndex });
+                } else if (window.vsto) {
+                    window.vsto.sendMessage({ type: 'applyRevisionAccept', responseUuid: responseUuid, globalIndex: globalIndex });
+                }
+            };
+
+            // expose for debugging
+            window._oa.showComparison = window.showComparison;
+            window._oa.showRevisions = window.showRevisions;
+        })();
     </script>
 </body>
 </html>
