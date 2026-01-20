@@ -290,8 +290,8 @@ Public MustInherit Class BaseChatControl
                 Case "saveSettings"
                     HandleSaveSettings(jsonDoc)
                 Case "getHistoryFiles"
-                    'TestX()
-                    HandleGetHistoryFiles()
+                    TestX()
+                    'HandleGetHistoryFiles()
                 Case "openHistoryFile"
                     HandleOpenHistoryFile(jsonDoc)
                 Case "getMcpConnections"
@@ -310,6 +310,9 @@ Public MustInherit Class BaseChatControl
                     HandleApplyRevisionSegment(jsonDoc)
                 Case "applyDocumentPlanItem"
                     HandleApplyDocumentPlanItem(jsonDoc)
+                Case "rejectShowComparison"
+                    ' 排版答案内容格式有误，重试
+
                 Case "applyRevisionAccept" ' 前端请求接受单个 Revision
                     HandleApplyRevisionAccept(jsonDoc)
                 Case "applyRevisionReject" ' 前端请求拒绝单个 Revision
@@ -1342,27 +1345,28 @@ Public MustInherit Class BaseChatControl
     '测试方法
     Public Async Function TestX() As Task(Of String)
         ' 前端提示
-        'Dim responseUuid As String = "6e2dc857-f0de-498e-8cfa-1bc6ffbd83d4"
-        'Try
-        '    Dim aiName As String = ConfigSettings.platform & " " & ConfigSettings.ModelName
-        '    Dim jsCreate As String = $"createChatSection('{aiName}', formatDateTime(new Date()), '{responseUuid}');"
-        '    Await ExecuteJavaScriptAsyncJS(jsCreate)
-        '    Dim js1 = $"appendRenderer('{responseUuid}','正在向模型发起校对请求，请耐心等待');"
-        '    Await ExecuteJavaScriptAsyncJS(js1)
-        'Catch ex As Exception
-        '    Debug.WriteLine("ExecuteJavaScriptAsyncJS 调用失败: " & ex.Message)
-        'End Try
+        Dim responseUuid As String = "6e2dc857-f0de-498e-8cfa-1bc6ffbd83d4"
+        Try
+            Dim aiName As String = ConfigSettings.platform & " " & ConfigSettings.ModelName
+            Dim jsCreate As String = $"createChatSection('{aiName}', formatDateTime(new Date()), '{responseUuid}');"
+            Await ExecuteJavaScriptAsyncJS(jsCreate)
+            Dim js1 = $"appendRenderer('{responseUuid}','正在向模型发起校对请求，请耐心等待');"
+            Await ExecuteJavaScriptAsyncJS(js1)
+        Catch ex As Exception
+            Debug.WriteLine("ExecuteJavaScriptAsyncJS 调用失败: " & ex.Message)
+        End Try
 
-        'Dim configFileName As String = "formattest.json"
-        'Dim configFilePath As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-        'ConfigSettings.OfficeAiAppDataFolder, configFileName)
-        'Dim aiFinal As String = File.ReadAllText(configFilePath)
-        'Dim js As String = $"showComparison('{responseUuid}', '123', {JsonConvert.SerializeObject(aiFinal)});"
-        'Await ExecuteJavaScriptAsyncJS(js)
-        'Debug.Print(js)
+        ' 格式化
+        Dim configFileName As String = "formattest.json"
+        Dim configFilePath As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        ConfigSettings.OfficeAiAppDataFolder, configFileName)
+        Dim aiFinal As String = File.ReadAllText(configFilePath)
+        Dim js As String = $"showComparison('{responseUuid}', '123', {JsonConvert.SerializeObject(aiFinal)});"
+        Await ExecuteJavaScriptAsyncJS(js)
+        Debug.Print(js)
 
 
-
+        ' 校对
         'Dim configFileName As String = "retest.json"
         'Dim configFilePath As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
         'ConfigSettings.OfficeAiAppDataFolder, configFileName)
@@ -1399,6 +1403,9 @@ Public MustInherit Class BaseChatControl
         End Try
         Return Nothing
     End Function
+
+    ' 存储调用Send时的请求参数（requestUuid/responseUuid -> JObject）
+    Protected _savedRequestParams As New Dictionary(Of String, JObject)()
 
     Public Async Function Send(question As String, systemPrompt As String, addHistory As Boolean, responseMode As String) As Task
         Dim apiUrl As String = ConfigSettings.ApiUrl
@@ -1465,6 +1472,9 @@ Public MustInherit Class BaseChatControl
                 "4) 对于用户请求的改进（用户标记当前回答为不接受），在回复开头先写明 '改进点'（1-3 行），然后给出修正的 Plan 与 Answer。" & vbCrLf &
                 "5) 保持回答简洁、有条理，优先提供可直接执行的结论和示例。"
             End If
+
+
+
             Dim requestBody As String = CreateRequestBody(requestUuid, question, systemPrompt, addHistory)
             Await SendHttpRequestStream(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody, StripQuestion(question), requestUuid, addHistory, responseMode)
             Await SaveFullWebPageAsync2()

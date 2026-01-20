@@ -133,8 +133,6 @@ Public MustInherit Class BaseDeepseekChat
                                                           ' 初始化设置和执行按钮
                                                           Await InitializeSettingsSafe()
 
-                                                          ' 注入登录监听器
-                                                          'Await InjectLoginObserverSafe()
 
                                                           Debug.WriteLine("所有脚本注入完成")
                                                       Catch ex As Exception
@@ -160,9 +158,6 @@ Public MustInherit Class BaseDeepseekChat
 
                                                                            ' 初始化设置和执行按钮
                                                                            Await InitializeSettingsSafe()
-
-                                                                           ' 注入登录监听器
-                                                                           'Await InjectLoginObserverSafe()
 
                                                                            Debug.WriteLine("所有脚本注入完成")
                                                                        Catch ex As Exception
@@ -388,303 +383,186 @@ Public MustInherit Class BaseDeepseekChat
 
             Dim script As String = "
     (function() {
-        console.log('[Execute Buttons] =================== 开始初始化 ===================');
-        
-        // 避免重复初始化
+        console.log('[Execute Buttons] 注入开始（使用自定义可点击元素以避免被页面禁用）');
+
         if (window.__executeButtonsInitialized) {
-            console.log('[Execute Buttons] 已初始化，尝试刷新');
-            if (window.refreshExecuteButtons) {
-                window.refreshExecuteButtons();
-            }
+            console.log('[Execute Buttons] 已初始化，刷新');
+            if (window.refreshExecuteButtons) window.refreshExecuteButtons();
             return;
         }
         window.__executeButtonsInitialized = true;
-        
-        // 使用多种策略查找复制按钮
+
         function findCopyButton(container) {
             if (!container) return null;
-            
-            console.log('[Execute Buttons] 在容器中查找复制按钮');
-            
-            // 策略1: 直接通过文本内容查找
             const allButtons = container.querySelectorAll('[role=""button""]');
-            console.log('[Execute Buttons] 找到按钮数量:', allButtons.length);
-            
             for (let i = 0; i < allButtons.length; i++) {
                 const btn = allButtons[i];
-                const text = btn.textContent || '';
-                console.log(`[Execute Buttons] 按钮 ${i+1} 文本: '${text.trim()}'`);
-                
-                if (text.includes('复制') || text.includes('Copy')) {
-                    console.log('[Execute Buttons] ✓ 找到复制按钮!');
-                    return btn;
-                }
+                const text = (btn.textContent || '').trim();
+                if (text.includes('复制') || text.includes('Copy')) return btn;
             }
-            
-            console.log('[Execute Buttons] ✗ 未找到复制按钮');
             return null;
         }
-        
-        // 动态获取代码内容的函数 - 在点击时调用
+
         function getCurrentCodeContent(codeBlock) {
             try {
-                const preElement = codeBlock.querySelector('pre');
-                if (!preElement) {
-                    console.log('[Execute Buttons] 点击时未找到pre元素');
-                    return { code: '', language: 'unknown' };
-                }
-                
-                // 获取当前完整的代码内容（SSE流式更新后的完整内容）
-                const codeContent = preElement.textContent || '';
-                console.log(`[Execute Buttons] 动态获取代码长度: ${codeContent.length} 字符`);
-                
-                // 动态获取语言信息
+                const pre = codeBlock.querySelector('pre');
+                if (!pre) return { code: '', language: 'unknown' };
+                const codeContent = pre.textContent || '';
                 let language = 'unknown';
-                const allSpans = codeBlock.querySelectorAll('span');
-                
-                for (const span of allSpans) {
-                    const text = span.textContent && span.textContent.trim().toLowerCase();
-                    if (text && /^(vba|javascript|js|excel|python|sql|typescript|html|css|c#|java|php|csharp)$/i.test(text)) {
-                        language = text;
-                        console.log(`[Execute Buttons] 动态获取语言: ${language}`);
-                        break;
+                const spans = codeBlock.querySelectorAll('span');
+                for (const s of spans) {
+                    const t = (s.textContent || '').trim().toLowerCase();
+                    if (t && /^(vba|javascript|js|excel|python|sql|typescript|html|css|c#|java|php|csharp)$/i.test(t)) {
+                        language = t; break;
                     }
                 }
-                
                 return { code: codeContent, language: language };
-            } catch (error) {
-                console.error('[Execute Buttons] 动态获取代码内容时出错:', error);
+            } catch (e) {
+                console.error('[Execute Buttons] 获取代码失败', e);
                 return { code: '', language: 'unknown' };
             }
         }
-        
-        // 处理单个代码块 - 只创建按钮，不获取代码
+
+        // 创建一个不会被页面禁用的可点击元素（使用 div 而不是 button）
+        function createExecuteElement() {
+            const el = document.createElement('div');
+            el.setAttribute('role','button');
+            el.setAttribute('aria-disabled','false');
+            el.className = 'vsto-execute-button ds-text-button';
+            el.tabIndex = 0;
+            el.style.display = 'inline-flex';
+            el.style.alignItems = 'center';
+            el.style.marginRight = '4px';
+            el.style.cursor = 'pointer';
+            el.style.userSelect = 'none';
+            el.innerHTML = '<div class=""ds-button__icon""><div class=""ds-icon"" style=""font-size:16px;width:16px;"">▶</div></div><span class=""code-info-button-text"">执行</span>';
+            return el;
+        }
+
+        function attachClickHandler(executeEl, codeBlock) {
+            const handler = function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('[Execute Buttons] 执行（自定义元素）被点击');
+                const content = getCurrentCodeContent(codeBlock);
+                if (!content.code || !content.code.trim()) {
+                    console.log('[Execute Buttons] 代码为空，跳过');
+                    return;
+                }
+                try {
+                    if (window.vsto && typeof window.vsto.executeCode === 'function') {
+                        window.vsto.executeCode(content.code, content.language, true);
+                        console.log('[Execute Buttons] 通过 vsto 执行请求发送');
+                    } else if (window.chrome && window.chrome.webview && window.chrome.webview.postMessage) {
+                        window.chrome.webview.postMessage({
+                            type: 'executeCode',
+                            code: content.code,
+                            language: content.language,
+                            executecodePreview: true
+                        });
+                        console.log('[Execute Buttons] 通过 chrome.webview 发送执行请求');
+                    } else {
+                        console.error('[Execute Buttons] 无通信接口');
+                    }
+                } catch (err) {
+                    console.error('[Execute Buttons] 发送执行请求失败', err);
+                }
+            };
+            executeEl.addEventListener('click', handler);
+            // 键盘可访问性
+            executeEl.addEventListener('keydown', function(ev) {
+                if (ev.key === 'Enter' || ev.key === ' ') {
+                    ev.preventDefault();
+                    this.click();
+                }
+            });
+        }
+
         function processCodeBlock(codeBlock, index) {
             try {
-                console.log(`[Execute Buttons] ========== 处理代码块 ${index+1} ==========`);
-                
-                if (!codeBlock.classList.contains('md-code-block')) {
-                    console.log('[Execute Buttons] 不是代码块，跳过');
-                    return false;
-                }
-                
-                // 查找复制按钮
-                const copyButton = findCopyButton(codeBlock);
-                if (!copyButton) {
-                    console.log('[Execute Buttons] 未找到复制按钮，跳过此代码块');
-                    return false;
-                }
-                
-                // 获取按钮容器
-                const buttonContainer = copyButton.parentElement;
-                if (!buttonContainer) {
-                    console.log('[Execute Buttons] 找不到按钮容器');
-                    return false;
-                }
-                
-                // 检查是否已添加执行按钮
-                if (buttonContainer.querySelector('.execute-code-button')) {
-                    console.log('[Execute Buttons] 执行按钮已存在，跳过');
-                    return false;
-                }
-                
-                // 验证是否有pre元素（基本检查）
-                const preElement = codeBlock.querySelector('pre');
-                if (!preElement) {
-                    console.log('[Execute Buttons] 未找到pre元素，跳过');
-                    return false;
-                }
-                
-                // 创建执行按钮
-                console.log('[Execute Buttons] 开始创建执行按钮...');
-                
-                const executeButton = copyButton.cloneNode(true);
-                executeButton.classList.add('execute-code-button');
-                
-                // 修改按钮内容
-                executeButton.innerHTML = '';
-                
-                // 创建图标容器
-                const iconDiv = document.createElement('div');
-                iconDiv.className = 'ds-button__icon';
-                
-                const icon = document.createElement('div');
-                icon.className = 'ds-icon';
-                icon.style.fontSize = '16px';
-                icon.style.width = '16px';
-                icon.innerHTML = '▶'; // 播放图标
-                
-                iconDiv.appendChild(icon);
-                executeButton.appendChild(iconDiv);
-                
-                // 创建文本
-                const textSpan = document.createElement('span');
-                textSpan.className = 'code-info-button-text';
-                textSpan.textContent = '执行';
-                executeButton.appendChild(textSpan);
-                
-                console.log('[Execute Buttons] ✓ 执行按钮创建完成');
-                
-                // 关键改进：添加点击事件 - 动态获取代码内容
-                executeButton.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    
-                    console.log('[Execute Buttons] =================== 执行按钮被点击 ===================');
-                    
-                    // 在点击时动态获取当前完整的代码内容
-                    const currentContent = getCurrentCodeContent(codeBlock);
-                    
-                    if (!currentContent.code.trim()) {
-                        console.log('[Execute Buttons] ✗ 获取到的代码内容为空');
-                        return;
-                    }
-                    
-                    console.log('[Execute Buttons] 当前代码长度:', currentContent.code.length);
-                    console.log('[Execute Buttons] 当前语言:', currentContent.language);
-                    console.log('[Execute Buttons] 代码预览:', currentContent.code.substring(0, 200) + '...');
-                    
-                    try {
-                        // 发送到VB应用
-                        if (window.vsto && typeof window.vsto.executeCode === 'function') {
-                            window.vsto.executeCode(currentContent.code, currentContent.language, true);
-                            console.log('[Execute Buttons] ✓ 通过vsto接口发送执行请求');
-                        } else if (window.chrome && window.chrome.webview && window.chrome.webview.postMessage) {
-                            window.chrome.webview.postMessage({
-                                type: 'executeCode',
-                                code: currentContent.code,
-                                language: currentContent.language,
-                                executecodePreview: true
-                            });
-                            console.log('[Execute Buttons] ✓ 通过chrome.webview发送执行请求');
-                        } else {
-                            console.error('[Execute Buttons] ✗ 通信接口不可用');
-                            console.log('[Execute Buttons] vsto可用:', !!window.vsto);
-                            console.log('[Execute Buttons] chrome.webview可用:', !!(window.chrome && window.chrome.webview));
-                        }
-                    } catch (error) {
-                        console.error('[Execute Buttons] ✗ 发送执行请求失败:', error);
-                    }
-                });
-                
-                // 插入执行按钮到DOM
-                try {
-                    buttonContainer.insertBefore(executeButton, copyButton);
-                    console.log('[Execute Buttons] ✓ 成功插入执行按钮到DOM');
-                    
-                    // 验证按钮是否真的添加了
-                    const verification = buttonContainer.querySelector('.execute-code-button');
-                    if (verification) {
-                        console.log('[Execute Buttons] ✓ 验证：执行按钮存在于DOM中');
-                        return true;
-                    } else {
-                        console.log('[Execute Buttons] ✗ 验证失败：执行按钮未在DOM中找到');
-                        return false;
-                    }
-                } catch (e) {
-                    console.error('[Execute Buttons] ✗ 插入DOM失败:', e);
-                    return false;
-                }
-                
-            } catch (error) {
-                console.error(`[Execute Buttons] ✗ 处理代码块 ${index+1} 时出错:`, error);
+                if (!codeBlock.classList.contains('md-code-block')) return false;
+                const copyBtn = findCopyButton(codeBlock);
+                if (!copyBtn) return false;
+                const container = copyBtn.parentElement;
+                if (!container) return false;
+                if (container.querySelector('.vsto-execute-button')) return false;
+                const pre = codeBlock.querySelector('pre');
+                if (!pre) return false;
+
+                console.log('[Execute Buttons] 创建自定义执行元素');
+                const execEl = createExecuteElement();
+
+                // 将自定义元素插入到 copyBtn 之前
+                container.insertBefore(execEl, copyBtn);
+
+                // 挂载事件
+                attachClickHandler(execEl, codeBlock);
+
+                // 防护：确保页面不会把它标记为禁用（定期清理 + 观察）
+                execEl.style.pointerEvents = 'auto';
+                execEl.removeAttribute('disabled');
+                execEl.setAttribute('aria-disabled','false');
+
+                console.log('[Execute Buttons] 自定义执行元素插入完成');
+                return true;
+            } catch (ex) {
+                console.error('[Execute Buttons] 处理代码块失败', ex);
                 return false;
             }
         }
-        
-        // 扫描并处理所有代码块
+
         function addExecuteButtons() {
-            console.log('[Execute Buttons] ========================================');
-            console.log('[Execute Buttons] 开始扫描页面上的代码块');
-            
             const codeBlocks = document.querySelectorAll('.md-code-block');
-            console.log(`[Execute Buttons] 在页面上找到 ${codeBlocks.length} 个代码块`);
-            
-            if (codeBlocks.length === 0) {
-                console.log('[Execute Buttons] 页面上没有找到任何代码块');
-                return;
-            }
-            
-            let processedCount = 0;
-            codeBlocks.forEach((block, index) => {
-                if (processCodeBlock(block, index)) {
-                    processedCount++;
-                }
-            });
-            
-            console.log(`[Execute Buttons] 扫描完成！成功处理 ${processedCount}/${codeBlocks.length} 个代码块`);
-            console.log('[Execute Buttons] ========================================');
+            if (!codeBlocks || codeBlocks.length === 0) return;
+            let count = 0;
+            codeBlocks.forEach((b,i) => { if (processCodeBlock(b,i)) count++; });
+            console.log('[Execute Buttons] 处理完成: ' + count + '/' + codeBlocks.length);
         }
-        
-        // 设置全局刷新函数
+
+        // 定期修复：移除页面可能添加的 disabled/禁用类
+        function keepAlive() {
+            document.querySelectorAll('.vsto-execute-button').forEach(b => {
+                try {
+                    b.removeAttribute('disabled');
+                    b.setAttribute('aria-disabled','false');
+                    b.classList.remove('ds-atom-button--disabled', 'ds-text-button--disabled', 'execute-code-button');
+                    b.style.pointerEvents = 'auto';
+                    b.style.opacity = ''; // 如果页面设置了半透明，也恢复
+                } catch(e) {}
+            });
+        }
+
+        // 观察父容器，若页面替换、修改节点则重新注入
+        const observer = new MutationObserver(function(mutations) {
+            let shouldRun = false;
+            for (const m of mutations) {
+                if (m.addedNodes && m.addedNodes.length > 0) {
+                    shouldRun = true; break;
+                }
+                if (m.type === 'attributes' && (m.attributeName === 'class' || m.attributeName === 'disabled' || m.attributeName === 'aria-disabled')) {
+                    shouldRun = true; break;
+                }
+            }
+            if (shouldRun) {
+                setTimeout(addExecuteButtons, 120);
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class','disabled','aria-disabled'] });
+
+        // 初始化与周期修复
+        setTimeout(addExecuteButtons, 120);
+        [500,1000,2000,3000,5000].forEach((d,i) => setTimeout(addExecuteButtons, d));
+        setInterval(keepAlive, 1000);
+
+        // 提供外部手动刷新
         window.refreshExecuteButtons = addExecuteButtons;
-        
-        // DOM观察器 - 监听新代码块的添加
-        function setupObserver() {
-            const observer = new MutationObserver((mutations) => {
-                let shouldProcess = false;
-                
-                for (const mutation of mutations) {
-                    if (mutation.addedNodes.length > 0) {
-                        for (const node of mutation.addedNodes) {
-                            if (node.nodeType === 1) {
-                                if ((node.classList && node.classList.contains('md-code-block')) ||
-                                    (node.querySelector && node.querySelector('.md-code-block'))) {
-                                    shouldProcess = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    if (shouldProcess) break;
-                }
-                
-                if (shouldProcess) {
-                    console.log('[Execute Buttons] DOM变化检测到新代码块');
-                    setTimeout(addExecuteButtons, 200);
-                }
-            });
-            
-            observer.observe(document.body, {
-                childList: true,
-                subtree: true
-            });
-            
-            console.log('[Execute Buttons] ✓ DOM观察器已激活');
-        }
-        
-        // 初始化
-        console.log('[Execute Buttons] 开始初始化流程');
-        
-        // 立即尝试
-        setTimeout(addExecuteButtons, 100);
-        
-        // 设置观察器
-        setupObserver();
-        
-        // 多次检查 - 确保捕获所有代码块
-        [500, 1000, 2000, 3000, 5000].forEach((delay, index) => {
-            setTimeout(() => {
-                console.log(`[Execute Buttons] 第${index+2}次检查 - ${delay}ms`);
-                addExecuteButtons();
-            }, delay);
-        });
-        
-        // 手动刷新快捷键
-        document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.shiftKey && e.key === 'E') {
-                console.log('[Execute Buttons] 手动刷新 (Ctrl+Shift+E)');
-                e.preventDefault();
-                addExecuteButtons();
-            }
-        });
-        
-        console.log('[Execute Buttons] =================== 初始化完成 ===================');
+
+        console.log('[Execute Buttons] 注入完成（自定义元素策略）');
     })();
     "
 
             Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
-            Debug.WriteLine("执行按钮注入脚本已执行")
+            Debug.WriteLine("执行按钮注入脚本已执行（自定义元素版本）")
         Catch ex As Exception
             Debug.WriteLine($"注入执行按钮脚本时出错: {ex.Message}")
         End Try
