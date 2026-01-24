@@ -267,6 +267,17 @@
     <Compile Include="Ribbon\BaseOfficeRibbon.vb">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Include="Controls\Models\SelectionInfo.vb" />
+    <Compile Include="Controls\Models\HistoryMessage.vb" />
+    <Compile Include="Controls\Services\WebViewService.vb" />
+    <Compile Include="Controls\Services\MessageService.vb" />
+    <Compile Include="Controls\Services\HttpStreamService.vb" />
+    <Compile Include="Controls\Services\CodeExecutionService.vb" />
+    <Compile Include="Controls\Services\FileParserService.vb" />
+    <Compile Include="Controls\Services\ChatStateService.vb" />
+    <Compile Include="Controls\Services\UtilsService.vb" />
+    <Compile Include="Controls\Services\HistoryService.vb" />
+    <Compile Include="Controls\Services\McpService.vb" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Controls\BaseChatControl.resx">
@@ -294,9 +305,6 @@
       <LastGenOutput>Settings.Designer.vb</LastGenOutput>
     </None>
     <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Resources\chat-template.html" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Resources\about.png" />
@@ -342,6 +350,24 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Resources\mcp1.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\css\styles.css" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\js\utils.js" />
+    <None Include="Resources\js\core.js" />
+    <None Include="Resources\js\markdown-renderer.js" />
+    <None Include="Resources\js\chat-manager.js" />
+    <None Include="Resources\js\message-sender.js" />
+    <None Include="Resources\js\code-handler.js" />
+    <None Include="Resources\js\settings-manager.js" />
+    <None Include="Resources\js\mcp-manager.js" />
+    <None Include="Resources\js\revision-manager.js" />
+    <None Include="Resources\js\history-manager.js" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\chat-template-refactored.html" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.VisualBasic.targets" />
   <Import Project="..\packages\Microsoft.Web.WebView2.1.0.3240.44\build\Microsoft.Web.WebView2.targets" Condition="Exists('..\packages\Microsoft.Web.WebView2.1.0.3240.44\build\Microsoft.Web.WebView2.targets')" />

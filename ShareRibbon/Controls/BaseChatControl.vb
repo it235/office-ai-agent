@@ -29,6 +29,49 @@ Imports Newtonsoft.Json.Linq
 Public MustInherit Class BaseChatControl
     Inherits UserControl
 
+    ' 服务类实例
+    Private _fileParserService As New FileParserService()
+    Protected _chatStateService As New ChatStateService()
+    Private _historyService As HistoryService = Nothing
+    Private _mcpService As McpService = Nothing
+
+    ' 延迟初始化的历史服务
+    Protected ReadOnly Property HistoryService As HistoryService
+        Get
+            If _historyService Is Nothing Then
+                _historyService = New HistoryService(AddressOf ExecuteJavaScriptAsyncJS)
+            End If
+            Return _historyService
+        End Get
+    End Property
+
+    ' 延迟初始化的 MCP 服务
+    Protected ReadOnly Property McpService As McpService
+        Get
+            If _mcpService Is Nothing Then
+                _mcpService = New McpService(AddressOf ExecuteJavaScriptAsyncJS, AddressOf GetApplication)
+            End If
+            Return _mcpService
+        End Get
+    End Property
+
+    ' 延迟初始化的代码执行服务
+    Private _codeExecutionService As CodeExecutionService = Nothing
+    Protected ReadOnly Property CodeExecutionService As CodeExecutionService
+        Get
+            If _codeExecutionService Is Nothing Then
+                _codeExecutionService = New CodeExecutionService(
+                    AddressOf GetVBProject,
+                    AddressOf GetOfficeApplicationObject,
+                    AddressOf GetApplication,
+                    AddressOf RunCode,
+                    AddressOf RunCodePreview,
+                    AddressOf EvaluateFormula)
+            End If
+            Return _codeExecutionService
+        End Get
+    End Property
+
     'settings
     Protected topicRandomness As Double
     Protected contextLimit As Integer
@@ -43,32 +86,20 @@ Public MustInherit Class BaseChatControl
 
     Protected loadingPictureBox As PictureBox
 
-    ' ========== 选区对比与写回相关字段 ==========
-    Protected Class SelectionInfo
-        Public Property DocumentPath As String
-        Public Property StartPos As Integer
-        Public Property EndPos As Integer
-        Public Property SelectedText As String
-    End Class
-
+    ' 选区对比相关字段
     Protected PendingSelectionInfo As SelectionInfo = Nothing
     Protected _selectionPendingMap As New Dictionary(Of String, SelectionInfo)()
     Private allPlainMarkdownBuffer As New StringBuilder()
-    ' =======================================================
 
-    Protected _responseToRequestMap As New Dictionary(Of String, String)() ' responseUuid -> requestUuid
-
-    ' 新增：存储解析到的修订（responseUuid -> JArray）
+    Protected _responseToRequestMap As New Dictionary(Of String, String)()
     Protected _revisionsMap As New Dictionary(Of String, JArray)()
 
     Protected Overrides Sub WndProc(ByRef m As Message)
         Const WM_PASTE As Integer = &H302
         If m.Msg = WM_PASTE Then
-            ' 在此处理粘贴操作，比如：
             If Clipboard.ContainsText() Then
                 Dim txt As String = Clipboard.GetText()
             End If
-            ' 不把消息传递给基类，从而拦截后续处理  
             Return
         End If
         MyBase.WndProc(m)
@@ -76,50 +107,32 @@ Public MustInherit Class BaseChatControl
 
     Protected Async Function InitializeWebView2() As Task
         Try
-            ' 自定义用户数据目录
             Dim userDataFolder As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MyAppWebView2Cache")
-
-            ' 确保目录存在
             If Not Directory.Exists(userDataFolder) Then
                 Directory.CreateDirectory(userDataFolder)
             End If
 
-            ' 释放资源文件到本地
             Dim wwwRoot As String = ResourceExtractor.ExtractResources()
-
-            ' 配置 WebView2 的创建属性
             ChatBrowser.CreationProperties = New CoreWebView2CreationProperties With {
                 .UserDataFolder = userDataFolder
             }
-
-            ' 初始化 WebView2
             Await ChatBrowser.EnsureCoreWebView2Async(Nothing)
 
-            ' 确保 CoreWebView2 已初始化
             If ChatBrowser.CoreWebView2 IsNot Nothing Then
-
-                ' 设置 WebView2 的安全选项
                 ChatBrowser.CoreWebView2.Settings.IsScriptEnabled = True
                 ChatBrowser.CoreWebView2.Settings.AreDefaultScriptDialogsEnabled = True
                 ChatBrowser.CoreWebView2.Settings.IsWebMessageEnabled = True
-                ChatBrowser.CoreWebView2.Settings.AreDevToolsEnabled = True ' 开发时启用开发者工具
+                ChatBrowser.CoreWebView2.Settings.AreDevToolsEnabled = True
 
-                ' 设置虚拟主机名映射到本地目录
                 ChatBrowser.CoreWebView2.SetVirtualHostNameToFolderMapping(
-                    "officeai.local", ' 虚拟主机名
-                    wwwRoot,          ' 本地文件夹路径
-                    CoreWebView2HostResourceAccessKind.Allow  ' 允许访问
+                    "officeai.local",
+                    wwwRoot,
+                    CoreWebView2HostResourceAccessKind.Allow
                 )
 
-                ' 替换模板中的 {wwwroot} 占位符
-                Dim htmlContent As String = My.Resources.chat_template
-
-                ' 加载 HTML 模板
+                Dim htmlContent As String = My.Resources.chat_template_refactored
                 ChatBrowser.CoreWebView2.NavigateToString(htmlContent)
-
-                ' 配置 Marked 和代码高亮
                 ConfigureMarked()
-                ' 添加导航完成事件处理，确保在页面加载完成后初始化设置
                 AddHandler ChatBrowser.CoreWebView2.NavigationCompleted, AddressOf OnWebViewNavigationCompleted
 
             Else
@@ -185,28 +198,11 @@ Public MustInherit Class BaseChatControl
             Return _chatHtmlFilePath
         End Get
     End Property
+
     Private Function GetFirst10Characters(text As String) As String
-        If String.IsNullOrEmpty(text) Then Return String.Empty
-
-        ' 取前20个字符，如果不足20个则取全部
-        Dim result As String = If(text.Length > 20, text.Substring(0, 20), text)
-
-        ' 移除文件名中不允许的字符，替换为下划线
-        Dim invalidChars As Char() = Path.GetInvalidFileNameChars()
-        For Each invalidChar In invalidChars
-            result = result.Replace(invalidChar, "_"c)
-        Next
-
-        ' 移除一些可能导致问题的字符
-        result = result.Replace(" ", "_")  ' 空格替换为下划线
-        result = result.Replace(".", "_")  ' 点号替换为下划线
-        result = result.Replace(",", "_")  ' 逗号替换为下划线
-        result = result.Replace(":", "_")  ' 冒号替换为下划线
-        result = result.Replace("?", "_")  ' 问号替换为下划线
-        result = result.Replace("!", "_")  ' 感叹号替换为下划线
-
-        Return result
+        Return UtilsService.GetFirst10Characters(text)
     End Function
+
     Private Sub OnWebViewNavigationCompleted(sender As Object, e As CoreWebView2NavigationCompletedEventArgs) Handles ChatBrowser.NavigationCompleted
         If e.IsSuccess Then
             Try
@@ -290,8 +286,7 @@ Public MustInherit Class BaseChatControl
                 Case "saveSettings"
                     HandleSaveSettings(jsonDoc)
                 Case "getHistoryFiles"
-                    TestX()
-                    'HandleGetHistoryFiles()
+                    HandleGetHistoryFiles()
                 Case "openHistoryFile"
                     HandleOpenHistoryFile(jsonDoc)
                 Case "getMcpConnections"
@@ -336,9 +331,7 @@ Public MustInherit Class BaseChatControl
     Protected Overridable Sub HandleApplyRevisionAll(jsonDoc As JObject)
     End Sub
 
-    ' 替换原有 HandleApplyRevisionSegment，且新增两个类级私有辅助函数
     Protected Overridable Sub HandleApplyRevisionSegment(jsonDoc As JObject)
-        Debug.Print(jsonDoc.ToString)
     End Sub
 
 
@@ -415,155 +408,29 @@ Public MustInherit Class BaseChatControl
         Debug.WriteLine("已清空聊天记忆（上下文）")
     End Sub
 
-    ' 处理获取MCP连接列表请求
+    ' 处理获取MCP连接列表请求 - 委托给 McpService
     Protected Sub HandleGetMcpConnections()
-        Try
-            ' 获取所有可用的MCP连接
-            Dim connections = MCPConnectionManager.LoadConnections()
-
-            ' 过滤出已启用的连接 - 使用IsActive而不是Enabled
-            Dim enabledConnections = connections.Where(Function(c) c.IsActive).ToList()
-
-            ' 获取已启用的MCP列表
-            Dim chatSettings As New ChatSettings(GetApplication())
-            Dim enabledMcpList = chatSettings.EnabledMcpList
-
-            ' 将数据序列化为JSON
-            Dim connectionsJson = JsonConvert.SerializeObject(enabledConnections)
-            Dim enabledListJson = JsonConvert.SerializeObject(enabledMcpList)
-
-            ' 获取当前配置的模型是否支持mcp
-            Dim mcpSupported As Boolean = ConfigSettings.mcpable
-            'Debug.WriteLine($"获取MCP连接列表，当前模型是否支持MCP {mcpSupported}")
-
-            ' 发送到前端
-            Dim js = $"renderMcpConnections({connectionsJson}, {enabledListJson},{mcpSupported.ToString().ToLower()});"
-            ExecuteJavaScriptAsyncJS(js)
-        Catch ex As Exception
-            Debug.WriteLine($"获取MCP连接列表失败: {ex.Message}")
-        End Try
+        McpService.GetMcpConnections()
     End Sub
 
-    ' 处理保存MCP设置请求
+    ' 处理保存MCP设置请求 - 委托给 McpService
     Protected Sub HandleSaveMcpSettings(jsonDoc As JObject)
-        Try
-            ' 获取启用的MCP列表
-            Dim enabledList As List(Of String) = jsonDoc("enabledList").ToObject(Of List(Of String))()
-
-            ' 保存到设置
-            Dim chatSettings As New ChatSettings(GetApplication())
-            chatSettings.SaveEnabledMcpList(enabledList)
-
-            GlobalStatusStrip.ShowInfo("MCP设置已保存")
-        Catch ex As Exception
-            Debug.WriteLine($"保存MCP设置失败: {ex.Message}")
-            GlobalStatusStrip.ShowWarning("保存MCP设置失败")
-        End Try
+        McpService.SaveMcpSettings(jsonDoc)
     End Sub
 
-    ' 添加MCP初始化方法
+    ' MCP初始化方法 - 委托给 McpService
     Protected Sub InitializeMcpSettings()
-        Try
-            ' 检查当前模型是否支持MCP
-            Dim mcpSupported = False
-
-            ' 从ConfigData中查找当前模型的mcpable属性
-            For Each config In ConfigManager.ConfigData
-                If config.selected Then
-                    For Each model In config.model
-                        If model.selected Then
-                            mcpSupported = model.mcpable
-                            Exit For
-                        End If
-                    Next
-                    Exit For
-                End If
-            Next
-
-            ' 加载MCP连接和启用列表
-            Dim connections = MCPConnectionManager.LoadConnections()
-            ' 使用IsActive替代Enabled
-            Dim enabledConnections = connections.Where(Function(c) c.IsActive).ToList()
-
-            Dim chatSettings As New ChatSettings(GetApplication())
-            Dim enabledMcpList = chatSettings.EnabledMcpList
-
-            ' 序列化为JSON
-            Dim connectionsJson = JsonConvert.SerializeObject(enabledConnections)
-            Dim enabledListJson = JsonConvert.SerializeObject(enabledMcpList)
-
-            ' 向前端传递信息
-            Dim js = $"setMcpSupport({mcpSupported.ToString().ToLower()}, {connectionsJson}, {enabledListJson});"
-            ExecuteJavaScriptAsyncJS(js)
-        Catch ex As Exception
-            Debug.WriteLine($"初始化MCP设置失败: {ex.Message}")
-        End Try
+        McpService.InitializeMcpSettings()
     End Sub
-    ' 处理获取历史文件列表请求
+
+    ' 处理获取历史文件列表请求 - 委托给 HistoryService
     Protected Sub HandleGetHistoryFiles()
-        Try
-            ' 获取历史文件目录
-            Dim historyDir As String = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            ConfigSettings.OfficeAiAppDataFolder
-        )
-
-            Dim historyFiles As New List(Of Object)()
-
-            If Directory.Exists(historyDir) Then
-                ' 查找所有符合条件的HTML文件
-                Dim files As String() = Directory.GetFiles(historyDir, "saved_chat_*.html")
-
-                For Each filePath As String In files
-                    Try
-                        Dim fileInfo As New FileInfo(filePath)
-                        historyFiles.Add(New With {
-                        .fileName = fileInfo.Name,
-                        .fullPath = fileInfo.FullName,
-                        .size = fileInfo.Length,
-                        .lastModified = fileInfo.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
-                    })
-                    Catch ex As Exception
-                        Debug.WriteLine($"处理文件信息时出错: {filePath} - {ex.Message}")
-                    End Try
-                Next
-            End If
-
-            ' 将文件列表序列化为JSON并发送到前端
-            Dim jsonResult As String = JsonConvert.SerializeObject(historyFiles)
-            Dim escapedJson As String = HttpUtility.JavaScriptStringEncode(jsonResult)
-
-            Dim js As String = $"setHistoryFilesList({jsonResult});"
-            ExecuteJavaScriptAsyncJS(js)
-
-        Catch ex As Exception
-            Debug.WriteLine($"获取历史文件列表时出错: {ex.Message}")
-            ' 发送空列表到前端
-            ExecuteJavaScriptAsyncJS("setHistoryFilesList([]);")
-        End Try
+        HistoryService.GetHistoryFiles()
     End Sub
 
-    ' 处理打开历史文件请求
+    ' 处理打开历史文件请求 - 委托给 HistoryService
     Protected Sub HandleOpenHistoryFile(jsonDoc As JObject)
-        Try
-            Dim filePath As String = jsonDoc("filePath").ToString()
-
-            If File.Exists(filePath) Then
-                ' 使用默认浏览器打开HTML文件
-                Process.Start(New ProcessStartInfo() With {
-                .FileName = filePath,
-                .UseShellExecute = True
-            })
-
-                GlobalStatusStrip.ShowInfo("已在浏览器中打开历史记录")
-            Else
-                GlobalStatusStrip.ShowWarning("历史记录文件不存在")
-            End If
-
-        Catch ex As Exception
-            Debug.WriteLine($"打开历史文件时出错: {ex.Message}")
-            GlobalStatusStrip.ShowWarning("打开历史记录失败: " & ex.Message)
-        End Try
+        HistoryService.OpenHistoryFile(jsonDoc)
     End Sub
 
     Protected Overridable Sub HandleCheckedChange(jsonDoc As JObject)
@@ -593,13 +460,7 @@ Public MustInherit Class BaseChatControl
         Public Property address As String
     End Class
 
-    ' 定义文件内容解析结果的类
-    Public Class FileContentResult
-        Public Property FileName As String
-        Public Property FileType As String  ' "Excel", "Word", "Text", 等
-        Public Property ParsedContent As String  ' 格式化的内容字符串
-        Public Property RawData As Object  ' 原始数据，可用于进一步处理
-    End Class
+    ' FileContentResult 类已移至 Controls/Models/HistoryMessage.vb
 
 
     ' 添加存储第一个问题的变量
@@ -695,7 +556,7 @@ Public MustInherit Class BaseChatControl
                             Case ".docx", ".doc"
                                 fileContentResult = ParseFile(fullFilePath)
                             Case ".csv", ".txt"
-                                fileContentResult = ParseTextFile(fullFilePath)
+                                fileContentResult = _fileParserService.ParseTextFile(fullFilePath)
                             Case Else
                                 fileContentResult = New FileContentResult With {
                             .FileName = Path.GetFileName(fullFilePath),
@@ -755,250 +616,7 @@ Public MustInherit Class BaseChatControl
     Protected MustOverride Function GetCurrentWorkingDirectory() As String
     Protected MustOverride Function AppendCurrentSelectedContent(message As String) As String
 
-    ' 通用的文本文件解析方法
-    Protected Function ParseTextFile(filePath As String) As FileContentResult
-        Try
-            Dim extension As String = Path.GetExtension(filePath).ToLower()
-
-            ' 对 CSV 文件使用专门的处理逻辑
-            If extension = ".csv" Then
-                Return ParseCsvFile(filePath)
-            End If
-
-            ' 对普通文本文件进行编码检测
-            Dim encoding As Encoding = DetectFileEncoding(filePath)
-            Dim content As String = File.ReadAllText(filePath, encoding)
-
-            Dim result As New FileContentResult With {
-            .FileName = Path.GetFileName(filePath),
-            .FileType = "Text",
-            .ParsedContent = content,
-            .RawData = content
-        }
-            Return result
-        Catch ex As Exception
-            Debug.WriteLine($"Error parsing text file: {ex.Message}")
-            Return New FileContentResult With {
-            .FileName = Path.GetFileName(filePath),
-            .FileType = "Text",
-            .ParsedContent = $"[解析文本文件时出错: {ex.Message}]"
-        }
-        End Try
-    End Function
-
-    ' 专门用于解析 CSV 文件的方法
-    Protected Function ParseCsvFile(filePath As String) As FileContentResult
-        Try
-            ' 检测文件编码
-            Dim encoding As Encoding = DetectFileEncoding(filePath)
-
-            ' 用检测到的编码读取内容
-            Dim csvContent As String = File.ReadAllText(filePath, encoding)
-
-            ' 创建一个格式化的 CSV 内容
-            Dim formattedContent As New StringBuilder()
-            formattedContent.AppendLine($"CSV 文件: {Path.GetFileName(filePath)} (编码: {encoding.EncodingName})")
-            formattedContent.AppendLine()
-
-            ' 分析 CSV 数据结构
-            Dim rows As String() = csvContent.Split({vbCr, vbLf}, StringSplitOptions.RemoveEmptyEntries)
-
-            If rows.Length > 0 Then
-                ' 检测分隔符，可能是逗号、分号、制表符等
-                Dim delimiter As Char = DetectCsvDelimiter(rows(0))
-
-                ' 获取列数，用于后续限制数据量
-                Dim columns As String() = rows(0).Split(delimiter)
-                Dim columnCount As Integer = columns.Length
-
-                ' 添加表头（如果存在）
-                formattedContent.AppendLine("表头:")
-                formattedContent.AppendLine(FormatCsvRow(rows(0), delimiter))
-                formattedContent.AppendLine()
-
-                ' 添加数据行（限制行数，避免数据太多）
-                Dim maxRows As Integer = Math.Min(rows.Length, 25) ' 最多显示25行
-                formattedContent.AppendLine("数据:")
-
-                For i As Integer = 1 To maxRows - 1
-                    formattedContent.AppendLine(FormatCsvRow(rows(i), delimiter))
-                Next
-
-                ' 如果有更多行，添加提示
-                If rows.Length > maxRows Then
-                    formattedContent.AppendLine("...")
-                    formattedContent.AppendLine($"[文件包含 {rows.Length} 行，仅显示前 {maxRows - 1} 行数据]")
-                End If
-            Else
-                formattedContent.AppendLine("[CSV 文件为空]")
-            End If
-
-            Return New FileContentResult With {
-            .FileName = Path.GetFileName(filePath),
-            .FileType = "CSV",
-            .ParsedContent = formattedContent.ToString(),
-            .RawData = csvContent
-        }
-        Catch ex As Exception
-            Debug.WriteLine($"Error parsing CSV file: {ex.Message}")
-            Return New FileContentResult With {
-            .FileName = Path.GetFileName(filePath),
-            .FileType = "CSV",
-            .ParsedContent = $"[解析 CSV 文件时出错: {ex.Message}]"
-        }
-        End Try
-    End Function
-
-    ' 格式化 CSV 行数据，使其更易读
-    Private Function FormatCsvRow(row As String, delimiter As Char) As String
-        Dim fields As String() = row.Split(delimiter)
-        Dim formattedRow As New StringBuilder()
-
-        For i As Integer = 0 To fields.Length - 1
-            Dim field As String = fields(i).Trim(""""c) ' 移除引号
-            If i < fields.Length - 1 Then
-                formattedRow.Append($"{field} | ")
-            Else
-                formattedRow.Append(field)
-            End If
-        Next
-
-        Return formattedRow.ToString()
-    End Function
-
-    ' 检测 CSV 文件的分隔符
-    Private Function DetectCsvDelimiter(sampleLine As String) As Char
-        ' 常见的 CSV 分隔符
-        Dim possibleDelimiters As Char() = {","c, ";"c, vbTab, "|"c}
-        Dim bestDelimiter As Char = ","c ' 默认使用逗号
-        Dim maxCount As Integer = 0
-
-        ' 检查每个可能的分隔符
-        For Each delimiter In possibleDelimiters
-            Dim count As Integer = sampleLine.Count(Function(c) c = delimiter)
-            If count > maxCount Then
-                maxCount = count
-                bestDelimiter = delimiter
-            End If
-        Next
-
-        Return bestDelimiter
-    End Function
-
-    ' 检测文件编码
-    Private Function DetectFileEncoding(filePath As String) As Encoding
-        ' 首先，我们尝试从 BOM (Byte Order Mark) 检测编码
-        Try
-            Using fs As New FileStream(filePath, FileMode.Open, FileAccess.Read)
-                ' 读取前几个字节来检测 BOM
-                Dim bom(3) As Byte
-                Dim bytesRead As Integer = fs.Read(bom, 0, bom.Length)
-
-                ' 检查是否有 BOM
-                If bytesRead >= 3 AndAlso bom(0) = &HEF AndAlso bom(1) = &HBB AndAlso bom(2) = &HBF Then
-                    ' UTF-8 with BOM
-                    Return New UTF8Encoding(True)
-                ElseIf bytesRead >= 2 AndAlso bom(0) = &HFE AndAlso bom(1) = &HFF Then
-                    ' UTF-16 (Big Endian)
-                    Return Encoding.BigEndianUnicode
-                ElseIf bytesRead >= 2 AndAlso bom(0) = &HFF AndAlso bom(1) = &HFE Then
-                    ' UTF-16 (Little Endian)
-                    If bytesRead >= 4 AndAlso bom(2) = 0 AndAlso bom(3) = 0 Then
-                        ' UTF-32 (Little Endian)
-                        Return Encoding.UTF32
-                    Else
-                        ' UTF-16 (Little Endian)
-                        Return Encoding.Unicode
-                    End If
-                ElseIf bytesRead >= 4 AndAlso bom(0) = 0 AndAlso bom(1) = 0 AndAlso bom(2) = &HFE AndAlso bom(3) = &HFF Then
-                    ' UTF-32 (Big Endian)
-                    Return New UTF32Encoding(True, True)
-                End If
-            End Using
-
-            ' 定义Unicode替换字符，用于检测无效字符
-            Dim unicodeReplacementChar As Char = ChrW(&HFFFD) ' Unicode 替换字符 U+FFFD
-
-            ' 针对中文文件，优先尝试 GB18030/GBK 编码
-            Dim fileExtension As String = Path.GetExtension(filePath).ToLower()
-            If fileExtension = ".csv" Then
-                ' 首先尝试 GB18030/GBK 编码，这在中文环境下非常常见
-                Try
-                    ' 读取部分文件内容
-                    Dim csvSampleBytes As Byte() = New Byte(4095) {}  ' 读取前 4KB
-                    Using fs As New FileStream(filePath, FileMode.Open, FileAccess.Read)
-                        fs.Read(csvSampleBytes, 0, csvSampleBytes.Length)
-                    End Using
-
-                    ' 尝试用 GB18030 解码
-                    Dim gbkEncoding As Encoding = Encoding.GetEncoding("GB18030")
-                    Dim gbkText As String = gbkEncoding.GetString(csvSampleBytes)
-
-                    ' 检查解码后的文本是否符合 CSV 格式的特征（包含逗号和换行符）
-                    If gbkText.Contains(",") AndAlso (gbkText.Contains(vbCr) OrElse gbkText.Contains(vbLf)) Then
-                        ' 如果包含逗号和换行符，可能是有效的 CSV
-                        Dim invalidCharCount As Integer = gbkText.Count(Function(c) c = "?"c Or c = unicodeReplacementChar)
-                        Dim totalCharCount As Integer = gbkText.Length
-
-                        ' 允许有少量不可识别字符
-                        If invalidCharCount <= totalCharCount * 0.05 Then ' 允许5%的不可识别字符
-                            Return gbkEncoding
-                        End If
-                    End If
-                Catch ex As Exception
-                    ' 忽略错误，继续尝试其他编码
-                    Debug.WriteLine($"尝试 GB18030 编码时出错: {ex.Message}")
-                End Try
-            End If
-
-            ' 尝试几种常见的编码
-            Dim encodingsToTry As Encoding() = {
-            New UTF8Encoding(False),        ' UTF-8 without BOM
-            Encoding.GetEncoding("GB18030"), ' 中文编码，涵盖简体中文
-            Encoding.Default                ' 系统默认编码
-        }
-
-            ' 读取文件的前几行样本
-            Dim generalSampleBytes As Byte() = New Byte(4095) {}  ' 读取前 4KB
-            Using fs As New FileStream(filePath, FileMode.Open, FileAccess.Read)
-                fs.Read(generalSampleBytes, 0, generalSampleBytes.Length)
-            End Using
-
-            Dim bestEncoding As Encoding = encodingsToTry(0) ' 默认使用第一个编码
-            Dim leastInvalidCharCount As Integer = Integer.MaxValue
-
-            ' 尝试每种编码，选择产生最少无效字符的编码
-            For Each enc In encodingsToTry
-                Try
-                    Dim sample As String = enc.GetString(generalSampleBytes)
-                    ' 计算问号和替换字符的数量作为无效字符的指标
-                    Dim invalidCharCount As Integer = sample.Count(Function(c) c = "?"c Or c = unicodeReplacementChar)
-
-                    ' 如果这个编码产生的无效字符更少
-                    If invalidCharCount < leastInvalidCharCount Then
-                        leastInvalidCharCount = invalidCharCount
-                        bestEncoding = enc
-
-                        ' 如果没有无效字符，立即使用这个编码
-                        If invalidCharCount = 0 Then
-                            Exit For
-                        End If
-                    End If
-                Catch ex As Exception
-                    ' 忽略解码错误，尝试下一个编码
-                    Continue For
-                End Try
-            Next
-
-            ' 使用产生最少无效字符的编码
-            Return bestEncoding
-
-        Catch ex As Exception
-            Debug.WriteLine($"检测文件编码时出错: {ex.Message}")
-            ' 出错时使用系统默认编码
-            Return Encoding.Default
-        End Try
-    End Function
+    ' 文本/CSV 解析已委托给 FileParserService，请使用 _fileParserService.ParseTextFile()
 
     Protected MustOverride Function GetApplication() As ApplicationInfo
     Protected MustOverride Function GetVBProject() As VBProject
@@ -1009,188 +627,12 @@ Public MustInherit Class BaseChatControl
     Protected MustOverride Sub GetSelectionContent(target As Object)
 
 
-    ' 执行代码的方法
+    ' 执行代码的方法 - 委托给 CodeExecutionService
     Public Sub ExecuteCode(code As String, language As String, preview As Boolean)
-        ' 根据语言类型执行不同的操作
-        Dim lowerLang As String = language.ToLower()
-
-        If lowerLang.Contains("vbnet") OrElse lowerLang.Contains("vbscript") OrElse lowerLang.Contains("vba") Then
-            ' 执行 VBA 代码 (简化匹配逻辑: 包含vb或vba的都识别为VBA)
-            ExecuteVBACode(code, preview)
-        ElseIf lowerLang.Contains("js") OrElse lowerLang.Contains("javascript") Then
-            ' 执行 JavaScript 代码
-            ExecuteJavaScript(code, preview)
-        ElseIf lowerLang.Contains("excel") OrElse lowerLang.Contains("formula") OrElse lowerLang.Contains("function") Then
-            ' 执行 Excel 函数/公式
-            ExecuteExcelFormula(code, preview)
-
-            'Case "sql", "language-sql"
-            '    ' 执行 SQL 查询
-            '    ExecuteSqlQuery(code, preview)
-            'Case "powerquery", "m", "language-powerquery", "language-m"
-            '    ' 执行 PowerQuery/M 语言
-            '    ExecutePowerQuery(code, preview)
-            'Case "python", "py", "language-python"
-            '    ' 执行 Python 代码
-            '    ExecutePython(code, preview)
-        Else
-            GlobalStatusStrip.ShowWarning("不支持的语言类型: " & language)
-        End If
-
+        CodeExecutionService.ExecuteCode(code, language, preview)
     End Sub
 
-    ' 执行JavaScript代码 - 专注于操作Office/WPS对象模型，支持Office JS API风格代码
-    Protected Function ExecuteJavaScript(jsCode As String, preview As Boolean) As Boolean
-        Try
-            ' 获取Office应用对象
-            Dim appObject As Object = GetOfficeApplicationObject()
-            If appObject Is Nothing Then
-                GlobalStatusStrip.ShowWarning("无法获取Office应用程序对象")
-                Return False
-            End If
-
-            ' 检测是否是Office JS API风格的代码
-            Dim isOfficeJsApiStyle As Boolean = jsCode.Contains("getActiveWorksheet") OrElse
-                                            jsCode.Contains("getUsedRange") OrElse
-                                            jsCode.Contains("getValues") OrElse
-                                            jsCode.Contains("setValues")
-
-            ' 创建脚本控制引擎
-            Dim scriptEngine As Object = CreateObject("MSScriptControl.ScriptControl")
-            scriptEngine.Language = "JScript"
-
-            ' 判断是WPS还是Microsoft Office
-            Dim isWPS As Boolean = False
-            Try
-                Dim appName As String = appObject.Name
-                isWPS = appName.Contains("WPS")
-            Catch ex As Exception
-                isWPS = False
-            End Try
-
-            ' 将Office应用对象暴露给脚本环境
-            scriptEngine.AddObject("app", appObject, True)
-
-            ' 添加适配层代码
-            Dim adapterCode As String = "
-        // Office JS API 适配层
-        var Office = {
-            isWPS: " & isWPS.ToString().ToLower() & ",
-            app: app,
-            context: {
-                workbook: {
-                    // 适配 Office JS API 方法到 COM 对象
-                    getActiveWorksheet: function() {
-                        return {
-                            sheet: app.ActiveSheet,
-                            getUsedRange: function() {
-                                var usedRange = this.sheet.UsedRange;
-                                return {
-                                    range: usedRange,
-                                    getValues: function() {
-                                        var values = [];
-                                        var rows = this.range.Rows.Count;
-                                        var cols = this.range.Columns.Count;
-                                        
-                                        for(var i = 1; i <= rows; i++) {
-                                            var rowValues = [];
-                                            for(var j = 1; j <= cols; j++) {
-                                                var cellValue = this.range.Cells(i, j).Value;
-                                                rowValues.push(cellValue);
-                                            }
-                                            values.push(rowValues);
-                                        }
-                                        return values;
-                                    },
-                                    setValues: function(values) {
-                                        if(!values || values.length === 0) return;
-                                        
-                                        for(var i = 0; i < values.length; i++) {
-                                            var row = values[i];
-                                            for(var j = 0; j < row.length; j++) {
-                                                try {
-                                                    this.range.Cells(i+1, j+1).Value = row[j];
-                                                } catch(e) {
-                                                    // 忽略单元格设置错误
-                                                }
-                                            }
-                                        }
-                                    }
-                                };
-                            }
-                        };
-                    }
-                }
-            },
-            // 日志函数
-            log: function(message) { 
-                return '输出: ' + message; 
-            }
-        };
-        
-        // Office JS API 主函数适配器
-        function executeOfficeJsApi(codeFunc) {
-            var workbook = Office.context.workbook;
-            if(typeof codeFunc === 'function') {
-                try {
-                    return codeFunc(workbook);
-                } catch(e) {
-                    return 'Office JS API 执行错误: ' + e.message;
-                }
-            }
-            return 'Invalid function';
-        }
-        "
-
-            ' 预执行适配层代码
-            scriptEngine.ExecuteStatement(adapterCode)
-
-            ' 构建执行代码，根据代码类型选择不同的执行方式
-            Dim wrappedCode As String
-
-            If isOfficeJsApiStyle Then
-                ' 如果是Office JS API风格，使用适配层执行
-                wrappedCode = "
-            try {
-                // 将用户代码包装为函数
-                var userFunc = function(workbook) {
-                    " & jsCode & "
-                };
-                
-                // 使用适配器执行
-                executeOfficeJsApi(userFunc);
-                return 'Office JS API 代码执行成功';
-            } catch(e) {
-                return 'Office JS API 执行错误: ' + e.message;
-            }
-            "
-            Else
-                ' 普通JavaScript代码
-                wrappedCode = "
-            try {
-                // 用户代码开始
-                " & jsCode & "
-                // 用户代码结束
-                return '代码执行成功';
-            } catch(e) {
-                return '执行错误: ' + e.message;
-            }
-            "
-            End If
-
-            ' 执行JavaScript代码并获取结果
-            Dim result As String = scriptEngine.Eval(wrappedCode)
-            GlobalStatusStrip.ShowInfo(result)
-
-            Return True
-        Catch ex As Exception
-            MessageBox.Show("执行JavaScript代码时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-            Return False
-        End Try
-    End Function
-
-
-
+    ' ExecuteJavaScript 已委托给 CodeExecutionService
     ' 添加清除特定 sheetName 的方法
     Public Async Sub ClearSelectedContentBySheetName(sheetName As String)
         Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(
@@ -1202,33 +644,7 @@ Public MustInherit Class BaseChatControl
     ' 抽象方法 - 获取Office应用程序对象
     Protected MustOverride Function GetOfficeApplicationObject() As Object
 
-    ' 执行Excel公式或函数 - 基类通用实现
-    Protected Function ExecuteExcelFormula(formulaCode As String, preview As Boolean) As Boolean
-        Try
-            ' 获取应用程序信息
-            Dim appInfo As ApplicationInfo = GetApplication()
-
-            ' 去除可能的等号前缀
-            If formulaCode.StartsWith("=") Then
-                formulaCode = formulaCode.Substring(1)
-            End If
-
-            ' 根据应用类型处理
-            If appInfo.Type = OfficeApplicationType.Excel Then
-                ' 对于Excel，使用Evaluate方法
-                Dim result As Boolean = EvaluateFormula(formulaCode, preview)
-                GlobalStatusStrip.ShowInfo("公式执行结果: " & result.ToString())
-                Return True
-            Else
-                ' 其他应用不支持直接执行Excel公式
-                GlobalStatusStrip.ShowWarning("Excel公式执行仅支持Excel环境")
-                Return False
-            End If
-        Catch ex As Exception
-            MessageBox.Show("执行Excel公式时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-            Return False
-        End Try
-    End Function
+    ' ExecuteExcelFormula, ExecuteVBACode, ContainsProcedureDeclaration, FindFirstProcedureName 已委托给 CodeExecutionService
 
     ' 虚方法 - 评估Excel公式（只有Excel子类会实现）
     Protected Overridable Function EvaluateFormula(formula As String, preview As Boolean) As Boolean
@@ -1236,172 +652,13 @@ Public MustInherit Class BaseChatControl
         Return True
     End Function
 
-    ' 执行前端传来的 VBA 代码片段
-    Protected Function ExecuteVBACode(vbaCode As String, preview As Boolean)
-
-        If preview Then
-            ' 返回是否需要执行，accept-True，reject-False
-            If Not RunCodePreview(vbaCode, preview) Then
-                Return True
-            End If
-            ' 如果预览模式，直接返回
-        End If
-
-        ' 获取 VBA 项目
-        Dim vbProj As VBProject = GetVBProject()
-
-        ' 添加空值检查
-        If vbProj Is Nothing Then
-            Return False
-        End If
-
-        Dim vbComp As VBComponent = Nothing
-        Dim tempModuleName As String = "TempMod" & DateTime.Now.Ticks.ToString().Substring(0, 8)
-
-        Try
-            ' 创建临时模块
-            vbComp = vbProj.VBComponents.Add(vbext_ComponentType.vbext_ct_StdModule)
-            vbComp.Name = tempModuleName
-
-            ' 检查代码是否已包含 Sub/Function 声明
-            If ContainsProcedureDeclaration(vbaCode) Then
-                ' 代码已包含过程声明，直接添加
-                vbComp.CodeModule.AddFromString(vbaCode)
-
-                ' 查找第一个过程名并执行
-                Dim procName As String = FindFirstProcedureName(vbComp)
-                If Not String.IsNullOrEmpty(procName) Then
-                    RunCode(tempModuleName & "." & procName)
-                Else
-                    'MessageBox.Show("无法在代码中找到可执行的过程")
-                    GlobalStatusStrip.ShowWarning("无法在代码中找到可执行的过程")
-                End If
-            Else
-                ' 代码不包含过程声明，将其包装在 Auto_Run 过程中
-                Dim wrappedCode As String = "Sub Auto_Run()" & vbNewLine &
-                                           vbaCode & vbNewLine &
-                                           "End Sub"
-                vbComp.CodeModule.AddFromString(wrappedCode)
-
-                ' 执行 Auto_Run 过程
-                RunCode(tempModuleName & ".Auto_Run")
-
-            End If
-
-        Catch ex As Exception
-            MessageBox.Show("执行 VBA 代码时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-        Finally
-            ' 无论成功还是失败，都删除临时模块
-            Try
-                If vbProj IsNot Nothing AndAlso vbComp IsNot Nothing Then
-                    vbProj.VBComponents.Remove(vbComp)
-                End If
-            Catch
-                ' 忽略清理错误
-            End Try
-        End Try
-    End Function
-
-
-    ' 检查代码是否包含过程声明
-    Public Function ContainsProcedureDeclaration(code As String) As Boolean
-        ' 使用简单的正则表达式检查是否包含 Sub 或 Function 声明
-        Return Regex.IsMatch(code, "^\s*(Sub|Function)\s+\w+", RegexOptions.Multiline Or RegexOptions.IgnoreCase)
-    End Function
-
-
-    ' 查找模块中的第一个过程名
-    Public Function FindFirstProcedureName(comp As VBComponent) As String
-        Try
-            Dim codeModule As CodeModule = comp.CodeModule
-            Dim lineCount As Integer = codeModule.CountOfLines
-            Dim line As Integer = 1
-
-            While line <= lineCount
-                Dim procName As String = codeModule.ProcOfLine(line, vbext_ProcKind.vbext_pk_Proc)
-                If Not String.IsNullOrEmpty(procName) Then
-                    Return procName
-                End If
-                line = codeModule.ProcStartLine(procName, vbext_ProcKind.vbext_pk_Proc) + codeModule.ProcCountLines(procName, vbext_ProcKind.vbext_pk_Proc)
-            End While
-
-            Return String.Empty
-        Catch
-            ' 如果出错，尝试使用正则表达式从代码中提取
-            Dim code As String = comp.CodeModule.Lines(1, comp.CodeModule.CountOfLines)
-            Dim match As Match = Regex.Match(code, "^\s*(Sub|Function)\s+(\w+)", RegexOptions.Multiline Or RegexOptions.IgnoreCase)
-
-            If match.Success AndAlso match.Groups.Count > 2 Then
-                Return match.Groups(2).Value
-            End If
-
-            Return String.Empty
-        End Try
-    End Function
-
     ' 在类字段区：新增 response mode 映射
     Protected _responseModeMap As New Dictionary(Of String, String)() ' responseUuid -> mode (e.g. "reformat","proofread","revisions_only","comparison_only")
 
-    '测试方法
-    Public Async Function TestX() As Task(Of String)
-        ' 前端提示
-        Dim responseUuid As String = "6e2dc857-f0de-498e-8cfa-1bc6ffbd83d4"
-        Try
-            Dim aiName As String = ConfigSettings.platform & " " & ConfigSettings.ModelName
-            Dim jsCreate As String = $"createChatSection('{aiName}', formatDateTime(new Date()), '{responseUuid}');"
-            Await ExecuteJavaScriptAsyncJS(jsCreate)
-            Dim js1 = $"appendRenderer('{responseUuid}','正在向模型发起校对请求，请耐心等待');"
-            Await ExecuteJavaScriptAsyncJS(js1)
-        Catch ex As Exception
-            Debug.WriteLine("ExecuteJavaScriptAsyncJS 调用失败: " & ex.Message)
-        End Try
-
-        ' 格式化
-        Dim configFileName As String = "formattest.json"
-        Dim configFilePath As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-        ConfigSettings.OfficeAiAppDataFolder, configFileName)
-        Dim aiFinal As String = File.ReadAllText(configFilePath)
-        Dim js As String = $"showComparison('{responseUuid}', '123', {JsonConvert.SerializeObject(aiFinal)});"
-        Await ExecuteJavaScriptAsyncJS(js)
-        Debug.Print(js)
-
-
-        ' 校对
-        'Dim configFileName As String = "retest.json"
-        'Dim configFilePath As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-        'ConfigSettings.OfficeAiAppDataFolder, configFileName)
-        'Dim aiText As String = File.ReadAllText(configFilePath)
-        'Dim revisions As JArray = TryExtractJsonArrayFromText(aiText)
-        'If revisions IsNot Nothing AndAlso revisions.Count > 0 Then
-        '    Dim jsRev As String = $"showRevisions('{responseUuid}', {revisions.ToString(Formatting.None)});"
-        '    ExecuteJavaScriptAsyncJS(jsRev)
-        '    Debug.Print(jsRev)
-        'End If
-
-        Return ""
-    End Function
+    ' 测试方法已移除，如需调试请使用单独的测试类
 
     Private Function TryExtractJsonArrayFromText(text As String) As JArray
-        Try
-            If String.IsNullOrWhiteSpace(text) Then Return Nothing
-
-            ' 尝试用正则抽取第一个 [...] 数组块（Singleline 允许跨行）
-            Dim m As Match = Regex.Match(text, "\[.*\]", RegexOptions.Singleline)
-            If m.Success Then
-                Dim jsonCandidate As String = m.Value.Trim()
-                ' 验证并解析为 JArray
-                Try
-                    Dim arr As JArray = JArray.Parse(jsonCandidate)
-                    Return arr
-                Catch ex As Exception
-                    Debug.WriteLine("解析 JSON 数组失败: " & ex.Message)
-                    Return Nothing
-                End Try
-            End If
-        Catch ex As Exception
-            Debug.WriteLine("TryExtractJsonArrayFromText 出错: " & ex.Message)
-        End Try
-        Return Nothing
+        Return UtilsService.TryExtractJsonArrayFromText(text)
     End Function
 
     ' 存储调用Send时的请求参数（requestUuid/responseUuid -> JObject）
@@ -1498,11 +755,7 @@ Public MustInherit Class BaseChatControl
 
 
     Private Function StripQuestion(question As String) As String
-        Dim result As String = question.Replace("\", "\\").Replace("""", "\""").
-                                  Replace(vbCr, "\r").Replace(vbLf, "\n").
-                                  Replace(vbTab, "\t").Replace(vbBack, "\b").
-                                  Replace(Chr(12), "\f")
-        Return result
+        Return UtilsService.StripQuestion(question)
     End Function
 
     Private Function CreateRequestBody(uuid As String, question As String, systemPrompt As String, addHistory As Boolean) As String
@@ -1921,7 +1174,6 @@ Public MustInherit Class BaseChatControl
                     Continue For
                 End If
 
-                Debug.Print(line)
                 Dim jsonObj As JObject = JObject.Parse(line)
 
                 ' 获取token信息 - 只保存最后一个响应块的usage信息
@@ -2308,37 +1560,18 @@ Public MustInherit Class BaseChatControl
     End Function
 
     Private Function DecodeBase64(base64 As String) As String
-        Dim bytes As Byte() = System.Convert.FromBase64String(base64)
-        Return System.Text.Encoding.UTF8.GetString(bytes)
+        Return UtilsService.DecodeBase64(base64)
     End Function
 
     Private Function EscapeJavaScriptString(input As String) As String
-        Return input _
-        .Replace("\", "\\") _
-        .Replace("'", "\'") _
-        .Replace(vbCr, "") _
-        .Replace(vbLf, "\n") _
-        .Replace("</script>", "<\/script>")  ' 避免脚本注入
+        Return UtilsService.EscapeJavaScriptString(input)
     End Function
 
 
 
-    ' 共用的HTTP请求方法
+    ' 共用的HTTP请求方法 - 委托给 UtilsService
     Protected Async Function SendHttpRequest(apiUrl As String, apiKey As String, requestBody As String) As Task(Of String)
-        Try
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
-            Using client As New HttpClient()
-                client.Timeout = TimeSpan.FromSeconds(120)
-                client.DefaultRequestHeaders.Add("Authorization", "Bearer " & apiKey)
-                Dim content As New StringContent(requestBody, Encoding.UTF8, "application/json")
-                Dim response As HttpResponseMessage = Await client.PostAsync(apiUrl, content)
-                response.EnsureSuccessStatusCode()
-                Return Await response.Content.ReadAsStringAsync()
-            End Using
-        Catch ex As Exception
-            MessageBox.Show($"请求失败: {ex.Message}")
-            Return String.Empty
-        End Try
+        Return Await UtilsService.SendHttpRequestAsync(apiUrl, apiKey, requestBody)
     End Function
 
     ' 加载本地HTML文件
@@ -2418,7 +1651,9 @@ Public MustInherit Class BaseChatControl
                                         ' 移除 <script> 标签及其内容
                                         Dim scriptPattern As String = "<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>"
                                         decodedHtml = Regex.Replace(decodedHtml, scriptPattern, String.Empty, RegexOptions.IgnoreCase)
-                                        decodedHtml = decodedHtml.Replace("https://officeai.local/css/", "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/")
+
+                                        ' 内联本地 CSS 资源（用于离线查看）
+                                        decodedHtml = UtilsService.InlineCssResources(decodedHtml)
 
 
                                         ' 重新注入必要的JavaScript代码
@@ -2442,109 +1677,7 @@ Public MustInherit Class BaseChatControl
     End Function
 
     Private Function GetEssentialJavaScript() As String
-        Return "
-<script>
-// 代码复制功能
-function copyCode(button) {
-    const codeBlock = button.closest('.code-block');
-    const codeElement = codeBlock.querySelector('code');
-    const code = codeElement.textContent;
-
-    const textarea = document.createElement('textarea');
-    textarea.value = code;
-    textarea.style.position = 'fixed';
-    textarea.style.opacity = '0';
-    document.body.appendChild(textarea);
-
-    try {
-        textarea.select();
-        textarea.setSelectionRange(0, 99999);
-        document.execCommand('copy');
-
-        const originalText = button.innerHTML;
-        button.innerHTML = '已复制';
-        setTimeout(() => {
-            button.innerHTML = originalText;
-        }, 2000);
-    } catch (err) {
-        console.error('复制失败:', err);
-        alert('复制失败');
-    } finally {
-        document.body.removeChild(textarea);
-    }
-}
-
-// 聊天消息引用展开/折叠功能
-function toggleChatMessageReference(headerElement) {
-    const container = headerElement.closest('.chat-message-references');
-    if (container) {
-        container.classList.toggle('collapsed');
-        
-        // 更新箭头方向
-        const arrow = headerElement.querySelector('.chat-message-reference-arrow');
-        if (arrow) {
-            arrow.innerHTML = container.classList.contains('collapsed') ? '&#9658;' : '&#9660;';
-        }
-    }
-}
-
-// 页面初始化
-document.addEventListener('DOMContentLoaded', function() {
-    // 添加代码块点击事件
-    document.querySelectorAll('.code-toggle-label').forEach(label => {
-        label.onclick = function(e) {
-            e.stopPropagation();
-            const preElement = this.nextElementSibling;
-            if (preElement && preElement.tagName.toLowerCase() === 'pre') {
-                preElement.classList.toggle('collapsed');
-                this.textContent = preElement.classList.contains('collapsed') ? '点击展开代码' : '点击折叠代码';
-            }
-        };
-    });
-    
-    // 添加pre元素点击事件
-    document.querySelectorAll('pre.collapsible').forEach(preElement => {
-        preElement.onclick = function(e) {
-            // 忽略代码按钮点击
-            if (e.target.closest('.code-button') || e.target.closest('.code-buttons')) {
-                return;
-            }
-            e.stopPropagation();
-            this.classList.toggle('collapsed');
-            
-            const toggleLabel = this.previousElementSibling;
-            if (toggleLabel && toggleLabel.classList.contains('code-toggle-label')) {
-                toggleLabel.textContent = this.classList.contains('collapsed') ? '点击展开代码' : '点击折叠代码';
-            }
-        };
-    });
-    
-    // 处理聊天消息引用点击
-    document.querySelectorAll('.chat-message-reference-header').forEach(header => {
-        header.onclick = function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            toggleChatMessageReference(this);
-        };
-    });
-    
-    // 处理推理容器点击
-    document.querySelectorAll('.reasoning-header').forEach(header => {
-        header.onclick = function() {
-            const container = this.closest('.reasoning-container');
-            if (container) {
-                container.classList.toggle('collapsed');
-            }
-        };
-    });
-});
-
-// 如果DOM已加载完成，立即执行初始化
-if (document.readyState !== 'loading') {
-    const event = new Event('DOMContentLoaded');
-    document.dispatchEvent(event);
-}
-</script>"
+        Return UtilsService.GetEssentialJavaScript()
     End Function
 
     Private Async Function EnsureWebView2InitializedAsync() As Task
@@ -2560,58 +1693,14 @@ if (document.readyState !== 'loading') {
     )
     End Function
 
-    ' 提示词配置（每次仅可使用1个）
-    Public Class HistoryMessage
-        Public Property role As String
-        Public Property content As String
-    End Class
+    ' HistoryMessage 类已移至 Controls/Models/HistoryMessage.vb
 
     ' 注入辅助脚本
     Protected Sub InitializeWebView2Script()
         ' 设置 Web 消息处理器
         AddHandler ChatBrowser.WebMessageReceived, AddressOf WebView2_WebMessageReceived
-
-        ' 注入辅助脚本
-        Dim script As String = "
-        window.vsto = {
-            executeCode: function(code, language,preview) {
-                window.chrome.webview.postMessage({
-                    type: 'executeCode',
-                    code: code,
-                    language: language,
-                    executecodePreview: preview
-                });
-                return true;
-            },
-            checkedChange: function(thisProperty,checked) {
-                return window.chrome.webview.postMessage({
-                    type: 'checkedChange',
-                    isChecked: checked,
-                    property: thisProperty
-                });
-            },
-            sendMessage: function(payload) {
-                let messageToSend;
-                if (typeof payload === 'string') {
-                    messageToSend = { type: 'sendMessage', value: payload };
-                } else {
-                    messageToSend = payload;
-                }
-                window.chrome.webview.postMessage(messageToSend);
-                return true;
-            },
-            saveSettings: function(settingsObject){
-                return window.chrome.webview.postMessage({
-                    type: 'saveSettings',
-                    topicRandomness: settingsObject.topicRandomness,
-                    contextLimit: settingsObject.contextLimit,
-                    selectedCell: settingsObject.selectedCell,
-                    executeCodePreview: settingsObject.executeCodePreview,
-                });
-            }
-        };
-    "
-        ChatBrowser.ExecuteScriptAsync(script)
+        ' 注入 VSTO 桥接脚本
+        ChatBrowser.ExecuteScriptAsync(UtilsService.GetVstoBridgeScript())
     End Sub
 
     ' 选中内容发送到聊天区
@@ -2623,31 +1712,12 @@ if (document.readyState !== 'loading') {
     End Sub
 
 
+    ' VBA 异常处理 - 委托给 UtilsService
     Protected Shared Sub VBAxceptionHandle(ex As Runtime.InteropServices.COMException)
-        ' 处理信任中心权限问题
-        If ex.Message.Contains("程序访问不被信任") OrElse
-       ex.Message.Contains("Programmatic access to Visual Basic Project is not trusted") Then
-            VBATrustShowBox()
-        Else
-            MessageBox.Show("执行 VBA 代码时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-        End If
-    End Sub
-
-    Private Shared Sub VBATrustShowBox()
-        MessageBox.Show(
-                        "无法执行 VBA 代码，请按以下步骤设置：" & vbCrLf & vbCrLf &
-                        "1. 点击 '文件' -> '选项' -> '信任中心'" & vbCrLf &
-                        "2. 点击 '信任中心设置'" & vbCrLf &
-                        "3. 选择 '宏设置'" & vbCrLf &
-                        "4. 勾选 '信任对 VBA 项目对象模型的访问'",
-                        "需要设置信任中心权限",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Warning)
+        UtilsService.HandleVbaException(ex)
     End Sub
 
 
-    ' 排版重构新增：后端逐项应用 documentPlan 项（骨架实现，可按需扩展）
     Protected Overridable Sub HandleApplyDocumentPlanItem(jsonDoc As JObject)
-        Debug.Print("父类")
     End Sub
 End Class

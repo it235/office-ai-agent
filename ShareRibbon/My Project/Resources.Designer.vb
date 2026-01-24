@@ -91,25 +91,45 @@ Namespace My.Resources
         End Property
         
         '''<summary>
-        '''  查找类似 &lt;!DOCTYPE html&gt;
-        '''&lt;html&gt;
-        '''&lt;head&gt;
-        '''    &lt;meta charset=&quot;GBK&quot;&gt;
-        '''    &lt;title&gt;Excel Ai Chat Content&lt;/title&gt;
-        '''&lt;!-- 先加载核心库 --&gt;
-        '''&lt;script src=&quot;https://officeai.local/js/highlight.min.js&quot;&gt;&lt;/script&gt;
-        '''&lt;link rel=&quot;stylesheet&quot; href=&quot;https://officeai.local/css/github.min.css&quot;&gt;
-        '''&lt;script src=&quot;https://officeai.local/js/marked.min.js&quot;&gt;&lt;/script&gt;
-        '''&lt;script src=&quot;https://officeai.local/js/vbscript.min.js&quot;&gt;&lt;/script&gt;
+        '''  查找类似 /**
+        ''' * chat-manager.js - Chat Section Management
+        ''' * Functions for creating and managing chat message sections
+        ''' */
         '''
-        '''    &lt;script&gt;
-        '''        hljs.registerAliases(&apos;vba&apos;, { languageName: &apos;vbscript&apos; });
-        '''        hljs.highlightAll();
-        '''    &lt;/ [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''// Create chat section with sender info and content area
+        '''window.createChatSection = function (sender, timestamp, uuid) {
+        '''    // Create chat container
+        '''    const chatContainer = document.createElement(&apos;div&apos;);
+        '''    chatContainer.className = &apos;chat-container&apos;;
+        '''    chatContainer.id = &apos;chat-&apos; + uuid;
+        '''
+        '''    // Record sender for later reference
+        '''    chatContainer.dataset.sender = sender;
+        '''
+        '''   [字符串的其余部分被截断]&quot;; 的本地化字符串。
         '''</summary>
-        Public ReadOnly Property chat_template() As String
+        Public ReadOnly Property chat_manager() As String
             Get
-                Return ResourceManager.GetString("chat_template", resourceCulture)
+                Return ResourceManager.GetString("chat_manager", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找类似 &lt;!DOCTYPE html&gt;
+        '''&lt;html lang=&quot;zh-CN&quot;&gt;
+        '''&lt;head&gt;
+        '''    &lt;meta charset=&quot;UTF-8&quot;&gt;
+        '''    &lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1.0&quot;&gt;
+        '''    &lt;title&gt;AI Chat&lt;/title&gt;
+        '''    &lt;!-- Third-party libraries - using virtual host officeai.local --&gt;
+        '''    &lt;script src=&quot;https://officeai.local/js/marked.min.js&quot;&gt;&lt;/script&gt;
+        '''    &lt;script src=&quot;https://officeai.local/js/highlight.min.js&quot;&gt;&lt;/script&gt;
+        '''    &lt;script src=&quot;https://officeai.local/js/vbscript.min.js&quot;&gt;&lt;/script&gt;
+        '''    &lt;link rel=&quot;stylesheet&quot; href=&quot;https://officeai. [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property chat_template_refactored() As String
+            Get
+                Return ResourceManager.GetString("chat_template_refactored", resourceCulture)
             End Get
         End Property
         
@@ -120,6 +140,57 @@ Namespace My.Resources
             Get
                 Dim obj As Object = ResourceManager.GetObject("clear", resourceCulture)
                 Return CType(obj,System.Drawing.Bitmap)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找类似 /**
+        ''' * code-handler.js - Code Block Handling
+        ''' * Functions for copying, executing, and editing code blocks
+        ''' */
+        '''
+        '''// Copy code from code block
+        '''function copyCode(button) {
+        '''    const codeBlock = button.closest(&apos;.code-block&apos;);
+        '''    const codeElement = codeBlock.querySelector(&apos;code&apos;);
+        '''    const code = codeElement.textContent;
+        '''
+        '''    // Create temp textarea for copying
+        '''    const textarea = document.createElement(&apos;textarea&apos;);
+        '''    textarea.value = code;
+        '''    textarea.style.position = &apos;fixed&apos;;
+        '''    textarea. [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property code_handler() As String
+            Get
+                Return ResourceManager.GetString("code_handler", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找类似 /**
+        ''' * core.js - Core initialization for OfficeAI Chat
+        ''' * Marked.js configuration and renderer setup
+        ''' */
+        '''
+        '''// Configure marked.js
+        '''marked.setOptions({
+        '''    highlight: function (code, lang) {
+        '''        if (lang &amp;&amp; hljs.getLanguage(lang)) {
+        '''            return hljs.highlight(code, { language: lang }).value;
+        '''        }
+        '''        return hljs.highlightAuto(code).value;
+        '''    },
+        '''    breaks: true,
+        '''    gfm: true
+        '''});
+        '''
+        '''// Extend marked renderer for code blocks with action buttons
+        '''const renderer = new marked.Re [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property core() As String
+            Get
+                Return ResourceManager.GetString("core", resourceCulture)
             End Get
         End Property
         
@@ -172,12 +243,60 @@ Namespace My.Resources
         End Property
         
         '''<summary>
+        '''  查找类似 /**
+        ''' * history-manager.js - History Sidebar and File Management
+        ''' * Handles chat history display and navigation
+        ''' */
+        '''
+        '''window.historyManager = {
+        '''    isOpen: false,
+        '''
+        '''    // Initialize history functionality
+        '''    init: function () {
+        '''        const toggleBtn = document.getElementById(&apos;history-toggle-btn&apos;);
+        '''        const sidebar = document.getElementById(&apos;history-sidebar&apos;);
+        '''        const overlay = document.getElementById(&apos;sidebar-overlay&apos;);
+        '''        const closeBtn = document.getElementById(&apos;close-sidebar- [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property history_manager() As String
+            Get
+                Return ResourceManager.GetString("history_manager", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
         '''  查找 System.Drawing.Bitmap 类型的本地化资源。
         '''</summary>
         Public ReadOnly Property magic() As System.Drawing.Bitmap
             Get
                 Dim obj As Object = ResourceManager.GetObject("magic", resourceCulture)
                 Return CType(obj,System.Drawing.Bitmap)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找类似 /**
+        ''' * markdown-renderer.js - Markdown Stream Renderer
+        ''' * Handles incremental markdown rendering for streaming responses
+        ''' */
+        '''
+        '''class MarkdownStreamRenderer {
+        '''    constructor(element) {
+        '''        this.output = element instanceof HTMLElement ? element : document.getElementById(element);
+        '''        this.fullContent = &apos;&apos;;
+        '''    }
+        '''
+        '''    append(text) {
+        '''        this.fullContent += text + &apos;&apos;;
+        '''
+        '''        // Use full content render
+        '''        this.output.innerHTML = marked.parse(this.fullContent);
+        '''
+        '''        // Appl [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property markdown_renderer() As String
+            Get
+                Return ResourceManager.GetString("markdown_renderer", resourceCulture)
             End Get
         End Property
         
@@ -196,6 +315,33 @@ Namespace My.Resources
         End Property
         
         '''<summary>
+        '''  查找类似 /**
+        ''' * mcp-manager.js - MCP Connection Management
+        ''' * Handles MCP (Model Context Protocol) connection display and configuration
+        ''' */
+        '''
+        '''// MCP state variables
+        '''let mcpConnections = [];
+        '''let enabledMcpList = [];
+        '''let mcpSupported = false;
+        '''
+        '''// Toggle MCP dialog visibility
+        '''function toggleMcpDialog() {
+        '''    requestMcpConnections();
+        '''    document.getElementById(&apos;mcp-dialog&apos;).style.display = &apos;block&apos;;
+        '''    document.getElementById(&apos;mcp-overlay&apos;).style.display = &apos;block&apos;;
+        '''}
+        '''
+        '''// Close MCP dialog
+        '''function close [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property mcp_manager() As String
+            Get
+                Return ResourceManager.GetString("mcp_manager", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
         '''  查找 System.Drawing.Bitmap 类型的本地化资源。
         '''</summary>
         Public ReadOnly Property mcp1() As System.Drawing.Bitmap
@@ -206,12 +352,130 @@ Namespace My.Resources
         End Property
         
         '''<summary>
+        '''  查找类似 /**
+        ''' * message-sender.js - Message Sending Logic
+        ''' * Handles sending messages to backend and managing input UI
+        ''' */
+        '''
+        '''// Send message payload to server (VB backend)
+        '''function sendMessageToServer(messagePayload) {
+        '''    if (window.chrome &amp;&amp; window.chrome.webview) {
+        '''        window.chrome.webview.postMessage(messagePayload);
+        '''    } else if (window.vsto) {
+        '''        if (typeof window.vsto.sendMessage === &apos;function&apos;) {
+        '''            if (messagePayload.type === &apos;sendMessage&apos; &amp;&amp; typeof messagePayload.value === &apos;ob [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property message_sender() As String
+            Get
+                Return ResourceManager.GetString("message_sender", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找类似 /**
+        ''' * revision-manager.js - Revision Display and Application
+        ''' * Handles document formatting preview and revision suggestions
+        ''' */
+        '''
+        '''(function () {
+        '''    if (!window._oa) window._oa = {};
+        '''    window._oa._comparisonCache = window._oa._comparisonCache || {};
+        '''
+        '''    // Format preview (simplified: using paraIndex and formatting object)
+        '''    window.showComparison = function (uuid, originalText, aiPreviewOrPlan) {
+        '''        console.log(aiPreviewOrPlan);
+        '''        try {
+        '''            const container = document.get [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property revision_manager() As String
+            Get
+                Return ResourceManager.GetString("revision_manager", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
         '''  查找 System.Drawing.Bitmap 类型的本地化资源。
         '''</summary>
         Public ReadOnly Property send32() As System.Drawing.Bitmap
             Get
                 Dim obj As Object = ResourceManager.GetObject("send32", resourceCulture)
                 Return CType(obj,System.Drawing.Bitmap)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找类似 /**
+        ''' * settings-manager.js - Settings Dialog Management
+        ''' * Handles settings dialog display, save, and cancel operations
+        ''' */
+        '''
+        '''// Open settings dialog
+        '''function settingsButton() {
+        '''    document.getElementById(&apos;settings-overlay&apos;).style.display = &apos;block&apos;;
+        '''    document.getElementById(&apos;settings-dialog&apos;).style.display = &apos;block&apos;;
+        '''}
+        '''
+        '''// Cancel settings dialog
+        '''function settingsCancel() {
+        '''    document.getElementById(&apos;settings-overlay&apos;).style.display = &apos;none&apos;;
+        '''    document.getElementById(&apos;settings-dialog&apos;). [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property settings_manager() As String
+            Get
+                Return ResourceManager.GetString("settings_manager", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找类似 /* ShareRibbon/Resources/css/styles.css */
+        '''/* Office AI Chat 样式表 - 从 chat-template.html 提取 */
+        '''
+        '''/* ====== 基础样式 ====== */
+        '''body {
+        '''    font-family: -apple-system, BlinkMacSystemFont, &apos;Segoe UI&apos;, Roboto, Oxygen, Ubuntu, Cantarell, &apos;Open Sans&apos;, &apos;Helvetica Neue&apos;, sans-serif;
+        '''    line-height: 1.5;
+        '''    color: #333;
+        '''    max-width: 800px;
+        '''    margin: 0 auto;
+        '''    padding: 20px;
+        '''    background-color: #f9f9f9;
+        '''    padding-bottom: 160px;
+        '''}
+        '''
+        '''#chat-output {
+        '''    padding: 20px;
+        '''    background-color: white;
+        '''  [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property styles() As String
+            Get
+                Return ResourceManager.GetString("styles", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找类似 /**
+        ''' * utils.js - Utility functions for OfficeAI Chat
+        ''' * Common helper functions used across the application
+        ''' */
+        '''
+        '''// Generate UUID v4
+        '''function generateUUID() {
+        '''    return &apos;xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx&apos;.replace(/[xy]/g, function (c) {
+        '''        const r = Math.random() * 16 | 0;
+        '''        const v = c === &apos;x&apos; ? r : (r &amp; 0x3 | 0x8);
+        '''        return v.toString(16);
+        '''    });
+        '''}
+        '''
+        '''// Format date time to string
+        '''function formatDateTime(date) {
+        '''    const year = date.getFullYear();
+        '''    const month = S [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property utils() As String
+            Get
+                Return ResourceManager.GetString("utils", resourceCulture)
             End Get
         End Property
         

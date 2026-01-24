@@ -4,55 +4,84 @@ Public Class ResourceExtractor
     Public Shared Function ExtractResources() As String
         DebugListResources()
         Try
-            ' »ñÈ¡ÓÃ»§±¾µØÓ¦ÓÃÊı¾İÄ¿Â¼
+            ' è·å–ç”¨æˆ·æœ¬åœ°åº”ç”¨ç¨‹åºæ•°æ®ç›®å½•
             Dim appDataPath As String = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "OfficeAI",
                 "www"
             )
 
-            ' È·±£Ä¿Â¼´æÔÚ
+            ' ç¡®ä¿ç›®å½•å­˜åœ¨
             Directory.CreateDirectory(appDataPath)
             Directory.CreateDirectory(Path.Combine(appDataPath, "css"))
             Directory.CreateDirectory(Path.Combine(appDataPath, "js"))
 
-            ' »ñÈ¡×ÊÔ´¹ÜÀíÆ÷
+            ' è·å–èµ„æºç®¡ç†å™¨
             Dim rm As New Resources.ResourceManager("ShareRibbon.Resources", System.Reflection.Assembly.GetExecutingAssembly())
 
-            ' ×ÊÔ´Ãûµ½ÎÄ¼şÃûµÄÓ³Éä
-            Dim resources As New Dictionary(Of String, String) From {
+            ' ç¬¬ä¸‰æ–¹åº“èµ„æºæ–‡ä»¶æ˜ å°„
+            Dim libraryResources As New Dictionary(Of String, String) From {
                 {"marked_min", "marked.min.js"},
                 {"highlight_min", "highlight.min.js"},
                 {"vbscript_min", "vbscript.min.js"},
                 {"github_min", "github.min.css"}
             }
 
-            ' ÊÍ·Å×ÊÔ´
-            For Each kvp In resources
+            ' é‡Šæ”¾ç¬¬ä¸‰æ–¹åº“èµ„æº
+            For Each kvp In libraryResources
                 ExtractResourceToFileFromManager(kvp.Key, kvp.Value, targetDir:=Path.Combine(appDataPath, If(kvp.Value.EndsWith(".js"), "js", "css")), rm:=rm)
+            Next
+
+            ' è‡ªå®šä¹‰CSSèµ„æºæ–‡ä»¶æ˜ å°„
+            Dim cssResources As New Dictionary(Of String, String) From {
+                {"styles", "styles.css"}
+            }
+
+            ' é‡Šæ”¾CSSèµ„æº
+            For Each kvp In cssResources
+                ExtractResourceToFileFromManager(kvp.Key, kvp.Value, targetDir:=Path.Combine(appDataPath, "css"), rm:=rm)
+            Next
+
+            ' è‡ªå®šä¹‰JSèµ„æºæ–‡ä»¶æ˜ å°„
+            Dim jsResources As New Dictionary(Of String, String) From {
+                {"utils", "utils.js"},
+                {"core", "core.js"},
+                {"markdown_renderer", "markdown-renderer.js"},
+                {"chat_manager", "chat-manager.js"},
+                {"message_sender", "message-sender.js"},
+                {"code_handler", "code-handler.js"},
+                {"settings_manager", "settings-manager.js"},
+                {"mcp_manager", "mcp-manager.js"},
+                {"revision_manager", "revision-manager.js"},
+                {"history_manager", "history-manager.js"}
+            }
+
+            ' é‡Šæ”¾JSèµ„æº
+            For Each kvp In jsResources
+                ExtractResourceToFileFromManager(kvp.Key, kvp.Value, targetDir:=Path.Combine(appDataPath, "js"), rm:=rm)
             Next
 
             Return appDataPath
         Catch ex As Exception
-            Debug.WriteLine($"ÊÍ·Å×ÊÔ´Ê§°Ü: {ex.Message}")
+            Debug.WriteLine($"é‡Šæ”¾èµ„æºå¤±è´¥: {ex.Message}")
             Return String.Empty
         End Try
     End Function
 
     Private Shared Sub ExtractResourceToFileFromManager(resourceName As String, targetFileName As String, targetDir As String, rm As Resources.ResourceManager)
         Try
-            ' ´Ó×ÊÔ´¹ÜÀíÆ÷»ñÈ¡×ÊÔ´
+            ' ä»èµ„æºç®¡ç†å™¨ä¸­è·å–èµ„æº
             Dim resourceObj = rm.GetObject(resourceName)
 
             If resourceObj IsNot Nothing Then
                 Dim targetPath = Path.Combine(targetDir, targetFileName)
 
-                ' ¸ù¾İ×ÊÔ´ÀàĞÍ´¦Àí
+                ' æ ¹æ®èµ„æºç±»å‹å¤„ç†
                 If TypeOf resourceObj Is Byte() Then
-                    ' Èç¹ûÊÇ×Ö½ÚÊı×é£¬Ö±½ÓĞ´Èë
+                    ' å¦‚æœæ˜¯å­—èŠ‚æ•°ç»„ï¼Œç›´æ¥å†™å…¥
                     File.WriteAllBytes(targetPath, DirectCast(resourceObj, Byte()))
                 ElseIf TypeOf resourceObj Is String Then
-                    ' Èç¹ûÊÇ×Ö·û´®£¬×ª»»Îª×Ö½ÚºóĞ´Èë
+                    ' å¦‚æœæ˜¯å­—ç¬¦ä¸²ï¼Œè½¬æ¢ä¸ºå­—èŠ‚åå†™å…¥
                     File.WriteAllText(targetPath, DirectCast(resourceObj, String))
                 Else
                     Debug.WriteLine($"Unsupported resource type for {resourceName}: {resourceObj.GetType().Name}")
@@ -63,34 +92,34 @@ Public Class ResourceExtractor
             Else
                 Debug.WriteLine($"Resource not found: {resourceName}")
 
-                ' Êä³öËùÓĞ¿ÉÓÃµÄ×ÊÔ´Ãû³ÆÒÔ±ãµ÷ÊÔ
+                ' åˆ—å‡ºæ‰€æœ‰å¯ç”¨çš„èµ„æºï¼Œä»¥ä¾¿è°ƒè¯•
                 Dim resourceSet = rm.GetResourceSet(Globalization.CultureInfo.CurrentUICulture, True, True)
                 For Each entry As DictionaryEntry In resourceSet
                     Debug.WriteLine($"Available resource: {entry.Key}")
                 Next
             End If
         Catch ex As Exception
-            Debug.WriteLine($"ÌáÈ¡×ÊÔ´ {resourceName} Ê§°Ü: {ex.Message}")
+            Debug.WriteLine($"æå–èµ„æº {resourceName} å¤±è´¥: {ex.Message}")
         End Try
     End Sub
 
-    ' µ÷ÊÔ·½·¨ - ÁĞ³öËùÓĞ×ÊÔ´
+    ' è°ƒè¯•æ–¹æ³• - åˆ—å‡ºæ‰€æœ‰èµ„æº
     Private Shared Sub DebugListResources()
         Try
             Dim assembly = System.Reflection.Assembly.GetExecutingAssembly()
-            Debug.WriteLine("=== ËùÓĞÇ¶Èë×ÊÔ´ ===")
+            Debug.WriteLine("=== æ‰€æœ‰åµŒå…¥èµ„æº ===")
             For Each resourceName In assembly.GetManifestResourceNames()
                 Debug.WriteLine($"Found resource: {resourceName}")
             Next
 
-            Debug.WriteLine("=== Resources ÖĞµÄ×ÊÔ´ ===")
+            Debug.WriteLine("=== Resources ä¸­çš„èµ„æº ===")
             Dim rm As New Resources.ResourceManager("ShareRibbon.Resources", assembly)
             Dim resourceSet = rm.GetResourceSet(Globalization.CultureInfo.CurrentUICulture, True, True)
             For Each entry As DictionaryEntry In resourceSet
                 Debug.WriteLine($"Resource: {entry.Key} (Type: {If(entry.Value IsNot Nothing, entry.Value.GetType().ToString(), "null")})")
             Next
         Catch ex As Exception
-            Debug.WriteLine($"ÁĞ³ö×ÊÔ´Ê±³ö´í: {ex.Message}")
+            Debug.WriteLine($"åˆ—å‡ºèµ„æºæ—¶å‡ºé”™: {ex.Message}")
         End Try
     End Sub
 End Class
