@@ -29,6 +29,17 @@ function sendChatMessage() {
     const attachedFileObjects = window.attachedFiles;
     const selectedSheetContent = window.getAllSelectedContent();
 
+    // 检查是否处于续写模式
+    if (window.continuationModeActive) {
+        // 续写模式：发送续写请求而不是普通聊天
+        sendContinuationMessage(userTypedText);
+        
+        // 清空输入
+        chatInput.value = '';
+        chatInput.style.height = 'auto';
+        return;
+    }
+
     // Check if there's any content to send
     if (!userTypedText && attachedFileObjects.length === 0 && selectedSheetContent.length === 0) return;
 

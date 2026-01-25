@@ -259,18 +259,51 @@ Public Class WordDocumentTranslateService
     End Sub
 
     ''' <summary>
-    ''' 创建新文档并写入翻译结果
+    ''' 创建新文档并写入翻译结果（保留原文档格式）
     ''' </summary>
     Private Sub ApplyToNewDocument(results As List(Of TranslateParagraphResult))
         Try
+            ' 复制原文档到新文档（保留所有格式）
+            _document.Content.Copy()
             Dim newDoc = _wordApp.Documents.Add()
+            newDoc.Content.Paste()
 
-            For Each result In results
+            ' 替换每个段落的文本内容（保留格式）
+            Dim paras = newDoc.Paragraphs
+            For i = 0 To Math.Min(results.Count, paras.Count) - 1
+                Dim result = results(i)
                 If result.Success AndAlso Not String.IsNullOrWhiteSpace(result.TranslatedText) Then
-                    newDoc.Content.InsertAfter(result.TranslatedText & vbCr)
-                ElseIf Not String.IsNullOrWhiteSpace(result.OriginalText) Then
-                    ' 翻译失败时保留原文
-                    newDoc.Content.InsertAfter(result.OriginalText & vbCr)
+                    Dim para = paras(i + 1)
+                    ' 仅替换文本，不改变格式
+                    Dim paraRange = para.Range
+                    Dim originalEnd = paraRange.End
+                    
+                    ' 保存原始格式
+                    Dim fontName = paraRange.Font.Name
+                    Dim fontSize = paraRange.Font.Size
+                    Dim fontBold = paraRange.Font.Bold
+                    Dim fontItalic = paraRange.Font.Italic
+                    Dim fontColor = paraRange.Font.Color
+                    Dim paraAlignment = para.Alignment
+                    Dim firstLineIndent = para.FirstLineIndent
+                    Dim leftIndent = para.LeftIndent
+                    Dim rightIndent = para.RightIndent
+                    Dim lineSpacing = para.LineSpacing
+                    
+                    ' 替换文本
+                    paraRange.Text = result.TranslatedText & vbCr
+                    
+                    ' 恢复格式
+                    paraRange.Font.Name = fontName
+                    paraRange.Font.Size = fontSize
+                    paraRange.Font.Bold = fontBold
+                    paraRange.Font.Italic = fontItalic
+                    paraRange.Font.Color = fontColor
+                    para.Alignment = paraAlignment
+                    para.FirstLineIndent = firstLineIndent
+                    para.LeftIndent = leftIndent
+                    para.RightIndent = rightIndent
+                    para.LineSpacing = lineSpacing
                 End If
             Next
 

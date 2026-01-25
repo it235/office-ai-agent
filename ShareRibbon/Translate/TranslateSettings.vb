@@ -44,8 +44,8 @@ Public Class TranslateSettings
     ''' <summary>是否显示翻译进度</summary>
     Public Property ShowProgress As Boolean = True
 
-    ''' <summary>批量翻译时每批段落数</summary>
-    Public Property BatchSize As Integer = 5
+    ''' <summary>批量翻译时每批段落数（0表示整批翻译，不分批）</summary>
+    Public Property BatchSize As Integer = 0
 
     Private Shared ReadOnly fileName As String = "translate_config.json"
     Private Shared ReadOnly filePath As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),

@@ -244,8 +244,12 @@ Public MustInherit Class BaseChatControl
             topicRandomness = ChatSettings.topicRandomness
             settingsScrollChecked = ChatSettings.settingsScrollChecked
 
+            ' 设置Office应用类型（用于前端区分Word/PPT/Excel）
+            Dim appType = GetOfficeAppType()
+
             ' 将设置发送到前端
             Dim js As String = $"
+            window.officeAppType = '{appType}';
             document.getElementById('topic-randomness').value = '{ChatSettings.topicRandomness}';
             document.getElementById('topic-randomness-value').textContent = '{ChatSettings.topicRandomness}';
             document.getElementById('context-limit').value = '{ChatSettings.contextLimit}';
@@ -313,6 +317,14 @@ Public MustInherit Class BaseChatControl
                 Case "applyRevisionReject" ' 前端请求拒绝单个 Revision
                     HandleApplyRevisionReject(jsonDoc)
 
+                ' 续写功能消息处理
+                Case "triggerContinuation"
+                    HandleTriggerContinuation(jsonDoc)
+                Case "applyContinuation"
+                    HandleApplyContinuation(jsonDoc)
+                Case "refineContinuation"
+                    HandleRefineContinuation(jsonDoc)
+
                 Case Else
                     Debug.WriteLine($"未知消息类型: {messageType}")
             End Select
@@ -343,6 +355,104 @@ Public MustInherit Class BaseChatControl
     Protected Overridable Sub HandleApplyRevisionAccept(jsonDoc As JObject)
     End Sub
 
+
+    ' ========== 续写功能相关方法 ==========
+
+    ''' <summary>
+    ''' 触发续写（由子类实现具体逻辑）
+    ''' </summary>
+    ''' <param name="jsonDoc">包含style参数的JSON对象</param>
+    Protected Overridable Sub HandleTriggerContinuation(jsonDoc As JObject)
+        Debug.WriteLine("HandleTriggerContinuation 被调用（基类默认不执行）")
+        GlobalStatusStrip.ShowWarning("当前应用不支持续写功能")
+    End Sub
+
+    ''' <summary>
+    ''' 应用续写结果到文档（由子类实现）
+    ''' </summary>
+    Protected Overridable Sub HandleApplyContinuation(jsonDoc As JObject)
+        Debug.WriteLine("HandleApplyContinuation 被调用（基类默认不执行）")
+    End Sub
+
+    ''' <summary>
+    ''' 调整续写（多轮对话）
+    ''' </summary>
+    Protected Overridable Sub HandleRefineContinuation(jsonDoc As JObject)
+        Try
+            Dim uuid As String = If(jsonDoc("uuid") IsNot Nothing, jsonDoc("uuid").ToString(), String.Empty)
+            Dim refinement As String = If(jsonDoc("refinement") IsNot Nothing, jsonDoc("refinement").ToString(), String.Empty)
+
+            If String.IsNullOrWhiteSpace(refinement) Then
+                GlobalStatusStrip.ShowWarning("请输入调整方向")
+                Return
+            End If
+
+            ' 构建调整提示
+            Dim refinementPrompt As New StringBuilder()
+            refinementPrompt.AppendLine("请根据以下要求调整之前的续写内容：")
+            refinementPrompt.AppendLine()
+            refinementPrompt.AppendLine($"【调整要求】{refinement}")
+            refinementPrompt.AppendLine()
+            refinementPrompt.AppendLine("请直接输出调整后的续写内容，不要添加任何解释：")
+
+            ' 保持 responseMode = "continuation"，发送调整请求
+            Task.Run(Async Function()
+                         Await Send(refinementPrompt.ToString(), GetContinuationSystemPrompt(), True, "continuation")
+                     End Function)
+
+            GlobalStatusStrip.ShowInfo("正在调整续写内容...")
+        Catch ex As Exception
+            Debug.WriteLine($"HandleRefineContinuation 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning("调整续写时出错")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 发送续写请求
+    ''' </summary>
+    Protected Sub SendContinuationRequest(context As ContinuationContext, Optional style As String = "")
+        Dim systemPrompt = GetContinuationSystemPrompt()
+        Dim userPrompt = BuildContinuationUserPrompt(context, style)
+
+        Task.Run(Async Function()
+                     Await Send(userPrompt, systemPrompt, True, "continuation")
+                 End Function)
+    End Sub
+
+    ''' <summary>
+    ''' 获取续写的系统提示词
+    ''' </summary>
+    Protected Function GetContinuationSystemPrompt() As String
+        Return "你是一个专业的写作助手。根据提供的上下文，自然地续写内容。要求：
+1. 保持与原文一致的语言风格、语气和术语
+2. 内容要连贯自然，不要重复上文已有内容
+3. 只输出续写内容，不要添加任何解释、前缀或标记
+4. 如果上下文不足，可以合理推断但保持谨慎
+5. 续写长度适中，约100-300字，除非用户另有要求"
+    End Function
+
+    ''' <summary>
+    ''' 构建续写请求的用户提示
+    ''' </summary>
+    Protected Function BuildContinuationUserPrompt(context As ContinuationContext, Optional style As String = "") As String
+        Dim sb As New StringBuilder()
+
+        sb.AppendLine("请根据以下上下文续写内容：")
+        sb.AppendLine()
+        sb.Append(context.BuildPrompt())
+
+        If Not String.IsNullOrWhiteSpace(style) Then
+            sb.AppendLine()
+            sb.AppendLine($"【风格要求】{style}")
+        End If
+
+        sb.AppendLine()
+        sb.AppendLine("请直接输出续写内容，不要添加任何前缀或说明：")
+
+        Return sb.ToString()
+    End Function
+
+    ' ========== 续写功能相关方法结束 ==========
 
     ' 新增：处理用户接受答案
     Protected Sub HandleAcceptAnswer(jsonDoc As JObject)
@@ -619,6 +729,14 @@ Public MustInherit Class BaseChatControl
     ' 文本/CSV 解析已委托给 FileParserService，请使用 _fileParserService.ParseTextFile()
 
     Protected MustOverride Function GetApplication() As ApplicationInfo
+    
+    ''' <summary>
+    ''' 获取Office应用类型，用于前端区分Word/PowerPoint/Excel
+    ''' </summary>
+    Protected Overridable Function GetOfficeAppType() As String
+        Return "Unknown"
+    End Function
+    
     Protected MustOverride Function GetVBProject() As VBProject
     Protected MustOverride Function RunCodePreview(vbaCode As String, preview As Boolean) As Boolean
     Protected MustOverride Function RunCode(vbaCode As String)
@@ -1140,6 +1258,18 @@ Public MustInherit Class BaseChatControl
 
     ' 会话完成的钩子，可自行实现
     Protected Overridable Sub CheckAndCompleteProcessingHook(_finalUuid As String, allPlainMarkdownBuffer As StringBuilder)
+        ' 处理续写模式的完成 - 显示续写预览界面
+        If _responseModeMap.ContainsKey(_finalUuid) AndAlso _responseModeMap(_finalUuid) = "continuation" Then
+            ExecuteJavaScriptAsyncJS($"showContinuationPreview('{_finalUuid}');")
+        End If
+
+        ' 校对/排版模式 - 隐藏代码块的编辑和执行按钮（只保留复制）
+        If _responseModeMap.ContainsKey(_finalUuid) Then
+            Dim mode = _responseModeMap(_finalUuid)
+            If mode = "proofread" OrElse mode = "reformat" Then
+                ExecuteJavaScriptAsyncJS($"hideCodeActionButtons('{_finalUuid}');")
+            End If
+        End If
     End Sub
 
 

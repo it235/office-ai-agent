@@ -83,6 +83,26 @@ Namespace My.Resources
         '''<summary>
         '''  查找 System.Drawing.Bitmap 类型的本地化资源。
         '''</summary>
+        Public ReadOnly Property aiwrite() As System.Drawing.Bitmap
+            Get
+                Dim obj As Object = ResourceManager.GetObject("aiwrite", resourceCulture)
+                Return CType(obj,System.Drawing.Bitmap)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找 System.Drawing.Bitmap 类型的本地化资源。
+        '''</summary>
+        Public ReadOnly Property audit() As System.Drawing.Bitmap
+            Get
+                Dim obj As Object = ResourceManager.GetObject("audit", resourceCulture)
+                Return CType(obj,System.Drawing.Bitmap)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找 System.Drawing.Bitmap 类型的本地化资源。
+        '''</summary>
         Public ReadOnly Property chat() As System.Drawing.Bitmap
             Get
                 Dim obj As Object = ResourceManager.GetObject("chat", resourceCulture)
@@ -149,17 +169,17 @@ Namespace My.Resources
         ''' * Functions for copying, executing, and editing code blocks
         ''' */
         '''
-        '''// Copy code from code block
-        '''function copyCode(button) {
-        '''    const codeBlock = button.closest(&apos;.code-block&apos;);
-        '''    const codeElement = codeBlock.querySelector(&apos;code&apos;);
-        '''    const code = codeElement.textContent;
-        '''
-        '''    // Create temp textarea for copying
-        '''    const textarea = document.createElement(&apos;textarea&apos;);
-        '''    textarea.value = code;
-        '''    textarea.style.position = &apos;fixed&apos;;
-        '''    textarea. [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''/**
+        ''' * 隐藏指定消息中代码块的编辑和执行按钮（校对/排版模式使用）
+        ''' * @param {string} uuid - 消息的UUID
+        ''' */
+        '''function hideCodeActionButtons(uuid) {
+        '''    const messageContainer = document.getElementById(&apos;content-&apos; + uuid);
+        '''    if (!messageContainer) return;
+        '''    
+        '''    // 隐藏所有编辑和执行按钮，只保留复制按钮
+        '''    const editButtons = messageContainer.querySelectorAll(&apos;.edit-button&apos;);
+        '''    const executeButtons = messageContainer.querySelector [字符串的其余部分被截断]&quot;; 的本地化字符串。
         '''</summary>
         Public ReadOnly Property code_handler() As String
             Get
@@ -229,6 +249,16 @@ Namespace My.Resources
         Public ReadOnly Property github_min() As String
             Get
                 Return ResourceManager.GetString("github_min", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找 System.Drawing.Bitmap 类型的本地化资源。
+        '''</summary>
+        Public ReadOnly Property help() As System.Drawing.Bitmap
+            Get
+                Dim obj As Object = ResourceManager.GetObject("help", resourceCulture)
+                Return CType(obj,System.Drawing.Bitmap)
             End Get
         End Property
         
@@ -382,6 +412,16 @@ Namespace My.Resources
         End Property
         
         '''<summary>
+        '''  查找 System.Drawing.Bitmap 类型的本地化资源。
+        '''</summary>
+        Public ReadOnly Property papers() As System.Drawing.Bitmap
+            Get
+                Dim obj As Object = ResourceManager.GetObject("papers", resourceCulture)
+                Return CType(obj,System.Drawing.Bitmap)
+            End Get
+        End Property
+        
+        '''<summary>
         '''  查找类似 /**
         ''' * revision-manager.js - Revision Display and Application
         ''' * Handles document formatting preview and revision suggestions
@@ -460,6 +500,16 @@ Namespace My.Resources
         Public ReadOnly Property styles() As String
             Get
                 Return ResourceManager.GetString("styles", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找 System.Drawing.Bitmap 类型的本地化资源。
+        '''</summary>
+        Public ReadOnly Property translate() As System.Drawing.Bitmap
+            Get
+                Dim obj As Object = ResourceManager.GetObject("translate", resourceCulture)
+                Return CType(obj,System.Drawing.Bitmap)
             End Get
         End Property
         

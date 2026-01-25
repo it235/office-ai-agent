@@ -188,6 +188,9 @@
     </Compile>
     <Compile Include="Config\ChatSettings.vb" />
     <Compile Include="Config\ConfigSettings.vb" />
+    <Compile Include="Config\AboutForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Config\GlobalStatusStripAll.vb">
       <SubType>Form</SubType>
     </Compile>
@@ -205,6 +208,7 @@
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Translate\TranslateSettings.vb" />
+    <Compile Include="Continuation\ContinuationService.vb" />
     <Compile Include="Config\WebView2Loader.vb" />
     <Compile Include="Controls\BaseChatControl.Designer.vb">
       <DependentUpon>BaseChatControl.vb</DependentUpon>
@@ -382,6 +386,21 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Resources\doubao_avatar.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\audit.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\help.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\papers.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\translate.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\aiwrite.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.VisualBasic.targets" />
   <Import Project="..\packages\Microsoft.Web.WebView2.1.0.3240.44\build\Microsoft.Web.WebView2.targets" Condition="Exists('..\packages\Microsoft.Web.WebView2.1.0.3240.44\build\Microsoft.Web.WebView2.targets')" />

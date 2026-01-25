@@ -70,6 +70,9 @@ Partial Class Ribbon1
         Me.WebCaptureButton.Visible = False
         Me.ProofreadButton.Visible = False
         Me.ReformatButton.Visible = False
+
+        Me.TranslateButton.Image = ShareRibbon.SharedResources.Translate
+        Me.StudyButton.Image = ShareRibbon.SharedResources.Help
     End Sub
 
 End Class

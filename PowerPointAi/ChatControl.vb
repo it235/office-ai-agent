@@ -199,6 +199,11 @@ Public Class ChatControl
         Return New ApplicationInfo("PowerPoint", OfficeApplicationType.PowerPoint)
     End Function
 
+    ' 返回Office应用类型
+    Protected Overrides Function GetOfficeAppType() As String
+        Return "PowerPoint"
+    End Function
+
     ' 提供PowerPoint应用程序对象
     Protected Overrides Function GetOfficeApplicationObject() As Object
         Return Globals.ThisAddIn.Application
@@ -784,7 +789,117 @@ Public Class ChatControl
 
 
     Protected Overrides Sub CheckAndCompleteProcessingHook(_finalUuid As String, allPlainMarkdownBuffer As StringBuilder)
-
+        ' 调用基类处理续写模式
+        MyBase.CheckAndCompleteProcessingHook(_finalUuid, allPlainMarkdownBuffer)
     End Sub
+
+    ' ========== 续写功能 ==========
+
+    Private _continuationService As PowerPointContinuationService
+    Private _cachedContinuationContext As ContinuationContext ' 缓存续写上下文，用于多轮续写
+
+    ''' <summary>
+    ''' 触发续写 - 获取光标上下文并发送AI请求
+    ''' </summary>
+    Protected Overrides Sub HandleTriggerContinuation(jsonDoc As JObject)
+        Try
+            ' 提取参数
+            Dim style As String = ""
+            Dim isContinuationMode As Boolean = False
+
+            If jsonDoc IsNot Nothing Then
+                If jsonDoc("style") IsNot Nothing Then
+                    style = jsonDoc("style").ToString()
+                End If
+                If jsonDoc("isContinuationMode") IsNot Nothing Then
+                    isContinuationMode = jsonDoc("isContinuationMode").ToObject(Of Boolean)()
+                End If
+            End If
+
+            ' 初始化续写服务
+            If _continuationService Is Nothing Then
+                _continuationService = New PowerPointContinuationService(Globals.ThisAddIn.Application)
+            End If
+
+            ' 检查是否可以续写
+            If Not _continuationService.CanContinue() Then
+                GlobalStatusStrip.ShowWarning("无法获取演示文稿信息，请确保文档已打开")
+                Return
+            End If
+
+            Dim context As ContinuationContext
+
+            ' 如果是续写模式的后续请求，并且有缓存的上下文，则复用
+            If isContinuationMode AndAlso _cachedContinuationContext IsNot Nothing Then
+                ' 多轮续写：使用缓存的上下文，但style作为新的调整要求
+                context = _cachedContinuationContext
+                GlobalStatusStrip.ShowInfo("继续续写...")
+            Else
+                ' 首次续写或非续写模式：重新获取上下文
+                context = _continuationService.GetCursorContext(3, 3)
+                If context Is Nothing Then
+                    GlobalStatusStrip.ShowWarning("无法获取幻灯片上下文")
+                    Return
+                End If
+                ' 缓存上下文
+                _cachedContinuationContext = context
+                GlobalStatusStrip.ShowInfo("正在分析上下文并生成续写内容...")
+            End If
+
+            ' 发送续写请求（带上风格参数）
+            SendContinuationRequest(context, style)
+
+        Catch ex As Exception
+            Debug.WriteLine($"HandleTriggerContinuation 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"触发续写时出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 应用续写结果到PowerPoint幻灯片
+    ''' </summary>
+    Protected Overrides Sub HandleApplyContinuation(jsonDoc As JObject)
+        Try
+            Dim content As String = If(jsonDoc("content") IsNot Nothing, jsonDoc("content").ToString(), String.Empty)
+            Dim positionStr As String = If(jsonDoc("position") IsNot Nothing, jsonDoc("position").ToString(), "current")
+
+            If String.IsNullOrWhiteSpace(content) Then
+                GlobalStatusStrip.ShowWarning("续写内容为空")
+                Return
+            End If
+
+            ' 确保续写服务已初始化
+            If _continuationService Is Nothing Then
+                _continuationService = New PowerPointContinuationService(Globals.ThisAddIn.Application)
+            End If
+
+            ' 根据position参数确定插入位置
+            Dim insertPos As ShareRibbon.InsertPosition
+            Select Case positionStr.ToLower()
+                Case "start"
+                    insertPos = ShareRibbon.InsertPosition.DocumentStart ' 首页
+                Case "end"
+                    insertPos = ShareRibbon.InsertPosition.DocumentEnd ' 末页
+                Case Else ' "current" 或默认
+                    insertPos = ShareRibbon.InsertPosition.AtCursor ' 当前页
+            End Select
+
+            ' 插入续写内容
+            _continuationService.InsertContinuation(content, insertPos)
+
+            GlobalStatusStrip.ShowInfo("续写内容已插入幻灯片")
+
+            ' 通知前端移除操作按钮
+            Dim uuid As String = If(jsonDoc("uuid") IsNot Nothing, jsonDoc("uuid").ToString(), String.Empty)
+            If Not String.IsNullOrEmpty(uuid) Then
+                ExecuteJavaScriptAsyncJS($"removeContinuationActions('{uuid}');")
+            End If
+
+        Catch ex As Exception
+            Debug.WriteLine($"HandleApplyContinuation 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"插入续写内容时出错: {ex.Message}")
+        End Try
+    End Sub
+
 End Class
 

@@ -114,7 +114,8 @@ Public MustInherit Class DocumentTranslateService
         End If
 
         Dim total = paragraphs.Count
-        Dim batchSize = Settings.BatchSize
+        ' BatchSize=0 表示整批翻译（不分批）
+        Dim batchSize = If(Settings.BatchSize <= 0, total, Settings.BatchSize)
 
         ' 获取翻译配置
         Dim cfg = ConfigManager.ConfigData.FirstOrDefault(Function(c) c.translateSelected)
@@ -155,7 +156,7 @@ Public MustInherit Class DocumentTranslateService
                 .Message = $"正在翻译 {currentIndex}/{total}"
             })
 
-            ' 控制请求频率
+            ' 控制请求频率（如果还有更多批次）
             If currentIndex < total Then
                 Await Task.Delay(CInt(1000 / Settings.MaxRequestsPerSecond))
             End If

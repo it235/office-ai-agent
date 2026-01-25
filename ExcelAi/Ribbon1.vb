@@ -298,4 +298,9 @@ Public Class Ribbon1
             MessageBox.Show("翻译过程出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
+
+    ' AI续写功能 - Excel暂不支持（续写主要用于文档类型）
+    Protected Overrides Sub ContinuationButton_Click(sender As Object, e As RibbonControlEventArgs)
+        MessageBox.Show("AI续写功能主要用于Word和PowerPoint文档，Excel暂不支持此功能。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
+    End Sub
 End Class

@@ -137,4 +137,26 @@ Public Class Ribbon1
             MessageBox.Show("翻译过程出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
+
+    ' AI续写功能 - PowerPoint实现
+    Protected Overrides Sub ContinuationButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Try
+            ' 确保侧栏已打开
+            Globals.ThisAddIn.ShowChatTaskPane()
+
+            ' 获取ChatControl并触发续写（自动模式，显示对话框）
+            Dim chatCtrl = Globals.ThisAddIn.chatControl
+            If chatCtrl IsNot Nothing Then
+                ' 稍等一下让WebView2加载完成，然后触发续写对话框
+                Task.Run(Async Function()
+                             Await Task.Delay(300)
+                             Await chatCtrl.ExecuteJavaScriptAsyncJS("triggerContinuation(true);")
+                         End Function)
+            Else
+                MessageBox.Show("请先打开AI助手面板", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            End If
+        Catch ex As Exception
+            MessageBox.Show("触发AI续写时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub
 End Class

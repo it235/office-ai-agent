@@ -25,10 +25,10 @@ Public MustInherit Class BaseOfficeRibbon
         ' 基类初始化方法，子类可以重写
     End Sub
 
-    ' 关于我按钮点击事件
+    ' 关于我按钮点击事件 - 显示带git链接的对话框
     Private Sub AboutButton_Click_1(sender As Object, e As RibbonControlEventArgs) Handles AboutButton.Click
-        MsgBox("大家好，我是B站的君哥，账号 君哥聊编程 。该插件的灵感是来自于一位B站的粉丝，他是银行审计相关的工作，经常与表格打交道，很多时候表格中的数据无法通过固定的公式来计算，但是在人类理解上又具有相同的意义，所以Excel AI诞生了。
-插件在持续优化中，我本身与Excel打交道比较少，如果你有更多好的idea可以过来给我留言或评论，不断完善该插件。ExcelAi数据的默认存放目录在当前用户/文档/" + ConfigSettings.OfficeAiAppDataFolder + "下。")
+        Dim aboutForm As New AboutForm()
+        aboutForm.ShowDialog()
     End Sub
 
     ' 清理缓存配置按钮点击事件
@@ -67,6 +67,29 @@ Public MustInherit Class BaseOfficeRibbon
         Dim configForm As New ConfigPromptForm(GetApplication())
         If configForm.ShowDialog() = DialogResult.OK Then
         End If
+    End Sub
+
+    ' 教学文档按钮点击事件 - 根据应用类型跳转不同URL
+    Private Sub StudyButton_Click(sender As Object, e As RibbonControlEventArgs) Handles StudyButton.Click
+        Dim appInfo = GetApplication()
+        Dim url As String = "https://www.officeso.cn/study/"
+
+        Select Case appInfo.Type
+            Case OfficeApplicationType.Word
+                url &= "word"
+            Case OfficeApplicationType.Excel
+                url &= "excel"
+            Case OfficeApplicationType.PowerPoint
+                url &= "ppt"
+            Case Else
+                url &= "word"
+        End Select
+
+        Try
+            System.Diagnostics.Process.Start(url)
+        Catch ex As Exception
+            MessageBox.Show("无法打开教学文档链接: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
     End Sub
 
 
@@ -117,4 +140,7 @@ Public MustInherit Class BaseOfficeRibbon
 
     ' 一键翻译按钮点击事件（抽象方法，由子类实现）
     Protected MustOverride Sub TranslateButton_Click(sender As Object, e As RibbonControlEventArgs) Handles TranslateButton.Click
+
+    ' AI续写按钮点击事件（抽象方法，由子类实现）
+    Protected MustOverride Sub ContinuationButton_Click(sender As Object, e As RibbonControlEventArgs) Handles ContinuationButton.Click
 End Class
