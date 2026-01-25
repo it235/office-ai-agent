@@ -901,5 +901,70 @@ Public Class ChatControl
         End Try
     End Sub
 
+    ''' <summary>
+    ''' 获取当前PowerPoint上下文快照（用于自动补全）
+    ''' </summary>
+    Protected Overrides Function GetContextSnapshot() As JObject
+        Dim snapshot As New JObject()
+        snapshot("appType") = "PowerPoint"
+
+        Try
+            Dim pres = Globals.ThisAddIn.Application.ActivePresentation
+            If pres IsNot Nothing Then
+                snapshot("slidesCount") = pres.Slides.Count
+
+                ' 获取当前幻灯片信息
+                Try
+                    Dim slideIndex = Globals.ThisAddIn.Application.ActiveWindow.View.Slide.SlideIndex
+                    snapshot("currentSlide") = slideIndex
+                Catch
+                End Try
+            End If
+
+            ' 获取选中内容
+            Dim selText = ""
+            Try
+                Dim sel = Globals.ThisAddIn.Application.ActiveWindow.Selection
+                If sel.Type = Microsoft.Office.Interop.PowerPoint.PpSelectionType.ppSelectionText Then
+                    selText = sel.TextRange.Text
+                ElseIf sel.Type = Microsoft.Office.Interop.PowerPoint.PpSelectionType.ppSelectionShapes Then
+                    For i = 1 To Math.Min(sel.ShapeRange.Count, 3)
+                        Dim shape = sel.ShapeRange(i)
+                        If shape.HasTextFrame AndAlso shape.TextFrame.HasText Then
+                            selText &= shape.TextFrame.TextRange.Text & " "
+                        End If
+                    Next
+                End If
+            Catch
+            End Try
+
+            If selText.Length > 300 Then
+                selText = selText.Substring(0, 300) & "..."
+            End If
+            snapshot("selection") = selText.Trim()
+
+        Catch ex As Exception
+            Debug.WriteLine($"GetContextSnapshot 出错: {ex.Message}")
+        End Try
+
+        Return snapshot
+    End Function
+
+    ''' <summary>
+    ''' 重写保存设置方法，同步更新PPT补全管理器状态
+    ''' </summary>
+    Protected Overrides Sub HandleSaveSettings(jsonDoc As JObject)
+        MyBase.HandleSaveSettings(jsonDoc)
+        
+        ' 同步更新PPT补全管理器的启用状态
+        Try
+            Dim enableAutocomplete As Boolean = If(jsonDoc("enableAutocomplete")?.Value(Of Boolean)(), False)
+            PowerPointCompletionManager.Instance.Enabled = enableAutocomplete
+            Debug.WriteLine($"[PPTChatControl] 补全设置已同步: Enabled={enableAutocomplete}")
+        Catch ex As Exception
+            Debug.WriteLine($"[PPTChatControl] 同步补全设置失败: {ex.Message}")
+        End Try
+    End Sub
+
 End Class
 

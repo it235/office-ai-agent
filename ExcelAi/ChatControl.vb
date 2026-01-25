@@ -668,5 +668,68 @@ Public Class ChatControl
     Protected Overrides Sub CheckAndCompleteProcessingHook(_finalUuid As String, allPlainMarkdownBuffer As StringBuilder)
 
     End Sub
+
+    ''' <summary>
+    ''' 获取当前Excel上下文快照（用于自动补全）
+    ''' </summary>
+    Protected Overrides Function GetContextSnapshot() As JObject
+        Dim snapshot As New JObject()
+        snapshot("appType") = "Excel"
+
+        Try
+            Dim selection = Globals.ThisAddIn.Application.Selection
+            If selection IsNot Nothing Then
+                ' 获取选中区域地址
+                Dim rangeAddr = ""
+                Try
+                    rangeAddr = selection.Address
+                Catch
+                End Try
+                snapshot("selectionAddress") = rangeAddr
+
+                ' 获取选中内容（限制大小）
+                Dim selText = ""
+                Try
+                    If TypeOf selection.Value Is Object(,) Then
+                        Dim values = CType(selection.Value, Object(,))
+                        Dim sb As New StringBuilder()
+                        Dim maxRows = Math.Min(values.GetLength(0), 5)
+                        Dim maxCols = Math.Min(values.GetLength(1), 5)
+                        For r = 1 To maxRows
+                            For c = 1 To maxCols
+                                If values(r, c) IsNot Nothing Then
+                                    sb.Append(values(r, c).ToString())
+                                End If
+                                If c < maxCols Then sb.Append(vbTab)
+                            Next
+                            sb.AppendLine()
+                        Next
+                        selText = sb.ToString()
+                    ElseIf selection.Value IsNot Nothing Then
+                        selText = selection.Value.ToString()
+                    End If
+                Catch
+                End Try
+
+                If selText.Length > 300 Then
+                    selText = selText.Substring(0, 300) & "..."
+                End If
+                snapshot("selection") = selText
+            Else
+                snapshot("selection") = ""
+            End If
+
+            ' 获取工作表名
+            Dim ws = Globals.ThisAddIn.Application.ActiveSheet
+            If ws IsNot Nothing Then
+                snapshot("sheetName") = ws.Name
+            End If
+
+        Catch ex As Exception
+            Debug.WriteLine($"GetContextSnapshot 出错: {ex.Message}")
+        End Try
+
+        Return snapshot
+    End Function
 End Class
 

@@ -24,8 +24,18 @@ function sendMessageToServer(messagePayload) {
 
 // Send chat message
 function sendChatMessage() {
+    // 优先从smart-input获取内容，兼容隐藏的textarea
+    const smartInput = document.getElementById('smart-input');
     const chatInput = document.getElementById('chat-input');
-    const userTypedText = chatInput.value.trim();
+    
+    // 从smart-input获取用户输入
+    let userTypedText = '';
+    if (smartInput && smartInput.innerText) {
+        userTypedText = smartInput.innerText.trim();
+    } else if (chatInput) {
+        userTypedText = chatInput.value.trim();
+    }
+    
     const attachedFileObjects = window.attachedFiles;
     const selectedSheetContent = window.getAllSelectedContent();
 
@@ -35,8 +45,13 @@ function sendChatMessage() {
         sendContinuationMessage(userTypedText);
         
         // 清空输入
-        chatInput.value = '';
-        chatInput.style.height = 'auto';
+        if (typeof clearSmartInput === 'function') {
+            clearSmartInput();
+        } else {
+            if (chatInput) chatInput.value = '';
+            if (smartInput) smartInput.innerText = '';
+        }
+        if (chatInput) chatInput.style.height = 'auto';
         return;
     }
 
@@ -126,7 +141,13 @@ function sendChatMessage() {
     window.attachedFiles = [];
     renderReferences();
 
-    chatInput.value = '';
+    // 清空输入框（优先使用smart-input）
+    if (typeof clearSmartInput === 'function') {
+        clearSmartInput();
+    } else {
+        chatInput.value = '';
+        if (smartInput) smartInput.innerText = '';
+    }
     chatInput.style.height = 'auto';
     hidePromptSuggestions();
 }
@@ -150,36 +171,52 @@ function changeSendButton() {
 // Initialize input event handlers
 (function initMessageSender() {
     const chatInput = document.getElementById('chat-input');
+    const smartInput = document.getElementById('smart-input');
     
     // Send button click
     document.getElementById('send-button').onclick = sendChatMessage;
 
-    // Enter to send, Shift+Enter for newline
-    chatInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendChatMessage();
-        }
-    });
+    // 如果有smart-input，键盘事件由autocomplete.js处理
+    // 否则使用传统textarea的事件处理
+    if (!smartInput) {
+        // Enter to send, Shift+Enter for newline (仅当没有smart-input时)
+        chatInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendChatMessage();
+            }
+        });
 
-    // Auto-resize textarea and prompt suggestions
-    chatInput.addEventListener('input', function () {
-        this.style.height = 'auto';
-        this.style.height = (this.scrollHeight) + 'px';
+        // Auto-resize textarea and prompt suggestions
+        chatInput.addEventListener('input', function () {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
 
-        const value = this.value;
-        if (value === '#') {
-            showPromptSuggestions();
-        } else if (!value.startsWith('#') || value.length > 1) {
-            hidePromptSuggestions();
-        }
-    });
+            const value = this.value;
+            if (value === '#') {
+                showPromptSuggestions();
+            } else if (!value.startsWith('#') || value.length > 1) {
+                hidePromptSuggestions();
+            }
+        });
+    } else {
+        // smart-input的#提示词功能
+        smartInput.addEventListener('input', function () {
+            const value = this.innerText || '';
+            if (value === '#') {
+                showPromptSuggestions();
+            } else if (!value.startsWith('#') || value.length > 1) {
+                hidePromptSuggestions();
+            }
+        });
+    }
 
     // Hide suggestions when clicking outside
     document.addEventListener('click', function (event) {
         const promptSuggestionsDiv = document.getElementById('prompt-suggestions');
         const attachFileButton = document.getElementById('attach-file-button');
-        if (!chatInput.contains(event.target) && !promptSuggestionsDiv.contains(event.target) && !attachFileButton.contains(event.target)) {
+        const targetInput = smartInput || chatInput;
+        if (!targetInput.contains(event.target) && !promptSuggestionsDiv.contains(event.target) && !attachFileButton.contains(event.target)) {
             if (!event.target.closest('.reference-chip-remove')) {
                 hidePromptSuggestions();
             }
@@ -191,6 +228,7 @@ function changeSendButton() {
 function showPromptSuggestions() {
     const promptSuggestionsDiv = document.getElementById('prompt-suggestions');
     const chatInput = document.getElementById('chat-input');
+    const smartInput = document.getElementById('smart-input');
     
     promptSuggestionsDiv.innerHTML = '';
     predefinedPrompts.forEach(promptText => {
@@ -198,11 +236,19 @@ function showPromptSuggestions() {
         item.className = 'prompt-suggestion-item';
         item.textContent = promptText;
         item.onclick = function () {
-            chatInput.value = promptText;
+            // 优先更新smart-input
+            if (smartInput) {
+                smartInput.innerText = promptText;
+                if (typeof syncToHiddenTextarea === 'function') {
+                    syncToHiddenTextarea();
+                }
+            } else {
+                chatInput.value = promptText;
+            }
             hidePromptSuggestions();
-            chatInput.focus();
+            (smartInput || chatInput).focus();
             const event = new Event('input', { bubbles: true, cancelable: true });
-            chatInput.dispatchEvent(event);
+            (smartInput || chatInput).dispatchEvent(event);
         };
         promptSuggestionsDiv.appendChild(item);
     });

@@ -1,4 +1,4 @@
-Imports System.Diagnostics
+﻿Imports System.Diagnostics
 Imports System.IO
 Imports System.Runtime.InteropServices
 Imports System.Threading.Tasks
@@ -19,6 +19,9 @@ Public Class ThisAddIn
     Private _deepseekTaskPane As Microsoft.Office.Tools.CustomTaskPane
     Private _doubaoControl As DoubaoChat
     Private _doubaoTaskPane As Microsoft.Office.Tools.CustomTaskPane
+    
+    ' Word补全管理器
+    Private _completionManager As WordCompletionManager
 
     Private Sub WordAi_Startup() Handles Me.Startup
 
@@ -40,7 +43,37 @@ Public Class ThisAddIn
         widthTimer1.Interval = 100 ' 设置延迟时间，单位为毫秒
 
         translateService = New WordTranslateService()
+        
+        ' 预加载聊天设置（确保补全配置在CompletionManager初始化前已加载）
+        Dim chatSettings As New ChatSettings(New ApplicationInfo("Word", OfficeApplicationType.Word))
+        
+        ' 初始化Word补全管理器
+        InitializeCompletionManager()
 
+    End Sub
+    
+    ''' <summary>
+    ''' 初始化Word补全管理器
+    ''' </summary>
+    Private Sub InitializeCompletionManager()
+        Try
+            _completionManager = WordCompletionManager.Instance
+            _completionManager.Initialize(Me.Application)
+            ' 根据设置启用/禁用补全
+            _completionManager.Enabled = ChatSettings.EnableAutocomplete
+            Debug.WriteLine("Word补全管理器已初始化")
+        Catch ex As Exception
+            Debug.WriteLine($"初始化Word补全管理器失败: {ex.Message}")
+        End Try
+    End Sub
+    
+    ''' <summary>
+    ''' 启用/禁用Word补全功能
+    ''' </summary>
+    Public Sub SetCompletionEnabled(enabled As Boolean)
+        If _completionManager IsNot Nothing Then
+            _completionManager.Enabled = enabled
+        End If
     End Sub
 
 

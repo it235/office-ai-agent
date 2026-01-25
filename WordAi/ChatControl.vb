@@ -1018,4 +1018,53 @@ Public Class ChatControl
         End Try
     End Sub
 
+    ''' <summary>
+    ''' 获取当前Word上下文快照（用于自动补全）
+    ''' </summary>
+    Protected Overrides Function GetContextSnapshot() As JObject
+        Dim snapshot As New JObject()
+        snapshot("appType") = "Word"
+
+        Try
+            Dim selection = Globals.ThisAddIn.Application.Selection
+            If selection IsNot Nothing AndAlso selection.Start <> selection.End Then
+                ' 有选中内容
+                Dim selText = selection.Text
+                If Not String.IsNullOrEmpty(selText) AndAlso selText.Length > 500 Then
+                    selText = selText.Substring(0, 500) & "..."
+                End If
+                snapshot("selection") = If(selText, "")
+            Else
+                snapshot("selection") = ""
+            End If
+
+            ' 获取文档标题
+            Dim doc = Globals.ThisAddIn.Application.ActiveDocument
+            If doc IsNot Nothing Then
+                snapshot("documentName") = If(doc.Name, "")
+            End If
+
+        Catch ex As Exception
+            Debug.WriteLine($"GetContextSnapshot 出错: {ex.Message}")
+        End Try
+
+        Return snapshot
+    End Function
+
+    ''' <summary>
+    ''' 重写保存设置方法，同步更新Word补全管理器状态
+    ''' </summary>
+    Protected Overrides Sub HandleSaveSettings(jsonDoc As JObject)
+        MyBase.HandleSaveSettings(jsonDoc)
+        
+        ' 同步更新Word补全管理器的启用状态
+        Try
+            Dim enableAutocomplete As Boolean = If(jsonDoc("enableAutocomplete")?.Value(Of Boolean)(), False)
+            WordCompletionManager.Instance.Enabled = enableAutocomplete
+            Debug.WriteLine($"[WordChatControl] 补全设置已同步: Enabled={enableAutocomplete}")
+        Catch ex As Exception
+            Debug.WriteLine($"[WordChatControl] 同步补全设置失败: {ex.Message}")
+        End Try
+    End Sub
+
 End Class

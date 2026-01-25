@@ -293,6 +293,7 @@
     <Compile Include="Controls\Services\UtilsService.vb" />
     <Compile Include="Controls\Services\HistoryService.vb" />
     <Compile Include="Controls\Services\McpService.vb" />
+    <Compile Include="Controls\Services\OfficeCompletionService.vb" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Controls\BaseChatControl.resx">

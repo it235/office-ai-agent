@@ -1250,3 +1250,166 @@ input:checked + .mcp-toggle-slider:before {
         padding: 8px 4px 4px 4px;
     }
 }
+
+/* ====== 智能输入框样式 ====== */
+.smart-input-container {
+    position: relative;
+    width: 100%;
+    min-height: 40px;
+    max-height: 200px;
+}
+
+.smart-input {
+    width: 100%;
+    min-height: 40px;
+    max-height: 200px;
+    padding: 10px 12px;
+    border: none;
+    outline: none;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #333;
+    background: transparent;
+    resize: none;
+    overflow-y: auto;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+    box-sizing: border-box;
+}
+
+.smart-input:empty:before {
+    content: attr(data-placeholder);
+    color: #999;
+    pointer-events: none;
+}
+
+.smart-input:focus {
+    outline: none;
+}
+
+/* Ghost text - 虚化补全文本 */
+.ghost-text {
+    color: #999;
+    opacity: 0.6;
+    pointer-events: none;
+    font-size: 14px;
+    line-height: 1.5;
+    white-space: pre;
+    display: none;
+}
+
+/* ====== 自动补全下拉列表样式 ====== */
+.autocomplete-dropdown {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    box-shadow: 0 -4px 16px rgba(0,0,0,0.12);
+    max-height: 220px;
+    overflow: hidden;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+}
+
+.autocomplete-dropdown.hidden {
+    display: none;
+}
+
+.autocomplete-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: linear-gradient(135deg, #4a6fa5 0%, #3d5a7c 100%);
+    color: white;
+    font-size: 12px;
+    font-weight: 500;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.autocomplete-hint {
+    font-size: 11px;
+    opacity: 0.8;
+}
+
+#autocomplete-list {
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+    overflow-y: auto;
+    max-height: 180px;
+}
+
+.autocomplete-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: background-color 0.15s;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.autocomplete-item:last-child {
+    border-bottom: none;
+}
+
+.autocomplete-item:hover {
+    background-color: #f5f5f5;
+}
+
+.autocomplete-item.selected {
+    background-color: #e3f2fd;
+}
+
+.autocomplete-item .completion-text {
+    flex: 1;
+    font-size: 13px;
+    color: #333;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-right: 8px;
+}
+
+.autocomplete-item .completion-hint {
+    font-size: 11px;
+    color: #999;
+    background: #f0f0f0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.autocomplete-item.selected .completion-hint {
+    background: #4a6fa5;
+    color: white;
+}
+
+/* ====== 自动补全加载状态 ====== */
+.autocomplete-loading {
+    padding: 12px;
+    text-align: center;
+    color: #666;
+    font-size: 13px;
+}
+
+.autocomplete-loading::after {
+    content: '';
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    margin-left: 8px;
+    border: 2px solid #ccc;
+    border-top-color: #4a6fa5;
+    border-radius: 50%;
+    animation: autocomplete-spin 0.8s linear infinite;
+}
+
+@keyframes autocomplete-spin {
+    to { transform: rotate(360deg); }
+}

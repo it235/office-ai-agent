@@ -1,4 +1,4 @@
-Imports System.IO
+﻿Imports System.IO
 
 Public Class ResourceExtractor
     Public Shared Function ExtractResources() As String
@@ -53,7 +53,8 @@ Public Class ResourceExtractor
                 {"settings_manager", "settings-manager.js"},
                 {"mcp_manager", "mcp-manager.js"},
                 {"revision_manager", "revision-manager.js"},
-                {"history_manager", "history-manager.js"}
+                {"history_manager", "history-manager.js"},
+                {"autocomplete", "autocomplete.js"}
             }
 
             ' 释放JS资源

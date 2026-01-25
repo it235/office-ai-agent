@@ -258,6 +258,19 @@ Public MustInherit Class BaseChatControl
             document.getElementById('settings-selected-cell').checked = {ChatSettings.selectedCellChecked.ToString().ToLower()};
             document.getElementById('settings-executecode-preview').checked = {ChatSettings.executecodePreviewChecked.ToString().ToLower()};
             
+            // 初始化自动补全设置
+            var autocompleteCheckbox = document.getElementById('settings-autocomplete-enable');
+            if (autocompleteCheckbox) {{
+                autocompleteCheckbox.checked = {ChatSettings.EnableAutocomplete.ToString().ToLower()};
+            }}
+            var shortcutSelect = document.getElementById('settings-autocomplete-shortcut');
+            if (shortcutSelect) {{
+                shortcutSelect.value = '{ChatSettings.AutocompleteShortcut}';
+            }}
+            if (typeof updateAutocompleteSettings === 'function') {{
+                updateAutocompleteSettings({{ enabled: {ChatSettings.EnableAutocomplete.ToString().ToLower()}, delayMs: {ChatSettings.AutocompleteDelayMs}, shortcut: '{ChatSettings.AutocompleteShortcut}' }});
+            }}
+            
             var selectElement = document.getElementById('chatMode');
             if (selectElement) {{
                 selectElement.value = '{ChatSettings.chatMode}';
@@ -324,6 +337,12 @@ Public MustInherit Class BaseChatControl
                     HandleApplyContinuation(jsonDoc)
                 Case "refineContinuation"
                     HandleRefineContinuation(jsonDoc)
+
+                ' 自动补全功能消息处理
+                Case "requestCompletion"
+                    HandleRequestCompletion(jsonDoc)
+                Case "acceptCompletion"
+                    HandleAcceptCompletion(jsonDoc)
 
                 Case Else
                     Debug.WriteLine($"未知消息类型: {messageType}")
@@ -454,6 +473,403 @@ Public MustInherit Class BaseChatControl
 
     ' ========== 续写功能相关方法结束 ==========
 
+    ' ========== 自动补全功能相关方法 ==========
+
+    ''' <summary>
+    ''' 处理自动补全请求
+    ''' </summary>
+    Protected Overridable Async Sub HandleRequestCompletion(jsonDoc As JObject)
+        Try
+            ' 检查设置是否启用自动补全
+            If Not ChatSettings.EnableAutocomplete Then
+                Return
+            End If
+
+            Dim inputText As String = If(jsonDoc("input")?.ToString(), "")
+            Dim timestamp As Long = If(jsonDoc("timestamp")?.Value(Of Long)(), 0)
+
+            If String.IsNullOrWhiteSpace(inputText) OrElse inputText.Length < 2 Then
+                Return
+            End If
+
+            ' 获取上下文快照
+            Dim contextSnapshot = GetContextSnapshot()
+
+            ' 构建补全请求的prompt
+            Dim completions = Await RequestCompletionsFromLLM(inputText, contextSnapshot)
+
+            ' 返回结果到前端
+            Dim resultJson As New JObject()
+            resultJson("completions") = JArray.FromObject(completions)
+            resultJson("timestamp") = timestamp
+
+            ExecuteJavaScriptAsyncJS($"showCompletions({resultJson.ToString(Newtonsoft.Json.Formatting.None)});")
+
+        Catch ex As Exception
+            Debug.WriteLine($"HandleRequestCompletion 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 处理补全采纳记录
+    ''' </summary>
+    Protected Overridable Sub HandleAcceptCompletion(jsonDoc As JObject)
+        Try
+            Dim inputText As String = If(jsonDoc("input")?.ToString(), "")
+            Dim completion As String = If(jsonDoc("completion")?.ToString(), "")
+            Dim context As String = If(jsonDoc("context")?.ToString(), "")
+
+            ' 记录补全历史
+            RecordCompletionHistory(inputText, completion, context)
+
+        Catch ex As Exception
+            Debug.WriteLine($"HandleAcceptCompletion 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 获取当前Office上下文快照（由子类重写提供具体实现）
+    ''' </summary>
+    Protected Overridable Function GetContextSnapshot() As JObject
+        Dim snapshot As New JObject()
+        snapshot("appType") = GetOfficeAppType()
+        snapshot("selection") = ""
+        Return snapshot
+    End Function
+
+    ''' <summary>
+    ''' 调用大模型获取补全建议
+    ''' </summary>
+    Private Async Function RequestCompletionsFromLLM(inputText As String, contextSnapshot As JObject) As Task(Of List(Of String))
+        Dim completions As New List(Of String)()
+
+        Try
+            ' 获取翻译配置（用于补全）
+            Dim cfg = ConfigManager.ConfigData.FirstOrDefault(Function(c) c.selected)
+            If cfg Is Nothing OrElse cfg.model Is Nothing OrElse cfg.model.Count = 0 Then
+                Return completions
+            End If
+
+            Dim selectedModel = cfg.model.FirstOrDefault(Function(m) m.selected)
+            If selectedModel Is Nothing Then selectedModel = cfg.model(0)
+            
+            Dim modelName = selectedModel.modelName
+            Dim apiUrl = cfg.url
+            Dim apiKey = cfg.key
+            
+            ' 检查是否支持FIM模式
+            Dim useFimMode = selectedModel.fimSupported AndAlso Not String.IsNullOrEmpty(selectedModel.fimUrl)
+            
+            If useFimMode Then
+                ' 使用FIM API
+                completions = Await RequestCompletionsWithFIM(inputText, contextSnapshot, selectedModel, apiKey)
+            Else
+                ' 使用Chat Completion API
+                completions = Await RequestCompletionsWithChat(inputText, contextSnapshot, cfg, selectedModel, apiKey)
+            End If
+
+        Catch ex As Exception
+            Debug.WriteLine($"RequestCompletionsFromLLM 出错: {ex.Message}")
+        End Try
+
+        Return completions
+    End Function
+
+    ''' <summary>
+    ''' 使用FIM (Fill-In-the-Middle) API获取补全
+    ''' </summary>
+    Private Async Function RequestCompletionsWithFIM(inputText As String, contextSnapshot As JObject, 
+                                                      model As ConfigManager.ConfigItemModel, apiKey As String) As Task(Of List(Of String))
+        Dim completions As New List(Of String)()
+        
+        Try
+            Dim fimUrl = model.fimUrl
+            
+            ' 构建FIM请求
+            Dim requestObj As New JObject()
+            requestObj("model") = model.modelName
+            requestObj("prompt") = inputText
+            requestObj("suffix") = "" ' 光标后无内容
+            requestObj("max_tokens") = 50
+            requestObj("temperature") = 0.3
+            requestObj("stream") = False
+            
+            Dim requestBody = requestObj.ToString(Newtonsoft.Json.Formatting.None)
+            
+            Using client As New Net.Http.HttpClient()
+                client.Timeout = TimeSpan.FromSeconds(10)
+                client.DefaultRequestHeaders.Add("Authorization", "Bearer " & apiKey)
+                Dim content As New Net.Http.StringContent(requestBody, System.Text.Encoding.UTF8, "application/json")
+                Dim response = Await client.PostAsync(fimUrl, content)
+                response.EnsureSuccessStatusCode()
+                
+                Dim responseBody = Await response.Content.ReadAsStringAsync()
+                Dim jObj = JObject.Parse(responseBody)
+                
+                ' FIM API返回格式: {"choices": [{"text": "补全内容"}]}
+                Dim text = jObj("choices")?(0)?("text")?.ToString()
+                If Not String.IsNullOrWhiteSpace(text) Then
+                    ' 清理换行和多余空白
+                    text = text.Trim().Split({vbCr, vbLf, vbCrLf}, StringSplitOptions.RemoveEmptyEntries)(0)
+                    If text.Length <= 50 Then
+                        completions.Add(text)
+                    End If
+                End If
+            End Using
+            
+        Catch ex As Exception
+            Debug.WriteLine($"RequestCompletionsWithFIM 出错: {ex.Message}")
+        End Try
+        
+        Return completions
+    End Function
+
+    ''' <summary>
+    ''' 使用Chat Completion API获取补全
+    ''' </summary>
+    Private Async Function RequestCompletionsWithChat(inputText As String, contextSnapshot As JObject,
+                                                       cfg As ConfigManager.ConfigItem, model As ConfigManager.ConfigItemModel, 
+                                                       apiKey As String) As Task(Of List(Of String))
+        Dim completions As New List(Of String)()
+        
+        Try
+            Dim apiUrl = cfg.url
+            Dim modelName = model.modelName
+
+            ' 获取上下文信息
+            Dim appType = If(contextSnapshot("appType")?.ToString(), "Office")
+            Dim selectionText = If(contextSnapshot("selection")?.ToString(), "")
+
+            ' 根据Office类型构建场景化系统提示词
+            Dim systemPrompt = GetCompletionSystemPrompt(appType)
+
+            ' 构建用户消息
+            Dim userContent As New StringBuilder()
+            userContent.AppendLine($"当前应用: {appType}")
+            userContent.AppendLine($"用户已输入: ""{inputText}""")
+            If Not String.IsNullOrWhiteSpace(selectionText) Then
+                userContent.AppendLine($"选中内容: ""{selectionText.Substring(0, Math.Min(200, selectionText.Length))}""")
+            End If
+            
+            ' 添加额外上下文信息
+            If contextSnapshot("sheetName") IsNot Nothing Then
+                userContent.AppendLine($"当前工作表: {contextSnapshot("sheetName")}")
+            End If
+            If contextSnapshot("slideIndex") IsNot Nothing Then
+                userContent.AppendLine($"当前幻灯片: 第{contextSnapshot("slideIndex")}页")
+            End If
+            
+            userContent.AppendLine()
+            userContent.AppendLine("请给出补全建议（JSON格式）。")
+
+            ' 构建请求
+            Dim requestObj As New JObject()
+            requestObj("model") = modelName
+            requestObj("stream") = False
+            requestObj("temperature") = 0.3
+
+            Dim messages As New JArray()
+            messages.Add(New JObject() From {{"role", "system"}, {"content", systemPrompt}})
+            messages.Add(New JObject() From {{"role", "user"}, {"content", userContent.ToString()}})
+            requestObj("messages") = messages
+
+            ' 发送请求
+            Dim requestBody = requestObj.ToString(Newtonsoft.Json.Formatting.None)
+
+            Using client As New Net.Http.HttpClient()
+                client.Timeout = TimeSpan.FromSeconds(10) ' 补全请求超时短一些
+                client.DefaultRequestHeaders.Add("Authorization", "Bearer " & apiKey)
+                Dim content As New Net.Http.StringContent(requestBody, System.Text.Encoding.UTF8, "application/json")
+                Dim response = Await client.PostAsync(apiUrl, content)
+                response.EnsureSuccessStatusCode()
+
+                Dim responseBody = Await response.Content.ReadAsStringAsync()
+                
+                ' 解析API响应
+                Dim jObj As JObject = Nothing
+                Try
+                    jObj = JObject.Parse(responseBody)
+                Catch apiParseEx As Exception
+                    Debug.WriteLine($"解析API响应失败: {apiParseEx.Message}")
+                    Return completions
+                End Try
+
+                Dim msg As String = Nothing
+                Try
+                    msg = jObj("choices")?(0)?("message")?("content")?.ToString()
+                Catch
+                    ' 尝试其他格式（例如某些API使用不同的响应结构）
+                    msg = jObj("message")?.ToString()
+                End Try
+
+                If Not String.IsNullOrEmpty(msg) Then
+                    ' 尝试解析JSON响应
+                    Try
+                        ' 清理可能的markdown代码块标记
+                        Dim cleanedMsg = msg.Trim()
+                        If cleanedMsg.StartsWith("```") Then
+                            ' 去除开头的```json或```
+                            Dim firstNewLine = cleanedMsg.IndexOf(vbLf)
+                            If firstNewLine > 0 Then
+                                cleanedMsg = cleanedMsg.Substring(firstNewLine + 1)
+                            End If
+                        End If
+                        If cleanedMsg.EndsWith("```") Then
+                            cleanedMsg = cleanedMsg.Substring(0, cleanedMsg.Length - 3)
+                        End If
+                        cleanedMsg = cleanedMsg.Trim()
+
+                        ' 尝试找到JSON对象的起始位置
+                        Dim jsonStart = cleanedMsg.IndexOf("{")
+                        Dim jsonEnd = cleanedMsg.LastIndexOf("}")
+                        If jsonStart >= 0 AndAlso jsonEnd > jsonStart Then
+                            cleanedMsg = cleanedMsg.Substring(jsonStart, jsonEnd - jsonStart + 1)
+                        End If
+
+                        Dim resultObj = JObject.Parse(cleanedMsg)
+                        Dim completionsArray = resultObj("completions")
+                        If completionsArray IsNot Nothing Then
+                            For Each item In completionsArray
+                                Dim c = item.ToString().Trim()
+                                If Not String.IsNullOrWhiteSpace(c) Then
+                                    completions.Add(c)
+                                End If
+                            Next
+                        End If
+                    Catch parseEx As Exception
+                        Debug.WriteLine($"解析补全JSON失败: {parseEx.Message}, 原始内容: {msg}")
+                        ' 如果不是有效JSON，尝试直接使用返回内容
+                        If Not String.IsNullOrWhiteSpace(msg) AndAlso msg.Length < 50 Then
+                            completions.Add(msg.Trim())
+                        End If
+                    End Try
+                End If
+            End Using
+
+        Catch ex As Exception
+            Debug.WriteLine($"RequestCompletionsFromLLM 出错: {ex.Message}")
+        End Try
+
+        Return completions
+    End Function
+
+    ''' <summary>
+    ''' 记录补全历史
+    ''' </summary>
+    Private Sub RecordCompletionHistory(inputText As String, completion As String, context As String)
+        Try
+            Dim historyPath = IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                ConfigSettings.OfficeAiAppDataFolder,
+                "autocomplete_history.json")
+
+            Dim history As JObject
+            If IO.File.Exists(historyPath) Then
+                Dim json = IO.File.ReadAllText(historyPath)
+                history = JObject.Parse(json)
+            Else
+                history = New JObject()
+                history("version") = 1
+                history("history") = New JArray()
+            End If
+
+            Dim historyArray = CType(history("history"), JArray)
+
+            ' 查找是否已有相同的记录
+            Dim existingItem = historyArray.FirstOrDefault(Function(item)
+                                                               Return item("input")?.ToString() = inputText AndAlso
+                                                                      item("completion")?.ToString() = completion
+                                                           End Function)
+
+            If existingItem IsNot Nothing Then
+                ' 更新计数和时间
+                existingItem("count") = existingItem("count").Value(Of Integer)() + 1
+                existingItem("lastUsed") = DateTime.UtcNow.ToString("o")
+            Else
+                ' 添加新记录
+                Dim newItem As New JObject()
+                newItem("input") = inputText
+                newItem("completion") = completion
+                newItem("context") = context
+                newItem("count") = 1
+                newItem("lastUsed") = DateTime.UtcNow.ToString("o")
+                historyArray.Add(newItem)
+
+                ' 限制历史记录数量（最多保留100条）
+                While historyArray.Count > 100
+                    historyArray.RemoveAt(0)
+                End While
+            End If
+
+            ' 保存
+            Dim dir = IO.Path.GetDirectoryName(historyPath)
+            If Not IO.Directory.Exists(dir) Then
+                IO.Directory.CreateDirectory(dir)
+            End If
+            IO.File.WriteAllText(historyPath, history.ToString(Newtonsoft.Json.Formatting.Indented))
+
+        Catch ex As Exception
+            Debug.WriteLine($"RecordCompletionHistory 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 根据Office应用类型获取场景化的补全系统提示词
+    ''' </summary>
+    Private Function GetCompletionSystemPrompt(appType As String) As String
+        Dim baseRules = "
+规则：
+1. 只返回补全的剩余部分，不要重复用户已输入的内容
+2. 返回JSON格式: {""completions"": [""补全1"", ""补全2"", ""补全3""]}
+3. 最多返回3个候选
+4. 补全应简洁，通常不超过20个字"
+
+        Select Case appType.ToLower()
+            Case "excel"
+                Return $"你是Excel AI助手的输入补全引擎。根据用户当前输入和Excel上下文，预测用户想要的操作。
+
+常见Excel场景补全示例：
+- ""帮我"" → ""计算这列的总和"", ""筛选重复数据"", ""生成数据透视表""
+- ""把"" → ""选中区域转换为表格"", ""这列数据去重"", ""A列和B列合并""
+- ""统计"" → ""每个类别的数量"", ""销售额的平均值"", ""各月份的增长率""
+- ""公式"" → ""计算两列的差值"", ""查找匹配的数据"", ""条件求和""
+- ""格式"" → ""设置为货币格式"", ""添加条件格式"", ""调整列宽""
+- ""图表"" → ""创建柱状图"", ""生成趋势线"", ""添加数据标签""
+{baseRules}"
+
+            Case "word"
+                Return $"你是Word AI助手的输入补全引擎。根据用户当前输入和Word上下文，预测用户想要的操作。
+
+常见Word场景补全示例：
+- ""帮我"" → ""润色这段文字"", ""翻译选中内容"", ""生成文章大纲""
+- ""把"" → ""这段改成正式语气"", ""标题设为一级标题"", ""段落缩进调整""
+- ""总结"" → ""这篇文章的要点"", ""会议纪要"", ""核心观点""
+- ""扩写"" → ""这个段落"", ""详细说明这个观点"", ""增加案例论证""
+- ""格式"" → ""统一段落间距"", ""添加页眉页脚"", ""设置目录样式""
+- ""检查"" → ""语法错误"", ""错别字"", ""标点符号""
+{baseRules}"
+
+            Case "powerpoint"
+                Return $"你是PowerPoint AI助手的输入补全引擎。根据用户当前输入和PPT上下文，预测用户想要的操作。
+
+常见PPT场景补全示例：
+- ""帮我"" → ""美化这张幻灯片"", ""生成演讲稿"", ""添加过渡动画""
+- ""把"" → ""文字转换为SmartArt"", ""图片裁剪为圆形"", ""背景改为渐变色""
+- ""生成"" → ""项目汇报PPT"", ""产品介绍页"", ""团队介绍页""
+- ""添加"" → ""图表展示数据"", ""时间线"", ""流程图""
+- ""设计"" → ""统一字体样式"", ""配色方案"", ""母版布局""
+- ""总结"" → ""演示要点"", ""关键数据"", ""结论页内容""
+{baseRules}"
+
+            Case Else
+                Return $"你是Office AI助手的输入补全引擎。根据用户当前输入和Office上下文，预测用户想要输入的内容。
+{baseRules}
+5. 考虑Office上下文（选中内容、文档类型）"
+        End Select
+    End Function
+
+    ' ========== 自动补全功能相关方法结束 ==========
+
     ' 新增：处理用户接受答案
     Protected Sub HandleAcceptAnswer(jsonDoc As JObject)
         Try
@@ -558,10 +974,13 @@ Public MustInherit Class BaseChatControl
         settingsScrollChecked = jsonDoc("settingsScroll")
         Dim chatMode As String = jsonDoc("chatMode")
         Dim executeCodePreview As Boolean = jsonDoc("executeCodePreview")
+        Dim enableAutocomplete As Boolean = If(jsonDoc("enableAutocomplete")?.Value(Of Boolean)(), False)
+        Dim autocompleteShortcut As String = If(jsonDoc("autocompleteShortcut")?.Value(Of String)(), "Ctrl+.")
         Dim chatSettings As New ChatSettings(GetApplication())
         ' 保存设置到配置文件
         chatSettings.SaveSettings(topicRandomness, contextLimit, selectedCellChecked,
-                                  settingsScrollChecked, executeCodePreview, chatMode)
+                                  settingsScrollChecked, executeCodePreview, chatMode,
+                                  enableAutocomplete, 800, autocompleteShortcut)
     End Sub
 
     Public Class SendMessageReferenceContentItem

@@ -23,6 +23,10 @@ function settingsSave() {
     let selectedCell = document.getElementById('settings-selected-cell').checked;
     let executeCodePreview = document.getElementById('settings-executecode-preview').checked;
     let chatMode = document.getElementById("chatMode").value;
+    
+    // 自动补全设置
+    let enableAutocomplete = document.getElementById('settings-autocomplete-enable').checked;
+    let autocompleteShortcut = document.getElementById('settings-autocomplete-shortcut').value;
 
     // Save settings to backend
     if (window.chrome && window.chrome.webview) {
@@ -34,6 +38,8 @@ function settingsSave() {
             settingsScroll: settingsScroll,
             chatMode: chatMode,
             executeCodePreview: executeCodePreview,
+            enableAutocomplete: enableAutocomplete,
+            autocompleteShortcut: autocompleteShortcut,
         });
     } else if (window.vsto) {
         window.vsto.saveSettings({
@@ -43,9 +49,16 @@ function settingsSave() {
             settingsScroll: settingsScroll,
             chatMode: chatMode,
             executeCodePreview: executeCodePreview,
+            enableAutocomplete: enableAutocomplete,
+            autocompleteShortcut: autocompleteShortcut,
         });
     } else {
         alert('无法执行代码：未检测到支持的通信接口');
+    }
+    
+    // 更新前端自动补全状态
+    if (typeof updateAutocompleteSettings === 'function') {
+        updateAutocompleteSettings({ enabled: enableAutocomplete, shortcut: autocompleteShortcut });
     }
 
     // Close dialog

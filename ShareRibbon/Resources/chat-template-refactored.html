@@ -57,7 +57,24 @@
                 <div id="prompt-suggestions" style="display: none;">
                     <!-- 提示词项将在此处动态添加 -->
                 </div>
-                <textarea id="chat-input" placeholder="请在此输入您的问题... 按Enter键直接发送，Shift+Enter换行" rows="2"></textarea>
+
+                <!-- 自动补全下拉列表 -->
+                <div id="autocomplete-dropdown" class="autocomplete-dropdown hidden">
+                    <div class="autocomplete-header">
+                        <span>AI 建议</span>
+                        <span class="autocomplete-hint">Tab 采纳 · ↑↓ 切换 · Esc 关闭</span>
+                    </div>
+                    <ul id="autocomplete-list"></ul>
+                </div>
+
+                <!-- 智能输入框容器 -->
+                <div class="smart-input-container">
+                    <div id="smart-input" contenteditable="true" class="smart-input" 
+                         data-placeholder="请在此输入您的问题... 按Enter键直接发送，Tab采纳补全"></div>
+                    <span id="ghost-text" class="ghost-text"></span>
+                </div>
+                <!-- 隐藏的textarea用于兼容现有发送逻辑 -->
+                <textarea id="chat-input" style="display:none;" placeholder="请在此输入您的问题..." rows="2"></textarea>
                 <div id="chat-input-actions">
 
                     <button id="settings-button" title="设置" onclick="settingsButton()">
@@ -196,6 +213,25 @@
             <div class="setting-tip">开启后，Agent模式下可提前预览变更点，对比差异</div>
         </div>
 
+        <div class="setting-item checkbox-item">
+            <div>
+                <label class="setting-label">AI智能补全</label>
+                <input type="checkbox" id="settings-autocomplete-enable">
+            </div>
+            <div class="setting-tip">开启后，输入时AI会自动识别意图并提供补全建议</div>
+        </div>
+        
+        <div class="setting-item">
+            <label class="setting-label">补全快捷键</label>
+            <select id="settings-autocomplete-shortcut" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc;">
+                <option value="Ctrl+.">Ctrl + .</option>
+                <option value="Alt+/">Alt + /</option>
+                <option value="Ctrl+Enter">Ctrl + Enter</option>
+                <option value="Alt+Enter">Alt + Enter</option>
+            </select>
+            <div class="setting-tip">选择接受补全建议的快捷键组合</div>
+        </div>
+
         <div class="setting-item">
             <label class="setting-label">话题随机性</label>
             <div class="slider-container">
@@ -247,5 +283,6 @@
     <script src="https://officeai.local/js/mcp-manager.js"></script>
     <script src="https://officeai.local/js/history-manager.js"></script>
     <script src="https://officeai.local/js/revision-manager.js"></script>
+    <script src="https://officeai.local/js/autocomplete.js"></script>
 </body>
 </html>

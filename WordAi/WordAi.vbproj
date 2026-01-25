@@ -313,6 +313,7 @@
     <Compile Include="WordTranslateService.vb" />
     <Compile Include="WordDocumentTranslateService.vb" />
     <Compile Include="WordContinuationService.vb" />
+    <Compile Include="WordCompletionManager.vb" />
     <EmbeddedResource Include="ChatControl.resx">
       <DependentUpon>ChatControl.vb</DependentUpon>
     </EmbeddedResource>

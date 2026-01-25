@@ -17,6 +17,9 @@ Public Class ThisAddIn
     Private _deepseekTaskPane As Microsoft.Office.Tools.CustomTaskPane
     Private _doubaoControl As DoubaoChat
     Private _doubaoTaskPane As Microsoft.Office.Tools.CustomTaskPane
+    
+    ' PPT补全管理器
+    Private _completionManager As PowerPointCompletionManager
 
     Private Sub WordAi_Startup() Handles Me.Startup
 
@@ -40,6 +43,36 @@ Public Class ThisAddIn
         CreateDeepseekTaskPane()
 
         translateService = New PowerPointTranslateService()
+        
+        ' 预加载聊天设置（确保补全配置在CompletionManager初始化前已加载）
+        Dim chatSettings As New ChatSettings(New ApplicationInfo("PowerPoint", OfficeApplicationType.PowerPoint))
+        
+        ' 初始化PPT补全管理器
+        InitializeCompletionManager()
+    End Sub
+    
+    ''' <summary>
+    ''' 初始化PPT补全管理器
+    ''' </summary>
+    Private Sub InitializeCompletionManager()
+        Try
+            _completionManager = PowerPointCompletionManager.Instance
+            _completionManager.Initialize(Me.Application)
+            ' 根据设置启用/禁用补全
+            _completionManager.Enabled = ChatSettings.EnableAutocomplete
+            Debug.WriteLine("PPT补全管理器已初始化")
+        Catch ex As Exception
+            Debug.WriteLine($"初始化PPT补全管理器失败: {ex.Message}")
+        End Try
+    End Sub
+    
+    ''' <summary>
+    ''' 启用/禁用PPT补全功能
+    ''' </summary>
+    Public Sub SetCompletionEnabled(enabled As Boolean)
+        If _completionManager IsNot Nothing Then
+            _completionManager.Enabled = enabled
+        End If
     End Sub
 
     Private Sub CreateDeepseekTaskPane()

@@ -95,6 +95,8 @@ Public Class ConfigManager
                     If item_m.selected Then
                         ConfigSettings.ModelName = item_m.modelName
                         ConfigSettings.mcpable = item_m.mcpable
+                        ConfigSettings.fimSupported = item_m.fimSupported
+                        ConfigSettings.fimUrl = If(String.IsNullOrEmpty(item_m.fimUrl), item.url, item_m.fimUrl)
                     End If
                 Next
             End If
@@ -147,6 +149,13 @@ Public Class ConfigManager
         Public Property translateSelected As Boolean = False
         Public Property mcpable As Boolean = False
         Public Property mcpValidated As Boolean = False
+        
+        ' FIM (Fill-In-the-Middle) 补全能力支持
+        Public Property fimSupported As Boolean = False
+        
+        ' FIM API端点（如果与chat端点不同）
+        Public Property fimUrl As String = ""
+        
         Public Overrides Function ToString() As String
             Return modelName
         End Function
