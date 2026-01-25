@@ -311,6 +311,7 @@
       <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="WordTranslateService.vb" />
+    <Compile Include="WordDocumentTranslateService.vb" />
     <EmbeddedResource Include="ChatControl.resx">
       <DependentUpon>ChatControl.vb</DependentUpon>
     </EmbeddedResource>

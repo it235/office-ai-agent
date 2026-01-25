@@ -115,11 +115,6 @@ Public MustInherit Class BaseOfficeRibbon
     ' MCP按钮点击事件
     Protected MustOverride Sub MCPButton_Click(sender As Object, e As RibbonControlEventArgs) Handles MCPButton.Click
 
-    ' 在 BaseOfficeRibbon 中新增方法（放在类中合适位置）
-    Private Sub TranslateConfigButton_Click(sender As Object, e As RibbonControlEventArgs) Handles TranslateConfigButton.Click
-        Dim dlg As New TranslateConfigForm()
-        If dlg.ShowDialog() = DialogResult.OK Then
-            ' 翻译配置已保存
-        End If
-    End Sub
+    ' 一键翻译按钮点击事件（抽象方法，由子类实现）
+    Protected MustOverride Sub TranslateButton_Click(sender As Object, e As RibbonControlEventArgs) Handles TranslateButton.Click
 End Class

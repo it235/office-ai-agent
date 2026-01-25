@@ -196,9 +196,11 @@
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Translate\BaseTranslateService.vb" />
-    <Compile Include="Translate\TranslateConfigForm.vb">
+    <Compile Include="Translate\DocumentTranslateService.vb" />
+    <Compile Include="Translate\TranslateActionForm.vb">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="Translate\TranslateDomainTemplate.vb" />
     <Compile Include="Translate\TranslateGlobalSettingsForm.vb">
       <SubType>Form</SubType>
     </Compile>

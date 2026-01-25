@@ -23,9 +23,10 @@ Public Class DoubaoChat
         Await InitializeWebView2()
         'InitializeWebView2Script()
     End Sub
-    'Public Async Function InitializeAsync() As System.Threading.Tasks.Task
-    '    Await InitializeWebView2()
-    'End Function
+
+    Public Async Function InitializeAsync() As System.Threading.Tasks.Task
+        Await InitializeWebView2()
+    End Function
 
     Protected Overrides Function GetCurrentWorkingDirectory() As String
         Try

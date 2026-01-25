@@ -1,4 +1,4 @@
-' ShareRibbon\Ribbon\BaseOfficeRibbon.Designer.vb
+﻿' ShareRibbon\Ribbon\BaseOfficeRibbon.Designer.vb
 Partial Class BaseOfficeRibbon
     Inherits Microsoft.Office.Tools.Ribbon.RibbonBase
 
@@ -54,8 +54,8 @@ Partial Class BaseOfficeRibbon
 
         Me.BatchDataGenButton = Me.Factory.CreateRibbonButton()
 
-        ' 新增：翻译配置按钮
-        Me.TranslateConfigButton = Me.Factory.CreateRibbonButton
+        ' 新增：一键翻译按钮
+        Me.TranslateButton = Me.Factory.CreateRibbonButton
 
         ' 新增：校对与排版按钮
         Me.ProofreadButton = Me.Factory.CreateRibbonButton
@@ -115,7 +115,7 @@ Partial Class BaseOfficeRibbon
         Me.GroupAI.Items.Add(Me.Separator1)
         Me.GroupAI.Items.Add(Me.PromptConfigButton)
         Me.GroupAI.Items.Add(Me.ChatButton)
-        Me.GroupAI.Items.Add(Me.TranslateConfigButton)
+        Me.GroupAI.Items.Add(Me.TranslateButton)
         Me.GroupAI.Items.Add(Me.ProofreadButton)
         Me.GroupAI.Items.Add(Me.ReformatButton)
         Me.GroupAI.Items.Add(Me.Separator2)
@@ -158,12 +158,12 @@ Partial Class BaseOfficeRibbon
         Me.ReformatButton.ScreenTip = "对选中或全文进行结构化排版"
         Me.ReformatButton.SuperTip = "优化标题、段落与列表并返回可解析的修订JSON"
 
-        ' TranslateConfigButton
-        Me.TranslateConfigButton.Label = "翻译配置"
-        Me.TranslateConfigButton.Name = "TranslateConfigButton"
-        Me.TranslateConfigButton.ShowImage = True
-        Me.TranslateConfigButton.ScreenTip = "配置翻译功能与平台"
-        Me.TranslateConfigButton.SuperTip = "启用/配置翻译、选择翻译平台与模型"
+        ' TranslateButton - 一键翻译
+        Me.TranslateButton.Label = "AI翻译"
+        Me.TranslateButton.Name = "TranslateButton"
+        Me.TranslateButton.ShowImage = True
+        Me.TranslateButton.ScreenTip = "一键翻译文档内容"
+        Me.TranslateButton.SuperTip = "支持全文翻译、选区翻译、沉浸式翻译等多种模式"
 
         ' AboutButton
         Me.AboutButton.Label = "关于"
@@ -243,8 +243,8 @@ Partial Class BaseOfficeRibbon
     Protected WithEvents GroupMCP As Microsoft.Office.Tools.Ribbon.RibbonGroup
     Protected WithEvents MCPButton As Microsoft.Office.Tools.Ribbon.RibbonButton
 
-    ' 新增翻译配置按钮声明
-    Protected WithEvents TranslateConfigButton As Microsoft.Office.Tools.Ribbon.RibbonButton
+    ' 一键翻译按钮声明
+    Protected WithEvents TranslateButton As Microsoft.Office.Tools.Ribbon.RibbonButton
 
     ' 新增：校对/排版按钮声明
     Protected WithEvents ProofreadButton As Microsoft.Office.Tools.Ribbon.RibbonButton

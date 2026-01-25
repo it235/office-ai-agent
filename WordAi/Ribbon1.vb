@@ -248,4 +248,88 @@ Public Class Ribbon1
         End Try
     End Sub
 
+    ' 一键翻译功能
+    Protected Overrides Async Sub TranslateButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Try
+            Dim wordApp = Globals.ThisAddIn.Application
+
+            ' 检查是否有选中内容
+            Dim hasSelection As Boolean = False
+            Try
+                If wordApp?.Selection?.Range IsNot Nothing Then
+                    Dim selText = wordApp.Selection.Range.Text
+                    hasSelection = Not String.IsNullOrWhiteSpace(selText)
+                End If
+            Catch
+                hasSelection = False
+            End Try
+
+            ' 显示翻译操作对话框
+            Dim actionForm As New ShareRibbon.TranslateActionForm(hasSelection, "Word")
+            If actionForm.ShowDialog() <> DialogResult.OK Then
+                Return
+            End If
+
+            ' 创建翻译服务
+            Dim translateService As New WordDocumentTranslateService(wordApp)
+
+            ' 更新设置
+            Dim settings = ShareRibbon.TranslateSettings.Load()
+            settings.SourceLanguage = actionForm.SourceLanguage
+            settings.TargetLanguage = actionForm.TargetLanguage
+            settings.CurrentDomain = actionForm.SelectedDomain
+            settings.OutputMode = actionForm.OutputMode
+            settings.Save()
+
+            ' 显示进度
+            ShareRibbon.GlobalStatusStripAll.ShowWarning("正在准备翻译...")
+
+            ' 绑定进度事件
+            AddHandler translateService.ProgressChanged, Sub(s, args)
+                                                             ShareRibbon.GlobalStatusStripAll.ShowWarning(args.Message)
+                                                         End Sub
+
+            ' 执行翻译
+            Dim results As List(Of ShareRibbon.TranslateParagraphResult)
+            If actionForm.TranslateAll Then
+                results = Await translateService.TranslateAllAsync()
+            Else
+                results = Await translateService.TranslateSelectionAsync()
+            End If
+
+            ' 应用翻译结果
+            If actionForm.OutputMode = ShareRibbon.TranslateOutputMode.SidePanel Then
+                ' 在侧栏显示
+                Globals.ThisAddIn.ShowChatTaskPane()
+                Await Task.Delay(250)
+
+                Dim chatCtrl = Globals.ThisAddIn.chatControl
+                If chatCtrl IsNot Nothing Then
+                    Dim displayText = translateService.FormatResultsForDisplay(results, True)
+                    Dim responseUuid As String = Guid.NewGuid().ToString()
+                    Dim aiName As String = "AI翻译助手"
+                    Dim jsCreate As String = $"createChatSection('{aiName}', formatDateTime(new Date()), '{responseUuid}');"
+                    Await chatCtrl.ExecuteJavaScriptAsyncJS(jsCreate)
+
+                    ' 转义特殊字符
+                    Dim escapedText = displayText.Replace("\", "\\").Replace("'", "\'").Replace(vbCr, "\n").Replace(vbLf, "")
+                    Dim js = $"appendRenderer('{responseUuid}','{escapedText}');"
+                    Await chatCtrl.ExecuteJavaScriptAsyncJS(js)
+                End If
+            Else
+                ' 应用到文档
+                If actionForm.TranslateAll Then
+                    translateService.ApplyTranslation(results, actionForm.OutputMode)
+                Else
+                    translateService.ApplyTranslationToSelection(results, actionForm.OutputMode)
+                End If
+            End If
+
+            ShareRibbon.GlobalStatusStripAll.ShowWarning($"翻译完成，共处理 {results.Count} 个段落")
+
+        Catch ex As Exception
+            MessageBox.Show("翻译过程出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub
+
 End Class
