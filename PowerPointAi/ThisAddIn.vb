@@ -15,6 +15,8 @@ Public Class ThisAddIn
     ' 在类中添加以下变量
     Private _deepseekControl As DeepseekControl
     Private _deepseekTaskPane As Microsoft.Office.Tools.CustomTaskPane
+    Private _doubaoControl As DoubaoChat
+    Private _doubaoTaskPane As Microsoft.Office.Tools.CustomTaskPane
 
     Private Sub WordAi_Startup() Handles Me.Startup
 
@@ -55,6 +57,21 @@ Public Class ThisAddIn
             MessageBox.Show($"初始化任务窗格失败: {ex.Message}")
         End Try
     End Sub
+
+    Private Async Function CreateDoubaoTaskPane() As Task
+        Try
+            If _doubaoControl Is Nothing Then
+                ' 为新工作簿创建任务窗格
+                _doubaoControl = New DoubaoChat()
+                'Await _doubaoControl.InitializeAsync()
+                _doubaoTaskPane = Me.CustomTaskPanes.Add(_doubaoControl, "Doubao AI智能助手")
+                _doubaoTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
+                _doubaoTaskPane.Width = 420
+            End If
+        Catch ex As Exception
+            MessageBox.Show($"初始化Doubao任务窗格失败: {ex.Message}")
+        End Try
+    End Function
 
     Private Function IsWpsActive() As Boolean
         Try
@@ -143,5 +160,10 @@ Public Class ThisAddIn
     Public Async Sub ShowDeepseekTaskPane()
         CreateDeepseekTaskPane()
         _deepseekTaskPane.Visible = True
+    End Sub
+
+    Public Async Sub ShowDoubaoTaskPane()
+        Await CreateDoubaoTaskPane()
+        _doubaoTaskPane.Visible = True
     End Sub
 End Class

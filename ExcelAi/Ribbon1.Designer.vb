@@ -62,6 +62,7 @@ Partial Class Ribbon1
         Me.RibbonType = "Microsoft.Excel.Workbook"
 
         Me.DeepseekButton.Image = ShareRibbon.SharedResources.Deepseek
+        Me.DoubaoButton.Image = ShareRibbon.SharedResources.Doubao
         Me.MCPButton.Image = ShareRibbon.SharedResources.Mcp1
         Me.WebCaptureButton.Image = ShareRibbon.SharedResources.Send32
         Me.SpotlightButton.Image = ShareRibbon.SharedResources.Wait

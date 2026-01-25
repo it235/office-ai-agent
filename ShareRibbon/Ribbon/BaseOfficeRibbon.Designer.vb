@@ -1,4 +1,4 @@
-﻿' ShareRibbon\Ribbon\BaseOfficeRibbon.Designer.vb
+' ShareRibbon\Ribbon\BaseOfficeRibbon.Designer.vb
 Partial Class BaseOfficeRibbon
     Inherits Microsoft.Office.Tools.Ribbon.RibbonBase
 
@@ -41,6 +41,7 @@ Partial Class BaseOfficeRibbon
         ' 新增：Deepseek 专用 Group
         Me.GroupDeepseek = Me.Factory.CreateRibbonGroup
         Me.DeepseekButton = Me.Factory.CreateRibbonButton()
+        Me.DoubaoButton = Me.Factory.CreateRibbonButton()
 
         ' 新增：MCP 专用 Group
         Me.GroupMCP = Me.Factory.CreateRibbonGroup
@@ -75,6 +76,7 @@ Partial Class BaseOfficeRibbon
 
         ' GroupDeepseek - 新的Deepseek专用Group
         Me.GroupDeepseek.Items.Add(Me.DeepseekButton)
+        Me.GroupDeepseek.Items.Add(Me.DoubaoButton)
         Me.GroupDeepseek.Label = "免费强化版"
         Me.GroupDeepseek.Name = "GroupDeepseek"
 
@@ -85,6 +87,14 @@ Partial Class BaseOfficeRibbon
         Me.DeepseekButton.ShowImage = True
         Me.DeepseekButton.ScreenTip = "免费增强版"
         Me.DeepseekButton.SuperTip = "在原有对话基础上，增加Agent执行能力"
+
+        ' 配置Doubao按钮 - 设置为大图标
+        Me.DoubaoButton.Label = "Doubao"
+        Me.DoubaoButton.Name = "DoubaoButton"
+        Me.DoubaoButton.ControlSize = Microsoft.Office.Core.RibbonControlSize.RibbonControlSizeLarge
+        Me.DoubaoButton.ShowImage = True
+        Me.DoubaoButton.ScreenTip = "豆包智能助手"
+        Me.DoubaoButton.SuperTip = "基于豆包的智能对话助手，支持代码执行"
 
         ' GroupMCP - 新的MCP专用Group
         Me.GroupMCP.Items.Add(Me.MCPButton)
@@ -221,6 +231,7 @@ Partial Class BaseOfficeRibbon
     ' 新增：Deepseek 专用 Group 声明
     Protected WithEvents GroupDeepseek As Microsoft.Office.Tools.Ribbon.RibbonGroup
     Protected WithEvents DeepseekButton As Microsoft.Office.Tools.Ribbon.RibbonButton
+    Protected WithEvents DoubaoButton As Microsoft.Office.Tools.Ribbon.RibbonButton
 
     ' 在 Class BaseOfficeRibbon 的底部添加这些控件声明
     Protected WithEvents GroupTools As Microsoft.Office.Tools.Ribbon.RibbonGroup

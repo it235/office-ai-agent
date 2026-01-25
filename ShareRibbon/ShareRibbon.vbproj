@@ -216,10 +216,19 @@
     <Compile Include="Controls\BaseDataCapturePane.vb">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Include="Controls\BaseChat.vb">
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Include="Controls\BaseDeepseekChat.Designer.vb">
       <DependentUpon>BaseDeepseekChat.vb</DependentUpon>
     </Compile>
     <Compile Include="Controls\BaseDeepseekChat.vb">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="Controls\BaseDoubaoChat.Designer.vb">
+      <DependentUpon>BaseDoubaoChat.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Controls\BaseDoubaoChat.vb">
       <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="Controls\WebSiteContentConfirmDialog.vb">
@@ -368,6 +377,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Resources\chat-template-refactored.html" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\doubao_avatar.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.VisualBasic.targets" />
   <Import Project="..\packages\Microsoft.Web.WebView2.1.0.3240.44\build\Microsoft.Web.WebView2.targets" Condition="Exists('..\packages\Microsoft.Web.WebView2.1.0.3240.44\build\Microsoft.Web.WebView2.targets')" />

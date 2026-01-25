@@ -14,6 +14,8 @@ Public Class ThisAddIn
     ' 在类中添加以下变量
     Private _deepseekControl As DeepseekControl
     Private _deepseekTaskPane As Microsoft.Office.Tools.CustomTaskPane
+    Private _doubaoControl As DoubaoChat
+    Private _doubaoTaskPane As Microsoft.Office.Tools.CustomTaskPane
 
     Private chatTaskPane As Microsoft.Office.Tools.CustomTaskPane
     Public Shared chatControl As ChatControl
@@ -359,6 +361,20 @@ Public Class ThisAddIn
         End Try
     End Sub
 
+    Private Async Function CreateDoubaoTaskPane() As Task
+        Try
+            If _doubaoControl Is Nothing Then
+                ' 为新工作簿创建任务窗格
+                _doubaoControl = New DoubaoChat()
+                _doubaoTaskPane = Me.CustomTaskPanes.Add(_doubaoControl, "Doubao AI智能助手")
+                _doubaoTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
+                _doubaoTaskPane.Width = 420
+            End If
+        Catch ex As Exception
+            MessageBox.Show($"初始化Doubao任务窗格失败: {ex.Message}")
+        End Try
+    End Function
+
     ' 显示VBA信任中心设置说明
     Private Sub ShowVbaTrustCenterInstructions()
         MessageBox.Show(
@@ -443,5 +459,10 @@ Public Class ThisAddIn
         Debug.WriteLine($"Deepseek点击事件")
         CreateDeepseekTaskPane()
         _deepseekTaskPane.Visible = True
+    End Sub
+
+    Public Async Sub ShowDoubaoTaskPane()
+        CreateDoubaoTaskPane()
+        _doubaoTaskPane.Visible = True
     End Sub
 End Class

@@ -1,4 +1,4 @@
-﻿' WordAi\Ribbon1.vb
+' WordAi\Ribbon1.vb
 Imports System.Diagnostics
 Imports System.Text.RegularExpressions
 Imports System.Windows.Forms
@@ -199,6 +199,11 @@ Public Class Ribbon1
     ' Deepseek按钮点击事件实现
     Protected Overrides Sub DeepseekButton_Click(sender As Object, e As RibbonControlEventArgs)
         Globals.ThisAddIn.ShowDeepseekTaskPane()
+    End Sub
+
+    ' Doubao按钮点击事件实现
+    Protected Overrides Sub DoubaoButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Globals.ThisAddIn.ShowDoubaoTaskPane()
     End Sub
 
     ' 批量数据生成按钮点击事件实现

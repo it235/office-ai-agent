@@ -46,6 +46,11 @@
             Return CType(_resourceManager.GetObject("deepseek"), System.Drawing.Image)
         End Get
     End Property
+    Public Shared ReadOnly Property Doubao() As System.Drawing.Image
+        Get
+            Return CType(_resourceManager.GetObject("doubao_avatar"), System.Drawing.Image)
+        End Get
+    End Property
     Public Shared ReadOnly Property Wait() As System.Drawing.Image
         Get
             Return CType(_resourceManager.GetObject("wait"), System.Drawing.Image)

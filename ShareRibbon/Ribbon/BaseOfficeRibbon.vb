@@ -1,4 +1,4 @@
-﻿' ShareRibbon\Ribbon\BaseOfficeRibbon.vb
+' ShareRibbon\Ribbon\BaseOfficeRibbon.vb
 Imports System.IO
 Imports System.Net
 Imports System.Net.Http
@@ -105,6 +105,9 @@ Public MustInherit Class BaseOfficeRibbon
 
     ' Deepseek按钮点击事件
     Protected MustOverride Sub DeepseekButton_Click(sender As Object, e As RibbonControlEventArgs) Handles DeepseekButton.Click
+
+    ' Doubao按钮点击事件
+    Protected MustOverride Sub DoubaoButton_Click(sender As Object, e As RibbonControlEventArgs) Handles DoubaoButton.Click
 
     ' 批量数据生成按钮点击事件
     Protected MustOverride Sub BatchDataGenButton_Click(sender As Object, e As RibbonControlEventArgs) Handles BatchDataGenButton.Click

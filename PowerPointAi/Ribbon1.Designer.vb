@@ -67,6 +67,7 @@ Partial Class Ribbon1
         Me.WebCaptureButton.Visible = False
 
         Me.DeepseekButton.Image = ShareRibbon.SharedResources.Deepseek
+        Me.DoubaoButton.Image = ShareRibbon.SharedResources.Doubao
         Me.WebCaptureButton.Image = ShareRibbon.SharedResources.Send32
 
         Me.ProofreadButton.Visible = False
