@@ -303,4 +303,9 @@ Public Class Ribbon1
     Protected Overrides Sub ContinuationButton_Click(sender As Object, e As RibbonControlEventArgs)
         MessageBox.Show("AI续写功能主要用于Word和PowerPoint文档，Excel暂不支持此功能。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
     End Sub
+
+    ' 接受补全功能 - Excel暂不支持
+    Protected Overrides Sub AcceptCompletionButton_Click(sender As Object, e As RibbonControlEventArgs)
+        MessageBox.Show("AI自动补全功能主要用于Word和PowerPoint文档，Excel暂不支持此功能。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
+    End Sub
 End Class

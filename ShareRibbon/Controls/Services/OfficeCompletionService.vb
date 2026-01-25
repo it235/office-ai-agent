@@ -1,3 +1,4 @@
+Imports System.Diagnostics
 Imports System.Net.Http
 Imports System.Text
 Imports System.Threading
@@ -10,11 +11,19 @@ Public Class OfficeCompletionService
     Private Shared _instance As OfficeCompletionService
     Private Shared ReadOnly _lock As New Object()
     
+    ' 单例 HttpClient（避免频繁创建连接，提升性能）
+    Private Shared ReadOnly _httpClient As New HttpClient() With {
+        .Timeout = TimeSpan.FromSeconds(8)
+    }
+    
     Private _debounceTimer As Timer
     Private _lastInputText As String = ""
     Private _isEnabled As Boolean = False
     Private _currentCompletions As List(Of String)
     Private _completionCallback As Action(Of List(Of String), System.Drawing.Point)
+    
+    ' 取消令牌源（用于取消进行中的请求）
+    Private _cancellationTokenSource As CancellationTokenSource
     
     ' 防抖延迟（毫秒）
     Private Const DEBOUNCE_DELAY_MS As Integer = 800
@@ -37,6 +46,7 @@ Public Class OfficeCompletionService
     
     Private Sub New()
         _currentCompletions = New List(Of String)()
+        _cancellationTokenSource = New CancellationTokenSource()
     End Sub
     
     ''' <summary>
@@ -98,6 +108,16 @@ Public Class OfficeCompletionService
             _debounceTimer.Dispose()
             _debounceTimer = Nothing
         End If
+        
+        ' 取消进行中的 HTTP 请求
+        If _cancellationTokenSource IsNot Nothing Then
+            Try
+                _cancellationTokenSource.Cancel()
+            Catch
+                ' 忽略取消异常
+            End Try
+        End If
+        _cancellationTokenSource = New CancellationTokenSource()
     End Sub
     
     ''' <summary>
@@ -132,10 +152,13 @@ Public Class OfficeCompletionService
     ''' <summary>
     ''' 调用LLM获取补全
     ''' </summary>
-    Private Async Function GetCompletionsFromLLM(inputText As String, appType As String) As Task(Of List(Of String))
+    Private Async Function GetCompletionsFromLLM(inputText As String, appType As String, 
+                                                  Optional token As CancellationToken = Nothing) As Task(Of List(Of String))
         Dim completions As New List(Of String)()
         
         Try
+            If token = Nothing Then token = _cancellationTokenSource.Token
+            
             Dim cfg = ConfigManager.ConfigData.FirstOrDefault(Function(c) c.selected)
             If cfg Is Nothing OrElse cfg.model Is Nothing OrElse cfg.model.Count = 0 Then
                 Return completions
@@ -150,11 +173,13 @@ Public Class OfficeCompletionService
             
             ' 检查是否支持FIM
             If selectedModel.fimSupported AndAlso Not String.IsNullOrEmpty(selectedModel.fimUrl) Then
-                completions = Await GetCompletionsWithFIM(inputText, selectedModel, apiKey)
+                completions = Await GetCompletionsWithFIM(inputText, selectedModel, apiKey, token)
             Else
-                completions = Await GetCompletionsWithChat(inputText, appType, cfg, selectedModel, apiKey)
+                completions = Await GetCompletionsWithChat(inputText, appType, cfg, selectedModel, apiKey, token)
             End If
             
+        Catch ex As OperationCanceledException
+            Debug.WriteLine("[Completion] 请求已取消")
         Catch ex As Exception
             Debug.WriteLine($"GetCompletionsFromLLM 出错: {ex.Message}")
         End Try
@@ -166,38 +191,42 @@ Public Class OfficeCompletionService
     ''' 使用FIM API获取补全
     ''' </summary>
     Private Async Function GetCompletionsWithFIM(inputText As String, model As ConfigManager.ConfigItemModel, 
-                                                  apiKey As String) As Task(Of List(Of String))
+                                                  apiKey As String, token As CancellationToken) As Task(Of List(Of String))
         Dim completions As New List(Of String)()
         
         Try
+            token.ThrowIfCancellationRequested()
+            
             Dim requestObj As New JObject()
             requestObj("model") = model.modelName
             requestObj("prompt") = inputText
             requestObj("suffix") = ""
-            requestObj("max_tokens") = 100
+            requestObj("max_tokens") = 60  ' 减少 token 数量以加快响应
             requestObj("temperature") = 0.3
             requestObj("stream") = False
             
-            Using client As New HttpClient()
-                client.Timeout = TimeSpan.FromSeconds(10)
-                client.DefaultRequestHeaders.Add("Authorization", "Bearer " & apiKey)
-                Dim content As New StringContent(requestObj.ToString(), Encoding.UTF8, "application/json")
-                Dim response = Await client.PostAsync(model.fimUrl, content)
-                response.EnsureSuccessStatusCode()
-                
-                Dim responseBody = Await response.Content.ReadAsStringAsync()
-                Dim jObj = JObject.Parse(responseBody)
-                
-                Dim text = jObj("choices")?(0)?("text")?.ToString()
-                If Not String.IsNullOrWhiteSpace(text) Then
-                    ' 取第一行
-                    Dim firstLine = text.Trim().Split({vbCr, vbLf, vbCrLf}, StringSplitOptions.RemoveEmptyEntries)(0)
-                    If firstLine.Length <= 100 Then
-                        completions.Add(firstLine)
-                    End If
-                End If
-            End Using
+            ' 使用单例 HttpClient
+            Dim request As New HttpRequestMessage(HttpMethod.Post, model.fimUrl)
+            request.Headers.Add("Authorization", "Bearer " & apiKey)
+            request.Content = New StringContent(requestObj.ToString(), Encoding.UTF8, "application/json")
             
+            Dim response = Await _httpClient.SendAsync(request, token)
+            response.EnsureSuccessStatusCode()
+            
+            Dim responseBody = Await response.Content.ReadAsStringAsync()
+            Dim jObj = JObject.Parse(responseBody)
+            
+            Dim text = jObj("choices")?(0)?("text")?.ToString()
+            If Not String.IsNullOrWhiteSpace(text) Then
+                ' 取第一行
+                Dim firstLine = text.Trim().Split({vbCr, vbLf, vbCrLf}, StringSplitOptions.RemoveEmptyEntries)(0)
+                If firstLine.Length <= 100 Then
+                    completions.Add(firstLine)
+                End If
+            End If
+            
+        Catch ex As OperationCanceledException
+            Debug.WriteLine("[FIM] 请求已取消")
         Catch ex As Exception
             Debug.WriteLine($"GetCompletionsWithFIM 出错: {ex.Message}")
         End Try
@@ -210,10 +239,12 @@ Public Class OfficeCompletionService
     ''' </summary>
     Private Async Function GetCompletionsWithChat(inputText As String, appType As String,
                                                    cfg As ConfigManager.ConfigItem, model As ConfigManager.ConfigItemModel,
-                                                   apiKey As String) As Task(Of List(Of String))
+                                                   apiKey As String, token As CancellationToken) As Task(Of List(Of String))
         Dim completions As New List(Of String)()
         
         Try
+            token.ThrowIfCancellationRequested()
+            
             Dim systemPrompt = GetSystemPrompt(appType)
             
             Dim requestObj As New JObject()
@@ -226,22 +257,24 @@ Public Class OfficeCompletionService
             messages.Add(New JObject() From {{"role", "user"}, {"content", $"请补全以下文本（只返回补全部分，不要重复原文）：{vbCrLf}{inputText}"}})
             requestObj("messages") = messages
             
-            Using client As New HttpClient()
-                client.Timeout = TimeSpan.FromSeconds(10)
-                client.DefaultRequestHeaders.Add("Authorization", "Bearer " & apiKey)
-                Dim content As New StringContent(requestObj.ToString(), Encoding.UTF8, "application/json")
-                Dim response = Await client.PostAsync(cfg.url, content)
-                response.EnsureSuccessStatusCode()
-                
-                Dim responseBody = Await response.Content.ReadAsStringAsync()
-                Dim jObj = JObject.Parse(responseBody)
-                
-                Dim msg = jObj("choices")?(0)?("message")?("content")?.ToString()
-                If Not String.IsNullOrWhiteSpace(msg) AndAlso msg.Length <= 100 Then
-                    completions.Add(msg.Trim())
-                End If
-            End Using
+            ' 使用单例 HttpClient
+            Dim request As New HttpRequestMessage(HttpMethod.Post, cfg.url)
+            request.Headers.Add("Authorization", "Bearer " & apiKey)
+            request.Content = New StringContent(requestObj.ToString(), Encoding.UTF8, "application/json")
             
+            Dim response = Await _httpClient.SendAsync(request, token)
+            response.EnsureSuccessStatusCode()
+            
+            Dim responseBody = Await response.Content.ReadAsStringAsync()
+            Dim jObj = JObject.Parse(responseBody)
+            
+            Dim msg = jObj("choices")?(0)?("message")?("content")?.ToString()
+            If Not String.IsNullOrWhiteSpace(msg) AndAlso msg.Length <= 100 Then
+                completions.Add(msg.Trim())
+            End If
+            
+        Catch ex As OperationCanceledException
+            Debug.WriteLine("[Chat] 请求已取消")
         Catch ex As Exception
             Debug.WriteLine($"GetCompletionsWithChat 出错: {ex.Message}")
         End Try
@@ -278,12 +311,15 @@ Public Class OfficeCompletionService
     ''' <summary>
     ''' 直接获取补全（不带防抖，供外部调用）
     ''' </summary>
-    Public Async Function GetCompletionsDirectAsync(inputText As String, appType As String) As Task(Of List(Of String))
+    Public Async Function GetCompletionsDirectAsync(inputText As String, appType As String, 
+                                                     Optional token As CancellationToken = Nothing) As Task(Of List(Of String))
         If Not _isEnabled OrElse Not ChatSettings.EnableAutocomplete Then
             Return New List(Of String)()
         End If
         
-        Dim completions = Await GetCompletionsFromLLM(inputText, appType)
+        If token = Nothing Then token = _cancellationTokenSource.Token
+        
+        Dim completions = Await GetCompletionsFromLLM(inputText, appType, token)
         _currentCompletions = completions
         Return completions
     End Function

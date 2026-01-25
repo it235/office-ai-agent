@@ -74,7 +74,7 @@ Partial Class Ribbon1
         Me.StudyButton.Image = ShareRibbon.SharedResources.Help
         Me.ProofreadButton.Image = ShareRibbon.SharedResources.Audit
         Me.ReformatButton.Image = ShareRibbon.SharedResources.Papers
-
+        Me.AcceptCompletionButton.Visible = False ' 暂时不展示
     End Sub
 
 End Class

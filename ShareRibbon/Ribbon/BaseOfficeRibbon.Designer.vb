@@ -34,21 +34,23 @@ Partial Class BaseOfficeRibbon
         Me.DeepseekButton = Me.Factory.CreateRibbonButton()
         Me.DoubaoButton = Me.Factory.CreateRibbonButton()
 
-        ' Group 2: 大模型配置 - 配置API/提示词
+        ' Group 2: 大模型配置 - 配置API/提示词/自动补全
         Me.GroupConfig = Me.Factory.CreateRibbonGroup
         Me.ConfigApiButton = Me.Factory.CreateRibbonButton
         Me.PromptConfigButton = Me.Factory.CreateRibbonButton
+        Me.AutocompleteSettingsButton = Me.Factory.CreateRibbonButton
 
         ' Group 3: AI对话 - Chat AI/AI翻译
         Me.GroupChat = Me.Factory.CreateRibbonGroup
         Me.ChatButton = Me.Factory.CreateRibbonButton
         Me.TranslateButton = Me.Factory.CreateRibbonButton
 
-        ' Group 4: AI内容提效 - 续写/校对/排版 (Word/PPT专用)
+        ' Group 4: AI内容提效 - 续写/校对/排版/接受补全 (Word/PPT专用)
         Me.GroupAIContent = Me.Factory.CreateRibbonGroup
         Me.ContinuationButton = Me.Factory.CreateRibbonButton
         Me.ProofreadButton = Me.Factory.CreateRibbonButton
         Me.ReformatButton = Me.Factory.CreateRibbonButton
+        Me.AcceptCompletionButton = Me.Factory.CreateRibbonButton
 
         ' Group 5: MCP连接
         Me.GroupMCP = Me.Factory.CreateRibbonGroup
@@ -115,6 +117,7 @@ Partial Class BaseOfficeRibbon
         ' ========== Group 2: 大模型配置 ==========
         Me.GroupConfig.Items.Add(Me.ConfigApiButton)
         Me.GroupConfig.Items.Add(Me.PromptConfigButton)
+        Me.GroupConfig.Items.Add(Me.AutocompleteSettingsButton)
         Me.GroupConfig.Label = "大模型配置"
         Me.GroupConfig.Name = "GroupConfig"
 
@@ -131,6 +134,13 @@ Partial Class BaseOfficeRibbon
         Me.PromptConfigButton.ShowImage = True
         Me.PromptConfigButton.ScreenTip = "配置提示词"
         Me.PromptConfigButton.SuperTip = "管理和配置AI对话的系统提示词"
+
+        Me.AutocompleteSettingsButton.Label = "自动补全"
+        Me.AutocompleteSettingsButton.Name = "AutocompleteSettingsButton"
+        Me.AutocompleteSettingsButton.ControlSize = Microsoft.Office.Core.RibbonControlSize.RibbonControlSizeLarge
+        Me.AutocompleteSettingsButton.ShowImage = True
+        Me.AutocompleteSettingsButton.ScreenTip = "配置AI自动补全"
+        Me.AutocompleteSettingsButton.SuperTip = "设置自动补全开关、快捷键和触发延迟"
 
         ' ========== Group 3: AI对话 ==========
         Me.GroupChat.Items.Add(Me.ChatButton)
@@ -156,6 +166,7 @@ Partial Class BaseOfficeRibbon
         Me.GroupAIContent.Items.Add(Me.ContinuationButton)
         Me.GroupAIContent.Items.Add(Me.ProofreadButton)
         Me.GroupAIContent.Items.Add(Me.ReformatButton)
+        Me.GroupAIContent.Items.Add(Me.AcceptCompletionButton)
         Me.GroupAIContent.Label = "AI内容提效"
         Me.GroupAIContent.Name = "GroupAIContent"
 
@@ -179,6 +190,13 @@ Partial Class BaseOfficeRibbon
         Me.ReformatButton.ShowImage = True
         Me.ReformatButton.ScreenTip = "对选中或全文进行结构化排版"
         Me.ReformatButton.SuperTip = "优化标题、段落与列表并返回可解析的修订JSON"
+
+        Me.AcceptCompletionButton.Label = "接受补全"
+        Me.AcceptCompletionButton.Name = "AcceptCompletionButton"
+        Me.AcceptCompletionButton.ControlSize = Microsoft.Office.Core.RibbonControlSize.RibbonControlSizeLarge
+        Me.AcceptCompletionButton.ShowImage = True
+        Me.AcceptCompletionButton.ScreenTip = "接受AI自动补全"
+        Me.AcceptCompletionButton.SuperTip = "接受当前显示的灰色补全文本，将其转为正常文本"
 
         ' ========== Group 5: 工具箱 (Excel专用) ==========
         Me.GroupTools.Items.Add(Me.DataAnalysisButton)
@@ -281,6 +299,7 @@ Partial Class BaseOfficeRibbon
     Protected WithEvents GroupConfig As Microsoft.Office.Tools.Ribbon.RibbonGroup
     Protected WithEvents ConfigApiButton As Microsoft.Office.Tools.Ribbon.RibbonButton
     Protected WithEvents PromptConfigButton As Microsoft.Office.Tools.Ribbon.RibbonButton
+    Protected WithEvents AutocompleteSettingsButton As Microsoft.Office.Tools.Ribbon.RibbonButton
 
     ' Group 3: AI对话
     Protected WithEvents GroupChat As Microsoft.Office.Tools.Ribbon.RibbonGroup
@@ -292,6 +311,7 @@ Partial Class BaseOfficeRibbon
     Protected WithEvents ContinuationButton As Microsoft.Office.Tools.Ribbon.RibbonButton
     Protected WithEvents ProofreadButton As Microsoft.Office.Tools.Ribbon.RibbonButton
     Protected WithEvents ReformatButton As Microsoft.Office.Tools.Ribbon.RibbonButton
+    Protected WithEvents AcceptCompletionButton As Microsoft.Office.Tools.Ribbon.RibbonButton
 
     ' Group 5: 工具箱
     Protected WithEvents GroupTools As Microsoft.Office.Tools.Ribbon.RibbonGroup

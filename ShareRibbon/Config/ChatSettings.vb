@@ -25,7 +25,7 @@ Public Class ChatSettings
     ' 自动补全设置
     Public Shared Property EnableAutocomplete As Boolean = False     ' 是否启用自动补全（默认关闭）
     Public Shared Property AutocompleteDelayMs As Integer = 800      ' 防抖延迟（毫秒）
-    Public Shared Property AutocompleteShortcut As String = "Ctrl+."  ' 接受补全的快捷键
+    Public Shared Property AutocompleteShortcut As String = "Ctrl+Enter"  ' 接受补全的快捷键（默认Ctrl+Enter）
 
     ' 修改方法签名，参数类型改为 Double 和 Integer
     Public Sub SaveSettings(topicRandomness As Double, contextLimit As Integer,

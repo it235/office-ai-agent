@@ -239,6 +239,7 @@
     <Compile Include="PowerPointDocumentTranslateService.vb" />
     <Compile Include="PowerPointContinuationService.vb" />
     <Compile Include="PowerPointCompletionManager.vb" />
+    <Compile Include="Services\PowerPointGhostTextManager.vb" />
     <Compile Include="Ribbon1.Designer.vb">
       <DependentUpon>Ribbon1.vb</DependentUpon>
     </Compile>

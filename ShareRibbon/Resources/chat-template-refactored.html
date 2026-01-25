@@ -213,7 +213,8 @@
             <div class="setting-tip">开启后，Agent模式下可提前预览变更点，对比差异</div>
         </div>
 
-        <div class="setting-item checkbox-item">
+        <!-- AI智能补全设置已移至Ribbon区"大模型配置"组的"自动补全"按钮 -->
+        <div class="setting-item checkbox-item" style="display:none;">
             <div>
                 <label class="setting-label">AI智能补全</label>
                 <input type="checkbox" id="settings-autocomplete-enable">
@@ -221,7 +222,8 @@
             <div class="setting-tip">开启后，输入时AI会自动识别意图并提供补全建议</div>
         </div>
         
-        <div class="setting-item">
+        <!-- 补全快捷键设置已移至Ribbon区"大模型配置"组的"自动补全"按钮 -->
+        <div class="setting-item" style="display:none;">
             <label class="setting-label">补全快捷键</label>
             <select id="settings-autocomplete-shortcut" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc;">
                 <option value="Ctrl+.">Ctrl + .</option>

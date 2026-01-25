@@ -69,6 +69,13 @@ Public MustInherit Class BaseOfficeRibbon
         End If
     End Sub
 
+    ' 自动补全设置按钮点击事件
+    Private Sub AutocompleteSettingsButton_Click(sender As Object, e As RibbonControlEventArgs) Handles AutocompleteSettingsButton.Click
+        ' 创建并显示自动补全设置对话框
+        Dim settingsForm As New AutocompleteSettingsForm()
+        settingsForm.ShowDialog()
+    End Sub
+
     ' 教学文档按钮点击事件 - 根据应用类型跳转不同URL
     Private Sub StudyButton_Click(sender As Object, e As RibbonControlEventArgs) Handles StudyButton.Click
         Dim appInfo = GetApplication()
@@ -143,4 +150,7 @@ Public MustInherit Class BaseOfficeRibbon
 
     ' AI续写按钮点击事件（抽象方法，由子类实现）
     Protected MustOverride Sub ContinuationButton_Click(sender As Object, e As RibbonControlEventArgs) Handles ContinuationButton.Click
+
+    ' 接受补全按钮点击事件（抽象方法，由子类实现）
+    Protected MustOverride Sub AcceptCompletionButton_Click(sender As Object, e As RibbonControlEventArgs) Handles AcceptCompletionButton.Click
 End Class

@@ -159,4 +159,19 @@ Public Class Ribbon1
             MessageBox.Show("触发AI续写时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
+
+    ' 接受补全功能 - PowerPoint实现
+    Protected Overrides Sub AcceptCompletionButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Try
+            Dim completionManager = PowerPointCompletionManager.Instance
+            If completionManager IsNot Nothing AndAlso completionManager.HasGhostText Then
+                completionManager.AcceptCurrentCompletion()
+            Else
+                ' 没有可接受的补全时，显示提示
+                MessageBox.Show("当前没有可接受的补全建议。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            End If
+        Catch ex As Exception
+            MessageBox.Show("接受补全时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub
 End Class
