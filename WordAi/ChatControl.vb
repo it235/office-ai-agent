@@ -1019,6 +1019,52 @@ Public Class ChatControl
     End Sub
 
     ''' <summary>
+    ''' 应用模板渲染结果到Word文档
+    ''' </summary>
+    Protected Overrides Sub HandleApplyTemplateContent(jsonDoc As JObject)
+        Try
+            Dim content As String = If(jsonDoc("content") IsNot Nothing, jsonDoc("content").ToString(), String.Empty)
+            Dim positionStr As String = If(jsonDoc("position") IsNot Nothing, jsonDoc("position").ToString(), "current")
+
+            If String.IsNullOrWhiteSpace(content) Then
+                GlobalStatusStrip.ShowWarning("模板内容为空")
+                Return
+            End If
+
+            ' 确保续写服务已初始化（复用其插入逻辑）
+            If _continuationService Is Nothing Then
+                _continuationService = New WordContinuationService(Globals.ThisAddIn.Application)
+            End If
+
+            ' 根据position参数确定插入位置
+            Dim insertPos As ShareRibbon.InsertPosition
+            Select Case positionStr.ToLower()
+                Case "start"
+                    insertPos = ShareRibbon.InsertPosition.DocumentStart
+                Case "end"
+                    insertPos = ShareRibbon.InsertPosition.DocumentEnd
+                Case Else ' "current" 或默认
+                    insertPos = ShareRibbon.InsertPosition.AtCursor
+            End Select
+
+            ' 插入模板内容
+            _continuationService.InsertContinuation(content, insertPos)
+
+            GlobalStatusStrip.ShowInfo("模板内容已插入文档")
+
+            ' 通知前端移除操作按钮
+            Dim uuid As String = If(jsonDoc("uuid") IsNot Nothing, jsonDoc("uuid").ToString(), String.Empty)
+            If Not String.IsNullOrEmpty(uuid) Then
+                ExecuteJavaScriptAsyncJS($"removeTemplateActions('{uuid}');")
+            End If
+
+        Catch ex As Exception
+            Debug.WriteLine($"HandleApplyTemplateContent 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"插入模板内容时出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
     ''' 获取当前Word上下文快照（用于自动补全）
     ''' </summary>
     Protected Overrides Function GetContextSnapshot() As JObject

@@ -72,6 +72,13 @@ function sendChatMessage() {
         selectedContent: selectedSheetContent
     };
 
+    // 如果处于模板渲染模式，自动注入模板上下文
+    if (window.templateModeActive && window.currentTemplateContext) {
+        messagePayloadValue.responseMode = 'template_render';
+        messagePayloadValue.templateContext = window.currentTemplateContext;
+        messagePayloadValue.templateName = window.currentTemplateName || '';
+    }
+
     sendMessageToServer({
         type: 'sendMessage',
         value: messagePayloadValue
@@ -416,3 +423,83 @@ function renderReferences() {
         fileInput.value = '';
     });
 })();
+
+// ========== 意图识别显示功能 ==========
+
+/**
+ * 显示检测到的意图
+ * @param {string} intentType - 意图类型
+ */
+function showDetectedIntent(intentType) {
+    try {
+        // 意图类型到中文标签的映射
+        const intentLabels = {
+            'DATA_ANALYSIS': '数据分析',
+            'FORMULA_CALC': '公式计算',
+            'CHART_GEN': '图表生成',
+            'DATA_CLEANING': '数据清洗',
+            'REPORT_GEN': '报表生成',
+            'DATA_TRANSFORMATION': '数据转换',
+            'FORMAT_STYLE': '格式调整',
+            'GENERAL_QUERY': '通用查询'
+        };
+
+        // 意图类型到颜色的映射
+        const intentColors = {
+            'DATA_ANALYSIS': '#4a6fa5',
+            'FORMULA_CALC': '#28a745',
+            'CHART_GEN': '#ffc107',
+            'DATA_CLEANING': '#17a2b8',
+            'REPORT_GEN': '#6f42c1',
+            'DATA_TRANSFORMATION': '#fd7e14',
+            'FORMAT_STYLE': '#e83e8c',
+            'GENERAL_QUERY': '#6c757d'
+        };
+
+        const label = intentLabels[intentType] || intentType;
+        const color = intentColors[intentType] || '#6c757d';
+
+        // 创建或获取意图指示器
+        let indicator = document.getElementById('intent-indicator');
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.id = 'intent-indicator';
+            indicator.style.cssText = `
+                position: fixed;
+                top: 10px;
+                right: 10px;
+                z-index: 1000;
+                padding: 6px 12px;
+                border-radius: 16px;
+                font-size: 12px;
+                font-weight: 500;
+                color: white;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+                opacity: 0;
+                transform: translateY(-10px);
+                transition: opacity 0.3s ease, transform 0.3s ease;
+            `;
+            document.body.appendChild(indicator);
+        }
+
+        // 设置内容和颜色
+        indicator.textContent = '识别: ' + label;
+        indicator.style.backgroundColor = color;
+
+        // 显示动画
+        setTimeout(() => {
+            indicator.style.opacity = '1';
+            indicator.style.transform = 'translateY(0)';
+        }, 10);
+
+        // 3秒后淡出
+        setTimeout(() => {
+            indicator.style.opacity = '0';
+            indicator.style.transform = 'translateY(-10px)';
+        }, 3000);
+
+        console.log('显示意图: ' + label);
+    } catch (err) {
+        console.error('showDetectedIntent error:', err);
+    }
+}

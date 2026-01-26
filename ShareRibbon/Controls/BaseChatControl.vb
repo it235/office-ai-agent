@@ -67,10 +67,35 @@ Public MustInherit Class BaseChatControl
                     AddressOf RunCode,
                     AddressOf RunCodePreview,
                     AddressOf EvaluateFormula)
+                ' 设置JSON命令执行器（由子类提供）
+                _codeExecutionService.JsonCommandExecutor = AddressOf ExecuteJsonCommand
             End If
             Return _codeExecutionService
         End Get
     End Property
+
+    ''' <summary>
+    ''' 执行JSON命令（由子类重写以提供具体实现）
+    ''' </summary>
+    Protected Overridable Function ExecuteJsonCommand(jsonCode As String, preview As Boolean) As Boolean
+        ' 默认实现：不支持JSON命令
+        GlobalStatusStrip.ShowWarning("当前应用不支持JSON命令执行")
+        Return False
+    End Function
+
+    ' 延迟初始化的意图识别服务
+    Private _intentService As IntentRecognitionService = Nothing
+    Protected ReadOnly Property IntentService As IntentRecognitionService
+        Get
+            If _intentService Is Nothing Then
+                _intentService = New IntentRecognitionService()
+            End If
+            Return _intentService
+        End Get
+    End Property
+
+    ' 当前意图结果（用于子类访问）
+    Protected CurrentIntentResult As IntentResult = Nothing
 
     'settings
     Protected topicRandomness As Double
@@ -338,6 +363,12 @@ Public MustInherit Class BaseChatControl
                 Case "refineContinuation"
                     HandleRefineContinuation(jsonDoc)
 
+                ' 模板渲染功能消息处理
+                Case "applyTemplateContent"
+                    HandleApplyTemplateContent(jsonDoc)
+                Case "refineTemplateContent"
+                    HandleRefineTemplateContent(jsonDoc)
+
                 ' 自动补全功能消息处理
                 Case "requestCompletion"
                     HandleRequestCompletion(jsonDoc)
@@ -472,6 +503,92 @@ Public MustInherit Class BaseChatControl
     End Function
 
     ' ========== 续写功能相关方法结束 ==========
+
+    ' ========== 模板渲染功能相关方法 ==========
+
+    ''' <summary>
+    ''' 应用模板渲染结果到文档（由子类实现）
+    ''' </summary>
+    Protected Overridable Sub HandleApplyTemplateContent(jsonDoc As JObject)
+        Debug.WriteLine("HandleApplyTemplateContent 被调用（基类默认不执行）")
+        GlobalStatusStrip.ShowWarning("当前应用不支持模板渲染功能")
+    End Sub
+
+    ''' <summary>
+    ''' 调整模板渲染需求（多轮对话）
+    ''' </summary>
+    Protected Overridable Sub HandleRefineTemplateContent(jsonDoc As JObject)
+        Try
+            Dim uuid As String = If(jsonDoc("uuid") IsNot Nothing, jsonDoc("uuid").ToString(), String.Empty)
+            Dim refinement As String = If(jsonDoc("refinement") IsNot Nothing, jsonDoc("refinement").ToString(), String.Empty)
+
+            If String.IsNullOrWhiteSpace(refinement) Then
+                GlobalStatusStrip.ShowWarning("请输入调整需求")
+                Return
+            End If
+
+            ' 构建调整提示
+            Dim refinementPrompt As New StringBuilder()
+            refinementPrompt.AppendLine("请根据以下要求调整之前生成的模板内容：")
+            refinementPrompt.AppendLine()
+            refinementPrompt.AppendLine($"【调整需求】{refinement}")
+            refinementPrompt.AppendLine()
+            refinementPrompt.AppendLine("请直接输出调整后的内容，不要添加任何解释：")
+
+            ' 保持 responseMode = "template_render"，发送调整请求
+            Task.Run(Async Function()
+                         Await Send(refinementPrompt.ToString(), GetTemplateRenderSystemPrompt(""), True, "template_render")
+                     End Function)
+
+            GlobalStatusStrip.ShowInfo("正在调整模板内容...")
+        Catch ex As Exception
+            Debug.WriteLine($"HandleRefineTemplateContent 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning("调整模板内容时出错")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 获取模板渲染的系统提示词
+    ''' </summary>
+    Protected Function GetTemplateRenderSystemPrompt(templateContext As String) As String
+        Dim sb As New StringBuilder()
+        sb.AppendLine("你是一个专业的文档内容生成助手。你需要根据用户提供的模板结构（JSON格式）和风格来生成新的内容。")
+        sb.AppendLine()
+        sb.AppendLine("【重要格式要求】")
+        sb.AppendLine("- 严禁使用Markdown代码块格式（禁止使用```符号）")
+        sb.AppendLine("- 严禁使用任何Markdown格式标记（如#、**、-、>等）")
+        sb.AppendLine("- 直接输出纯文本内容，不要包装在任何代码块中")
+        sb.AppendLine("- 不要添加任何前缀、后缀、解释或说明文字")
+        sb.AppendLine("- 不要输出JSON格式，直接输出可以插入文档的纯文本")
+        sb.AppendLine()
+        sb.AppendLine("【模板JSON结构说明】")
+        sb.AppendLine("模板以JSON格式提供，包含以下信息：")
+        sb.AppendLine("- elements: 文档元素数组，每个元素包含type(类型)、text(文本)、styleName(样式名)、formatting(格式详情)")
+        sb.AppendLine("- formatting包含: fontName(字体)、fontSize(字号)、bold(加粗)、italic(斜体)、alignment(对齐)等")
+        sb.AppendLine("- 对于PPT模板：slides数组包含每张幻灯片的布局和元素信息")
+        sb.AppendLine()
+        sb.AppendLine("【内容生成要求】")
+        sb.AppendLine("1. 严格遵循模板的层级结构（如：标题、副标题、正文的层次关系）")
+        sb.AppendLine("2. 保持与模板一致的语气、术语规范和风格")
+        sb.AppendLine("3. 参考模板中的字号来判断内容的重要程度（大字号=标题，小字号=正文）")
+        sb.AppendLine("4. 内容要专业、连贯、符合实际使用场景")
+        sb.AppendLine("5. 按照模板中元素的顺序来组织输出内容")
+        sb.AppendLine("6. 每个段落或幻灯片内容之间用空行分隔")
+
+        If Not String.IsNullOrWhiteSpace(templateContext) Then
+            sb.AppendLine()
+            sb.AppendLine("【参考模板结构】")
+            sb.AppendLine("```json")
+            sb.AppendLine(templateContext)
+            sb.AppendLine("```")
+            sb.AppendLine()
+            sb.AppendLine("请根据以上模板结构，按照用户的内容需求生成相应格式的文档内容。直接输出纯文本，不要使用任何Markdown格式。")
+        End If
+
+        Return sb.ToString()
+    End Function
+
+    ' ========== 模板渲染功能相关方法结束 ==========
 
     ' ========== 自动补全功能相关方法 ==========
 
@@ -1129,7 +1246,55 @@ Public MustInherit Class BaseChatControl
         End If
 
         stopReaderStream = False ' Reset stop flag before sending new message
-        SendChatMessage(finalMessageToLLM)
+
+        ' 检查是否为模板渲染模式
+        Dim responseMode As String = If(messageValue("responseMode")?.ToString(), "")
+        Dim templateContext As String = If(messageValue("templateContext")?.ToString(), "")
+
+        If responseMode = "template_render" AndAlso Not String.IsNullOrWhiteSpace(templateContext) Then
+            ' 模板渲染模式：使用专用systemPrompt
+            Dim templateSystemPrompt = GetTemplateRenderSystemPrompt(templateContext)
+            Task.Run(Async Function()
+                         Await Send(finalMessageToLLM, templateSystemPrompt, True, "template_render")
+                     End Function)
+        Else
+            ' 普通消息模式：先进行意图识别
+            Try
+                ' 执行意图识别
+                CurrentIntentResult = IntentService.IdentifyIntent(question, GetContextSnapshot())
+
+                ' 通知前端显示检测到的意图
+                If CurrentIntentResult IsNot Nothing AndAlso CurrentIntentResult.Confidence > 0.2 Then
+                    ExecuteJavaScriptAsyncJS($"showDetectedIntent('{CurrentIntentResult.IntentType}')")
+                End If
+
+                ' 使用意图优化的方式发送消息
+                SendChatMessageWithIntent(finalMessageToLLM, CurrentIntentResult)
+            Catch ex As Exception
+                Debug.WriteLine($"意图识别失败，使用默认模式: {ex.Message}")
+                ' 回退到普通模式
+                SendChatMessage(finalMessageToLLM)
+            End Try
+        End If
+    End Sub
+
+    ''' <summary>
+    ''' 使用意图识别结果发送聊天消息
+    ''' </summary>
+    ''' <param name="message">消息内容</param>
+    ''' <param name="intent">意图识别结果</param>
+    Protected Overridable Sub SendChatMessageWithIntent(message As String, intent As IntentResult)
+        ' 默认实现：如果有有效意图，使用优化的systemPrompt
+        If intent IsNot Nothing AndAlso intent.Confidence > 0.2 Then
+            Dim optimizedPrompt = IntentService.GetOptimizedSystemPrompt(intent)
+            Debug.WriteLine($"使用意图优化提示词: {intent.IntentType}")
+            Task.Run(Async Function()
+                         Await Send(message, optimizedPrompt, True, "")
+                     End Function)
+        Else
+            ' 回退到普通发送
+            SendChatMessage(message)
+        End If
     End Sub
 
     Protected Overridable Sub HandleExecuteCode(jsonDoc As JObject)
@@ -1268,7 +1433,6 @@ Public MustInherit Class BaseChatControl
             End If
 
 
-
             Dim requestBody As String = CreateRequestBody(requestUuid, question, systemPrompt, addHistory)
             Await SendHttpRequestStream(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody, StripQuestion(question), requestUuid, addHistory, responseMode)
             Await SaveFullWebPageAsync2()
@@ -1298,8 +1462,8 @@ Public MustInherit Class BaseChatControl
     Private Function CreateRequestBody(uuid As String, question As String, systemPrompt As String, addHistory As Boolean) As String
         Dim result As String = StripQuestion(question)
 
-        ' 构建 messages 数组
-        Dim messages As New List(Of String)()
+        ' 构建 messages 数组（使用 JArray 确保正确的 JSON 序列化）
+        Dim messagesArray As New JArray()
 
         Dim systemMessage = New HistoryMessage() With {
             .role = "system",
@@ -1322,11 +1486,12 @@ Public MustInherit Class BaseChatControl
             ' 管理历史消息大小
             ManageHistoryMessageSize()
 
-            ' 将历史消息转换为 JSON messages（对内容做基础转义，避免字符串破坏 JSON）
+            ' 将历史消息转换为 JObject（自动处理所有特殊字符转义）
             For Each message In systemHistoryMessageData
-                Dim safeContent As String = If(message.content, String.Empty)
-                safeContent = safeContent.Replace("\", "\\").Replace("""", "\""").Replace(vbCr, "\r").Replace(vbLf, "\n")
-                messages.Add($"{{""role"": ""{message.role}"", ""content"": ""{safeContent}""}}")
+                Dim msgObj = New JObject()
+                msgObj("role") = message.role
+                msgObj("content") = If(message.content, String.Empty)
+                messagesArray.Add(msgObj)
             Next
         Else
             ' 仅使用当前消息，不添加历史
@@ -1334,9 +1499,10 @@ Public MustInherit Class BaseChatControl
             tempMessageData.Insert(0, systemMessage)
             tempMessageData.Add(q)
             For Each message In tempMessageData
-                Dim safeContent As String = If(message.content, String.Empty)
-                safeContent = safeContent.Replace("\", "\\").Replace("""", "\""").Replace(vbCr, "\r").Replace(vbLf, "\n")
-                messages.Add($"{{""role"": ""{message.role}"", ""content"": ""{safeContent}""}}")
+                Dim msgObj = New JObject()
+                msgObj("role") = message.role
+                msgObj("content") = If(message.content, String.Empty)
+                messagesArray.Add(msgObj)
             Next
         End If
 
@@ -1399,20 +1565,18 @@ Public MustInherit Class BaseChatControl
             Next
         End If
 
-        ' 构建 JSON 请求体
-        Dim messagesJson = String.Join(",", messages)
+        ' 构建 JSON 请求体（使用 JObject 确保正确序列化）
+        Dim requestObj = New JObject()
+        requestObj("model") = ConfigSettings.ModelName
+        requestObj("messages") = messagesArray
+        requestObj("stream") = True
 
         ' 如果有工具，添加到请求中
         If toolsArray IsNot Nothing AndAlso toolsArray.Count > 0 Then
-            Dim toolsJson = toolsArray.ToString(Formatting.None)
-            ' 注意这里没有给tools加额外的引号
-            Dim requestBody = $"{{""model"": ""{ConfigSettings.ModelName}"", ""tools"": {toolsJson}, ""messages"": [{messagesJson}], ""stream"": true}}"
-            Return requestBody
-        Else
-            ' 直接使用JSON数组符号
-            Dim requestBody = $"{{""model"": ""{ConfigSettings.ModelName}"",  ""messages"": [{messagesJson}], ""stream"": true}}"
-            Return requestBody
+            requestObj("tools") = toolsArray
         End If
+
+        Return requestObj.ToString(Newtonsoft.Json.Formatting.None)
 
     End Function
 
@@ -1682,6 +1846,12 @@ Public MustInherit Class BaseChatControl
             ExecuteJavaScriptAsyncJS($"showContinuationPreview('{_finalUuid}');")
         End If
 
+        ' 处理模板渲染模式的完成 - 显示模板预览界面并完全隐藏代码块
+        If _responseModeMap.ContainsKey(_finalUuid) AndAlso _responseModeMap(_finalUuid) = "template_render" Then
+            ExecuteJavaScriptAsyncJS($"showTemplatePreview('{_finalUuid}');")
+            ExecuteJavaScriptAsyncJS($"hideAllCodeBlockActions('{_finalUuid}');") ' 完全隐藏代码块操作栏
+        End If
+
         ' 校对/排版模式 - 隐藏代码块的编辑和执行按钮（只保留复制）
         If _responseModeMap.ContainsKey(_finalUuid) Then
             Dim mode = _responseModeMap(_finalUuid)
@@ -1881,7 +2051,7 @@ Public MustInherit Class BaseChatControl
                 End Try
 
                 ' 添加消息到界面，说明正在调用工具
-                Dim toolCallMessage = $"<br/>**正在调用工具: {toolName}**<br/>参数: `{argumentsObj.ToString(Formatting.None)}`<br/>"
+                Dim toolCallMessage = $"<br/>**正在调用工具: {toolName}**<br/>参数: `{argumentsObj.ToString(Newtonsoft.Json.Formatting.None)}`<br/>"
                 _currentMarkdownBuffer.Append(toolCallMessage)
                 FlushBuffer("content", uuid)
 
@@ -1904,7 +2074,7 @@ Public MustInherit Class BaseChatControl
                                          $"**工具名称:** {toolName}<br/>" &
                                          $"**连接名称:** {mcpConnectionName}<br/>" &
                                          $"**错误详情:** {detailedError}<br/>" &
-                                         $"**调用参数:**<br/>```json{vbCrLf}{argumentsObj.ToString(Formatting.Indented)}{vbCrLf}```<br/>"
+                                         $"**调用参数:**<br/>```json{vbCrLf}{argumentsObj.ToString(Newtonsoft.Json.Formatting.Indented)}{vbCrLf}```<br/>"
 
                         _currentMarkdownBuffer.Append(errorMessage)
                         FlushBuffer("content", uuid)
@@ -1947,12 +2117,12 @@ Public MustInherit Class BaseChatControl
             Dim promptBuilder As New StringBuilder()
             promptBuilder.AppendLine($"用户的原始问题：'{originQuestion}' ,但用户使用了 MCP 工具 '{toolName}'，参数为：")
             promptBuilder.AppendLine("```json")
-            promptBuilder.AppendLine(arguments.ToString(Formatting.Indented))
+            promptBuilder.AppendLine(arguments.ToString(Newtonsoft.Json.Formatting.Indented))
             promptBuilder.AppendLine("```")
             promptBuilder.AppendLine()
             promptBuilder.AppendLine("工具执行结果为：")
             promptBuilder.AppendLine("```json")
-            promptBuilder.AppendLine(result.ToString(Formatting.Indented))
+            promptBuilder.AppendLine(result.ToString(Newtonsoft.Json.Formatting.Indented))
             promptBuilder.AppendLine("```")
             promptBuilder.AppendLine()
             promptBuilder.AppendLine("请将上述结果结合用户的原始问题整理成易于理解的格式，并使用合适的Markdown格式化呈现，突出重要信息。不需要解释工具调用过程，只需要呈现结果。不要重复用户的请求内容。")
@@ -1975,7 +2145,7 @@ Public MustInherit Class BaseChatControl
             requestObj("messages") = messagesArray
             requestObj("stream") = True
 
-            Dim requestBody = requestObj.ToString(Formatting.None)
+            Dim requestBody = requestObj.ToString(Newtonsoft.Json.Formatting.None)
 
             ' 用于存储当前MCP润色调用的token信息
             Dim mcpTokenInfo As Nullable(Of TokenInfo) = Nothing
@@ -2067,7 +2237,7 @@ Public MustInherit Class BaseChatControl
 
             ' 如果格式化失败，直接显示原始结果
             _currentMarkdownBuffer.Append("\n\n**工具调用结果：**\n\n```json\n")
-            _currentMarkdownBuffer.Append(result.ToString(Formatting.Indented))
+            _currentMarkdownBuffer.Append(result.ToString(Newtonsoft.Json.Formatting.Indented))
             _currentMarkdownBuffer.Append("\n```\n")
             FlushBuffer("content", uuid)
         Finally

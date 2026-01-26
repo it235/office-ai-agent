@@ -1,4 +1,4 @@
-' WordAi\Ribbon1.vb
+﻿' WordAi\Ribbon1.vb
 Imports System.Diagnostics
 Imports System.Reflection
 Imports System.Threading.Tasks
@@ -374,5 +374,269 @@ Public Class Ribbon1
             MessageBox.Show("接受补全时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
+
+    ' 模板排版功能 - Word实现（使用JSON格式完整提取模板结构）
+    Protected Overrides Sub TemplateFormatButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Try
+            ' 1. 打开文件对话框选择模板文件
+            Using openDialog As New OpenFileDialog()
+                openDialog.Title = "选择Word模板文件"
+                openDialog.Filter = "Word文档|*.docx;*.doc|所有文件|*.*"
+                openDialog.FilterIndex = 1
+
+                If openDialog.ShowDialog() <> DialogResult.OK Then Return
+
+                Dim templatePath = openDialog.FileName
+                Dim templateName = System.IO.Path.GetFileName(templatePath)
+
+                ' 2. 读取模板文件内容 - 使用JSON格式完整提取
+                Dim wordApp = Globals.ThisAddIn.Application
+                Dim templateJson As JObject = Nothing
+
+                ' 打开模板文档（只读）
+                Dim templateDoc As Microsoft.Office.Interop.Word.Document = Nothing
+                Try
+                    templateDoc = wordApp.Documents.Open(templatePath, ReadOnly:=True, Visible:=False)
+
+                    ' 构建JSON结构
+                    templateJson = ExtractTemplateStructure(templateDoc, templateName)
+                Finally
+                    If templateDoc IsNot Nothing Then
+                        templateDoc.Close(SaveChanges:=False)
+                    End If
+                End Try
+
+                If templateJson Is Nothing Then
+                    MessageBox.Show("无法解析模板文件内容。", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                    Return
+                End If
+
+                ' 3. 打开Chat面板并进入模板渲染模式
+                Globals.ThisAddIn.ShowChatTaskPane()
+                Dim chatCtrl = Globals.ThisAddIn.chatControl
+                If chatCtrl IsNot Nothing Then
+                    ' 将JSON转为字符串传递给JS
+                    Dim templateContent = templateJson.ToString(Newtonsoft.Json.Formatting.Indented)
+
+                    ' 调用JS进入模板渲染模式
+                    Task.Run(Async Function()
+                                 Await Task.Delay(500) ' 等待WebView加载
+                                 Dim jsCall = $"enterTemplateMode(`{EscapeForJs(templateContent)}`, `{EscapeForJs(templateName)}`);"
+                                 Await chatCtrl.ExecuteJavaScriptAsyncJS(jsCall)
+                             End Function)
+
+                    MessageBox.Show("已进入模板渲染模式！" & vbCrLf & vbCrLf &
+                                    "模板结构已解析完成（包含段落、样式、字体、图片等信息）。" & vbCrLf &
+                                    "现在您可以在Chat中输入内容需求，AI将按照模板格式生成内容。" & vbCrLf &
+                                    "生成完成后可选择插入位置将内容插入到文档中。",
+                                    "模板模式已激活", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                End If
+            End Using
+        Catch ex As Exception
+            MessageBox.Show("加载模板时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 提取Word文档的完整结构为JSON格式
+    ''' </summary>
+    Private Function ExtractTemplateStructure(doc As Microsoft.Office.Interop.Word.Document, templateName As String) As JObject
+        Dim result As New JObject()
+        result("templateName") = templateName
+        result("totalParagraphs") = doc.Paragraphs.Count
+
+        ' 元素数组：包含段落、图片、表格等
+        Dim elements As New JArray()
+        Dim elementIndex As Integer = 0
+
+        ' 收集样式信息
+        Dim stylesDict As New Dictionary(Of String, JObject)()
+
+        ' 遍历段落（最多200段）
+        For i = 1 To Math.Min(doc.Paragraphs.Count, 200)
+            Dim para = doc.Paragraphs(i)
+            Dim r = para.Range
+            Dim text As String = If(r.Text IsNot Nothing, r.Text.ToString().TrimEnd(vbCr, vbLf), String.Empty)
+
+            ' 获取段落样式
+            Dim style = TryCast(para.Style, Microsoft.Office.Interop.Word.Style)
+            Dim styleName As String = If(style?.NameLocal, "Normal")
+
+            ' 收集样式详情
+            If style IsNot Nothing AndAlso Not stylesDict.ContainsKey(styleName) Then
+                Dim styleObj As New JObject()
+                styleObj("fontName") = If(style.Font.Name, "")
+                styleObj("fontSize") = If(style.Font.Size > 0, CDec(style.Font.Size), 12)
+                styleObj("bold") = (style.Font.Bold = -1)
+                styleObj("italic") = (style.Font.Italic = -1)
+                stylesDict(styleName) = styleObj
+            End If
+
+            ' 创建段落元素
+            Dim paraObj As New JObject()
+            paraObj("type") = "paragraph"
+            paraObj("index") = elementIndex
+            paraObj("text") = text
+            paraObj("styleName") = styleName
+
+            ' 提取段落的详细格式信息
+            Dim formatting As New JObject()
+            Try
+                ' 字体信息
+                formatting("fontName") = If(r.Font.Name, "")
+                formatting("fontSize") = If(r.Font.Size > 0, CDec(r.Font.Size), 12)
+                formatting("bold") = (r.Font.Bold = -1)
+                formatting("italic") = (r.Font.Italic = -1)
+                formatting("underline") = (r.Font.Underline <> Microsoft.Office.Interop.Word.WdUnderline.wdUnderlineNone)
+                formatting("color") = If(r.Font.Color <> Microsoft.Office.Interop.Word.WdColor.wdColorAutomatic,
+                                        ColorToHex(CInt(r.Font.Color)), "auto")
+
+                ' 段落格式
+                formatting("alignment") = GetAlignmentString(para.Alignment)
+                formatting("firstLineIndent") = Math.Round(CDec(para.FirstLineIndent) / 28.35, 2) ' 转换为字符
+                formatting("leftIndent") = Math.Round(CDec(para.LeftIndent) / 28.35, 2)
+                formatting("lineSpacing") = GetLineSpacingValue(para)
+                formatting("spaceBefore") = Math.Round(CDec(para.SpaceBefore), 1)
+                formatting("spaceAfter") = Math.Round(CDec(para.SpaceAfter), 1)
+            Catch ex As Exception
+                Debug.WriteLine($"提取段落 {i} 格式时出错: {ex.Message}")
+            End Try
+
+            paraObj("formatting") = formatting
+
+            ' 检查是否包含图片
+            If r.InlineShapes.Count > 0 Then
+                paraObj("hasImages") = True
+                paraObj("imageCount") = r.InlineShapes.Count
+            End If
+
+            ' 检查是否包含公式
+            If r.OMaths.Count > 0 Then
+                paraObj("hasFormulas") = True
+                paraObj("formulaCount") = r.OMaths.Count
+            End If
+
+            elements.Add(paraObj)
+            elementIndex += 1
+        Next
+
+        ' 检查文档中的表格
+        If doc.Tables.Count > 0 Then
+            For t = 1 To Math.Min(doc.Tables.Count, 20)
+                Dim table = doc.Tables(t)
+                Dim tableObj As New JObject()
+                tableObj("type") = "table"
+                tableObj("index") = elementIndex
+                tableObj("rows") = table.Rows.Count
+                tableObj("columns") = table.Columns.Count
+
+                ' 提取表格首行内容作为表头示例
+                Dim headerCells As New JArray()
+                Try
+                    For c = 1 To table.Columns.Count
+                        Dim cellText = table.Cell(1, c).Range.Text
+                        cellText = cellText.TrimEnd(vbCr, vbLf, ChrW(7))
+                        headerCells.Add(cellText)
+                    Next
+                    tableObj("headerCells") = headerCells
+                Catch
+                    ' 忽略合并单元格等情况
+                End Try
+
+                elements.Add(tableObj)
+                elementIndex += 1
+            Next
+        End If
+
+        ' 检查文档中的图片（非内嵌）
+        If doc.Shapes.Count > 0 Then
+            For s = 1 To Math.Min(doc.Shapes.Count, 20)
+                Dim shape = doc.Shapes(s)
+                If shape.Type = Microsoft.Office.Core.MsoShapeType.msoPicture OrElse
+                   shape.Type = Microsoft.Office.Core.MsoShapeType.msoLinkedPicture Then
+                    Dim imgObj As New JObject()
+                    imgObj("type") = "image"
+                    imgObj("index") = elementIndex
+                    imgObj("width") = Math.Round(CDec(shape.Width), 1)
+                    imgObj("height") = Math.Round(CDec(shape.Height), 1)
+                    imgObj("description") = "浮动图片"
+                    elements.Add(imgObj)
+                    elementIndex += 1
+                End If
+            Next
+        End If
+
+        result("elements") = elements
+
+        ' 添加样式集合
+        Dim stylesObj As New JObject()
+        For Each kvp In stylesDict
+            stylesObj(kvp.Key) = kvp.Value
+        Next
+        result("styles") = stylesObj
+
+        Return result
+    End Function
+
+    ''' <summary>
+    ''' 将对齐方式转换为字符串
+    ''' </summary>
+    Private Function GetAlignmentString(alignment As Microsoft.Office.Interop.Word.WdParagraphAlignment) As String
+        Select Case alignment
+            Case Microsoft.Office.Interop.Word.WdParagraphAlignment.wdAlignParagraphLeft
+                Return "left"
+            Case Microsoft.Office.Interop.Word.WdParagraphAlignment.wdAlignParagraphCenter
+                Return "center"
+            Case Microsoft.Office.Interop.Word.WdParagraphAlignment.wdAlignParagraphRight
+                Return "right"
+            Case Microsoft.Office.Interop.Word.WdParagraphAlignment.wdAlignParagraphJustify
+                Return "justify"
+            Case Else
+                Return "left"
+        End Select
+    End Function
+
+    ''' <summary>
+    ''' 获取行距值（返回倍数）
+    ''' </summary>
+    Private Function GetLineSpacingValue(para As Microsoft.Office.Interop.Word.Paragraph) As Decimal
+        Try
+            Select Case para.LineSpacingRule
+                Case Microsoft.Office.Interop.Word.WdLineSpacing.wdLineSpaceSingle
+                    Return 1.0D
+                Case Microsoft.Office.Interop.Word.WdLineSpacing.wdLineSpace1pt5
+                    Return 1.5D
+                Case Microsoft.Office.Interop.Word.WdLineSpacing.wdLineSpaceDouble
+                    Return 2.0D
+                Case Microsoft.Office.Interop.Word.WdLineSpacing.wdLineSpaceMultiple
+                    Return Math.Round(CDec(para.LineSpacing) / 12, 2)
+                Case Microsoft.Office.Interop.Word.WdLineSpacing.wdLineSpaceExactly,
+                     Microsoft.Office.Interop.Word.WdLineSpacing.wdLineSpaceAtLeast
+                    Return Math.Round(CDec(para.LineSpacing) / 12, 2)
+                Case Else
+                    Return 1.0D
+            End Select
+        Catch
+            Return 1.0D
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 将Word颜色值转换为十六进制字符串
+    ''' </summary>
+    Private Function ColorToHex(colorValue As Integer) As String
+        Try
+            Dim r = colorValue And &HFF
+            Dim g = (colorValue >> 8) And &HFF
+            Dim b = (colorValue >> 16) And &HFF
+            Return $"#{r:X2}{g:X2}{b:X2}"
+        Catch
+            Return "auto"
+        End Try
+    End Function
+
+    Private Function EscapeForJs(text As String) As String
+        Return text.Replace("\", "\\").Replace("`", "\`").Replace("$", "\$").Replace(vbCr, "").Replace(vbLf, "\n")
+    End Function
 
 End Class

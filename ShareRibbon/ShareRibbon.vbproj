@@ -297,6 +297,8 @@
     <Compile Include="Controls\Services\HistoryService.vb" />
     <Compile Include="Controls\Services\McpService.vb" />
     <Compile Include="Controls\Services\OfficeCompletionService.vb" />
+    <Compile Include="Controls\Services\IntentRecognitionService.vb" />
+    <Compile Include="Controls\Services\ExcelContextService.vb" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Controls\BaseChatControl.resx">

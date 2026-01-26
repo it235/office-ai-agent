@@ -341,7 +341,7 @@ Public Class HttpStreamService
                     Continue For
                 End If
 
-                _currentMarkdownBuffer.Append($"<br/>**正在调用工具: {toolName}**<br/>参数: `{argumentsObj.ToString(Formatting.None)}`<br/>")
+                _currentMarkdownBuffer.Append($"<br/>**正在调用工具: {toolName}**<br/>参数: `{argumentsObj.ToString(Newtonsoft.Json.Formatting.None)}`<br/>")
                 Await FlushBufferAsync("content", uuid)
 
                 ' 获取 MCP 连接
@@ -430,12 +430,12 @@ Public Class HttpStreamService
             Dim promptBuilder As New StringBuilder()
             promptBuilder.AppendLine($"用户的原始问题：'{originQuestion}'，但用户使用了 MCP 工具 '{toolName}'，参数为：")
             promptBuilder.AppendLine("```json")
-            promptBuilder.AppendLine(arguments.ToString(Formatting.Indented))
+            promptBuilder.AppendLine(arguments.ToString(Newtonsoft.Json.Formatting.Indented))
             promptBuilder.AppendLine("```")
             promptBuilder.AppendLine()
             promptBuilder.AppendLine("工具执行结果为：")
             promptBuilder.AppendLine("```json")
-            promptBuilder.AppendLine(result.ToString(Formatting.Indented))
+            promptBuilder.AppendLine(result.ToString(Newtonsoft.Json.Formatting.Indented))
             promptBuilder.AppendLine("```")
             promptBuilder.AppendLine()
             promptBuilder.AppendLine("请将上述结果整理成易于理解的格式，使用Markdown呈现。")
@@ -457,7 +457,7 @@ Public Class HttpStreamService
             requestObj("messages") = messagesArray
             requestObj("stream") = True
 
-            Dim requestBody = requestObj.ToString(Formatting.None)
+            Dim requestBody = requestObj.ToString(Newtonsoft.Json.Formatting.None)
 
             Using client As New HttpClient()
                 client.Timeout = System.Threading.Timeout.InfiniteTimeSpan
@@ -520,7 +520,7 @@ Public Class HttpStreamService
             End Using
         Catch ex As Exception
             hasError = True
-            errorResultJson = result.ToString(Formatting.Indented)
+            errorResultJson = result.ToString(Newtonsoft.Json.Formatting.Indented)
         End Try
 
         ' Handle error outside of Catch block (Await not allowed in Catch)
@@ -592,7 +592,7 @@ Public Class HttpStreamService
             Dim messagesJson = String.Join(",", messages)
 
             If toolsArray IsNot Nothing AndAlso toolsArray.Count > 0 Then
-                Dim toolsJson = toolsArray.ToString(Formatting.None)
+                Dim toolsJson = toolsArray.ToString(Newtonsoft.Json.Formatting.None)
                 Return $"{{""model"": ""{ConfigSettings.ModelName}"", ""tools"": {toolsJson}, ""messages"": [{messagesJson}], ""stream"": true}}"
             Else
                 Return $"{{""model"": ""{ConfigSettings.ModelName}"", ""messages"": [{messagesJson}], ""stream"": true}}"

@@ -308,4 +308,9 @@ Public Class Ribbon1
     Protected Overrides Sub AcceptCompletionButton_Click(sender As Object, e As RibbonControlEventArgs)
         MessageBox.Show("AI自动补全功能主要用于Word和PowerPoint文档，Excel暂不支持此功能。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
     End Sub
+
+    ' 模板排版功能 - Excel暂不支持
+    Protected Overrides Sub TemplateFormatButton_Click(sender As Object, e As RibbonControlEventArgs)
+        MessageBox.Show("模板排版功能主要用于Word和PowerPoint文档，Excel暂不支持此功能。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
+    End Sub
 End Class

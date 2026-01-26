@@ -152,6 +152,6 @@ Public Class ChatSettings
         settingsObj("enableMcpList") = JArray.FromObject(enabledList)
 
         ' 保存设置
-        File.WriteAllText(settingsPath, settingsObj.ToString(Formatting.Indented))
+        File.WriteAllText(settingsPath, settingsObj.ToString(Newtonsoft.Json.Formatting.Indented))
     End Sub
 End Class

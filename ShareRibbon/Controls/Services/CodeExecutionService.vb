@@ -41,16 +41,69 @@ Public Class CodeExecutionService
         ''' 根据语言类型执行代码
         ''' </summary>
         Public Sub ExecuteCode(code As String, language As String, preview As Boolean)
-            Dim lowerLang As String = language.ToLower()
+            Dim lowerLang As String = If(language, "").ToLower().Trim()
+            
+            ' 调试日志
+            Debug.WriteLine($"[CodeExecutionService] 执行代码, 语言: '{language}' (规范化: '{lowerLang}')")
+            Debug.WriteLine($"[CodeExecutionService] 代码前100字符: {If(code.Length > 100, code.Substring(0, 100), code)}...")
+            
+            ' 自动检测JSON：如果代码看起来像JSON命令格式
+            If String.IsNullOrEmpty(lowerLang) OrElse lowerLang = "plaintext" OrElse lowerLang = "text" Then
+                Dim trimmedCode = code.Trim()
+                If trimmedCode.StartsWith("{") AndAlso trimmedCode.EndsWith("}") Then
+                    Try
+                        Dim testJson = Newtonsoft.Json.Linq.JObject.Parse(trimmedCode)
+                        If testJson("command") IsNot Nothing Then
+                            Debug.WriteLine("[CodeExecutionService] 自动检测为JSON命令格式")
+                            lowerLang = "json"
+                        End If
+                    Catch
+                        ' 不是有效的JSON命令
+                    End Try
+                End If
+            End If
 
-            If lowerLang.Contains("vbnet") OrElse lowerLang.Contains("vbscript") OrElse lowerLang.Contains("vba") Then
+            If lowerLang.Contains("json") Then
+                Debug.WriteLine("[CodeExecutionService] 路由到JSON命令执行器")
+                ExecuteJsonCommand(code, preview)
+            ElseIf lowerLang.Contains("vbnet") OrElse lowerLang.Contains("vbscript") OrElse lowerLang.Contains("vba") Then
+                Debug.WriteLine("[CodeExecutionService] 路由到VBA执行器")
                 ExecuteVBACode(code, preview)
             ElseIf lowerLang.Contains("js") OrElse lowerLang.Contains("javascript") Then
+                Debug.WriteLine("[CodeExecutionService] 路由到JavaScript执行器")
                 ExecuteJavaScript(code, preview)
             ElseIf lowerLang.Contains("excel") OrElse lowerLang.Contains("formula") OrElse lowerLang.Contains("function") Then
+                Debug.WriteLine("[CodeExecutionService] 路由到Excel公式执行器")
                 ExecuteExcelFormula(code, preview)
             Else
+                Debug.WriteLine($"[CodeExecutionService] 不支持的语言类型: '{language}'")
                 GlobalStatusStrip.ShowWarning("不支持的语言类型: " & language)
+            End If
+        End Sub
+
+        ''' <summary>
+        ''' JSON命令执行委托（由子类设置）
+        ''' </summary>
+        Public Property JsonCommandExecutor As Func(Of String, Boolean, Boolean) = Nothing
+
+        ''' <summary>
+        ''' 执行JSON命令
+        ''' </summary>
+        Public Sub ExecuteJsonCommand(jsonCode As String, preview As Boolean)
+            Debug.WriteLine($"[CodeExecutionService] ExecuteJsonCommand 被调用, preview={preview}")
+            Debug.WriteLine($"[CodeExecutionService] JsonCommandExecutor 是否已设置: {JsonCommandExecutor IsNot Nothing}")
+            
+            If JsonCommandExecutor IsNot Nothing Then
+                Try
+                    Dim result = JsonCommandExecutor.Invoke(jsonCode, preview)
+                    Debug.WriteLine($"[CodeExecutionService] JSON命令执行结果: {result}")
+                Catch ex As Exception
+                    Debug.WriteLine($"[CodeExecutionService] JSON命令执行异常: {ex.Message}")
+                    GlobalStatusStrip.ShowWarning($"JSON命令执行失败: {ex.Message}")
+                End Try
+            Else
+                Debug.WriteLine("[CodeExecutionService] JsonCommandExecutor 未设置!")
+                GlobalStatusStrip.ShowWarning("当前应用不支持JSON命令执行，请使用VBA代码")
             End If
         End Sub
 

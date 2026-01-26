@@ -1,8 +1,10 @@
-' WordAi\Ribbon1.vb
+' PowerPointAi\Ribbon1.vb
 Imports System.Diagnostics
 Imports System.Threading.Tasks
 Imports System.Windows.Forms
 Imports Microsoft.Office.Tools.Ribbon
+Imports Newtonsoft.Json
+Imports Newtonsoft.Json.Linq
 Imports ShareRibbon  ' 添加此引用
 
 Public Class Ribbon1
@@ -174,4 +176,238 @@ Public Class Ribbon1
             MessageBox.Show("接受补全时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
+
+    ' 模板排版功能 - PowerPoint实现（使用JSON格式完整提取模板结构）
+    Protected Overrides Sub TemplateFormatButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Try
+            ' 1. 打开文件对话框选择模板文件
+            Using openDialog As New OpenFileDialog()
+                openDialog.Title = "选择PowerPoint模板文件"
+                openDialog.Filter = "PowerPoint文件|*.pptx;*.ppt|所有文件|*.*"
+                openDialog.FilterIndex = 1
+
+                If openDialog.ShowDialog() <> DialogResult.OK Then Return
+
+                Dim templatePath = openDialog.FileName
+                Dim templateName = System.IO.Path.GetFileName(templatePath)
+
+                ' 2. 读取模板文件内容 - 使用JSON格式完整提取
+                Dim pptApp = Globals.ThisAddIn.Application
+                Dim templateJson As JObject = Nothing
+
+                ' 打开模板演示文稿（只读）
+                Dim templatePres As Microsoft.Office.Interop.PowerPoint.Presentation = Nothing
+                Try
+                    templatePres = pptApp.Presentations.Open(templatePath, ReadOnly:=Microsoft.Office.Core.MsoTriState.msoTrue, WithWindow:=Microsoft.Office.Core.MsoTriState.msoFalse)
+
+                    ' 构建JSON结构
+                    templateJson = ExtractPresentationStructure(templatePres, templateName)
+                Finally
+                    If templatePres IsNot Nothing Then
+                        templatePres.Close()
+                    End If
+                End Try
+
+                If templateJson Is Nothing Then
+                    MessageBox.Show("无法解析模板文件内容。", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                    Return
+                End If
+
+                ' 3. 打开Chat面板并进入模板渲染模式
+                Globals.ThisAddIn.ShowChatTaskPane()
+                Dim chatCtrl = Globals.ThisAddIn.chatControl
+                If chatCtrl IsNot Nothing Then
+                    ' 将JSON转为字符串传递给JS
+                    Dim templateContent = templateJson.ToString(Formatting.Indented)
+
+                    ' 调用JS进入模板渲染模式
+                    Task.Run(Async Function()
+                                 Await Task.Delay(500)
+                                 Dim jsCall = $"enterTemplateMode(`{EscapeForJs(templateContent)}`, `{EscapeForJs(templateName)}`);"
+                                 Await chatCtrl.ExecuteJavaScriptAsyncJS(jsCall)
+                             End Function)
+
+                    MessageBox.Show("已进入模板渲染模式！" & vbCrLf & vbCrLf &
+                                    "模板结构已解析完成（包含幻灯片、文本、样式、图片等信息）。" & vbCrLf &
+                                    "现在您可以在Chat中输入内容需求，AI将按照模板格式生成内容。" & vbCrLf &
+                                    "生成完成后可选择插入位置将内容插入到演示文稿中。",
+                                    "模板模式已激活", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                End If
+            End Using
+        Catch ex As Exception
+            MessageBox.Show("加载模板时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 提取PPT演示文稿的完整结构为JSON格式
+    ''' </summary>
+    Private Function ExtractPresentationStructure(pres As Microsoft.Office.Interop.PowerPoint.Presentation, templateName As String) As JObject
+        Dim result As New JObject()
+        result("templateName") = templateName
+        result("totalSlides") = pres.Slides.Count
+        result("slideWidth") = pres.PageSetup.SlideWidth
+        result("slideHeight") = pres.PageSetup.SlideHeight
+
+        ' 幻灯片数组
+        Dim slides As New JArray()
+
+        ' 遍历幻灯片（最多30张）
+        For i = 1 To Math.Min(pres.Slides.Count, 30)
+            Dim slide = pres.Slides(i)
+            Dim slideObj As New JObject()
+            slideObj("slideIndex") = i
+            slideObj("slideLayout") = GetLayoutName(slide.Layout)
+
+            ' 元素数组：包含文本框、图片、表格等
+            Dim elements As New JArray()
+            Dim elementIndex As Integer = 0
+
+            ' 遍历幻灯片中的形状
+            For Each shape As Microsoft.Office.Interop.PowerPoint.Shape In slide.Shapes
+                Dim elemObj As New JObject()
+                elemObj("index") = elementIndex
+
+                ' 判断形状类型
+                If shape.HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                    ' 文本框/占位符
+                    Dim text = shape.TextFrame.TextRange.Text.Trim()
+                    elemObj("type") = "textbox"
+                    elemObj("text") = text
+                    elemObj("placeholderType") = GetPlaceholderTypeName(shape)
+
+                    ' 提取文本格式
+                    Dim formatting As New JObject()
+                    Try
+                        Dim textRange = shape.TextFrame.TextRange
+                        formatting("fontName") = If(textRange.Font.Name, "")
+                        formatting("fontSize") = If(textRange.Font.Size > 0, CDec(textRange.Font.Size), 18)
+                        formatting("bold") = (textRange.Font.Bold = Microsoft.Office.Core.MsoTriState.msoTrue)
+                        formatting("italic") = (textRange.Font.Italic = Microsoft.Office.Core.MsoTriState.msoTrue)
+                        formatting("underline") = (textRange.Font.Underline = Microsoft.Office.Core.MsoTriState.msoTrue)
+
+                        ' 颜色
+                        Try
+                            Dim rgb = textRange.Font.Color.RGB
+                            formatting("color") = $"#{rgb And &HFF:X2}{(rgb >> 8) And &HFF:X2}{(rgb >> 16) And &HFF:X2}"
+                        Catch
+                            formatting("color") = "auto"
+                        End Try
+
+                        ' 对齐方式
+                        formatting("alignment") = GetPPTAlignmentString(textRange.ParagraphFormat.Alignment)
+                    Catch ex As Exception
+                        Debug.WriteLine($"提取PPT文本格式时出错: {ex.Message}")
+                    End Try
+                    elemObj("formatting") = formatting
+
+                    ' 位置和大小
+                    elemObj("left") = Math.Round(CDec(shape.Left), 1)
+                    elemObj("top") = Math.Round(CDec(shape.Top), 1)
+                    elemObj("width") = Math.Round(CDec(shape.Width), 1)
+                    elemObj("height") = Math.Round(CDec(shape.Height), 1)
+
+                ElseIf shape.Type = Microsoft.Office.Core.MsoShapeType.msoPicture OrElse
+                       shape.Type = Microsoft.Office.Core.MsoShapeType.msoLinkedPicture Then
+                    ' 图片
+                    elemObj("type") = "image"
+                    elemObj("left") = Math.Round(CDec(shape.Left), 1)
+                    elemObj("top") = Math.Round(CDec(shape.Top), 1)
+                    elemObj("width") = Math.Round(CDec(shape.Width), 1)
+                    elemObj("height") = Math.Round(CDec(shape.Height), 1)
+
+                ElseIf shape.HasTable = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                    ' 表格
+                    elemObj("type") = "table"
+                    elemObj("rows") = shape.Table.Rows.Count
+                    elemObj("columns") = shape.Table.Columns.Count
+                    elemObj("left") = Math.Round(CDec(shape.Left), 1)
+                    elemObj("top") = Math.Round(CDec(shape.Top), 1)
+                    elemObj("width") = Math.Round(CDec(shape.Width), 1)
+                    elemObj("height") = Math.Round(CDec(shape.Height), 1)
+
+                    ' 提取表格首行作为示例
+                    Dim headerCells As New JArray()
+                    Try
+                        For c = 1 To shape.Table.Columns.Count
+                            Dim cellText = shape.Table.Cell(1, c).Shape.TextFrame.TextRange.Text.Trim()
+                            headerCells.Add(cellText)
+                        Next
+                        elemObj("headerCells") = headerCells
+                    Catch
+                        ' 忽略合并单元格等情况
+                    End Try
+
+                ElseIf shape.HasChart = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                    ' 图表
+                    elemObj("type") = "chart"
+                    elemObj("chartType") = shape.Chart.ChartType.ToString()
+                    elemObj("left") = Math.Round(CDec(shape.Left), 1)
+                    elemObj("top") = Math.Round(CDec(shape.Top), 1)
+                    elemObj("width") = Math.Round(CDec(shape.Width), 1)
+                    elemObj("height") = Math.Round(CDec(shape.Height), 1)
+
+                Else
+                    ' 其他形状
+                    elemObj("type") = "shape"
+                    elemObj("shapeType") = shape.Type.ToString()
+                    elemObj("left") = Math.Round(CDec(shape.Left), 1)
+                    elemObj("top") = Math.Round(CDec(shape.Top), 1)
+                    elemObj("width") = Math.Round(CDec(shape.Width), 1)
+                    elemObj("height") = Math.Round(CDec(shape.Height), 1)
+                End If
+
+                elements.Add(elemObj)
+                elementIndex += 1
+            Next
+
+            slideObj("elements") = elements
+            slides.Add(slideObj)
+        Next
+
+        result("slides") = slides
+        Return result
+    End Function
+
+    Private Function GetLayoutName(layout As Microsoft.Office.Interop.PowerPoint.PpSlideLayout) As String
+        Select Case layout
+            Case Microsoft.Office.Interop.PowerPoint.PpSlideLayout.ppLayoutTitle : Return "标题幻灯片"
+            Case Microsoft.Office.Interop.PowerPoint.PpSlideLayout.ppLayoutTitleOnly : Return "仅标题"
+            Case Microsoft.Office.Interop.PowerPoint.PpSlideLayout.ppLayoutText : Return "标题和内容"
+            Case Microsoft.Office.Interop.PowerPoint.PpSlideLayout.ppLayoutTwoColumnText : Return "两栏内容"
+            Case Microsoft.Office.Interop.PowerPoint.PpSlideLayout.ppLayoutBlank : Return "空白"
+            Case Microsoft.Office.Interop.PowerPoint.PpSlideLayout.ppLayoutContentWithCaption : Return "内容与标题"
+            Case Microsoft.Office.Interop.PowerPoint.PpSlideLayout.ppLayoutPictureWithCaption : Return "图片与标题"
+            Case Else : Return "自定义"
+        End Select
+    End Function
+
+    Private Function GetPPTAlignmentString(alignment As Microsoft.Office.Interop.PowerPoint.PpParagraphAlignment) As String
+        Select Case alignment
+            Case Microsoft.Office.Interop.PowerPoint.PpParagraphAlignment.ppAlignLeft : Return "left"
+            Case Microsoft.Office.Interop.PowerPoint.PpParagraphAlignment.ppAlignCenter : Return "center"
+            Case Microsoft.Office.Interop.PowerPoint.PpParagraphAlignment.ppAlignRight : Return "right"
+            Case Microsoft.Office.Interop.PowerPoint.PpParagraphAlignment.ppAlignJustify : Return "justify"
+            Case Else : Return "left"
+        End Select
+    End Function
+
+    Private Function GetPlaceholderTypeName(shape As Microsoft.Office.Interop.PowerPoint.Shape) As String
+        Try
+            If shape.PlaceholderFormat Is Nothing Then Return "文本框"
+            Select Case shape.PlaceholderFormat.Type
+                Case Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderTitle : Return "标题"
+                Case Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderCenterTitle : Return "居中标题"
+                Case Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderSubtitle : Return "副标题"
+                Case Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderBody : Return "正文"
+                Case Else : Return "内容"
+            End Select
+        Catch
+            Return "文本"
+        End Try
+    End Function
+
+    Private Function EscapeForJs(text As String) As String
+        Return text.Replace("\", "\\").Replace("`", "\`").Replace("$", "\$").Replace(vbCr, "").Replace(vbLf, "\n")
+    End Function
 End Class

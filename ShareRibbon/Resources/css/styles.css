@@ -679,6 +679,50 @@ pre.collapsible.collapsed {
     fill: currentColor;
 }
 
+/* ====== 模板引用区域样式 ====== */
+#template-reference-wrapper {
+    display: flex;
+    align-items: center;
+    padding: 6px 10px;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+    font-size: 12px;
+}
+
+.template-chip {
+    display: inline-flex;
+    align-items: center;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 16px;
+    padding: 4px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+}
+
+.template-chip:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+}
+
+#template-name-display {
+    max-width: 150px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#clear-template-btn {
+    color: rgba(255, 255, 255, 0.8);
+    transition: color 0.2s;
+}
+
+#clear-template-btn:hover {
+    color: white;
+}
+
 /* ====== 历史记录侧边栏样式 ====== */
 #history-sidebar {
     position: fixed;

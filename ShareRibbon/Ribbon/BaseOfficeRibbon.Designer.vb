@@ -45,11 +45,12 @@ Partial Class BaseOfficeRibbon
         Me.ChatButton = Me.Factory.CreateRibbonButton
         Me.TranslateButton = Me.Factory.CreateRibbonButton
 
-        ' Group 4: AI内容提效 - 续写/校对/排版/接受补全 (Word/PPT专用)
+        ' Group 4: AI内容提效 - 续写/校对/排版/模板排版/接受补全 (Word/PPT专用)
         Me.GroupAIContent = Me.Factory.CreateRibbonGroup
         Me.ContinuationButton = Me.Factory.CreateRibbonButton
         Me.ProofreadButton = Me.Factory.CreateRibbonButton
         Me.ReformatButton = Me.Factory.CreateRibbonButton
+        Me.TemplateFormatButton = Me.Factory.CreateRibbonButton
         Me.AcceptCompletionButton = Me.Factory.CreateRibbonButton
 
         ' Group 5: MCP连接
@@ -166,6 +167,7 @@ Partial Class BaseOfficeRibbon
         Me.GroupAIContent.Items.Add(Me.ContinuationButton)
         Me.GroupAIContent.Items.Add(Me.ProofreadButton)
         Me.GroupAIContent.Items.Add(Me.ReformatButton)
+        Me.GroupAIContent.Items.Add(Me.TemplateFormatButton)
         Me.GroupAIContent.Items.Add(Me.AcceptCompletionButton)
         Me.GroupAIContent.Label = "AI内容提效"
         Me.GroupAIContent.Name = "GroupAIContent"
@@ -190,6 +192,13 @@ Partial Class BaseOfficeRibbon
         Me.ReformatButton.ShowImage = True
         Me.ReformatButton.ScreenTip = "对选中或全文进行结构化排版"
         Me.ReformatButton.SuperTip = "优化标题、段落与列表并返回可解析的修订JSON"
+
+        Me.TemplateFormatButton.Label = "模板排版"
+        Me.TemplateFormatButton.Name = "TemplateFormatButton"
+        Me.TemplateFormatButton.ControlSize = Microsoft.Office.Core.RibbonControlSize.RibbonControlSizeLarge
+        Me.TemplateFormatButton.ShowImage = True
+        Me.TemplateFormatButton.ScreenTip = "使用模板格式排版"
+        Me.TemplateFormatButton.SuperTip = "选择格式模板，AI生成内容时将参考模板中的字体、字号、段落等格式"
 
         Me.AcceptCompletionButton.Label = "接受补全"
         Me.AcceptCompletionButton.Name = "AcceptCompletionButton"
@@ -311,6 +320,7 @@ Partial Class BaseOfficeRibbon
     Protected WithEvents ContinuationButton As Microsoft.Office.Tools.Ribbon.RibbonButton
     Protected WithEvents ProofreadButton As Microsoft.Office.Tools.Ribbon.RibbonButton
     Protected WithEvents ReformatButton As Microsoft.Office.Tools.Ribbon.RibbonButton
+    Protected WithEvents TemplateFormatButton As Microsoft.Office.Tools.Ribbon.RibbonButton
     Protected WithEvents AcceptCompletionButton As Microsoft.Office.Tools.Ribbon.RibbonButton
 
     ' Group 5: 工具箱

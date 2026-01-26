@@ -176,7 +176,7 @@ Public Class StreamJsonRpcMCPClient
         End If
 
         ' 添加行尾换行符，确保请求完整发送
-        Dim requestString = request.ToString(Formatting.None) & Environment.NewLine
+        Dim requestString = request.ToString(Newtonsoft.Json.Formatting.None) & Environment.NewLine
 
         ' 明确使用 UTF-8 编码写入
         Dim requestBytes = Encoding.UTF8.GetBytes(requestString)
@@ -232,9 +232,9 @@ Public Class StreamJsonRpcMCPClient
                     End If
 
                     ' 发送请求
-                    Debug.WriteLine($"发送Stdio请求: {request.ToString(Formatting.None)}")
+                    Debug.WriteLine($"发送Stdio请求: {request.ToString(Newtonsoft.Json.Formatting.None)}")
                     Dim response = Await SendStdioRequestAsync(request)
-                    Debug.WriteLine($"收到Stdio响应: {response.ToString(Formatting.None)}")
+                    Debug.WriteLine($"收到Stdio响应: {response.ToString(Newtonsoft.Json.Formatting.None)}")
 
                     ' 检查错误
                     If response("error") IsNot Nothing Then
@@ -271,7 +271,7 @@ Public Class StreamJsonRpcMCPClient
                         request("jsonrpc") = "2.0"
                         request("id") = "shutdown"
                         request("method") = "shutdown"
-                        _stdioProcess.StandardInput.WriteLine(request.ToString(Formatting.None))
+                        _stdioProcess.StandardInput.WriteLine(request.ToString(Newtonsoft.Json.Formatting.None))
                         _stdioProcess.StandardInput.Flush()
 
                         ' 给进程一点时间来处理

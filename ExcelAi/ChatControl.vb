@@ -458,6 +458,27 @@ Public Class ChatControl
         Send(message, "", True, "")
     End Sub
 
+    ''' <summary>
+    ''' 使用意图识别结果发送聊天消息（Excel特定实现）
+    ''' </summary>
+    Protected Overrides Sub SendChatMessageWithIntent(message As String, intent As IntentResult)
+        If intent IsNot Nothing AndAlso intent.Confidence > 0.2 Then
+            ' 使用意图优化的systemPrompt
+            Dim optimizedPrompt = IntentService.GetOptimizedSystemPrompt(intent)
+            Debug.WriteLine($"Excel使用意图优化提示词: {intent.IntentType}, 置信度: {intent.Confidence:F2}")
+
+            Task.Run(Async Function()
+                         Await Send(message, optimizedPrompt, True, "")
+                     End Function)
+        Else
+            ' 回退到普通发送
+            Send(message, "", True, "")
+        End If
+    End Sub
+
+    ''' <summary>
+    ''' 获取选中内容并格式化（使用ExcelContextService优化）
+    ''' </summary>
     Protected Overrides Function AppendCurrentSelectedContent(message As String) As String
         Try
             ' 获取当前活动工作表和选择区域
@@ -468,73 +489,26 @@ Public Class ChatControl
             If selection IsNot Nothing AndAlso TypeOf selection Is Microsoft.Office.Interop.Excel.Range Then
                 Dim selectedRange As Microsoft.Office.Interop.Excel.Range = DirectCast(selection, Microsoft.Office.Interop.Excel.Range)
 
-                ' 创建内容构建器，按照 ParseFile 的结构
-                Dim contentBuilder As New StringBuilder()
-                contentBuilder.AppendLine(vbCrLf & "--- 用户选中的WorkbookSheet参考内容如下 ---")
+                ' 提取数据到数组
+                Dim data As Object(,) = ExtractRangeData(selectedRange)
 
-                ' 添加活动工作簿信息
-                contentBuilder.AppendLine($"工作簿: {Path.GetFileName(activeWorkbook.FullName)}")
+                If data IsNot Nothing AndAlso data.Length > 0 Then
+                    ' 使用ExcelContextService进行优化的数据格式化
+                    Dim contextService As New ShareRibbon.ExcelContextService()
+                    Dim workbookName As String = Path.GetFileName(activeWorkbook.FullName)
+                    Dim worksheetName As String = selectedRange.Worksheet.Name
+                    Dim rangeAddress As String = selectedRange.Address(False, False)
 
-                ' 获取选择的工作表信息
-                Dim worksheet As Microsoft.Office.Interop.Excel.Worksheet = selectedRange.Worksheet
-                Dim sheetName As String = worksheet.Name
+                    ' 调用优化的格式化方法
+                    Dim formattedContent As String = contextService.FormatSelectionAsContext(
+                        data,
+                        workbookName,
+                        worksheetName,
+                        rangeAddress)
 
-                ' 添加工作表信息
-                contentBuilder.AppendLine($"工作表: {sheetName}")
-
-                ' 获取选择区域的范围地址
-                Dim address As String = selectedRange.Address(False, False)
-                contentBuilder.AppendLine($"  使用范围: {address}")
-
-                ' 读取选择区域中的单元格内容
-                Dim usedRange As Microsoft.Office.Interop.Excel.Range = selectedRange
-
-                ' 获取区域的行列信息
-                Dim firstRow As Integer = usedRange.Row
-                Dim firstCol As Integer = usedRange.Column
-                Dim lastRow As Integer = firstRow + usedRange.Rows.Count - 1
-                Dim lastCol As Integer = firstCol + usedRange.Columns.Count - 1
-
-                ' 限制读取的单元格数量（防止数据过大）
-                Dim maxRows As Integer = Math.Min(lastRow, firstRow + 30)
-                Dim maxCols As Integer = Math.Min(lastCol, firstCol + 10)
-
-                ' 检查是否有实际内容的标志
-                Dim hasContent As Boolean = False
-
-                ' 逐个单元格读取内容
-                For rowIndex As Integer = firstRow To maxRows
-                    For colIndex As Integer = firstCol To maxCols
-                        Try
-                            Dim cell As Microsoft.Office.Interop.Excel.Range = worksheet.Cells(rowIndex, colIndex)
-                            Dim cellValue As Object = cell.Value
-
-                            If cellValue IsNot Nothing Then
-                                Dim cellAddress As String = $"{GetExcelColumnName(colIndex)}{rowIndex}"
-                                contentBuilder.AppendLine($"  {cellAddress}: {cellValue}")
-                                hasContent = True
-                            End If
-                        Catch cellEx As Exception
-                            Debug.WriteLine($"读取单元格时出错: {cellEx.Message}")
-                            ' 继续处理下一个单元格
-                        End Try
-                    Next
-                Next
-
-                ' 如果有更多行或列未显示，添加提示
-                If lastRow > maxRows Then
-                    contentBuilder.AppendLine($"  ... 共有 {lastRow - firstRow + 1} 行，仅显示前 {maxRows - firstRow + 1} 行")
-                End If
-                If lastCol > maxCols Then
-                    contentBuilder.AppendLine($"  ... 共有 {lastCol - firstCol + 1} 列，仅显示前 {maxCols - firstCol + 1} 列")
-                End If
-
-                contentBuilder.AppendLine("--- WorkbookSheet参考内容到这结束 ---" & vbCrLf)
-
-                ' 只有在有实际内容时才添加到消息中
-                If hasContent Then
-                    ' 将选中内容添加到消息中
-                    message &= contentBuilder.ToString()
+                    If Not String.IsNullOrEmpty(formattedContent) Then
+                        message &= formattedContent
+                    End If
                 End If
             End If
         Catch ex As Exception
@@ -542,6 +516,142 @@ Public Class ChatControl
             ' 出错时不添加选中内容，继续发送原始消息
         End Try
         Return message
+    End Function
+
+    ''' <summary>
+    ''' 从Excel Range提取数据到二维数组（高性能批量读取）
+    ''' </summary>
+    Private Function ExtractRangeData(selectedRange As Microsoft.Office.Interop.Excel.Range) As Object(,)
+        Try
+            Const MAX_ROWS As Integer = 100
+            Const MAX_COLS As Integer = 26
+
+            ' 限制读取范围
+            Dim rowCount = Math.Min(selectedRange.Rows.Count, MAX_ROWS)
+            Dim colCount = Math.Min(selectedRange.Columns.Count, MAX_COLS)
+
+            ' 如果范围过大，只取部分
+            Dim actualRange As Microsoft.Office.Interop.Excel.Range
+            If selectedRange.Rows.Count > MAX_ROWS OrElse selectedRange.Columns.Count > MAX_COLS Then
+                actualRange = selectedRange.Resize(rowCount, colCount)
+            Else
+                actualRange = selectedRange
+            End If
+
+            ' 一次性读取所有数据（性能优化关键）
+            Dim values As Object = actualRange.Value2
+
+            ' 处理单个单元格的情况
+            If Not TypeOf values Is Object(,) Then
+                ' 创建1-based数组（与Excel返回的多单元格数组一致）
+                Dim result = DirectCast(Array.CreateInstance(GetType(Object), {1, 1}, {1, 1}), Object(,))
+                result(1, 1) = values
+                Return result
+            End If
+
+            Return DirectCast(values, Object(,))
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExtractRangeData 出错: {ex.Message}")
+            Return Nothing
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 尝试执行AI返回的直接操作命令
+    ''' </summary>
+    ''' <param name="aiResponse">AI响应文本</param>
+    ''' <returns>是否成功执行了命令</returns>
+    Public Function TryExecuteDirectCommands(aiResponse As String) As Boolean
+        Try
+            ' 提取JSON命令
+            Dim commands = ExcelDirectOperationService.ExtractCommandsFromResponse(aiResponse)
+
+            If commands.Count = 0 Then
+                Return False
+            End If
+
+            ' 创建操作服务
+            Dim operationService As New ExcelDirectOperationService(Globals.ThisAddIn.Application)
+
+            ' 执行所有命令
+            Dim allSuccess As Boolean = True
+            For Each cmd As Newtonsoft.Json.Linq.JObject In commands
+                Dim success = operationService.ExecuteCommand(cmd)
+                If Not success Then
+                    allSuccess = False
+                End If
+            Next
+
+            Return allSuccess
+
+        Catch ex As Exception
+            Debug.WriteLine($"TryExecuteDirectCommands 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行JSON命令（重写基类方法）- 带占位符替换和校验
+    ''' </summary>
+    Protected Overrides Function ExecuteJsonCommand(jsonCode As String, preview As Boolean) As Boolean
+        Try
+            ' 获取Excel上下文用于占位符替换
+            Dim context = ExcelJsonCommandSchema.GetExcelContext(Globals.ThisAddIn.Application)
+            
+            ' 先替换占位符再解析JSON
+            Dim processedJson = jsonCode
+            For Each kvp In context
+                processedJson = processedJson.Replace("{" & kvp.Key & "}", kvp.Value)
+            Next
+            
+            ' 解析JSON命令
+            Dim commandJson = Newtonsoft.Json.Linq.JObject.Parse(processedJson)
+            Dim command = commandJson("command")?.ToString()
+            
+            ' 校验JSON命令
+            Dim errorMsg As String = ""
+            If Not ExcelJsonCommandSchema.ValidateCommand(commandJson, errorMsg) Then
+                ShareRibbon.GlobalStatusStrip.ShowWarning($"JSON命令格式错误: {errorMsg}")
+                Return False
+            End If
+
+            ' JSON专用预览
+            If preview Then
+                Dim params = commandJson("params")
+                Dim targetRange = If(params?("targetRange")?.ToString(), params?("range")?.ToString())
+                Dim formula = params?("formula")?.ToString()
+                
+                Dim previewMsg = $"即将执行 Excel 命令:{vbCrLf}{vbCrLf}" &
+                                $"命令: {command}{vbCrLf}" &
+                                If(Not String.IsNullOrEmpty(targetRange), $"目标: {targetRange}{vbCrLf}", "") &
+                                If(Not String.IsNullOrEmpty(formula), $"公式: {formula}{vbCrLf}", "") &
+                                $"{vbCrLf}是否继续执行？"
+
+                If MessageBox.Show(previewMsg, "JSON命令预览", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) <> DialogResult.OK Then
+                    Return True
+                End If
+            End If
+
+            ' 执行命令
+            Dim operationService As New ExcelDirectOperationService(Globals.ThisAddIn.Application)
+            Dim success = operationService.ExecuteCommand(commandJson)
+
+            If success Then
+                ShareRibbon.GlobalStatusStrip.ShowInfo($"命令 '{command}' 执行成功")
+            Else
+                ShareRibbon.GlobalStatusStrip.ShowWarning($"命令 '{command}' 执行失败")
+            End If
+
+            Return success
+
+        Catch ex As Newtonsoft.Json.JsonReaderException
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"JSON格式无效: {ex.Message}")
+            Return False
+        Catch ex As Exception
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"执行失败: {ex.Message}")
+            Return False
+        End Try
     End Function
 
     Protected Overrides Function ParseFile(filePath As String) As FileContentResult
@@ -678,11 +788,13 @@ Public Class ChatControl
 
         Try
             Dim selection = Globals.ThisAddIn.Application.Selection
-            If selection IsNot Nothing Then
+            If selection IsNot Nothing AndAlso TypeOf selection Is Microsoft.Office.Interop.Excel.Range Then
+                Dim selRange = DirectCast(selection, Microsoft.Office.Interop.Excel.Range)
+
                 ' 获取选中区域地址
                 Dim rangeAddr = ""
                 Try
-                    rangeAddr = selection.Address
+                    rangeAddr = selRange.Address(False, False)
                 Catch
                 End Try
                 snapshot("selectionAddress") = rangeAddr
@@ -690,23 +802,34 @@ Public Class ChatControl
                 ' 获取选中内容（限制大小）
                 Dim selText = ""
                 Try
-                    If TypeOf selection.Value Is Object(,) Then
-                        Dim values = CType(selection.Value, Object(,))
-                        Dim sb As New StringBuilder()
-                        Dim maxRows = Math.Min(values.GetLength(0), 5)
-                        Dim maxCols = Math.Min(values.GetLength(1), 5)
-                        For r = 1 To maxRows
-                            For c = 1 To maxCols
-                                If values(r, c) IsNot Nothing Then
-                                    sb.Append(values(r, c).ToString())
-                                End If
-                                If c < maxCols Then sb.Append(vbTab)
+                    Dim cellValue = selRange.Value2
+                    If cellValue IsNot Nothing Then
+                        If TypeOf cellValue Is Object(,) Then
+                            Dim values = DirectCast(cellValue, Object(,))
+                            Dim sb As New StringBuilder()
+
+                            ' 使用正确的数组边界（Excel返回1-based数组）
+                            Dim rowStart = values.GetLowerBound(0)
+                            Dim rowEnd = values.GetUpperBound(0)
+                            Dim colStart = values.GetLowerBound(1)
+                            Dim colEnd = values.GetUpperBound(1)
+
+                            Dim maxRowEnd = Math.Min(rowEnd, rowStart + 4)
+                            Dim maxColEnd = Math.Min(colEnd, colStart + 4)
+
+                            For r = rowStart To maxRowEnd
+                                For c = colStart To maxColEnd
+                                    If values(r, c) IsNot Nothing Then
+                                        sb.Append(values(r, c).ToString())
+                                    End If
+                                    If c < maxColEnd Then sb.Append(vbTab)
+                                Next
+                                sb.AppendLine()
                             Next
-                            sb.AppendLine()
-                        Next
-                        selText = sb.ToString()
-                    ElseIf selection.Value IsNot Nothing Then
-                        selText = selection.Value.ToString()
+                            selText = sb.ToString()
+                        Else
+                            selText = cellValue.ToString()
+                        End If
                     End If
                 Catch
                 End Try
@@ -722,7 +845,7 @@ Public Class ChatControl
             ' 获取工作表名
             Dim ws = Globals.ThisAddIn.Application.ActiveSheet
             If ws IsNot Nothing Then
-                snapshot("sheetName") = ws.Name
+                snapshot("sheetName") = CStr(ws.Name)
             End If
 
         Catch ex As Exception

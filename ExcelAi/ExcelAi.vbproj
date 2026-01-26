@@ -286,6 +286,8 @@
       <SubType>Component</SubType>
     </Compile>
     <Compile Include="Spotlight.vb" />
+    <Compile Include="ExcelDirectOperationService.vb" />
+    <Compile Include="ExcelJsonCommandSchema.vb" />
     <Compile Include="TextPreviewForm.vb">
       <SubType>Form</SubType>
     </Compile>

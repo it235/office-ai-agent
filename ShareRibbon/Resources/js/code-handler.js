@@ -19,6 +19,37 @@ function hideCodeActionButtons(uuid) {
     executeButtons.forEach(btn => btn.style.display = 'none');
 }
 
+/**
+ * 完全隐藏代码块的操作栏（模板渲染模式使用）
+ * @param {string} uuid - 消息的UUID
+ */
+function hideAllCodeBlockActions(uuid) {
+    const messageContainer = document.getElementById('content-' + uuid);
+    if (!messageContainer) return;
+    
+    // 隐藏所有代码块操作按钮（复制、编辑、执行）
+    const codeButtons = messageContainer.querySelectorAll('.code-buttons');
+    codeButtons.forEach(btn => btn.style.display = 'none');
+    
+    // 如果需要，也可以将代码块转换为普通文本显示
+    const codeBlocks = messageContainer.querySelectorAll('.code-block');
+    codeBlocks.forEach(block => {
+        block.style.border = 'none';
+        block.style.background = 'transparent';
+        block.style.padding = '0';
+    });
+    
+    // 隐藏代码折叠标签
+    const toggleLabels = messageContainer.querySelectorAll('.code-toggle-label');
+    toggleLabels.forEach(label => label.style.display = 'none');
+    
+    // 移除pre元素的折叠样式
+    const preElements = messageContainer.querySelectorAll('pre.collapsible');
+    preElements.forEach(pre => {
+        pre.classList.remove('collapsible', 'collapsed');
+    });
+}
+
 // Copy code from code block
 function copyCode(button) {
     const codeBlock = button.closest('.code-block');
@@ -60,7 +91,23 @@ function executeCode(button) {
     const codeBlock = button.closest('.code-block');
     const codeElement = codeBlock.querySelector('code');
     const code = codeElement.textContent;
-    const language = codeElement.className.replace('language-', '');
+    let language = codeElement.className.replace('language-', '').replace(/\s*hljs\s*/g, '').trim();
+    
+    // 自动检测JSON：如果语言未标识或不明确，检查代码内容是否为JSON格式
+    if (!language || language === '' || language === 'plaintext' || language === 'text') {
+        const trimmedCode = code.trim();
+        if ((trimmedCode.startsWith('{') && trimmedCode.endsWith('}')) ||
+            (trimmedCode.startsWith('[') && trimmedCode.endsWith(']'))) {
+            try {
+                JSON.parse(trimmedCode);
+                language = 'json';
+                console.log('Auto-detected JSON format');
+            } catch (e) {
+                // 不是有效的JSON，保持原语言
+            }
+        }
+    }
+    
     let preview = document.getElementById('settings-executecode-preview').checked;
 
     try {
@@ -958,7 +1005,8 @@ function hideAllModeIndicators() {
     const indicators = [
         'continuation-mode-indicator',
         'proofread-mode-indicator', 
-        'reformat-mode-indicator'
+        'reformat-mode-indicator',
+        'template-mode-indicator'
     ];
     
     indicators.forEach(id => {
@@ -967,6 +1015,256 @@ function hideAllModeIndicators() {
     });
     
     document.body.style.paddingTop = '';
+}
+
+// ==================== 模板渲染模式相关函数 ====================
+
+/**
+ * 进入模板渲染模式
+ * @param {string} templateContext - 解析后的模板结构描述
+ * @param {string} templateName - 模板文件名
+ */
+function enterTemplateMode(templateContext, templateName) {
+    window.templateModeActive = true;
+    window.currentTemplateContext = templateContext;
+    window.currentTemplateName = templateName || '未命名模板';
+    
+    // 显示模式指示器
+    showTemplateModeIndicator(window.currentTemplateName);
+    
+    console.log('已进入模板渲染模式:', templateName);
+}
+
+/**
+ * 退出模板渲染模式
+ */
+function exitTemplateMode() {
+    window.templateModeActive = false;
+    window.currentTemplateContext = null;
+    window.currentTemplateName = null;
+    
+    // 隐藏模式指示器
+    hideTemplateModeIndicator();
+    
+    console.log('已退出模板渲染模式');
+}
+
+/**
+ * 显示模板模式指示器
+ * @param {string} templateName - 模板文件名
+ */
+function showTemplateModeIndicator(templateName) {
+    // 先隐藏其他模式指示器
+    hideAllModeIndicators();
+    
+    const indicator = document.createElement('div');
+    indicator.id = 'template-mode-indicator';
+    indicator.innerHTML = `
+        <div style="
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(135deg, #9c27b0, #7b1fa2);
+            color: white;
+            padding: 8px 12px;
+            font-size: 13px;
+            z-index: 9999;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        ">
+            <span>📋 模板模式 - 正在基于 "${templateName}" 生成内容</span>
+            <button onclick="exitTemplateMode()" style="
+                background: rgba(255,255,255,0.2);
+                border: 1px solid rgba(255,255,255,0.4);
+                color: white;
+                padding: 4px 12px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 12px;
+            ">退出模板模式</button>
+        </div>
+    `;
+    
+    document.body.appendChild(indicator);
+    document.body.style.paddingTop = '40px';
+}
+
+/**
+ * 隐藏模板模式指示器
+ */
+function hideTemplateModeIndicator() {
+    const indicator = document.getElementById('template-mode-indicator');
+    if (indicator) {
+        indicator.remove();
+        document.body.style.paddingTop = '';
+    }
+}
+
+/**
+ * 显示模板内容预览界面（AI响应完成后调用）
+ * @param {string} uuid - 消息的唯一标识
+ */
+function showTemplatePreview(uuid) {
+    try {
+        const chatSection = document.getElementById('chat-' + uuid);
+        if (!chatSection) {
+            console.error('showTemplatePreview: 找不到 chat section, uuid=' + uuid);
+            return;
+        }
+
+        const contentEl = document.getElementById('content-' + uuid) || chatSection.querySelector('.message-content');
+        if (!contentEl) {
+            console.error('showTemplatePreview: 找不到 content 元素, uuid=' + uuid);
+            return;
+        }
+
+        // 检查是否已经有模板操作按钮
+        if (document.getElementById('template-actions-' + uuid)) return;
+
+        // 隐藏常规聊天的 reject-btn（如果存在）
+        const footer = document.getElementById('footer-' + uuid);
+        if (footer) {
+            const rejectBtn = footer.querySelector('.reject-btn');
+            if (rejectBtn) rejectBtn.style.display = 'none';
+        }
+
+        // 检测应用类型
+        const isPPT = window.officeAppType === 'PowerPoint';
+        
+        // 根据应用类型设置按钮文案
+        const insertStartLabel = isPPT ? '插入首页' : '插入开头';
+        const insertCurrentLabel = isPPT ? '插入当前页' : '插入当前位置';
+        const insertEndLabel = isPPT ? '插入末页' : '插入结尾';
+
+        // 创建模板操作按钮区域（紫色主题）
+        const actionsHtml = `
+            <div class="template-actions" id="template-actions-${uuid}" style="margin-top: 8px; padding: 8px; background: #f3e5f5; border-radius: 6px; border: 1px solid #ce93d8;">
+                <div style="margin-bottom: 6px; font-size: 12px; color: #7b1fa2;">模板内容生成完成，选择插入位置：</div>
+                <div style="margin-bottom: 6px;">
+                    <button class="btn-primary template-btn" onclick="handleTemplateInsert('${uuid}', 'start')" style="background: #9c27b0; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 11px;">
+                        ${insertStartLabel}
+                    </button>
+                    <button class="btn-primary template-btn" onclick="handleTemplateInsert('${uuid}', 'current')" style="background: #7b1fa2; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 11px;">
+                        ${insertCurrentLabel}
+                    </button>
+                    <button class="btn-primary template-btn" onclick="handleTemplateInsert('${uuid}', 'end')" style="background: #9c27b0; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px;">
+                        ${insertEndLabel}
+                    </button>
+                </div>
+                <div>
+                    <button class="btn-secondary template-btn" onclick="handleTemplateRefine('${uuid}')" style="background: #e1bee7; color: #4a148c; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 11px;">
+                        调整需求
+                    </button>
+                    <button class="btn-secondary template-btn" onclick="handleTemplateRegenerate()" style="background: #e1bee7; color: #4a148c; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px;">
+                        重新生成
+                    </button>
+                </div>
+            </div>
+        `;
+        contentEl.insertAdjacentHTML('afterend', actionsHtml);
+        console.log('showTemplatePreview: 模板操作按钮已添加, uuid=' + uuid);
+        
+    } catch (err) {
+        console.error('showTemplatePreview error:', err);
+    }
+}
+
+/**
+ * 处理模板内容插入
+ * @param {string} uuid - 消息的唯一标识
+ * @param {string} position - 插入位置：'start'/'current'/'end'
+ */
+function handleTemplateInsert(uuid, position) {
+    try {
+        position = position || 'current';
+        
+        const chatSection = document.getElementById('chat-' + uuid);
+        if (!chatSection) return;
+
+        const contentEl = document.getElementById('content-' + uuid) || chatSection.querySelector('.message-content');
+        if (!contentEl) return;
+
+        // 获取生成的内容（纯文本）
+        const content = contentEl.innerText || contentEl.textContent;
+
+        // 发送插入请求到VB
+        window.chrome.webview.postMessage({
+            type: 'applyTemplateContent',
+            uuid: uuid,
+            content: content,
+            position: position
+        });
+
+        // 移除操作按钮并显示成功提示
+        removeTemplateActions(uuid);
+        
+        // 添加成功提示
+        const successMsg = document.createElement('div');
+        successMsg.style = 'margin-top: 8px; padding: 8px 12px; background: #e8f5e9; color: #2e7d32; border-radius: 6px; font-size: 13px;';
+        successMsg.textContent = '模板内容已插入文档';
+        contentEl.parentNode.appendChild(successMsg);
+        
+        // 3秒后移除提示
+        setTimeout(() => successMsg.remove(), 3000);
+    } catch (err) {
+        console.error('handleTemplateInsert error:', err);
+    }
+}
+
+/**
+ * 移除模板操作按钮
+ * @param {string} uuid - 消息的唯一标识
+ */
+function removeTemplateActions(uuid) {
+    const actionsDiv = document.getElementById('template-actions-' + uuid);
+    if (actionsDiv) {
+        actionsDiv.remove();
+    }
+}
+
+/**
+ * 处理模板需求调整
+ * @param {string} uuid - 消息的唯一标识
+ */
+function handleTemplateRefine(uuid) {
+    try {
+        const refinement = prompt('请输入调整需求（如：更详细、添加示例、换个风格等）：');
+        if (refinement && refinement.trim()) {
+            window.chrome.webview.postMessage({
+                type: 'refineTemplateContent',
+                uuid: uuid,
+                refinement: refinement.trim()
+            });
+            
+            // 更新按钮状态
+            const actionsDiv = document.getElementById('template-actions-' + uuid);
+            if (actionsDiv) {
+                actionsDiv.innerHTML = '<div style="color: #7b1fa2; font-size: 13px;">正在根据您的要求调整内容...</div>';
+            }
+        }
+    } catch (err) {
+        console.error('handleTemplateRefine error:', err);
+    }
+}
+
+/**
+ * 处理重新生成模板内容
+ */
+function handleTemplateRegenerate() {
+    try {
+        if (window.templateModeActive && window.currentTemplateContext) {
+            const input = document.getElementById('smart-input');
+            if (input) {
+                input.focus();
+                alert('请在输入框中重新描述您的内容需求，然后点击发送。');
+            }
+        }
+    } catch (err) {
+        console.error('handleTemplateRegenerate error:', err);
+    }
 }
 
 // 添加CSS动画样式

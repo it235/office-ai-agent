@@ -349,7 +349,7 @@ Public MustInherit Class DocumentTranslateService
         messages.Add(New JObject() From {{"role", "user"}, {"content", userContent}})
         requestObj("messages") = messages
 
-        Return requestObj.ToString(Formatting.None)
+        Return requestObj.ToString(Newtonsoft.Json.Formatting.None)
     End Function
 
     ''' <summary>

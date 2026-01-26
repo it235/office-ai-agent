@@ -153,4 +153,7 @@ Public MustInherit Class BaseOfficeRibbon
 
     ' 接受补全按钮点击事件（抽象方法，由子类实现）
     Protected MustOverride Sub AcceptCompletionButton_Click(sender As Object, e As RibbonControlEventArgs) Handles AcceptCompletionButton.Click
+
+    ' 模板排版按钮点击事件（抽象方法，由子类实现）
+    Protected MustOverride Sub TemplateFormatButton_Click(sender As Object, e As RibbonControlEventArgs) Handles TemplateFormatButton.Click
 End Class

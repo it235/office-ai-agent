@@ -286,5 +286,17 @@
     <script src="https://officeai.local/js/history-manager.js"></script>
     <script src="https://officeai.local/js/revision-manager.js"></script>
     <script src="https://officeai.local/js/autocomplete.js"></script>
+
+    <!-- 工具函数 -->
+    <script>
+        // 设置输入框文本（由VB.NET调用）
+        function setInputText(text) {
+            var smartInput = document.getElementById('smart-input');
+            if (smartInput) {
+                smartInput.innerText = text;
+                smartInput.focus();
+            }
+        }
+    </script>
 </body>
 </html>
