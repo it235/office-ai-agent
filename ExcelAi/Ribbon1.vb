@@ -281,16 +281,9 @@ Public Class Ribbon1
 
             ShareRibbon.GlobalStatusStripAll.ShowWarning($"正在翻译 {cellTexts.Count} 个单元格...")
 
-            ' 使用基础翻译服务翻译
-            Dim translateService As New ExcelTranslateService()
-
-            Dim results As New List(Of String)()
-            For i = 0 To cellTexts.Count - 1
-                ShareRibbon.GlobalStatusStripAll.ShowWarning($"正在翻译 {i + 1}/{cellTexts.Count}...")
-                translateService.TranslateTextAsync(cellTexts(i))
-                ' 这里简化处理，实际应该等待异步结果
-                Await System.Threading.Tasks.Task.Delay(500)
-            Next
+            ' 使用Excel文档翻译服务翻译
+            Dim translateService As New ExcelDocumentTranslateService()
+            Dim results = Await translateService.TranslateCellsAsync(cellTexts, cellRanges, settings)
 
             ShareRibbon.GlobalStatusStripAll.ShowWarning($"翻译完成，共处理 {cellTexts.Count} 个单元格")
 

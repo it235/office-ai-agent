@@ -21,6 +21,34 @@ const originalCodeRenderer = renderer.code;
 
 renderer.code = function (code, language, isEscaped) {
     const codeHtml = originalCodeRenderer.call(this, code, language, isEscaped);
+    
+    // 检测是否为可执行的代码类型
+    const lang = (language || '').toLowerCase().trim();
+    const executableLanguages = ['json', 'vba', 'vbnet', 'vbscript', 'javascript', 'js', 'excel', 'formula', 'function'];
+    let isExecutable = executableLanguages.some(l => lang.includes(l));
+    
+    // 自动检测JSON格式（即使没有语言标记）
+    if (!isExecutable && (!lang || lang === 'plaintext' || lang === 'text')) {
+        const trimmed = code.trim();
+        if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+            (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+            try {
+                const parsed = JSON.parse(trimmed);
+                if (parsed && (parsed.command || parsed.commands)) {
+                    isExecutable = true;
+                }
+            } catch (e) {}
+        }
+    }
+    
+    // 只为可执行代码显示执行按钮
+    const executeButton = isExecutable ? `
+                <button class="code-button execute-button" onclick="executeCode(this)">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                    执行
+                </button>` : '';
 
     // Add action buttons to code blocks
     return `
@@ -40,13 +68,7 @@ renderer.code = function (code, language, isEscaped) {
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                     </svg>
                     编辑
-                </button>
-                <button class="code-button execute-button" onclick="executeCode(this)">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                    </svg>
-                    执行
-                </button>
+                </button>${executeButton}
             </div>
         </div>
     `;

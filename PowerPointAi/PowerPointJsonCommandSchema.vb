@@ -19,7 +19,11 @@ Public Class PowerPointJsonCommandSchema
         "InsertText",
         "InsertShape",
         "FormatSlide",
-        "InsertTable"
+        "InsertTable",
+        "CreateSlides",
+        "AddAnimation",
+        "ApplyTransition",
+        "BeautifySlides"
     }
 
     ''' <summary>
@@ -72,7 +76,7 @@ Public Class PowerPointJsonCommandSchema
 - 禁止任何其他自创格式
 
 【command类型限制】
-只能使用: InsertSlide, InsertText, InsertShape, FormatSlide, InsertTable
+只能使用: InsertSlide, InsertText, InsertShape, FormatSlide, InsertTable, CreateSlides, AddAnimation, ApplyTransition, BeautifySlides
 
 【params必须包含的字段】
 - InsertSlide: position(可选: current/end), layout(可选), title(可选), content(可选)
@@ -80,11 +84,67 @@ Public Class PowerPointJsonCommandSchema
 - InsertShape: shapeType(必需), x(必需), y(必需), width(可选), height(可选)
 - FormatSlide: slideIndex(可选), background(可选), transition(可选)
 - InsertTable: rows(必需), cols(必需), data(可选), slideIndex(可选)
+- CreateSlides: slides(必需，数组，每个元素含title/content/layout)
+- AddAnimation: effect(必需: fadeIn/flyIn/zoom/wipe), slideIndex(可选), targetShapes(可选: all/title)
+- ApplyTransition: transitionType(必需: fade/push/wipe/split), scope(可选: all/current), duration(可选)
+- BeautifySlides: scope(可选: all/current), theme(可选，含background/titleFont/bodyFont)
 
 【slideIndex说明】
 - -1 或不填表示当前幻灯片
 - 0 表示第一张幻灯片
 - 正数表示具体幻灯片索引
+
+【批量生成幻灯片示例】
+```json
+{
+  ""command"": ""CreateSlides"",
+  ""params"": {
+    ""slides"": [
+      {""title"": ""第一章 概述"", ""content"": ""这是第一页内容"", ""layout"": ""titleAndContent""},
+      {""title"": ""第二章 详情"", ""content"": ""这是第二页内容"", ""layout"": ""titleAndContent""}
+    ]
+  }
+}
+```
+
+【添加动画示例】
+```json
+{
+  ""command"": ""AddAnimation"",
+  ""params"": {
+    ""slideIndex"": -1,
+    ""effect"": ""fadeIn"",
+    ""targetShapes"": ""all""
+  }
+}
+```
+
+【幻灯片切换效果示例】
+```json
+{
+  ""command"": ""ApplyTransition"",
+  ""params"": {
+    ""scope"": ""all"",
+    ""transitionType"": ""fade"",
+    ""duration"": 1.0
+  }
+}
+```
+
+【幻灯片美化示例】
+```json
+{
+  ""command"": ""BeautifySlides"",
+  ""params"": {
+    ""scope"": ""all"",
+    ""theme"": {
+      ""background"": ""#F5F5F5"",
+      ""titleFont"": {""name"": ""微软雅黑"", ""size"": 28, ""color"": ""#333333""},
+      ""bodyFont"": {""name"": ""微软雅黑"", ""size"": 18, ""color"": ""#666666""}
+    }
+  }
+}
+```
 
 如果用户需求不明确，请直接用中文询问用户，不要返回JSON。"
     End Function
@@ -270,6 +330,14 @@ Public Class PowerPointJsonCommandSchema
                     Return ValidateFormatSlide(params, errorMessage)
                 Case "inserttable"
                     Return ValidateInsertTable(params, errorMessage)
+                Case "createslides"
+                    Return ValidateCreateSlides(params, errorMessage)
+                Case "addanimation"
+                    Return ValidateAddAnimation(params, errorMessage)
+                Case "applytransition"
+                    Return ValidateApplyTransition(params, errorMessage)
+                Case "beautifyslides"
+                    Return ValidateBeautifySlides(params, errorMessage)
                 Case Else
                     Return True
             End Select
@@ -324,6 +392,60 @@ Public Class PowerPointJsonCommandSchema
         
         If rows Is Nothing OrElse cols Is Nothing Then
             errorMessage = "InsertTable缺少rows或cols参数"
+            Return False
+        End If
+        Return True
+    End Function
+
+    Private Shared Function ValidateCreateSlides(params As JToken, ByRef errorMessage As String) As Boolean
+        Dim slides = params("slides")
+        If slides Is Nothing OrElse slides.Type <> JTokenType.Array Then
+            errorMessage = "CreateSlides缺少slides数组参数"
+            Return False
+        End If
+        
+        Dim slidesArray = CType(slides, JArray)
+        If slidesArray.Count = 0 Then
+            errorMessage = "CreateSlides的slides数组不能为空"
+            Return False
+        End If
+        Return True
+    End Function
+
+    Private Shared Function ValidateAddAnimation(params As JToken, ByRef errorMessage As String) As Boolean
+        Dim effect = params("effect")?.ToString()
+        If String.IsNullOrEmpty(effect) Then
+            errorMessage = "AddAnimation缺少effect参数"
+            Return False
+        End If
+        
+        Dim validEffects = {"fadein", "flyin", "zoom", "wipe", "appear", "float"}
+        If Not validEffects.Contains(effect.ToLower()) Then
+            errorMessage = $"AddAnimation的effect参数无效: {effect}。有效值: fadeIn, flyIn, zoom, wipe, appear, float"
+            Return False
+        End If
+        Return True
+    End Function
+
+    Private Shared Function ValidateApplyTransition(params As JToken, ByRef errorMessage As String) As Boolean
+        Dim transType = params("transitionType")?.ToString()
+        If String.IsNullOrEmpty(transType) Then
+            errorMessage = "ApplyTransition缺少transitionType参数"
+            Return False
+        End If
+        
+        Dim validTypes = {"fade", "push", "wipe", "split", "reveal", "random"}
+        If Not validTypes.Contains(transType.ToLower()) Then
+            errorMessage = $"ApplyTransition的transitionType参数无效: {transType}。有效值: fade, push, wipe, split, reveal, random"
+            Return False
+        End If
+        Return True
+    End Function
+
+    Private Shared Function ValidateBeautifySlides(params As JToken, ByRef errorMessage As String) As Boolean
+        ' BeautifySlides参数都是可选的，但至少需要一个
+        If params("scope") Is Nothing AndAlso params("theme") Is Nothing Then
+            errorMessage = "BeautifySlides至少需要scope或theme参数"
             Return False
         End If
         Return True

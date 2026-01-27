@@ -19,7 +19,6 @@ Public Class ThisAddIn
 
     Private chatTaskPane As Microsoft.Office.Tools.CustomTaskPane
     Public Shared chatControl As ChatControl
-    Private translateService As ExcelTranslateService
 
     Private Sub ExcelAi_Startup() Handles Me.Startup
         Try
@@ -62,7 +61,6 @@ Public Class ThisAddIn
             Debug.WriteLine($"加载 Excel-DNA 失败: {ex.Message}")
             ' 继续执行，不要因为这个错误而中断启动
         End Try
-        translateService = New ExcelTranslateService()
 
     End Sub
 

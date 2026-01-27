@@ -19,7 +19,9 @@ Public Class WordJsonCommandSchema
         "FormatText",
         "ReplaceText",
         "InsertTable",
-        "ApplyStyle"
+        "ApplyStyle",
+        "GenerateTOC",
+        "BeautifyDocument"
     }
 
     ''' <summary>
@@ -70,7 +72,7 @@ Public Class WordJsonCommandSchema
 - 禁止任何其他自创格式
 
 【command类型限制】
-只能使用: InsertText, FormatText, ReplaceText, InsertTable, ApplyStyle
+只能使用: InsertText, FormatText, ReplaceText, InsertTable, ApplyStyle, GenerateTOC, BeautifyDocument
 
 【params必须包含的字段】
 - InsertText: content(必需), position(可选: cursor/start/end)
@@ -78,6 +80,35 @@ Public Class WordJsonCommandSchema
 - ReplaceText: find(必需), replace(必需), matchCase(可选)
 - InsertTable: rows(必需), cols(必需), data(可选)
 - ApplyStyle: styleName(必需), range(可选: selection/paragraph)
+- GenerateTOC: position(可选: start/cursor), levels(可选: 1-9), includePageNumbers(可选)
+- BeautifyDocument: theme(可选，含h1/h2/body字体设置), margins(可选)
+
+【生成目录示例】
+```json
+{
+  ""command"": ""GenerateTOC"",
+  ""params"": {
+    ""position"": ""start"",
+    ""levels"": 3,
+    ""includePageNumbers"": true
+  }
+}
+```
+
+【文档美化示例】
+```json
+{
+  ""command"": ""BeautifyDocument"",
+  ""params"": {
+    ""theme"": {
+      ""h1"": {""font"": ""微软雅黑"", ""size"": 22, ""color"": ""#000000"", ""bold"": true},
+      ""h2"": {""font"": ""微软雅黑"", ""size"": 18, ""color"": ""#333333"", ""bold"": true},
+      ""body"": {""font"": ""宋体"", ""size"": 12, ""lineSpacing"": 1.5}
+    },
+    ""margins"": {""top"": 2.5, ""bottom"": 2.5, ""left"": 3.0, ""right"": 3.0}
+  }
+}
+```
 
 如果用户需求不明确，请直接用中文询问用户，不要返回JSON。"
     End Function
@@ -263,6 +294,10 @@ Public Class WordJsonCommandSchema
                     Return ValidateInsertTable(params, errorMessage)
                 Case "applystyle"
                     Return ValidateApplyStyle(params, errorMessage)
+                Case "generatetoc"
+                    Return ValidateGenerateTOC(params, errorMessage)
+                Case "beautifydocument"
+                    Return ValidateBeautifyDocument(params, errorMessage)
                 Case Else
                     Return True
             End Select
@@ -322,6 +357,28 @@ Public Class WordJsonCommandSchema
         Dim styleName = params("styleName")?.ToString()
         If String.IsNullOrEmpty(styleName) Then
             errorMessage = "ApplyStyle缺少styleName参数"
+            Return False
+        End If
+        Return True
+    End Function
+
+    Private Shared Function ValidateGenerateTOC(params As JToken, ByRef errorMessage As String) As Boolean
+        ' GenerateTOC参数都是可选的
+        Dim levels = params("levels")
+        If levels IsNot Nothing Then
+            Dim levelValue = levels.Value(Of Integer)()
+            If levelValue < 1 OrElse levelValue > 9 Then
+                errorMessage = "GenerateTOC的levels参数必须在1-9之间"
+                Return False
+            End If
+        End If
+        Return True
+    End Function
+
+    Private Shared Function ValidateBeautifyDocument(params As JToken, ByRef errorMessage As String) As Boolean
+        ' BeautifyDocument至少需要theme或margins之一
+        If params("theme") Is Nothing AndAlso params("margins") Is Nothing Then
+            errorMessage = "BeautifyDocument至少需要theme或margins参数"
             Return False
         End If
         Return True

@@ -88,7 +88,13 @@ Public MustInherit Class BaseChatControl
     Protected ReadOnly Property IntentService As IntentRecognitionService
         Get
             If _intentService Is Nothing Then
-                _intentService = New IntentRecognitionService()
+                ' 根据当前Office应用类型初始化意图识别服务
+                Dim appInfo = GetApplication()
+                If appInfo IsNot Nothing Then
+                    _intentService = New IntentRecognitionService(appInfo.Type)
+                Else
+                    _intentService = New IntentRecognitionService()
+                End If
             End If
             Return _intentService
         End Get
@@ -1350,13 +1356,29 @@ Public MustInherit Class BaseChatControl
             ' 获取当前聊天模式
             Dim currentChatMode As String = ChatSettings.chatMode
 
-            ' 普通消息模式：进行意图识别（使用异步LLM增强）
+            ' 普通消息模式：先检查是否为追问，再决定是否进行意图识别
             Task.Run(Async Function()
                 Try
                     ' 检查是否有引用内容（文件或选中内容）
                     Dim hasReferences As Boolean = (filePaths IsNot Nothing AndAlso filePaths.Count > 0) OrElse
                                                     (selectedContents IsNot Nothing AndAlso selectedContents.Count > 0)
 
+                    ' 检查是否有历史对话记录，如果有则判断新问题是否为追问
+                    Dim isFollowUp As Boolean = False
+                    If systemHistoryMessageData.Count >= 2 AndAlso Not String.IsNullOrWhiteSpace(originalQuestion) Then
+                        ' 有历史记录，检查新问题是否与之前对话相关
+                        isFollowUp = Await IntentService.IsFollowUpQuestionAsync(originalQuestion, systemHistoryMessageData)
+                        Debug.WriteLine($"追问检查结果: isFollowUp={isFollowUp}")
+                    End If
+
+                    ' 如果是追问（与之前对话相关），直接发送给大模型，不弹出意图确认框
+                    If isFollowUp Then
+                        Debug.WriteLine($"检测到追问，直接发送给大模型处理")
+                        SendChatMessage(finalMessageToLLM)
+                        Return
+                    End If
+
+                    ' 不是追问，进行意图识别
                     ' 获取上下文快照
                     Dim contextSnapshot = GetContextSnapshot()
 
@@ -1386,12 +1408,12 @@ Public MustInherit Class BaseChatControl
                     ElseIf currentChatMode = "agent" Then
                         needConfirmation = True
                         autoConfirmCountdown = True  ' Agent模式：倒计时后自动确认
-                    ' 情况4：普通模式下，置信度较高时也需要确认
-                    ElseIf CurrentIntentResult.Confidence >= 0.4 Then
+                    ' 情况4：普通模式下，置信度较高时也需要确认（仅第一次对话）
+                    ElseIf CurrentIntentResult.Confidence >= 0.4 AndAlso systemHistoryMessageData.Count < 2 Then
                         needConfirmation = True
                         autoConfirmCountdown = False  ' Chat模式：不自动确认
                     Else
-                        needConfirmation = False ' 默认不弹出确认框，由大模型决定是否澄清
+                        needConfirmation = False ' 有历史记录时默认不弹出确认框
                     End If
 
                     If needConfirmation Then
@@ -1418,8 +1440,8 @@ Public MustInherit Class BaseChatControl
                         ExecuteJavaScriptAsyncJS($"showIntentPreview({previewJson.ToString(Formatting.None)})")
                         Debug.WriteLine($"显示意图预览（需确认）: {CurrentIntentResult.UserFriendlyDescription}, 自动确认: {autoConfirmCountdown}")
                     Else
-                        ' 置信度太低，直接发送，让大模型来澄清
-                        Debug.WriteLine($"意图不明确（置信度:{CurrentIntentResult.Confidence:F2}），由大模型澄清")
+                        ' 不需要确认，直接发送
+                        Debug.WriteLine($"直接发送消息（置信度:{CurrentIntentResult.Confidence:F2}）")
                         SendChatMessageWithIntent(finalMessageToLLM, CurrentIntentResult)
                     End If
 

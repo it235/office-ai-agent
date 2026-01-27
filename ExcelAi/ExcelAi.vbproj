@@ -278,7 +278,7 @@
     <Compile Include="ExcelAiComInterface.vb" />
     <Compile Include="ExcelDnaFunctions.vb" />
     <Compile Include="ExcelFunctions.vb" />
-    <Compile Include="ExcelTranslateService.vb" />
+    <Compile Include="ExcelDocumentTranslateService.vb" />
     <Compile Include="Ribbon1.Designer.vb">
       <DependentUpon>Ribbon1.vb</DependentUpon>
     </Compile>

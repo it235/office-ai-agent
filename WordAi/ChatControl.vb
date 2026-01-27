@@ -1307,6 +1307,10 @@ Public Class ChatControl
                     Return ExecuteInsertTable(params, selection)
                 Case "applystyle"
                     Return ExecuteApplyStyle(params, selection)
+                Case "generatetoc"
+                    Return ExecuteGenerateTOC(params, doc)
+                Case "beautifydocument"
+                    Return ExecuteBeautifyDocument(params, doc)
                 Case Else
                     Debug.WriteLine($"不支持的Word命令: {command}")
                     Return False
@@ -1441,5 +1445,182 @@ Public Class ChatControl
             Return False
         End Try
     End Function
+
+#Region "高级Word命令实现"
+
+    ''' <summary>
+    ''' 生成目录
+    ''' </summary>
+    Private Function ExecuteGenerateTOC(params As JToken, doc As Object) As Boolean
+        Try
+            Dim position = If(params("position")?.ToString(), "start")
+            Dim levels = If(params("levels")?.Value(Of Integer)(), 3)
+            Dim includePageNumbers = If(params("includePageNumbers")?.Value(Of Boolean)(), True)
+
+            ' 确定插入位置
+            Dim range As Object
+            If position.ToLower() = "start" Then
+                range = doc.Range(0, 0)
+            Else
+                range = Globals.ThisAddIn.Application.Selection.Range
+            End If
+
+            ' 删除已有目录
+            For Each toc In doc.TablesOfContents
+                toc.Delete()
+            Next
+
+            ' 插入新目录
+            Dim newToc = doc.TablesOfContents.Add(
+                Range:=range,
+                UseHeadingStyles:=True,
+                UpperHeadingLevel:=1,
+                LowerHeadingLevel:=levels,
+                IncludePageNumbers:=includePageNumbers
+            )
+
+            ' 更新目录
+            newToc.Update()
+
+            ShareRibbon.GlobalStatusStrip.ShowInfo($"已生成{levels}级目录")
+            Return True
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteGenerateTOC 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 文档美化
+    ''' </summary>
+    Private Function ExecuteBeautifyDocument(params As JToken, doc As Object) As Boolean
+        Try
+            Dim theme = params("theme")
+            Dim margins = params("margins")
+
+            ' 应用页边距
+            If margins IsNot Nothing Then
+                ApplyMargins(doc, margins)
+            End If
+
+            ' 应用主题样式
+            If theme IsNot Nothing Then
+                ApplyThemeStyles(doc, theme)
+            End If
+
+            ShareRibbon.GlobalStatusStrip.ShowInfo("文档美化完成")
+            Return True
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteBeautifyDocument 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 应用页边距
+    ''' </summary>
+    Private Sub ApplyMargins(doc As Object, margins As JToken)
+        Try
+            Dim pageSetup = doc.PageSetup
+            
+            ' 单位转换: 厘米 -> 磅 (1cm = 28.35磅)
+            Const cmToPoints As Single = 28.35F
+
+            If margins("top") IsNot Nothing Then
+                pageSetup.TopMargin = margins("top").Value(Of Single)() * cmToPoints
+            End If
+            If margins("bottom") IsNot Nothing Then
+                pageSetup.BottomMargin = margins("bottom").Value(Of Single)() * cmToPoints
+            End If
+            If margins("left") IsNot Nothing Then
+                pageSetup.LeftMargin = margins("left").Value(Of Single)() * cmToPoints
+            End If
+            If margins("right") IsNot Nothing Then
+                pageSetup.RightMargin = margins("right").Value(Of Single)() * cmToPoints
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"ApplyMargins 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 应用主题样式到文档
+    ''' </summary>
+    Private Sub ApplyThemeStyles(doc As Object, theme As JToken)
+        Try
+            ' 应用标题1样式
+            Dim h1Theme = theme("h1")
+            If h1Theme IsNot Nothing Then
+                ApplyStyleFromTheme(doc, "标题 1", h1Theme)
+            End If
+
+            ' 应用标题2样式
+            Dim h2Theme = theme("h2")
+            If h2Theme IsNot Nothing Then
+                ApplyStyleFromTheme(doc, "标题 2", h2Theme)
+            End If
+
+            ' 应用标题3样式
+            Dim h3Theme = theme("h3")
+            If h3Theme IsNot Nothing Then
+                ApplyStyleFromTheme(doc, "标题 3", h3Theme)
+            End If
+
+            ' 应用正文样式
+            Dim bodyTheme = theme("body")
+            If bodyTheme IsNot Nothing Then
+                ApplyStyleFromTheme(doc, "正文", bodyTheme)
+                
+                ' 应用行间距到所有段落
+                If bodyTheme("lineSpacing") IsNot Nothing Then
+                    Dim lineSpacing = bodyTheme("lineSpacing").Value(Of Single)()
+                    For Each para In doc.Paragraphs
+                        Try
+                            para.LineSpacingRule = 5 ' wdLineSpaceMultiple
+                            para.LineSpacing = 12 * lineSpacing ' 12磅 * 倍数
+                        Catch
+                        End Try
+                    Next
+                End If
+            End If
+
+        Catch ex As Exception
+            Debug.WriteLine($"ApplyThemeStyles 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 应用样式设置
+    ''' </summary>
+    Private Sub ApplyStyleFromTheme(doc As Object, styleName As String, themeSettings As JToken)
+        Try
+            Dim style = doc.Styles(styleName)
+            
+            If themeSettings("font") IsNot Nothing Then
+                style.Font.Name = themeSettings("font").ToString()
+            End If
+            If themeSettings("size") IsNot Nothing Then
+                style.Font.Size = themeSettings("size").Value(Of Single)()
+            End If
+            If themeSettings("color") IsNot Nothing Then
+                Dim colorStr = themeSettings("color").ToString()
+                Dim color = System.Drawing.ColorTranslator.FromHtml(colorStr)
+                style.Font.Color = System.Drawing.ColorTranslator.ToOle(color)
+            End If
+            If themeSettings("bold") IsNot Nothing Then
+                style.Font.Bold = If(themeSettings("bold").Value(Of Boolean)(), -1, 0)
+            End If
+            If themeSettings("italic") IsNot Nothing Then
+                style.Font.Italic = If(themeSettings("italic").Value(Of Boolean)(), -1, 0)
+            End If
+
+        Catch ex As Exception
+            Debug.WriteLine($"ApplyStyleFromTheme ({styleName}) 出错: {ex.Message}")
+        End Try
+    End Sub
+
+#End Region
 
 End Class

@@ -71,7 +71,7 @@ Partial Class Ribbon1
         Me.ProofreadButton.Visible = False
         Me.ReformatButton.Visible = False
         Me.AcceptCompletionButton.Visible = False  ' Excel不支持自动补全
-
+        Me.ContinuationButton.Visible = False
         Me.TemplateFormatButton.Visible = False
         Me.TranslateButton.Image = ShareRibbon.SharedResources.Translate
         Me.StudyButton.Image = ShareRibbon.SharedResources.Help

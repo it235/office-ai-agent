@@ -70,7 +70,8 @@ Partial Class Ribbon1
         Me.DoubaoButton.Image = ShareRibbon.SharedResources.Doubao
         Me.WebCaptureButton.Image = ShareRibbon.SharedResources.Send32
 
-        Me.ContinuationButton.Visible = False
+        Me.ContinuationButton.Image = ShareRibbon.SharedResources.Aiwrite
+
         Me.TranslateButton.Image = ShareRibbon.SharedResources.Translate
         Me.StudyButton.Image = ShareRibbon.SharedResources.Help
 

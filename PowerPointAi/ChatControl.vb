@@ -1210,6 +1210,14 @@ Public Class ChatControl
                     Return ExecuteFormatSlide(params, pres)
                 Case "inserttable"
                     Return ExecuteInsertTable(params, pres)
+                Case "createslides"
+                    Return ExecuteCreateSlides(params, pres)
+                Case "addanimation"
+                    Return ExecuteAddAnimation(params, pres)
+                Case "applytransition"
+                    Return ExecuteApplyTransition(params, pres)
+                Case "beautifyslides"
+                    Return ExecuteBeautifySlides(params, pres)
                 Case Else
                     Debug.WriteLine($"不支持的PPT命令: {command}")
                     Return False
@@ -1396,6 +1404,311 @@ Public Class ChatControl
             Return False
         End Try
     End Function
+
+#Region "高级PPT命令实现"
+
+    ''' <summary>
+    ''' 批量创建幻灯片
+    ''' </summary>
+    Private Function ExecuteCreateSlides(params As JToken, pres As Object) As Boolean
+        Try
+            Dim slides = params("slides")
+            If slides Is Nothing OrElse slides.Type <> JTokenType.Array Then
+                Return False
+            End If
+
+            Dim slidesArray = CType(slides, JArray)
+            Dim startIndex = pres.Slides.Count + 1
+
+            For i = 0 To slidesArray.Count - 1
+                Dim slideData = slidesArray(i)
+                Dim title = If(slideData("title")?.ToString(), "")
+                Dim content = If(slideData("content")?.ToString(), "")
+                Dim layout = If(slideData("layout")?.ToString(), "titleAndContent")
+
+                ' 根据layout选择布局类型
+                Dim layoutType As Integer = GetLayoutType(layout)
+                Dim slide = pres.Slides.Add(startIndex + i, layoutType)
+
+                ' 填充标题
+                If Not String.IsNullOrEmpty(title) Then
+                    For Each shape In slide.Shapes
+                        If shape.Type = Microsoft.Office.Core.MsoShapeType.msoPlaceholder Then
+                            If shape.PlaceholderFormat.Type = Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderTitle Then
+                                shape.TextFrame.TextRange.Text = title
+                                Exit For
+                            End If
+                        End If
+                    Next
+                End If
+
+                ' 填充内容
+                If Not String.IsNullOrEmpty(content) Then
+                    Dim contentFilled = False
+                    For Each shape In slide.Shapes
+                        If shape.Type = Microsoft.Office.Core.MsoShapeType.msoPlaceholder Then
+                            If shape.PlaceholderFormat.Type = Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderBody OrElse
+                               shape.PlaceholderFormat.Type = Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderSubtitle Then
+                                shape.TextFrame.TextRange.Text = content
+                                contentFilled = True
+                                Exit For
+                            End If
+                        End If
+                    Next
+
+                    ' 如果没有内容占位符，添加文本框
+                    If Not contentFilled Then
+                        Dim textBox = slide.Shapes.AddTextbox(
+                            Microsoft.Office.Core.MsoTextOrientation.msoTextOrientationHorizontal,
+                            50, 150, 620, 350)
+                        textBox.TextFrame.TextRange.Text = content
+                        textBox.TextFrame.TextRange.Font.Size = 18
+                    End If
+                End If
+            Next
+
+            ShareRibbon.GlobalStatusStrip.ShowInfo($"成功创建 {slidesArray.Count} 张幻灯片")
+            Return True
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteCreateSlides 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 获取布局类型
+    ''' </summary>
+    Private Function GetLayoutType(layout As String) As Integer
+        Select Case layout.ToLower()
+            Case "title", "titleonly"
+                Return 11 ' ppLayoutTitleOnly
+            Case "titleandcontent", "content"
+                Return 2 ' ppLayoutText
+            Case "twocontent", "twotext"
+                Return 3 ' ppLayoutTwoColumnText
+            Case "blank"
+                Return 7 ' ppLayoutBlank
+            Case "sectionheader"
+                Return 1 ' ppLayoutTitle
+            Case Else
+                Return 2 ' ppLayoutText (默认)
+        End Select
+    End Function
+
+    ''' <summary>
+    ''' 添加动画效果
+    ''' </summary>
+    Private Function ExecuteAddAnimation(params As JToken, pres As Object) As Boolean
+        Try
+            Dim slideIndex = If(params("slideIndex")?.Value(Of Integer)(), -1)
+            Dim effect = If(params("effect")?.ToString(), "fadeIn")
+            Dim targetShapes = If(params("targetShapes")?.ToString(), "all")
+
+            Dim slide As Object
+            If slideIndex < 0 Then
+                slide = Globals.ThisAddIn.Application.ActiveWindow.View.Slide
+            Else
+                slide = pres.Slides(Math.Min(slideIndex + 1, pres.Slides.Count))
+            End If
+
+            Dim timeline = slide.TimeLine
+            Dim msoEffect = GetMsoAnimEffect(effect)
+
+            For Each shape In slide.Shapes
+                Dim shouldAnimate = False
+
+                If targetShapes.ToLower() = "all" Then
+                    shouldAnimate = True
+                ElseIf targetShapes.ToLower() = "title" Then
+                    If shape.Type = Microsoft.Office.Core.MsoShapeType.msoPlaceholder AndAlso
+                       shape.PlaceholderFormat.Type = Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderTitle Then
+                        shouldAnimate = True
+                    End If
+                ElseIf targetShapes.ToLower() = "content" Then
+                    If shape.Type = Microsoft.Office.Core.MsoShapeType.msoPlaceholder AndAlso
+                       (shape.PlaceholderFormat.Type = Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderBody OrElse
+                        shape.PlaceholderFormat.Type = Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderSubtitle) Then
+                        shouldAnimate = True
+                    End If
+                End If
+
+                If shouldAnimate AndAlso shape.HasTextFrame Then
+                    Try
+                        timeline.MainSequence.AddEffect(shape, msoEffect)
+                    Catch
+                        ' 某些形状可能不支持动画
+                    End Try
+                End If
+            Next
+
+            Return True
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteAddAnimation 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 获取动画效果类型
+    ''' </summary>
+    Private Function GetMsoAnimEffect(effect As String) As Integer
+        Select Case effect.ToLower()
+            Case "fadein", "fade"
+                Return 10 ' msoAnimEffectFade
+            Case "flyin", "fly"
+                Return 2 ' msoAnimEffectFly
+            Case "zoom"
+                Return 53 ' msoAnimEffectGrowAndTurn
+            Case "wipe"
+                Return 22 ' msoAnimEffectWipe
+            Case "appear"
+                Return 1 ' msoAnimEffectAppear
+            Case "float"
+                Return 42 ' msoAnimEffectFloat
+            Case Else
+                Return 10 ' msoAnimEffectFade (默认)
+        End Select
+    End Function
+
+    ''' <summary>
+    ''' 应用幻灯片切换效果
+    ''' </summary>
+    Private Function ExecuteApplyTransition(params As JToken, pres As Object) As Boolean
+        Try
+            Dim transType = If(params("transitionType")?.ToString(), "fade")
+            Dim scope = If(params("scope")?.ToString(), "all")
+            Dim duration = If(params("duration")?.Value(Of Single)(), 1.0F)
+
+            Dim transEffect = GetTransitionEffect(transType)
+
+            Dim slidesToProcess As New List(Of Object)()
+            If scope.ToLower() = "all" Then
+                For Each slide In pres.Slides
+                    slidesToProcess.Add(slide)
+                Next
+            Else
+                slidesToProcess.Add(Globals.ThisAddIn.Application.ActiveWindow.View.Slide)
+            End If
+
+            For Each slide In slidesToProcess
+                slide.SlideShowTransition.EntryEffect = transEffect
+                slide.SlideShowTransition.Duration = duration
+                slide.SlideShowTransition.AdvanceOnClick = True
+            Next
+
+            ShareRibbon.GlobalStatusStrip.ShowInfo($"已为 {slidesToProcess.Count} 张幻灯片应用切换效果")
+            Return True
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteApplyTransition 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 获取切换效果类型
+    ''' </summary>
+    Private Function GetTransitionEffect(transType As String) As Integer
+        Select Case transType.ToLower()
+            Case "fade"
+                Return 257 ' ppTransitionFade
+            Case "push"
+                Return 3844 ' ppTransitionPush
+            Case "wipe"
+                Return 769 ' ppTransitionWipe
+            Case "split"
+                Return 2817 ' ppTransitionSplit
+            Case "reveal"
+                Return 3073 ' ppTransitionReveal
+            Case "random"
+                Return 513 ' ppTransitionRandom
+            Case Else
+                Return 257 ' ppTransitionFade (默认)
+        End Select
+    End Function
+
+    ''' <summary>
+    ''' 美化幻灯片
+    ''' </summary>
+    Private Function ExecuteBeautifySlides(params As JToken, pres As Object) As Boolean
+        Try
+            Dim scope = If(params("scope")?.ToString(), "all")
+            Dim theme = params("theme")
+
+            Dim slidesToProcess As New List(Of Object)()
+            If scope.ToLower() = "all" Then
+                For Each slide In pres.Slides
+                    slidesToProcess.Add(slide)
+                Next
+            Else
+                slidesToProcess.Add(Globals.ThisAddIn.Application.ActiveWindow.View.Slide)
+            End If
+
+            For Each slide In slidesToProcess
+                ' 应用背景色
+                If theme IsNot Nothing AndAlso theme("background") IsNot Nothing Then
+                    Try
+                        Dim bgColor = theme("background").ToString()
+                        Dim color = System.Drawing.ColorTranslator.FromHtml(bgColor)
+                        slide.FollowMasterBackground = False
+                        slide.Background.Fill.Solid()
+                        slide.Background.Fill.ForeColor.RGB = System.Drawing.ColorTranslator.ToOle(color)
+                    Catch
+                    End Try
+                End If
+
+                ' 应用字体样式
+                For Each shape In slide.Shapes
+                    If shape.HasTextFrame Then
+                        Dim isTitle = False
+                        If shape.Type = Microsoft.Office.Core.MsoShapeType.msoPlaceholder Then
+                            isTitle = (shape.PlaceholderFormat.Type = Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderTitle)
+                        End If
+
+                        Dim fontTheme = If(isTitle, theme?("titleFont"), theme?("bodyFont"))
+                        If fontTheme IsNot Nothing Then
+                            ApplyFontStyle(shape.TextFrame.TextRange, fontTheme)
+                        End If
+                    End If
+                Next
+            Next
+
+            ShareRibbon.GlobalStatusStrip.ShowInfo($"已美化 {slidesToProcess.Count} 张幻灯片")
+            Return True
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteBeautifySlides 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 应用字体样式
+    ''' </summary>
+    Private Sub ApplyFontStyle(textRange As Object, fontTheme As JToken)
+        Try
+            If fontTheme("name") IsNot Nothing Then
+                textRange.Font.Name = fontTheme("name").ToString()
+            End If
+            If fontTheme("size") IsNot Nothing Then
+                textRange.Font.Size = fontTheme("size").Value(Of Single)()
+            End If
+            If fontTheme("color") IsNot Nothing Then
+                Dim colorStr = fontTheme("color").ToString()
+                Dim color = System.Drawing.ColorTranslator.FromHtml(colorStr)
+                textRange.Font.Color.RGB = System.Drawing.ColorTranslator.ToOle(color)
+            End If
+            If fontTheme("bold") IsNot Nothing Then
+                textRange.Font.Bold = If(fontTheme("bold").Value(Of Boolean)(), -1, 0)
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"ApplyFontStyle 出错: {ex.Message}")
+        End Try
+    End Sub
+
+#End Region
 
 End Class
 
