@@ -230,7 +230,14 @@ function processStreamComplete(uuid, totalTokens) {
     sendButton.style.setProperty('display', 'flex', 'important');
     stopButton.style.setProperty('display', 'none', 'important');
 
-    // Collapse code blocks
+    // 先尝试将 JSON 命令转换为执行步骤展示
+    try {
+        convertJsonToExecutionPlan(uuid);
+    } catch (err) {
+        console.error('convertJsonToExecutionPlan error:', err);
+    }
+
+    // Collapse code blocks (对于未转换的代码块)
     const contentDiv = document.getElementById('content-' + uuid);
     if (contentDiv) {
         const codeBlocks = contentDiv.querySelectorAll('pre code');
@@ -257,9 +264,24 @@ function processStreamComplete(uuid, totalTokens) {
 
     // Auto-execute in agent mode
     if (document.getElementById("chatMode").value === 'agent') {
-        let executeBtns = document.getElementById("content-" + uuid).querySelector(".execute-button");
-        if (executeBtns) {
-            executeBtns.click();
+        // 在Agent模式下，查找执行计划按钮或代码执行按钮
+        const contentDiv = document.getElementById("content-" + uuid);
+        if (contentDiv) {
+            // 优先查找执行计划按钮（JSON命令转换后的）
+            let planBtn = contentDiv.querySelector(".execute-plan-btn");
+            if (planBtn) {
+                console.log('Agent模式：自动执行执行计划');
+                // 直接调用执行函数，跳过预览
+                executePlanFromRendererAutoMode(uuid);
+            } else {
+                // 查找普通执行按钮
+                let executeBtns = contentDiv.querySelector(".execute-button");
+                if (executeBtns) {
+                    console.log('Agent模式：自动执行代码');
+                    // 在Agent模式下强制跳过预览
+                    executeCodeAutoMode(executeBtns);
+                }
+            }
         }
     }
 
@@ -335,6 +357,12 @@ function acceptAnswer(uuid) {
 // Reject answer handler
 function rejectAnswer(uuid) {
     try {
+        // 立即置灰按钮，防止重复点击
+        const footer = document.getElementById('footer-' + uuid);
+        if (footer) {
+            footer.querySelectorAll('.accept-btn, .reject-btn').forEach(b => b.disabled = true);
+        }
+
         const contentDiv = document.getElementById('content-' + uuid);
         const plainText = contentDiv ? (contentDiv.innerText || contentDiv.textContent || '') : '';
 
@@ -342,6 +370,10 @@ function rejectAnswer(uuid) {
         try {
             reason = prompt('请简要说明希望如何改进（可留空）：', '');
             if (reason === null) {
+                // 用户取消了，恢复按钮
+                if (footer) {
+                    footer.querySelectorAll('.accept-btn, .reject-btn').forEach(b => b.disabled = false);
+                }
                 return;
             }
         } catch (e) {
@@ -355,9 +387,8 @@ function rejectAnswer(uuid) {
             reason: reason
         });
 
-        const footer = document.getElementById('footer-' + uuid);
+        // 显示状态提示
         if (footer) {
-            footer.querySelectorAll('.accept-btn, .reject-btn').forEach(b => b.disabled = true);
             const statusSpan = document.createElement('span');
             statusSpan.className = 'token-count';
             statusSpan.textContent = '已请求改进，等待新结果…';
@@ -1281,3 +1312,734 @@ function handleTemplateRegenerate() {
     `;
     document.head.appendChild(style);
 })();
+
+/**
+ * Agent模式下自动执行执行计划（仍然弹出预览框让用户确认）
+ * @param {string} uuid - 消息 UUID
+ */
+function executePlanFromRendererAutoMode(uuid) {
+    try {
+        const contentDiv = document.getElementById('content-' + uuid);
+        if (!contentDiv) return;
+
+        const container = contentDiv.querySelector('.execution-plan-container');
+        if (!container) return;
+
+        const codeElement = container.querySelector('.original-code code');
+        if (!codeElement) return;
+
+        const code = codeElement.textContent;
+
+        // Agent模式也弹出预览框让用户确认执行
+        const payload = {
+            type: 'executeCode',
+            code: code,
+            language: 'json',
+            executecodePreview: true, // 弹出预览框让用户确认
+            responseUuid: uuid,
+            autoMode: true
+        };
+
+        console.log('Agent模式执行JSON命令（弹出预览框确认）');
+
+        if (window.chrome && window.chrome.webview) {
+            window.chrome.webview.postMessage(payload);
+        } else if (window.vsto) {
+            window.vsto.executeCode(code, 'json', true);
+        }
+
+        // UI反馈
+        const btn = container.querySelector('.execute-plan-btn');
+        if (btn) {
+            btn.textContent = '等待确认...';
+            btn.disabled = true;
+            // 保存按钮引用，以便执行结果返回后恢复
+            btn.dataset.originalText = '执行此计划';
+        }
+    } catch (err) {
+        console.error('executePlanFromRendererAutoMode error:', err);
+    }
+}
+
+/**
+ * Agent模式下自动执行代码（仍然弹出预览框让用户确认）
+ * @param {HTMLElement} button - 执行按钮元素
+ */
+function executeCodeAutoMode(button) {
+    try {
+        const codeBlock = button.closest('.code-block');
+        if (!codeBlock) return;
+
+        const codeElement = codeBlock.querySelector('code');
+        if (!codeElement) return;
+
+        const code = codeElement.textContent;
+        let language = codeElement.className.replace('language-', '').replace(/\s*hljs\s*/g, '').trim();
+        
+        // 自动检测JSON
+        if (!language || language === '' || language === 'plaintext' || language === 'text') {
+            const trimmedCode = code.trim();
+            if ((trimmedCode.startsWith('{') && trimmedCode.endsWith('}')) ||
+                (trimmedCode.startsWith('[') && trimmedCode.endsWith(']'))) {
+                try {
+                    JSON.parse(trimmedCode);
+                    language = 'json';
+                } catch (e) {}
+            }
+        }
+
+        // 获取UUID
+        const chatContainer = button.closest('.chat-container');
+        let responseUuid = null;
+        if (chatContainer && chatContainer.id && chatContainer.id.startsWith('chat-')) {
+            responseUuid = chatContainer.id.replace('chat-', '');
+        }
+
+        // Agent模式也弹出预览框让用户确认
+        const payload = {
+            type: 'executeCode',
+            code: code,
+            language: language,
+            executecodePreview: true, // 弹出预览框让用户确认
+            responseUuid: responseUuid,
+            autoMode: true
+        };
+
+        console.log('Agent模式执行代码（弹出预览框确认）, 语言:', language);
+
+        if (window.chrome && window.chrome.webview) {
+            window.chrome.webview.postMessage(payload);
+        } else if (window.vsto) {
+            window.vsto.executeCode(code, language, true);
+        }
+
+        // UI反馈
+        const originalText = button.innerHTML;
+        button.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            等待确认...
+        `;
+        button.dataset.originalHtml = originalText;
+        button.disabled = true;
+    } catch (err) {
+        console.error('executeCodeAutoMode error:', err);
+    }
+}
+
+// 导出函数供全局使用
+window.executePlanFromRendererAutoMode = executePlanFromRendererAutoMode;
+window.executeCodeAutoMode = executeCodeAutoMode;
+
+// ========== JSON 命令转执行步骤功能 ==========
+
+/**
+ * 检测并将 JSON 代码块转换为执行步骤展示
+ * @param {string} uuid - 消息的 UUID
+ * @returns {boolean} 是否有 JSON 命令被转换
+ */
+function convertJsonToExecutionPlan(uuid) {
+    try {
+        const contentDiv = document.getElementById('content-' + uuid);
+        if (!contentDiv) return false;
+
+        const codeBlocks = contentDiv.querySelectorAll('pre code');
+        let converted = false;
+
+        codeBlocks.forEach(codeBlock => {
+            // 检测是否为 JSON
+            const language = codeBlock.className.replace('language-', '').replace(/\s*hljs\s*/g, '').trim().toLowerCase();
+            const code = codeBlock.textContent.trim();
+
+            // 检测 JSON 格式
+            if (isJsonCommand(code, language)) {
+                try {
+                    const json = JSON.parse(code);
+                    if (json.command) {
+                        // 是有效的命令 JSON，转换为执行步骤
+                        const planHtml = buildExecutionPlanHtml(json, uuid, code);
+                        
+                        // 替换代码块
+                        const codeBlockContainer = codeBlock.closest('.code-block');
+                        if (codeBlockContainer) {
+                            const planContainer = document.createElement('div');
+                            planContainer.innerHTML = planHtml;
+                            codeBlockContainer.parentNode.replaceChild(planContainer.firstElementChild, codeBlockContainer);
+                            converted = true;
+                        }
+                    }
+                } catch (e) {
+                    // JSON 解析失败，保持原样
+                }
+            }
+        });
+
+        return converted;
+    } catch (err) {
+        console.error('convertJsonToExecutionPlan error:', err);
+        return false;
+    }
+}
+
+/**
+ * 检测代码是否为 JSON 命令
+ * @param {string} code - 代码内容
+ * @param {string} language - 语言标识
+ * @returns {boolean}
+ */
+function isJsonCommand(code, language) {
+    if (!code) return false;
+
+    // 语言标识检测
+    if (language === 'json') return true;
+
+    // 内容检测
+    const trimmed = code.trim();
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+        (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        try {
+            const parsed = JSON.parse(trimmed);
+            // 检查是否有 command 字段
+            return parsed && (parsed.command || (Array.isArray(parsed) && parsed[0] && parsed[0].command));
+        } catch (e) {
+            return false;
+        }
+    }
+    return false;
+}
+
+/**
+ * 构建执行步骤的 HTML
+ * @param {Object} json - JSON 命令对象
+ * @param {string} uuid - 消息 UUID
+ * @param {string} originalCode - 原始 JSON 代码
+ * @returns {string} HTML 字符串
+ */
+function buildExecutionPlanHtml(json, uuid, originalCode) {
+    const plan = parseJsonToPlan(json);
+    const planId = uuid + '-plan';
+
+    let stepsHtml = plan.steps.map((step, idx) => {
+        const icon = getStepIcon(step.icon);
+        const willModify = step.willModify ? `<span class="modify-badge">→ ${escapeHtml(step.willModify)}</span>` : '';
+        const estimatedTime = step.estimatedTime ? `<span class="time-badge">⏱️ ${step.estimatedTime}</span>` : '';
+
+        return `
+            <div class="plan-step">
+                <span class="step-badge">${idx + 1}</span>
+                <div class="step-content">
+                    <div class="step-title">${icon} ${escapeHtml(step.description)}</div>
+                    ${(willModify || estimatedTime) ? `<div class="step-details">${willModify}${estimatedTime}</div>` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    return `
+        <div class="execution-plan-container" data-uuid="${uuid}" data-plan-id="${planId}">
+            <div class="plan-header">📋 执行计划</div>
+            <div class="plan-steps">
+                ${stepsHtml}
+            </div>
+            <div class="plan-actions">
+                <button class="execute-plan-btn" onclick="executePlanFromRenderer('${uuid}', this)">执行此计划</button>
+                <button class="show-code-btn" onclick="toggleCodeViewFromRenderer('${planId}')">查看代码</button>
+            </div>
+            <div class="original-code" id="code-${planId}">
+                <pre><code class="language-json">${escapeHtml(originalCode)}</code></pre>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * 将 JSON 命令解析为执行步骤
+ * @param {Object} json - JSON 命令对象
+ * @returns {Object} 包含 steps 数组的对象
+ */
+function parseJsonToPlan(json) {
+    const steps = [];
+    const command = json.command || '';
+    const params = json.params || {};
+
+    // 命令描述映射
+    const commandDescriptions = {
+        'ApplyFormula': { desc: '应用公式', icon: 'formula' },
+        'WriteData': { desc: '写入数据', icon: 'data' },
+        'FormatRange': { desc: '格式化区域', icon: 'format' },
+        'CreateChart': { desc: '创建图表', icon: 'chart' },
+        'CleanData': { desc: '清洗数据', icon: 'clean' },
+        'DataAnalysis': { desc: '数据分析', icon: 'data' },
+        'TransformData': { desc: '数据转换', icon: 'data' },
+        'GenerateReport': { desc: '生成报表', icon: 'data' }
+    };
+
+    const cmdInfo = commandDescriptions[command] || { desc: command, icon: 'default' };
+
+    // 根据命令类型生成步骤
+    switch (command.toLowerCase()) {
+        case 'applyformula':
+        case 'formula':
+            steps.push({
+                description: `在 ${params.targetRange || '目标区域'} 应用公式`,
+                icon: 'formula',
+                willModify: params.targetRange,
+                estimatedTime: '1秒'
+            });
+            if (params.formula) {
+                steps.push({
+                    description: `公式: ${getFormulaDescription(params.formula)}`,
+                    icon: 'formula'
+                });
+            }
+            if (params.fillDown) {
+                steps.push({
+                    description: '自动向下填充',
+                    icon: 'formula'
+                });
+            }
+            break;
+
+        case 'createchart':
+        case 'chart':
+            const chartTypes = { 'Column': '柱状图', 'Line': '折线图', 'Pie': '饼图', 'Bar': '条形图' };
+            const chartType = chartTypes[params.type] || params.type || '图表';
+            steps.push({
+                description: `读取 ${params.dataRange || '数据区域'} 作为图表数据`,
+                icon: 'search'
+            });
+            steps.push({
+                description: `创建 ${chartType}`,
+                icon: 'chart',
+                estimatedTime: '2秒'
+            });
+            if (params.title) {
+                steps.push({
+                    description: `设置标题: ${params.title}`,
+                    icon: 'chart'
+                });
+            }
+            break;
+
+        case 'formatrange':
+        case 'format':
+            const range = params.range || params.targetRange || '目标区域';
+            steps.push({
+                description: `选择 ${range} 区域`,
+                icon: 'search'
+            });
+            let formatDesc = '应用格式设置';
+            if (params.style) {
+                formatDesc = `应用 ${params.style} 样式`;
+            }
+            steps.push({
+                description: formatDesc,
+                icon: 'format',
+                willModify: range,
+                estimatedTime: '1秒'
+            });
+            break;
+
+        case 'cleandata':
+        case 'clean':
+            const operations = {
+                'removeDuplicates': '删除重复项',
+                'fillEmpty': '填充空值',
+                'trim': '去除空格'
+            };
+            const opDesc = operations[params.operation] || params.operation || '清洗';
+            steps.push({
+                description: `扫描 ${params.range || '数据区域'}`,
+                icon: 'search'
+            });
+            steps.push({
+                description: `执行: ${opDesc}`,
+                icon: 'clean',
+                willModify: params.range,
+                estimatedTime: '2秒'
+            });
+            break;
+
+        default:
+            steps.push({
+                description: `执行 ${cmdInfo.desc}`,
+                icon: cmdInfo.icon,
+                estimatedTime: '1秒'
+            });
+    }
+
+    return { steps };
+}
+
+/**
+ * 获取公式的友好描述
+ * @param {string} formula - 公式字符串
+ * @returns {string}
+ */
+function getFormulaDescription(formula) {
+    if (!formula) return '';
+    formula = formula.replace(/^=/, '');
+    const upper = formula.toUpperCase();
+
+    if (upper.startsWith('SUM(')) return '求和';
+    if (upper.startsWith('AVERAGE(')) return '平均值';
+    if (upper.startsWith('COUNT(')) return '计数';
+    if (upper.startsWith('MAX(')) return '最大值';
+    if (upper.startsWith('MIN(')) return '最小值';
+    if (upper.startsWith('VLOOKUP(')) return '垂直查找';
+    if (upper.startsWith('IF(')) return '条件判断';
+    if (formula.includes('+')) return '加法运算';
+    if (formula.includes('-')) return '减法运算';
+    if (formula.includes('*')) return '乘法运算';
+    if (formula.includes('/')) return '除法运算';
+
+    return formula.length > 25 ? formula.substring(0, 22) + '...' : formula;
+}
+
+/**
+ * 获取步骤图标
+ * @param {string} iconType - 图标类型
+ * @returns {string} emoji
+ */
+function getStepIcon(iconType) {
+    const icons = {
+        'search': '🔍',
+        'data': '📊',
+        'formula': '🧮',
+        'chart': '📈',
+        'format': '🎨',
+        'clean': '🧹',
+        'default': '⚡'
+    };
+    return icons[iconType] || icons['default'];
+}
+
+/**
+ * 执行计划按钮点击处理
+ * @param {string} uuid - 消息 UUID
+ * @param {HTMLElement} button - 按钮元素
+ */
+function executePlanFromRenderer(uuid, button) {
+    try {
+        // 找到原始代码
+        const container = button.closest('.execution-plan-container');
+        if (!container) return;
+
+        const codeElement = container.querySelector('.original-code code');
+        if (!codeElement) return;
+
+        const code = codeElement.textContent;
+        const preview = document.getElementById('settings-executecode-preview')?.checked || false;
+
+        // 发送执行请求
+        const payload = {
+            type: 'executeCode',
+            code: code,
+            language: 'json',
+            executecodePreview: preview,
+            responseUuid: uuid
+        };
+
+        if (window.chrome && window.chrome.webview) {
+            window.chrome.webview.postMessage(payload);
+        } else if (window.vsto) {
+            window.vsto.executeCode(code, 'json', preview);
+        }
+
+        // UI 反馈
+        button.textContent = '已执行';
+        button.disabled = true;
+        setTimeout(() => {
+            button.textContent = '执行此计划';
+            button.disabled = false;
+        }, 2000);
+    } catch (err) {
+        console.error('executePlanFromRenderer error:', err);
+        alert('执行失败：' + err.message);
+    }
+}
+
+/**
+ * 切换代码视图显示/隐藏
+ * @param {string} planId - 计划 ID
+ */
+function toggleCodeViewFromRenderer(planId) {
+    try {
+        const codeDiv = document.getElementById('code-' + planId);
+        if (codeDiv) {
+            codeDiv.classList.toggle('visible');
+
+            // 更新按钮文字
+            const container = codeDiv.closest('.execution-plan-container');
+            if (container) {
+                const btn = container.querySelector('.show-code-btn');
+                if (btn) {
+                    btn.textContent = codeDiv.classList.contains('visible') ? '隐藏代码' : '查看代码';
+                }
+            }
+
+            // 高亮代码
+            if (codeDiv.classList.contains('visible')) {
+                const codeBlock = codeDiv.querySelector('code');
+                if (codeBlock && typeof hljs !== 'undefined') {
+                    hljs.highlightElement(codeBlock);
+                }
+            }
+        }
+    } catch (err) {
+        console.error('toggleCodeViewFromRenderer error:', err);
+    }
+}
+
+// 导出函数供全局使用
+window.convertJsonToExecutionPlan = convertJsonToExecutionPlan;
+window.executePlanFromRenderer = executePlanFromRenderer;
+window.toggleCodeViewFromRenderer = toggleCodeViewFromRenderer;
+
+// ========== 执行结果处理函数 ==========
+
+/**
+ * 处理代码执行成功
+ * @param {string} uuid - 消息 UUID
+ */
+function handleExecutionSuccess(uuid) {
+    try {
+        console.log('执行成功:', uuid);
+        
+        // 清空引用区
+        clearAllReferences();
+        
+        // 恢复执行按钮状态
+        restoreExecuteButtons(uuid, true);
+    } catch (err) {
+        console.error('handleExecutionSuccess error:', err);
+    }
+}
+
+/**
+ * 处理代码执行失败
+ * @param {string} uuid - 消息 UUID
+ * @param {string} errorMsg - 错误信息
+ */
+function handleExecutionError(uuid, errorMsg) {
+    try {
+        console.log('执行失败:', uuid, errorMsg);
+        
+        // 恢复执行按钮状态（可再次点击）
+        restoreExecuteButtons(uuid, false);
+    } catch (err) {
+        console.error('handleExecutionError error:', err);
+    }
+}
+
+/**
+ * 处理用户取消执行（在预览对话框中点击取消）
+ * @param {string} uuid - 消息 UUID
+ */
+function handleExecutionCancelled(uuid) {
+    try {
+        console.log('用户取消执行:', uuid);
+        
+        // 恢复执行按钮状态
+        restoreExecuteButtons(uuid, false);
+    } catch (err) {
+        console.error('handleExecutionCancelled error:', err);
+    }
+}
+
+/**
+ * 恢复执行按钮状态
+ * @param {string} uuid - 消息 UUID
+ * @param {boolean} success - 是否执行成功
+ */
+function restoreExecuteButtons(uuid, success) {
+    try {
+        const contentDiv = document.getElementById('content-' + uuid);
+        if (!contentDiv) return;
+
+        // 恢复执行计划按钮
+        const planContainer = contentDiv.querySelector('.execution-plan-container');
+        if (planContainer) {
+            const btn = planContainer.querySelector('.execute-plan-btn');
+            if (btn) {
+                if (success) {
+                    btn.textContent = '已执行';
+                    btn.disabled = true;
+                } else {
+                    btn.textContent = btn.dataset.originalText || '执行此计划';
+                    btn.disabled = false;
+                }
+            }
+        }
+
+        // 恢复普通执行按钮
+        const executeButtons = contentDiv.querySelectorAll('.execute-button');
+        executeButtons.forEach(btn => {
+            if (success) {
+                btn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                    已执行
+                `;
+                btn.disabled = true;
+            } else {
+                // 恢复原始HTML或默认文本
+                if (btn.dataset.originalHtml) {
+                    btn.innerHTML = btn.dataset.originalHtml;
+                } else {
+                    btn.innerHTML = `
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                        </svg>
+                        执行
+                    `;
+                }
+                btn.disabled = false;
+            }
+        });
+    } catch (err) {
+        console.error('restoreExecuteButtons error:', err);
+    }
+}
+
+/**
+ * 清空所有引用区（文件和选中内容）
+ */
+function clearAllReferences() {
+    try {
+        // 清空选中内容
+        if (window.selectedContentMap) {
+            window.selectedContentMap = {};
+        }
+        
+        // 清空附加文件
+        if (window.attachedFiles) {
+            window.attachedFiles = [];
+        }
+        
+        // 重新渲染引用区
+        if (typeof renderReferences === 'function') {
+            renderReferences();
+        }
+        
+        console.log('引用区已清空');
+    } catch (err) {
+        console.error('clearAllReferences error:', err);
+    }
+}
+
+// 导出执行结果处理函数
+window.handleExecutionSuccess = handleExecutionSuccess;
+window.handleExecutionError = handleExecutionError;
+window.handleExecutionCancelled = handleExecutionCancelled;
+window.clearAllReferences = clearAllReferences;
+
+// ========== 文件解析进度显示 ==========
+
+/**
+ * 显示/隐藏文件解析进度
+ * @param {boolean} show - 是否显示
+ */
+function showFileParsingProgress(show) {
+    try {
+        let progressOverlay = document.getElementById('file-parsing-progress');
+        
+        if (show) {
+            if (!progressOverlay) {
+                progressOverlay = document.createElement('div');
+                progressOverlay.id = 'file-parsing-progress';
+                progressOverlay.innerHTML = `
+                    <div class="progress-content">
+                        <div class="progress-spinner"></div>
+                        <div class="progress-text">正在解析文件...</div>
+                        <div class="progress-detail" id="file-parsing-detail"></div>
+                    </div>
+                `;
+                progressOverlay.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(0,0,0,0.5);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 10000;
+                `;
+                
+                const style = document.createElement('style');
+                style.id = 'file-parsing-progress-style';
+                style.textContent = `
+                    #file-parsing-progress .progress-content {
+                        background: white;
+                        padding: 24px 32px;
+                        border-radius: 8px;
+                        text-align: center;
+                        box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+                        min-width: 280px;
+                    }
+                    #file-parsing-progress .progress-spinner {
+                        width: 40px;
+                        height: 40px;
+                        border: 4px solid #e0e0e0;
+                        border-top-color: #4a6fa5;
+                        border-radius: 50%;
+                        margin: 0 auto 16px;
+                        animation: file-parsing-spin 1s linear infinite;
+                    }
+                    @keyframes file-parsing-spin {
+                        to { transform: rotate(360deg); }
+                    }
+                    #file-parsing-progress .progress-text {
+                        font-size: 14px;
+                        color: #333;
+                        margin-bottom: 8px;
+                    }
+                    #file-parsing-progress .progress-detail {
+                        font-size: 12px;
+                        color: #666;
+                    }
+                `;
+                document.head.appendChild(style);
+                document.body.appendChild(progressOverlay);
+            } else {
+                progressOverlay.style.display = 'flex';
+            }
+        } else {
+            if (progressOverlay) {
+                progressOverlay.style.display = 'none';
+            }
+        }
+    } catch (err) {
+        console.error('showFileParsingProgress error:', err);
+    }
+}
+
+/**
+ * 更新文件解析进度
+ * @param {number} current - 当前进度
+ * @param {number} total - 总数
+ * @param {string} fileName - 当前文件名
+ */
+function updateFileParsingProgress(current, total, fileName) {
+    try {
+        const textEl = document.querySelector('#file-parsing-progress .progress-text');
+        const detailEl = document.getElementById('file-parsing-detail');
+        
+        if (textEl) {
+            textEl.textContent = `正在解析文件 (${current}/${total})`;
+        }
+        if (detailEl) {
+            detailEl.textContent = fileName || '';
+        }
+    } catch (err) {
+        console.error('updateFileParsingProgress error:', err);
+    }
+}
+
+// 导出文件解析进度函数
+window.showFileParsingProgress = showFileParsingProgress;
+window.updateFileParsingProgress = updateFileParsingProgress;

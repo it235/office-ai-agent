@@ -125,15 +125,59 @@ Public Class ExcelDirectOperationService
     ''' </summary>
     Private Function ExecuteWriteData(params As JToken) As Boolean
         Try
+            ' 支持多种参数名：targetRange, startCell, range
             Dim targetRange = params("targetRange")?.ToString()
+            If String.IsNullOrEmpty(targetRange) Then
+                targetRange = params("startCell")?.ToString()
+            End If
+            If String.IsNullOrEmpty(targetRange) Then
+                targetRange = params("range")?.ToString()
+            End If
+            
+            ' 如果有targetSheet，组合成完整地址
+            Dim targetSheet = params("targetSheet")?.ToString()
+            If Not String.IsNullOrEmpty(targetSheet) AndAlso Not String.IsNullOrEmpty(targetRange) Then
+                ' 如果targetRange不包含!，则添加工作表名
+                If Not targetRange.Contains("!") Then
+                    targetRange = $"{targetSheet}!{targetRange}"
+                End If
+            End If
+            
+            ' 支持data或targetData
             Dim data = params("data")
+            If data Is Nothing Then
+                data = params("targetData")
+            End If
 
             If String.IsNullOrEmpty(targetRange) OrElse data Is Nothing Then
+                ShareRibbon.GlobalStatusStrip.ShowWarning("WriteData缺少必要参数：targetRange/startCell 和 data")
                 Return False
             End If
 
-            Dim ws As Worksheet = _excelApp.ActiveSheet
-            Dim range As Range = ws.Range(targetRange)
+            ' 解析目标范围（可能包含工作表名）
+            Dim ws As Worksheet
+            Dim cellAddress As String = targetRange
+            
+            If targetRange.Contains("!") Then
+                ' 格式: "SheetName!A1" 或 "'Sheet Name'!A1"
+                Dim parts = targetRange.Split("!"c)
+                Dim sheetName = parts(0).Trim("'"c)
+                cellAddress = parts(1)
+                
+                ' 检查工作表是否存在，不存在则创建
+                Try
+                    ws = _excelApp.Worksheets(sheetName)
+                Catch
+                    ' 工作表不存在，创建新的
+                    ws = _excelApp.Worksheets.Add()
+                    ws.Name = sheetName
+                    ShareRibbon.GlobalStatusStrip.ShowInfo($"已创建新工作表: {sheetName}")
+                End Try
+            Else
+                ws = _excelApp.ActiveSheet
+            End If
+            
+            Dim range As Range = ws.Range(cellAddress)
 
             ' 支持单值或数组
             If data.Type = JTokenType.Array Then
@@ -160,6 +204,7 @@ Public Class ExcelDirectOperationService
 
         Catch ex As Exception
             Debug.WriteLine($"ExecuteWriteData 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"写入数据失败: {ex.Message}")
             Return False
         End Try
     End Function
@@ -177,8 +222,29 @@ Public Class ExcelDirectOperationService
                 Return False
             End If
 
-            Dim ws As Worksheet = _excelApp.ActiveSheet
-            Dim range As Range = ws.Range(targetRange)
+            ' 解析目标范围（可能包含工作表名）
+            Dim ws As Worksheet
+            Dim cellAddress As String = targetRange
+            
+            If targetRange.Contains("!") Then
+                ' 格式: "SheetName!A1:B10" 或 "'Sheet Name'!A1:B10"
+                Dim parts = targetRange.Split("!"c)
+                Dim sheetName = parts(0).Trim("'"c)
+                cellAddress = parts(1)
+                
+                ' 检查工作表是否存在，不存在则创建
+                Try
+                    ws = _excelApp.Worksheets(sheetName)
+                Catch
+                    ws = _excelApp.Worksheets.Add()
+                    ws.Name = sheetName
+                    ShareRibbon.GlobalStatusStrip.ShowInfo($"已创建新工作表: {sheetName}")
+                End Try
+            Else
+                ws = _excelApp.ActiveSheet
+            End If
+            
+            Dim range As Range = ws.Range(cellAddress)
 
             ' 确保公式以=开头
             If Not formula.StartsWith("=") Then
@@ -198,6 +264,7 @@ Public Class ExcelDirectOperationService
 
         Catch ex As Exception
             Debug.WriteLine($"ExecuteApplyFormula 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"应用公式失败: {ex.Message}")
             Return False
         End Try
     End Function
@@ -210,11 +277,13 @@ Public Class ExcelDirectOperationService
             Dim ws As Worksheet = _excelApp.ActiveSheet
             Dim params = commandJson("params")
 
-            ' 尝试多种参数格式
+            ' 尝试多种参数格式（支持 targetRange, range, target 等别名）
             Dim targetRange = If(params?("targetRange")?.ToString(),
+                             If(params?("range")?.ToString(),
                              If(params?("target")?.ToString(),
                              If(commandJson("target")?.ToString(),
-                             If(commandJson("targetRange")?.ToString(), ""))))
+                             If(commandJson("targetRange")?.ToString(),
+                             If(commandJson("range")?.ToString(), ""))))))
 
             Dim formula = If(params?("formula")?.ToString(),
                           If(commandJson("formula")?.ToString(), ""))

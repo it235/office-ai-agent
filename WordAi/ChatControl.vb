@@ -2,6 +2,7 @@
 Imports System.Drawing
 Imports System.IO
 Imports System.Linq
+Imports System.Math
 Imports System.Net
 Imports System.Net.Http
 Imports System.Net.Http.Headers
@@ -185,6 +186,23 @@ Public Class ChatControl
         Task.Run(Async Function()
                      Await Send(message, "", True, "")
                  End Function)
+    End Sub
+
+    ''' <summary>
+    ''' 使用意图识别结果发送聊天消息（重写基类方法）
+    ''' </summary>
+    Protected Overrides Sub SendChatMessageWithIntent(message As String, intent As IntentResult)
+        If intent IsNot Nothing AndAlso intent.Confidence > 0.2 Then
+            Dim optimizedPrompt = IntentService.GetOptimizedSystemPrompt(intent)
+            Debug.WriteLine($"Word使用意图优化提示词: {intent.IntentType}, 置信度: {intent.Confidence:F2}")
+
+            Task.Run(Async Function()
+                         Await Send(message, optimizedPrompt, True, "")
+                     End Function)
+        Else
+            ' 回退到普通发送
+            SendChatMessage(message)
+        End If
     End Sub
 
     ' 解析 Word 文件为文本（用于 file 引用）
@@ -1112,5 +1130,316 @@ Public Class ChatControl
             Debug.WriteLine($"[WordChatControl] 同步补全设置失败: {ex.Message}")
         End Try
     End Sub
+
+    ''' <summary>
+    ''' 执行JSON命令（重写基类方法）- 带严格验证
+    ''' </summary>
+    Protected Overrides Function ExecuteJsonCommand(jsonCode As String, preview As Boolean) As Boolean
+        Try
+            ' 使用严格的结构验证
+            Dim errorMessage As String = ""
+            Dim normalizedJson As JToken = Nothing
+            
+            If Not WordJsonCommandSchema.ValidateJsonStructure(jsonCode, errorMessage, normalizedJson) Then
+                ' 格式验证失败
+                Debug.WriteLine($"Word JSON格式验证失败: {errorMessage}")
+                Debug.WriteLine($"原始JSON: {jsonCode.Substring(0, Math.Min(200, jsonCode.Length))}...")
+                
+                ShareRibbon.GlobalStatusStrip.ShowWarning($"JSON格式不符合规范: {errorMessage}")
+                Return False
+            End If
+            
+            ' 验证通过，根据类型执行
+            If normalizedJson.Type = JTokenType.Object Then
+                Dim jsonObj = CType(normalizedJson, JObject)
+                
+                ' 命令数组格式
+                If jsonObj("commands") IsNot Nothing Then
+                    Return ExecuteWordCommandsArray(jsonObj("commands"), jsonCode, preview)
+                End If
+                
+                ' 单命令格式
+                Return ExecuteWordSingleCommand(jsonObj, jsonCode, preview)
+            End If
+            
+            ShareRibbon.GlobalStatusStrip.ShowWarning("无效的JSON格式")
+            Return False
+
+        Catch ex As Newtonsoft.Json.JsonReaderException
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"JSON格式无效: {ex.Message}")
+            Return False
+        Catch ex As Exception
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"执行失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行Word命令数组
+    ''' </summary>
+    Private Function ExecuteWordCommandsArray(commandsArray As JToken, originalJson As String, preview As Boolean) As Boolean
+        Try
+            Dim commands = CType(commandsArray, JArray)
+            If commands.Count = 0 Then
+                ShareRibbon.GlobalStatusStrip.ShowWarning("命令数组为空")
+                Return False
+            End If
+
+            ' 预览所有命令
+            If preview Then
+                Dim previewMsg As New StringBuilder()
+                previewMsg.AppendLine($"即将执行 {commands.Count} 个Word命令:")
+                previewMsg.AppendLine()
+
+                Dim cmdIndex = 1
+                For Each cmd In commands
+                    If cmd.Type = JTokenType.Object Then
+                        Dim cmdObj = CType(cmd, JObject)
+                        Dim cmdName = cmdObj("command")?.ToString()
+                        Dim content = cmdObj("params")?("content")?.ToString()
+                        
+                        previewMsg.AppendLine($"{cmdIndex}. {cmdName}")
+                        If Not String.IsNullOrEmpty(content) Then
+                            previewMsg.AppendLine($"   内容: {content.Substring(0, Math.Min(50, content.Length))}...")
+                        End If
+                        previewMsg.AppendLine()
+                        cmdIndex += 1
+                    End If
+                Next
+
+                previewMsg.AppendLine("是否继续执行？")
+
+                If MessageBox.Show(previewMsg.ToString(), "Word批量命令预览", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) <> DialogResult.OK Then
+                    ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
+                    Return True
+                End If
+            End If
+
+            ' 执行所有命令
+            Dim successCount = 0
+            Dim failCount = 0
+
+            For Each cmd In commands
+                If cmd.Type = JTokenType.Object Then
+                    Dim cmdObj = CType(cmd, JObject)
+                    If ExecuteWordCommand(cmdObj) Then
+                        successCount += 1
+                    Else
+                        failCount += 1
+                    End If
+                End If
+            Next
+
+            If failCount = 0 Then
+                ShareRibbon.GlobalStatusStrip.ShowInfo($"所有 {successCount} 个命令执行成功")
+            Else
+                ShareRibbon.GlobalStatusStrip.ShowWarning($"执行完成: {successCount} 成功, {failCount} 失败")
+            End If
+
+            Return failCount = 0
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteWordCommandsArray 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"批量执行失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行单个Word命令
+    ''' </summary>
+    Private Function ExecuteWordSingleCommand(commandJson As JObject, processedJson As String, preview As Boolean) As Boolean
+        Try
+            Dim command = commandJson("command")?.ToString()
+            
+            ' 预览
+            If preview Then
+                Dim params = commandJson("params")
+                Dim content = params?("content")?.ToString()
+
+                Dim previewMsg = $"即将执行 Word 命令:{vbCrLf}{vbCrLf}" &
+                                $"命令: {command}{vbCrLf}" &
+                                If(Not String.IsNullOrEmpty(content), $"内容: {content.Substring(0, Math.Min(100, content.Length))}...{vbCrLf}", "") &
+                                $"{vbCrLf}是否继续执行？"
+
+                If MessageBox.Show(previewMsg, "Word命令预览", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) <> DialogResult.OK Then
+                    ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
+                    Return True
+                End If
+            End If
+
+            ' 执行命令
+            Dim success = ExecuteWordCommand(commandJson)
+
+            If success Then
+                ShareRibbon.GlobalStatusStrip.ShowInfo($"命令 '{command}' 执行成功")
+            Else
+                ShareRibbon.GlobalStatusStrip.ShowWarning($"命令 '{command}' 执行失败")
+            End If
+
+            Return success
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteWordSingleCommand 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行具体的Word命令
+    ''' </summary>
+    Private Function ExecuteWordCommand(commandJson As JObject) As Boolean
+        Try
+            Dim command = commandJson("command")?.ToString()
+            Dim params = commandJson("params")
+            
+            Dim doc = Globals.ThisAddIn.Application.ActiveDocument
+            Dim selection = Globals.ThisAddIn.Application.Selection
+
+            Select Case command.ToLower()
+                Case "inserttext"
+                    Return ExecuteInsertText(params, selection)
+                Case "formattext"
+                    Return ExecuteFormatText(params, selection)
+                Case "replacetext"
+                    Return ExecuteReplaceText(params, doc)
+                Case "inserttable"
+                    Return ExecuteInsertTable(params, selection)
+                Case "applystyle"
+                    Return ExecuteApplyStyle(params, selection)
+                Case Else
+                    Debug.WriteLine($"不支持的Word命令: {command}")
+                    Return False
+            End Select
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteWordCommand 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    Private Function ExecuteInsertText(params As JToken, selection As Object) As Boolean
+        Try
+            Dim content = params("content")?.ToString()
+            Dim position = If(params("position")?.ToString(), "cursor")
+
+            Select Case position.ToLower()
+                Case "start"
+                    Globals.ThisAddIn.Application.ActiveDocument.Range(0, 0).InsertBefore(content)
+                Case "end"
+                    Globals.ThisAddIn.Application.ActiveDocument.Content.InsertAfter(content)
+                Case Else ' cursor
+                    selection.TypeText(content)
+            End Select
+
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteInsertText 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    Private Function ExecuteFormatText(params As JToken, selection As Object) As Boolean
+        Try
+            Dim range = selection.Range
+
+            If params("bold") IsNot Nothing Then
+                range.Font.Bold = If(params("bold").Value(Of Boolean)(), -1, 0)
+            End If
+
+            If params("italic") IsNot Nothing Then
+                range.Font.Italic = If(params("italic").Value(Of Boolean)(), -1, 0)
+            End If
+
+            If params("underline") IsNot Nothing Then
+                range.Font.Underline = If(params("underline").Value(Of Boolean)(), 1, 0)
+            End If
+
+            If params("fontSize") IsNot Nothing Then
+                range.Font.Size = params("fontSize").Value(Of Single)()
+            End If
+
+            If params("fontName") IsNot Nothing Then
+                range.Font.Name = params("fontName").ToString()
+            End If
+
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteFormatText 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    Private Function ExecuteReplaceText(params As JToken, doc As Object) As Boolean
+        Try
+            Dim find = params("find")?.ToString()
+            Dim replace = If(params("replace")?.ToString(), "")
+            Dim matchCase = If(params("matchCase")?.Value(Of Boolean)(), False)
+
+            Dim findObj = doc.Content.Find
+            findObj.ClearFormatting()
+            findObj.Replacement.ClearFormatting()
+            findObj.Text = find
+            findObj.Replacement.Text = replace
+            findObj.Forward = True
+            findObj.Wrap = 1 ' wdFindContinue
+            findObj.MatchCase = matchCase
+            findObj.Execute(Replace:=2) ' wdReplaceAll
+
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteReplaceText 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    Private Function ExecuteInsertTable(params As JToken, selection As Object) As Boolean
+        Try
+            Dim rows = params("rows")?.Value(Of Integer)()
+            Dim cols = params("cols")?.Value(Of Integer)()
+
+            If rows <= 0 OrElse cols <= 0 Then Return False
+
+            Dim table = Globals.ThisAddIn.Application.ActiveDocument.Tables.Add(
+                selection.Range, rows, cols)
+
+            ' 如果有data，填充表格
+            Dim data = params("data")
+            If data IsNot Nothing AndAlso data.Type = JTokenType.Array Then
+                Dim dataArr = CType(data, JArray)
+                Dim x As Integer = dataArr.Count - 1
+                Dim x2 As Integer = rows - 1
+                For rowIdx = 0 To Math.Min(x, x2)
+                    Dim rowData = dataArr(rowIdx)
+                    If rowData.Type = JTokenType.Array Then
+                        Dim rowArr = CType(rowData, JArray)
+                        Dim y As Integer = rowArr.Count - 1
+                        Dim y1 As Integer = cols - 1
+                        For colIdx = 0 To Math.Min(y, y1)
+                            table.Cell(rowIdx + 1, colIdx + 1).Range.Text = rowArr(colIdx).ToString()
+                        Next
+                    End If
+                Next
+            End If
+
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteInsertTable 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    Private Function ExecuteApplyStyle(params As JToken, selection As Object) As Boolean
+        Try
+            Dim styleName = params("styleName")?.ToString()
+            If String.IsNullOrEmpty(styleName) Then Return False
+
+            selection.Style = styleName
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteApplyStyle 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
 
 End Class

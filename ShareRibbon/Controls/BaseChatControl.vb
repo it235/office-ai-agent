@@ -97,6 +97,11 @@ Public MustInherit Class BaseChatControl
     ' 当前意图结果（用于子类访问）
     Protected CurrentIntentResult As IntentResult = Nothing
 
+    ' 意图预览相关字段
+    Private _pendingIntentMessage As String = Nothing
+    Private _pendingIntentResult As IntentResult = Nothing
+    Private _pendingFilePaths As List(Of String) = Nothing
+
     'settings
     Protected topicRandomness As Double
     Protected contextLimit As Integer
@@ -374,6 +379,16 @@ Public MustInherit Class BaseChatControl
                     HandleRequestCompletion(jsonDoc)
                 Case "acceptCompletion"
                     HandleAcceptCompletion(jsonDoc)
+
+                ' 意图预览功能消息处理
+                Case "confirmIntent"
+                    HandleConfirmIntent(jsonDoc)
+                Case "cancelIntent"
+                    HandleCancelIntent()
+
+                ' 文件选择对话框
+                Case "openFileDialog"
+                    HandleOpenFileDialog()
 
                 Case Else
                     Debug.WriteLine($"未知消息类型: {messageType}")
@@ -1151,6 +1166,9 @@ Public MustInherit Class BaseChatControl
             Return ' Nothing to send
         End If
 
+        ' 保存原始用户输入（用于意图识别）
+        Dim originalQuestion As String = question
+
         ' 保存第一个问题（仅保存一次）
         If isFirstMessage AndAlso Not String.IsNullOrEmpty(question) Then
             firstQuestion = question
@@ -1164,85 +1182,156 @@ Public MustInherit Class BaseChatControl
         ' --- 处理选中的内容 ---
         question = AppendCurrentSelectedContent("--- 我此次的问题：" & question & " ---")
 
-        ' --- 文件内容解析逻辑 ---
-        Dim fileContentBuilder As New StringBuilder()
-        Dim parsedFiles As New List(Of FileContentResult)()
-
+        ' 检查是否有文件需要解析
         If filePaths IsNot Nothing AndAlso filePaths.Count > 0 Then
-            question = question & " 用户提问结束，后续引用的文件都在同一目录下所以可以放心读取。 ---"
-
-            fileContentBuilder.AppendLine(vbCrLf & "--- 以下是用户引用的其他文件内容 ---")
-
-            ' 获取当前工作目录
-            Dim currentWorkingDir As String = GetCurrentWorkingDirectory()
-            If String.IsNullOrEmpty(currentWorkingDir) Then
-                GlobalStatusStrip.ShowWarning("请保存当前文件，并且把引用文件和当前文件放在同一目录下后重试: ")
-                Return
-            End If
-
-            For Each filePath As String In filePaths
-                Try
-                    ' 检查文件是否为绝对路径
-                    Dim fullFilePath As String = filePath
-
-                    ' 如果不是绝对路径，则尝试在当前工作目录下查找
-                    If Not Path.IsPathRooted(filePath) AndAlso Not String.IsNullOrEmpty(currentWorkingDir) Then
-                        fullFilePath = Path.Combine(currentWorkingDir, Path.GetFileName(filePath))
-                        Debug.WriteLine($"尝试在工作目录查找文件: {fullFilePath}")
-                    End If
-
-                    If File.Exists(fullFilePath) Then
-                        ' 根据文件扩展名选择合适的解析方法
-                        Dim fileExtension As String = Path.GetExtension(fullFilePath).ToLower()
-                        Dim fileContentResult As FileContentResult = Nothing
-
-                        Select Case fileExtension
-                            Case ".xlsx", ".xls", ".xlsm", ".xlsb"
-                                fileContentResult = ParseFile(fullFilePath)
-                            Case ".docx", ".doc"
-                                fileContentResult = ParseFile(fullFilePath)
-                            Case ".csv", ".txt"
-                                fileContentResult = _fileParserService.ParseTextFile(fullFilePath)
-                            Case Else
-                                fileContentResult = New FileContentResult With {
-                            .FileName = Path.GetFileName(fullFilePath),
-                            .FileType = "Unknown",
-                            .ParsedContent = $"[不支持的文件类型: {fileExtension}]"
-                        }
-                        End Select
-
-                        If fileContentResult IsNot Nothing Then
-                            parsedFiles.Add(fileContentResult)
-                            fileContentBuilder.AppendLine($"文件名: {fileContentResult.FileName}")
-                            fileContentBuilder.AppendLine($"文件内容:")
-                            fileContentBuilder.AppendLine(fileContentResult.ParsedContent)
-                            fileContentBuilder.AppendLine("---")
-                        End If
-                    Else
-                        fileContentBuilder.AppendLine($"文件 '{Path.GetFileName(filePath)}' 未找到或路径无效")
-                        Debug.WriteLine($"文件未找到: {fullFilePath}")
-                        ' 尝试列出当前目录中的文件，用于调试
-                        If Directory.Exists(currentWorkingDir) Then
-                            Dim filesInDir = Directory.GetFiles(currentWorkingDir)
-                            Debug.WriteLine($"当前目录中的文件: {String.Join(", ", filesInDir.Select(Function(f) Path.GetFileName(f)))}")
-                        End If
-                    End If
-                Catch ex As Exception
-                    Debug.WriteLine($"Error processing file '{filePath}': {ex.Message}")
-                    fileContentBuilder.AppendLine($"处理文件 '{Path.GetFileName(filePath)}' 时出错: {ex.Message}")
-                    fileContentBuilder.AppendLine("---")
-                End Try
-            Next
-
-            fileContentBuilder.AppendLine("--- 文件内容结束 ---" & vbCrLf)
+            ' 异步处理文件解析，避免卡死UI
+            HandleSendMessageWithFilesAsync(question, originalQuestion, filePaths, selectedContents, messageValue)
+        Else
+            ' 没有文件，直接处理消息
+            HandleSendMessageCore(question, originalQuestion, filePaths, selectedContents, messageValue, "")
         End If
+    End Sub
 
+    ''' <summary>
+    ''' 异步解析文件并发送消息
+    ''' </summary>
+    Private Sub HandleSendMessageWithFilesAsync(question As String, originalQuestion As String, 
+                                                 filePaths As List(Of String), 
+                                                 selectedContents As List(Of SendMessageReferenceContentItem),
+                                                 messageValue As JToken)
+        ' 显示进度提示
+        GlobalStatusStrip.ShowInfo($"正在解析 {filePaths.Count} 个文件...")
+        ExecuteJavaScriptAsyncJS("showFileParsingProgress(true)")
+
+        Task.Run(Sub()
+            Try
+                Dim fileContentBuilder As New StringBuilder()
+                Dim parsedFiles As New List(Of FileContentResult)()
+                Dim totalFiles = filePaths.Count
+                Dim processedFiles = 0
+
+                fileContentBuilder.AppendLine(vbCrLf & "--- 以下是用户引用的其他文件内容 ---")
+
+                ' 获取当前工作目录（需要在主线程调用）
+                Dim currentWorkingDir As String = ""
+                Me.Invoke(Sub()
+                    currentWorkingDir = GetCurrentWorkingDirectory()
+                End Sub)
+
+                If String.IsNullOrEmpty(currentWorkingDir) Then
+                    Me.Invoke(Sub()
+                        GlobalStatusStrip.ShowWarning("请保存当前文件，并且把引用文件和当前文件放在同一目录下后重试")
+                        ExecuteJavaScriptAsyncJS("showFileParsingProgress(false)")
+                    End Sub)
+                    Return
+                End If
+
+                For Each filePath As String In filePaths
+                    Try
+                        processedFiles += 1
+                        
+                        ' 更新进度
+                        Me.Invoke(Sub()
+                            GlobalStatusStrip.ShowInfo($"正在解析文件 ({processedFiles}/{totalFiles}): {Path.GetFileName(filePath)}")
+                            ExecuteJavaScriptAsyncJS($"updateFileParsingProgress({processedFiles}, {totalFiles}, '{EscapeJsString(Path.GetFileName(filePath))}')")
+                        End Sub)
+
+                        ' 检查文件是否为绝对路径
+                        Dim fullFilePath As String = filePath
+
+                        ' 如果不是绝对路径，则尝试在当前工作目录下查找
+                        If Not Path.IsPathRooted(filePath) AndAlso Not String.IsNullOrEmpty(currentWorkingDir) Then
+                            fullFilePath = Path.Combine(currentWorkingDir, Path.GetFileName(filePath))
+                            Debug.WriteLine($"尝试在工作目录查找文件: {fullFilePath}")
+                        End If
+
+                        If File.Exists(fullFilePath) Then
+                            ' 根据文件扩展名选择合适的解析方法
+                            Dim fileExtension As String = Path.GetExtension(fullFilePath).ToLower()
+                            Dim fileContentResult As FileContentResult = Nothing
+
+                            Select Case fileExtension
+                                Case ".xlsx", ".xls", ".xlsm", ".xlsb"
+                                    ' Excel文件解析需要在主线程
+                                    Me.Invoke(Sub()
+                                        fileContentResult = ParseFile(fullFilePath)
+                                    End Sub)
+                                Case ".docx", ".doc"
+                                    Me.Invoke(Sub()
+                                        fileContentResult = ParseFile(fullFilePath)
+                                    End Sub)
+                                Case ".csv", ".txt"
+                                    fileContentResult = _fileParserService.ParseTextFile(fullFilePath)
+                                Case Else
+                                    fileContentResult = New FileContentResult With {
+                                        .FileName = Path.GetFileName(fullFilePath),
+                                        .FileType = "Unknown",
+                                        .ParsedContent = $"[不支持的文件类型: {fileExtension}]"
+                                    }
+                            End Select
+
+                            If fileContentResult IsNot Nothing Then
+                                parsedFiles.Add(fileContentResult)
+                                fileContentBuilder.AppendLine($"文件名: {fileContentResult.FileName}")
+                                fileContentBuilder.AppendLine($"文件内容:")
+                                fileContentBuilder.AppendLine(fileContentResult.ParsedContent)
+                                fileContentBuilder.AppendLine("---")
+                            End If
+                        Else
+                            fileContentBuilder.AppendLine($"文件 '{Path.GetFileName(filePath)}' 未找到或路径无效")
+                            Debug.WriteLine($"文件未找到: {fullFilePath}")
+                        End If
+                    Catch ex As Exception
+                        Debug.WriteLine($"Error processing file '{filePath}': {ex.Message}")
+                        fileContentBuilder.AppendLine($"处理文件 '{Path.GetFileName(filePath)}' 时出错: {ex.Message}")
+                        fileContentBuilder.AppendLine("---")
+                    End Try
+                Next
+
+                fileContentBuilder.AppendLine("--- 文件内容结束 ---" & vbCrLf)
+
+                ' 文件解析完成，在主线程继续处理消息
+                Me.Invoke(Sub()
+                    GlobalStatusStrip.ShowInfo($"文件解析完成，共解析 {parsedFiles.Count} 个文件")
+                    ExecuteJavaScriptAsyncJS("showFileParsingProgress(false)")
+                    
+                    Dim questionWithFiles = question & " 用户提问结束，后续引用的文件都在同一目录下所以可以放心读取。 ---"
+                    HandleSendMessageCore(questionWithFiles, originalQuestion, filePaths, selectedContents, messageValue, fileContentBuilder.ToString())
+                End Sub)
+
+            Catch ex As Exception
+                Debug.WriteLine($"HandleSendMessageWithFilesAsync 出错: {ex.Message}")
+                Me.Invoke(Sub()
+                    GlobalStatusStrip.ShowWarning($"文件解析失败: {ex.Message}")
+                    ExecuteJavaScriptAsyncJS("showFileParsingProgress(false)")
+                End Sub)
+            End Try
+        End Sub)
+    End Sub
+
+    ''' <summary>
+    ''' 转义JS字符串中的特殊字符
+    ''' </summary>
+    Private Function EscapeJsString(s As String) As String
+        If String.IsNullOrEmpty(s) Then Return ""
+        Return s.Replace("\", "\\").Replace("'", "\'").Replace("""", "\""").Replace(vbCrLf, "\n").Replace(vbCr, "\n").Replace(vbLf, "\n")
+    End Function
+
+    ''' <summary>
+    ''' 处理消息发送的核心逻辑（文件解析完成后调用）
+    ''' </summary>
+    Private Sub HandleSendMessageCore(question As String, originalQuestion As String,
+                                       filePaths As List(Of String),
+                                       selectedContents As List(Of SendMessageReferenceContentItem),
+                                       messageValue As JToken,
+                                       fileContent As String)
+        
         ' 构建最终发送给 LLM 的消息
         Dim finalMessageToLLM As String = question
 
         ' 然后添加文件内容（如果有）
-        If fileContentBuilder.Length > 0 Then
-            finalMessageToLLM &= fileContentBuilder.ToString()
+        If Not String.IsNullOrEmpty(fileContent) Then
+            finalMessageToLLM &= fileContent
         End If
 
         stopReaderStream = False ' Reset stop flag before sending new message
@@ -1258,23 +1347,88 @@ Public MustInherit Class BaseChatControl
                          Await Send(finalMessageToLLM, templateSystemPrompt, True, "template_render")
                      End Function)
         Else
-            ' 普通消息模式：先进行意图识别
-            Try
-                ' 执行意图识别
-                CurrentIntentResult = IntentService.IdentifyIntent(question, GetContextSnapshot())
+            ' 获取当前聊天模式
+            Dim currentChatMode As String = ChatSettings.chatMode
 
-                ' 通知前端显示检测到的意图
-                If CurrentIntentResult IsNot Nothing AndAlso CurrentIntentResult.Confidence > 0.2 Then
-                    ExecuteJavaScriptAsyncJS($"showDetectedIntent('{CurrentIntentResult.IntentType}')")
-                End If
+            ' 普通消息模式：进行意图识别（使用异步LLM增强）
+            Task.Run(Async Function()
+                Try
+                    ' 检查是否有引用内容（文件或选中内容）
+                    Dim hasReferences As Boolean = (filePaths IsNot Nothing AndAlso filePaths.Count > 0) OrElse
+                                                    (selectedContents IsNot Nothing AndAlso selectedContents.Count > 0)
 
-                ' 使用意图优化的方式发送消息
-                SendChatMessageWithIntent(finalMessageToLLM, CurrentIntentResult)
-            Catch ex As Exception
-                Debug.WriteLine($"意图识别失败，使用默认模式: {ex.Message}")
-                ' 回退到普通模式
-                SendChatMessage(finalMessageToLLM)
-            End Try
+                    ' 获取上下文快照
+                    Dim contextSnapshot = GetContextSnapshot()
+
+                    ' 使用异步方法进行意图识别（调用大模型）
+                    CurrentIntentResult = Await IntentService.IdentifyIntentAsync(originalQuestion, contextSnapshot)
+                    CurrentIntentResult.OriginalInput = originalQuestion
+
+                    ' 如果LLM没有生成描述，使用默认生成
+                    If String.IsNullOrEmpty(CurrentIntentResult.UserFriendlyDescription) Then
+                        IntentService.GenerateUserFriendlyDescription(CurrentIntentResult)
+                    End If
+                    IntentService.BuildExecutionPlanPreview(CurrentIntentResult)
+
+                    ' 决定是否需要询问用户确认
+                    Dim needConfirmation As Boolean = False
+                    Dim autoConfirmCountdown As Boolean = False  ' Agent模式下倒计时后自动确认
+
+                    ' 情况1：用户只引用了内容但没有输入问题
+                    If hasReferences AndAlso String.IsNullOrWhiteSpace(originalQuestion) Then
+                        CurrentIntentResult.UserFriendlyDescription = "您引用了内容，请问您想要做什么？"
+                        needConfirmation = True
+                    ' 情况2：置信度太低（<0.4），让大模型来询问用户澄清
+                    ElseIf CurrentIntentResult.Confidence < 0.4 Then
+                        ' 不弹出意图预览卡片，直接发送给大模型，由大模型来询问用户
+                        needConfirmation = False
+                    ' 情况3：Agent模式下也需要确认，但会倒计时自动执行
+                    ElseIf currentChatMode = "agent" Then
+                        needConfirmation = True
+                        autoConfirmCountdown = True  ' Agent模式：倒计时后自动确认
+                    ' 情况4：普通模式下，置信度较高时也需要确认
+                    ElseIf CurrentIntentResult.Confidence >= 0.4 Then
+                        needConfirmation = True
+                        autoConfirmCountdown = False  ' Chat模式：不自动确认
+                    Else
+                        needConfirmation = False ' 默认不弹出确认框，由大模型决定是否澄清
+                    End If
+
+                    If needConfirmation Then
+                        ' 需要用户确认，保存待发送的消息
+                        _pendingIntentMessage = finalMessageToLLM
+                        _pendingIntentResult = CurrentIntentResult
+                        _pendingFilePaths = filePaths
+
+                        ' 构建意图预览数据并发送给前端
+                        Dim clarification = IntentService.GenerateIntentClarification(originalQuestion, contextSnapshot)
+                        
+                        ' 使用LLM生成的描述
+                        If Not String.IsNullOrEmpty(CurrentIntentResult.UserFriendlyDescription) Then
+                            clarification.Description = CurrentIntentResult.UserFriendlyDescription
+                        End If
+                        
+                        Dim previewJson = IntentService.IntentClarificationToJson(clarification)
+                        
+                        ' 添加倒计时相关参数
+                        previewJson("autoConfirm") = autoConfirmCountdown
+                        previewJson("countdownSeconds") = If(autoConfirmCountdown, 5, 10)  ' Agent模式5秒，Chat模式10秒
+                        
+                        ' 通知前端显示意图预览卡片（带倒计时）
+                        ExecuteJavaScriptAsyncJS($"showIntentPreview({previewJson.ToString(Formatting.None)})")
+                        Debug.WriteLine($"显示意图预览（需确认）: {CurrentIntentResult.UserFriendlyDescription}, 自动确认: {autoConfirmCountdown}")
+                    Else
+                        ' 置信度太低，直接发送，让大模型来澄清
+                        Debug.WriteLine($"意图不明确（置信度:{CurrentIntentResult.Confidence:F2}），由大模型澄清")
+                        SendChatMessageWithIntent(finalMessageToLLM, CurrentIntentResult)
+                    End If
+
+                Catch ex As Exception
+                    Debug.WriteLine($"意图识别失败，直接发送: {ex.Message}")
+                    ' 回退到直接发送模式
+                    SendChatMessage(finalMessageToLLM)
+                End Try
+            End Function)
         End If
     End Sub
 
@@ -1297,11 +1451,122 @@ Public MustInherit Class BaseChatControl
         End If
     End Sub
 
+    ''' <summary>
+    ''' 处理用户确认意图
+    ''' </summary>
+    Protected Sub HandleConfirmIntent(jsonDoc As JObject)
+        Try
+            If String.IsNullOrEmpty(_pendingIntentMessage) Then
+                Debug.WriteLine("HandleConfirmIntent: 没有待确认的消息")
+                Return
+            End If
+
+            Debug.WriteLine("用户确认意图，开始发送消息")
+
+            ' 显示意图类型指示器
+            If _pendingIntentResult IsNot Nothing AndAlso _pendingIntentResult.Confidence > 0.2 Then
+                ExecuteJavaScriptAsyncJS($"showDetectedIntent('{_pendingIntentResult.IntentType}')")
+            End If
+
+            ' 使用保存的意图结果发送消息
+            SendChatMessageWithIntent(_pendingIntentMessage, _pendingIntentResult)
+
+            ' 清空待确认状态
+            _pendingIntentMessage = Nothing
+            _pendingIntentResult = Nothing
+            _pendingFilePaths = Nothing
+
+            GlobalStatusStrip.ShowInfo("已确认意图，正在处理...")
+        Catch ex As Exception
+            Debug.WriteLine($"HandleConfirmIntent 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning("确认意图时出错")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 处理用户取消意图
+    ''' </summary>
+    Protected Sub HandleCancelIntent()
+        Try
+            Debug.WriteLine("用户取消意图")
+
+            ' 清空待确认状态
+            _pendingIntentMessage = Nothing
+            _pendingIntentResult = Nothing
+            _pendingFilePaths = Nothing
+
+            ' 恢复发送按钮状态
+            ExecuteJavaScriptAsyncJS("changeSendButton()")
+
+            GlobalStatusStrip.ShowInfo("已取消")
+        Catch ex As Exception
+            Debug.WriteLine($"HandleCancelIntent 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 处理打开文件对话框请求
+    ''' </summary>
+    Protected Sub HandleOpenFileDialog()
+        Try
+            ' 需要在UI线程上执行
+            If Me.InvokeRequired Then
+                Me.Invoke(Sub() HandleOpenFileDialog())
+                Return
+            End If
+
+            Using dialog As New OpenFileDialog()
+                dialog.Title = "选择要引用的文件"
+                dialog.Filter = "Excel文件|*.xls;*.xlsx;*.xlsm;*.xlsb;*.csv|" &
+                               "Word文件|*.doc;*.docx|" &
+                               "PowerPoint文件|*.ppt;*.pptx|" &
+                               "所有支持的文件|*.xls;*.xlsx;*.xlsm;*.xlsb;*.csv;*.doc;*.docx;*.ppt;*.pptx"
+                dialog.FilterIndex = 4 ' 默认显示所有支持的文件
+                dialog.Multiselect = True
+
+                If dialog.ShowDialog() = DialogResult.OK Then
+                    ' 构建文件列表JSON
+                    Dim filesArray As New JArray()
+                    For Each filePath In dialog.FileNames
+                        Dim fileObj As New JObject()
+                        fileObj("name") = Path.GetFileName(filePath)
+                        fileObj("path") = filePath
+                        filesArray.Add(fileObj)
+                    Next
+
+                    ' 发送给前端
+                    ExecuteJavaScriptAsyncJS($"addFilesFromDialog({filesArray.ToString(Formatting.None)})")
+                    Debug.WriteLine($"选择了 {dialog.FileNames.Length} 个文件")
+                End If
+            End Using
+        Catch ex As Exception
+            Debug.WriteLine($"HandleOpenFileDialog 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning("打开文件对话框时出错")
+        End Try
+    End Sub
+
     Protected Overridable Sub HandleExecuteCode(jsonDoc As JObject)
         Dim code As String = jsonDoc("code").ToString()
         Dim preview As Boolean = Boolean.Parse(jsonDoc("executecodePreview"))
         Dim language As String = jsonDoc("language").ToString()
-        ExecuteCode(code, language, preview)
+        Dim responseUuid As String = If(jsonDoc("responseUuid")?.ToString(), "")
+        
+        Try
+            ' 执行代码
+            ExecuteCode(code, language, preview)
+            
+            ' 执行成功后通知前端（清空引用区、更新按钮状态）
+            If Not String.IsNullOrEmpty(responseUuid) Then
+                ExecuteJavaScriptAsyncJS($"handleExecutionSuccess('{responseUuid}')")
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"HandleExecuteCode 执行出错: {ex.Message}")
+            ' 执行失败后通知前端（恢复按钮可点击）
+            If Not String.IsNullOrEmpty(responseUuid) Then
+                Dim escapedMsg = ex.Message.Replace("'", "\'").Replace(vbCrLf, " ")
+                ExecuteJavaScriptAsyncJS($"handleExecutionError('{responseUuid}', '{escapedMsg}')")
+            End If
+        End Try
     End Sub
 
 

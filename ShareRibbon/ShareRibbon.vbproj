@@ -299,6 +299,8 @@
     <Compile Include="Controls\Services\OfficeCompletionService.vb" />
     <Compile Include="Controls\Services\IntentRecognitionService.vb" />
     <Compile Include="Controls\Services\ExcelContextService.vb" />
+    <Compile Include="Controls\Services\ExecutionPlanRenderer.vb" />
+    <Compile Include="Controls\Models\ExecutionStep.vb" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Controls\BaseChatControl.resx">
@@ -386,6 +388,8 @@
     <None Include="Resources\js\mcp-manager.js" />
     <None Include="Resources\js\revision-manager.js" />
     <None Include="Resources\js\history-manager.js" />
+    <None Include="Resources\js\intent-preview.js" />
+    <None Include="Resources\js\autocomplete.js" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Resources\chat-template-refactored.html" />

@@ -76,6 +76,8 @@ Partial Class Ribbon1
 
         Me.ProofreadButton.Visible = False
         Me.ReformatButton.Visible = False
+        Me.DataAnalysisButton.Visible = False
+        Me.TemplateFormatButton.Visible = False
         Me.AcceptCompletionButton.Visible = False ' 暂时不展示
     End Sub
 

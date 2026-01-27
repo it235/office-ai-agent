@@ -291,6 +291,9 @@
     <Compile Include="TextPreviewForm.vb">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="JsonPreviewDialog.vb">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="ThisAddIn.vb">
       <SubType>Code</SubType>
     </Compile>

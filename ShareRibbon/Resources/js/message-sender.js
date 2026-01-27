@@ -395,11 +395,12 @@ function renderReferences() {
     const attachFileButton = document.getElementById('attach-file-button');
     const fileInput = document.getElementById('file-input');
 
+    // 点击附件按钮时，优先使用VB.NET对话框（支持完整路径）
     attachFileButton.addEventListener('click', () => {
-        fileInput.value = '';
-        fileInput.click();
+        openFileDialogFromVB();
     });
 
+    // 保留原有的文件输入处理（作为后备）
     fileInput.addEventListener('change', function (event) {
         const files = event.target.files;
         if (!files) return;
@@ -417,12 +418,159 @@ function renderReferences() {
                 console.log(`文件已添加: ${file.name}`);
                 continue;
             }
-            window.attachedFiles.push(file);
+            window.attachedFiles.push({
+                name: file.name,
+                path: file.path || file.name,
+                size: file.size
+            });
         }
         renderReferences();
         fileInput.value = '';
     });
 })();
+
+// ========== 文件引用增强功能 ==========
+
+/**
+ * 打开文件选择对话框（调用VB.NET）
+ */
+function openFileDialogFromVB() {
+    try {
+        sendMessageToServer({ type: 'openFileDialog' });
+    } catch (err) {
+        console.error('openFileDialogFromVB error:', err);
+        // 回退到HTML文件选择
+        const fileInput = document.getElementById('file-input');
+        if (fileInput) {
+            fileInput.value = '';
+            fileInput.click();
+        }
+    }
+}
+
+/**
+ * 接收VB.NET返回的文件列表
+ * @param {Array} files - 文件数组 [{name, path}, ...]
+ */
+function addFilesFromDialog(files) {
+    try {
+        if (!files || !Array.isArray(files)) return;
+
+        const allowedExtensions = /(\.xls|\.xlsx|\.xlsm|\.xlsb|\.csv|\.doc|\.docx|\.ppt|\.pptx)$/i;
+
+        files.forEach(file => {
+            if (!file || !file.name) return;
+
+            // 检查文件类型
+            if (!allowedExtensions.exec(file.name)) {
+                console.log(`文件类型不支持: ${file.name}`);
+                return;
+            }
+
+            // 检查重复
+            const isDuplicate = window.attachedFiles.some(
+                existingFile => existingFile.name === file.name && existingFile.path === file.path
+            );
+            if (isDuplicate) {
+                console.log(`文件已添加: ${file.name}`);
+                return;
+            }
+
+            // 添加文件
+            window.attachedFiles.push({
+                name: file.name,
+                path: file.path,
+                fromDialog: true
+            });
+        });
+
+        renderReferences();
+        console.log(`通过对话框添加了 ${files.length} 个文件`);
+    } catch (err) {
+        console.error('addFilesFromDialog error:', err);
+    }
+}
+
+/**
+ * 初始化拖拽区域
+ */
+function initDragDrop() {
+    const chatContainer = document.getElementById('chat-container');
+    if (!chatContainer) return;
+
+    // 拖拽进入
+    chatContainer.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        chatContainer.classList.add('drag-over');
+    });
+
+    // 拖拽离开
+    chatContainer.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // 只有当离开的是容器本身时才移除样式
+        if (e.target === chatContainer) {
+            chatContainer.classList.remove('drag-over');
+        }
+    });
+
+    // 放下文件
+    chatContainer.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        chatContainer.classList.remove('drag-over');
+
+        const files = e.dataTransfer.files;
+        if (!files || files.length === 0) return;
+
+        const allowedExtensions = /(\.xls|\.xlsx|\.xlsm|\.xlsb|\.csv|\.doc|\.docx|\.ppt|\.pptx)$/i;
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+
+            // 检查文件类型
+            if (!allowedExtensions.exec(file.name)) {
+                console.log(`文件类型不支持: ${file.name}`);
+                continue;
+            }
+
+            // 检查重复
+            const isDuplicate = window.attachedFiles.some(
+                existingFile => existingFile.name === file.name
+            );
+            if (isDuplicate) {
+                console.log(`文件已添加: ${file.name}`);
+                continue;
+            }
+
+            // 添加文件（拖拽的文件在WebView2环境下可能有path属性）
+            window.attachedFiles.push({
+                name: file.name,
+                path: file.path || file.name,
+                size: file.size,
+                fromDrag: true
+            });
+        }
+
+        renderReferences();
+        console.log(`通过拖拽添加了 ${files.length} 个文件`);
+    });
+
+    console.log('拖拽功能已初始化');
+}
+
+// 在页面加载后初始化拖拽功能
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initDragDrop);
+} else {
+    initDragDrop();
+}
+
+// 导出函数供全局使用
+window.openFileDialogFromVB = openFileDialogFromVB;
+window.addFilesFromDialog = addFilesFromDialog;
+window.initDragDrop = initDragDrop;
 
 // ========== 意图识别显示功能 ==========
 

@@ -1350,9 +1350,9 @@ input:checked + .mcp-toggle-slider:before {
     right: 0;
     background: white;
     border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    box-shadow: 0 -4px 16px rgba(0,0,0,0.12);
-    max-height: 220px;
+    border-radius: 6px;
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.1);
+    max-height: 180px;
     overflow: hidden;
     z-index: 1000;
     display: flex;
@@ -1367,32 +1367,32 @@ input:checked + .mcp-toggle-slider:before {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 12px;
+    padding: 6px 10px;
     background: linear-gradient(135deg, #4a6fa5 0%, #3d5a7c 100%);
     color: white;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 500;
     border-bottom: 1px solid #e0e0e0;
 }
 
 .autocomplete-hint {
-    font-size: 11px;
+    font-size: 10px;
     opacity: 0.8;
 }
 
 #autocomplete-list {
     list-style: none;
     margin: 0;
-    padding: 4px 0;
+    padding: 2px 0;
     overflow-y: auto;
-    max-height: 180px;
+    max-height: 140px;
 }
 
 .autocomplete-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 12px;
+    padding: 8px 10px;
     cursor: pointer;
     transition: background-color 0.15s;
     border-bottom: 1px solid #f0f0f0;
@@ -1412,20 +1412,20 @@ input:checked + .mcp-toggle-slider:before {
 
 .autocomplete-item .completion-text {
     flex: 1;
-    font-size: 13px;
+    font-size: 12px;
     color: #333;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    margin-right: 8px;
+    margin-right: 6px;
 }
 
 .autocomplete-item .completion-hint {
-    font-size: 11px;
+    font-size: 10px;
     color: #999;
     background: #f0f0f0;
-    padding: 2px 6px;
-    border-radius: 4px;
+    padding: 2px 5px;
+    border-radius: 3px;
     flex-shrink: 0;
 }
 
@@ -1456,4 +1456,583 @@ input:checked + .mcp-toggle-slider:before {
 
 @keyframes autocomplete-spin {
     to { transform: rotate(360deg); }
+}
+
+/* ====== 意图预览卡片样式 ====== */
+.intent-preview-card {
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    margin: 8px 6px;
+    padding: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    animation: intentSlideIn 0.2s ease-out;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+/* 紧凑模式 */
+.intent-preview-card.intent-preview-compact {
+    padding: 8px 10px;
+    margin: 6px 4px;
+}
+
+.intent-preview-card.intent-preview-compact .intent-preview-description {
+    font-size: 13px;
+    padding: 6px 10px;
+    margin-bottom: 8px;
+}
+
+.intent-preview-card.intent-preview-compact .execution-step {
+    padding: 4px 6px;
+    margin-bottom: 4px;
+}
+
+.intent-preview-card.intent-preview-compact .step-number {
+    width: 18px;
+    height: 18px;
+    font-size: 10px;
+    margin-right: 6px;
+}
+
+.intent-preview-card.intent-preview-compact .step-description {
+    font-size: 12px;
+}
+
+.intent-more-steps {
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+    padding: 4px;
+}
+
+/* 关闭按钮 */
+.intent-close-btn {
+    position: absolute;
+    right: 8px;
+    top: 8px;
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: #f0f0f0;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    color: #666;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.intent-close-btn:hover {
+    background: #e0e0e0;
+    color: #333;
+}
+
+@keyframes intentSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.intent-preview-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 6px;
+    position: relative;
+}
+
+.intent-preview-icon {
+    font-size: 16px;
+    margin-right: 6px;
+}
+
+.intent-preview-icon.spinning {
+    animation: intentSpin 1s linear infinite;
+}
+
+@keyframes intentSpin {
+    to { transform: rotate(360deg); }
+}
+
+.intent-preview-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #4a6fa5;
+}
+
+.intent-preview-description {
+    font-size: 14px;
+    color: #333;
+    padding: 8px 10px;
+    background: #f0f7ff;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    border-left: 3px solid #4a6fa5;
+}
+
+.intent-preview-plan {
+    margin-bottom: 10px;
+}
+
+.intent-plan-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: #666;
+    margin-bottom: 6px;
+}
+
+.execution-step {
+    display: flex;
+    align-items: center;
+    padding: 6px 8px;
+    background: #fff;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    margin-bottom: 4px;
+    transition: background-color 0.2s;
+}
+
+.execution-step:hover {
+    background: #f8f9fa;
+}
+
+.execution-step .step-number {
+    width: 18px;
+    height: 18px;
+    background: #4a6fa5;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+.execution-step .step-icon {
+    font-size: 14px;
+    margin-right: 6px;
+    flex-shrink: 0;
+}
+
+.execution-step .step-description {
+    flex: 1;
+    font-size: 12px;
+    color: #444;
+}
+
+.execution-step .step-modify {
+    font-size: 11px;
+    color: #666;
+    background: #e8f5e9;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-left: 6px;
+}
+
+.intent-preview-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    padding-top: 8px;
+    border-top: 1px solid #eee;
+}
+
+.intent-btn {
+    padding: 5px 10px;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.2s;
+    z-index: 10;
+    position: relative;
+}
+
+.intent-btn span {
+    font-size: 12px;
+}
+
+.intent-btn-confirm {
+    background: #4a6fa5;
+    color: white;
+}
+
+.intent-btn-confirm:hover {
+    background: #3d5a7c;
+}
+
+.intent-btn-edit {
+    background: #ff9800;
+    color: white;
+}
+
+.intent-btn-edit:hover {
+    background: #f57c00;
+}
+
+.intent-btn-cancel {
+    background: #f5f5f5;
+    color: #666;
+}
+
+.intent-btn-cancel:hover {
+    background: #e0e0e0;
+}
+
+/* 意图确认倒计时样式 */
+.intent-countdown-container {
+    padding: 8px 0;
+    text-align: center;
+    border-bottom: 1px solid #eee;
+    margin-bottom: 8px;
+}
+
+.intent-countdown {
+    font-size: 13px;
+    color: #666;
+    margin-bottom: 4px;
+}
+
+.intent-countdown .countdown-number {
+    display: inline-block;
+    font-size: 16px;
+    font-weight: bold;
+    color: #4a6fa5;
+    min-width: 20px;
+    animation: pulse 1s infinite;
+}
+
+.intent-countdown.countdown-expired {
+    color: #ff5722;
+    font-weight: 500;
+}
+
+.intent-tip {
+    font-size: 11px;
+    color: #999;
+    font-style: italic;
+    transition: opacity 0.3s;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.1); opacity: 0.8; }
+}
+
+/* 意图预览处理中状态 */
+.intent-preview-card.processing {
+    opacity: 0.85;
+}
+
+.intent-preview-card.processing .intent-preview-actions {
+    pointer-events: none;
+    opacity: 0.5;
+}
+
+/* ====== 执行计划展示样式（代码块替换） ====== */
+.execution-plan-container {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    margin: 8px 0;
+    overflow: hidden;
+}
+
+.execution-plan-container .plan-header {
+    background: linear-gradient(135deg, #4a6fa5 0%, #3d5a7c 100%);
+    color: white;
+    padding: 8px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.execution-plan-container .plan-steps {
+    padding: 8px;
+}
+
+.execution-plan-container .plan-step {
+    display: flex;
+    align-items: flex-start;
+    padding: 6px 8px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    margin-bottom: 6px;
+}
+
+.execution-plan-container .plan-step:last-child {
+    margin-bottom: 0;
+}
+
+.execution-plan-container .step-badge {
+    width: 20px;
+    height: 20px;
+    background: #4a6fa5;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+.execution-plan-container .step-content {
+    flex: 1;
+}
+
+.execution-plan-container .step-title {
+    font-size: 12px;
+    color: #333;
+    margin-bottom: 2px;
+}
+
+.execution-plan-container .step-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.execution-plan-container .modify-badge {
+    font-size: 10px;
+    background: #fff3e0;
+    color: #e65100;
+    padding: 1px 6px;
+    border-radius: 3px;
+}
+
+.execution-plan-container .time-badge {
+    font-size: 10px;
+    background: #e3f2fd;
+    color: #1565c0;
+    padding: 1px 6px;
+    border-radius: 3px;
+}
+
+.execution-plan-container .plan-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    padding: 8px 10px;
+    background: #f5f5f5;
+    border-top: 1px solid #e0e0e0;
+}
+
+.execution-plan-container .execute-plan-btn {
+    background: #4CAF50;
+    color: white;
+    border: none;
+    padding: 5px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.execution-plan-container .execute-plan-btn:hover {
+    background: #43a047;
+}
+
+.execution-plan-container .show-code-btn {
+    background: #fff;
+    color: #666;
+    border: 1px solid #ddd;
+    padding: 5px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.execution-plan-container .show-code-btn:hover {
+    background: #f5f5f5;
+    border-color: #ccc;
+}
+
+/* 隐藏的原始代码区域 */
+.execution-plan-container .original-code {
+    display: none;
+    padding: 12px;
+    background: #f6f8fa;
+    border-top: 1px solid #e0e0e0;
+}
+
+.execution-plan-container .original-code.visible {
+    display: block;
+}
+
+/* ====== 文件拖拽区域样式 ====== */
+#chat-container.drag-over {
+    background-color: #e3f2fd;
+    border: 2px dashed #4a6fa5;
+}
+
+#chat-container.drag-over::before {
+    content: '📁 松开以添加文件';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(74, 111, 165, 0.9);
+    color: white;
+    padding: 16px 32px;
+    border-radius: 8px;
+    font-size: 16px;
+    z-index: 1000;
+}
+
+/* ====== 文件附件按钮样式 ====== */
+#attach-file-btn {
+    background: none;
+    border: none;
+    padding: 4px 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #666;
+    transition: color 0.2s, background-color 0.2s;
+    border-radius: 4px;
+}
+
+#attach-file-btn:hover {
+    color: #4a6fa5;
+    background-color: #f0f0f0;
+}
+
+/* ====== 文件引用芯片样式增强 ====== */
+.reference-chip.file-chip {
+    background-color: #e8f5e9;
+    border-color: #81c784;
+}
+
+.reference-chip.file-chip:hover {
+    background-color: #c8e6c9;
+    border-color: #66bb6a;
+}
+
+.reference-chip .file-icon {
+    margin-right: 4px;
+    font-size: 14px;
+}
+
+/* ====== 执行步骤图标颜色 ====== */
+.execution-step .step-icon.icon-search { color: #1976d2; }
+.execution-step .step-icon.icon-data { color: #7b1fa2; }
+.execution-step .step-icon.icon-formula { color: #388e3c; }
+.execution-step .step-icon.icon-chart { color: #f57c00; }
+.execution-step .step-icon.icon-format { color: #c2185b; }
+.execution-step .step-icon.icon-clean { color: #00796b; }
+
+/* ====== 执行计划动画 ====== */
+.execution-plan-container .plan-step {
+    animation: stepFadeIn 0.3s ease-out forwards;
+    opacity: 0;
+}
+
+.execution-plan-container .plan-step:nth-child(1) { animation-delay: 0.05s; }
+.execution-plan-container .plan-step:nth-child(2) { animation-delay: 0.1s; }
+.execution-plan-container .plan-step:nth-child(3) { animation-delay: 0.15s; }
+.execution-plan-container .plan-step:nth-child(4) { animation-delay: 0.2s; }
+.execution-plan-container .plan-step:nth-child(5) { animation-delay: 0.25s; }
+.execution-plan-container .plan-step:nth-child(6) { animation-delay: 0.3s; }
+.execution-plan-container .plan-step:nth-child(7) { animation-delay: 0.35s; }
+
+@keyframes stepFadeIn {
+    from {
+        opacity: 0;
+        transform: translateX(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* ====== 意图预览卡片状态样式 ====== */
+.intent-preview-card.success {
+    border-color: #4caf50;
+    background: linear-gradient(135deg, #f1f8e9 0%, #e8f5e9 100%);
+}
+
+.intent-preview-card.error {
+    border-color: #f44336;
+    background: linear-gradient(135deg, #ffebee 0%, #fce4ec 100%);
+}
+
+/* ====== 执行按钮状态 ====== */
+.execute-plan-btn:disabled {
+    background: #bdbdbd;
+    cursor: not-allowed;
+}
+
+.execute-plan-btn.executing {
+    background: #ff9800;
+    position: relative;
+}
+
+.execute-plan-btn.executing::after {
+    content: '';
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: btnSpin 0.8s linear infinite;
+}
+
+@keyframes btnSpin {
+    to { transform: translateY(-50%) rotate(360deg); }
+}
+
+/* ====== 工具提示样式 ====== */
+.tooltip {
+    position: relative;
+}
+
+.tooltip::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 4px 8px;
+    background: rgba(0,0,0,0.8);
+    color: white;
+    font-size: 11px;
+    border-radius: 4px;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s;
+    pointer-events: none;
+    margin-bottom: 4px;
+}
+
+.tooltip:hover::after {
+    opacity: 1;
+    visibility: visible;
 }

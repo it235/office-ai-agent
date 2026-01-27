@@ -314,6 +314,7 @@
     <Compile Include="WordDocumentTranslateService.vb" />
     <Compile Include="WordContinuationService.vb" />
     <Compile Include="WordCompletionManager.vb" />
+    <Compile Include="WordJsonCommandSchema.vb" />
     <Compile Include="Services\WordGhostTextManager.vb" />
     <EmbeddedResource Include="ChatControl.resx">
       <DependentUpon>ChatControl.vb</DependentUpon>

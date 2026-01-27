@@ -214,6 +214,23 @@ Public Class ChatControl
         Send(message, "", True, "")
     End Sub
 
+    ''' <summary>
+    ''' 使用意图识别结果发送聊天消息（重写基类方法）
+    ''' </summary>
+    Protected Overrides Sub SendChatMessageWithIntent(message As String, intent As IntentResult)
+        If intent IsNot Nothing AndAlso intent.Confidence > 0.2 Then
+            Dim optimizedPrompt = IntentService.GetOptimizedSystemPrompt(intent)
+            Debug.WriteLine($"PPT使用意图优化提示词: {intent.IntentType}, 置信度: {intent.Confidence:F2}")
+
+            Task.Run(Async Function()
+                         Await Send(message, optimizedPrompt, True, "")
+                     End Function)
+        Else
+            ' 回退到普通发送
+            SendChatMessage(message)
+        End If
+    End Sub
+
     Protected Overrides Function ParseFile(filePath As String) As FileContentResult
 
     End Function
@@ -1011,6 +1028,374 @@ Public Class ChatControl
             Debug.WriteLine($"[PPTChatControl] 同步补全设置失败: {ex.Message}")
         End Try
     End Sub
+
+    ''' <summary>
+    ''' 执行JSON命令（重写基类方法）- 带严格验证
+    ''' </summary>
+    Protected Overrides Function ExecuteJsonCommand(jsonCode As String, preview As Boolean) As Boolean
+        Try
+            ' 使用严格的结构验证
+            Dim errorMessage As String = ""
+            Dim normalizedJson As JToken = Nothing
+            
+            If Not PowerPointJsonCommandSchema.ValidateJsonStructure(jsonCode, errorMessage, normalizedJson) Then
+                ' 格式验证失败
+                Debug.WriteLine($"PPT JSON格式验证失败: {errorMessage}")
+                Debug.WriteLine($"原始JSON: {jsonCode.Substring(0, Math.Min(200, jsonCode.Length))}...")
+                
+                ShareRibbon.GlobalStatusStrip.ShowWarning($"JSON格式不符合规范: {errorMessage}")
+                Return False
+            End If
+            
+            ' 验证通过，根据类型执行
+            If normalizedJson.Type = JTokenType.Object Then
+                Dim jsonObj = CType(normalizedJson, JObject)
+                
+                ' 命令数组格式
+                If jsonObj("commands") IsNot Nothing Then
+                    Return ExecutePPTCommandsArray(jsonObj("commands"), jsonCode, preview)
+                End If
+                
+                ' 单命令格式
+                Return ExecutePPTSingleCommand(jsonObj, jsonCode, preview)
+            End If
+            
+            ShareRibbon.GlobalStatusStrip.ShowWarning("无效的JSON格式")
+            Return False
+
+        Catch ex As Newtonsoft.Json.JsonReaderException
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"JSON格式无效: {ex.Message}")
+            Return False
+        Catch ex As Exception
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"执行失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行PPT命令数组
+    ''' </summary>
+    Private Function ExecutePPTCommandsArray(commandsArray As JToken, originalJson As String, preview As Boolean) As Boolean
+        Try
+            Dim commands = CType(commandsArray, JArray)
+            If commands.Count = 0 Then
+                ShareRibbon.GlobalStatusStrip.ShowWarning("命令数组为空")
+                Return False
+            End If
+
+            ' 预览所有命令
+            If preview Then
+                Dim previewMsg As New StringBuilder()
+                previewMsg.AppendLine($"即将执行 {commands.Count} 个PowerPoint命令:")
+                previewMsg.AppendLine()
+
+                Dim cmdIndex = 1
+                For Each cmd In commands
+                    If cmd.Type = JTokenType.Object Then
+                        Dim cmdObj = CType(cmd, JObject)
+                        Dim cmdName = cmdObj("command")?.ToString()
+                        Dim title = cmdObj("params")?("title")?.ToString()
+                        Dim content = cmdObj("params")?("content")?.ToString()
+                        
+                        previewMsg.AppendLine($"{cmdIndex}. {cmdName}")
+                        If Not String.IsNullOrEmpty(title) Then
+                            previewMsg.AppendLine($"   标题: {title}")
+                        End If
+                        If Not String.IsNullOrEmpty(content) Then
+                            previewMsg.AppendLine($"   内容: {content.Substring(0, Math.Min(50, content.Length))}...")
+                        End If
+                        previewMsg.AppendLine()
+                        cmdIndex += 1
+                    End If
+                Next
+
+                previewMsg.AppendLine("是否继续执行？")
+
+                If MessageBox.Show(previewMsg.ToString(), "PPT批量命令预览", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) <> DialogResult.OK Then
+                    ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
+                    Return True
+                End If
+            End If
+
+            ' 执行所有命令
+            Dim successCount = 0
+            Dim failCount = 0
+
+            For Each cmd In commands
+                If cmd.Type = JTokenType.Object Then
+                    Dim cmdObj = CType(cmd, JObject)
+                    If ExecutePPTCommand(cmdObj) Then
+                        successCount += 1
+                    Else
+                        failCount += 1
+                    End If
+                End If
+            Next
+
+            If failCount = 0 Then
+                ShareRibbon.GlobalStatusStrip.ShowInfo($"所有 {successCount} 个命令执行成功")
+            Else
+                ShareRibbon.GlobalStatusStrip.ShowWarning($"执行完成: {successCount} 成功, {failCount} 失败")
+            End If
+
+            Return failCount = 0
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecutePPTCommandsArray 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"批量执行失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行单个PPT命令
+    ''' </summary>
+    Private Function ExecutePPTSingleCommand(commandJson As JObject, processedJson As String, preview As Boolean) As Boolean
+        Try
+            Dim command = commandJson("command")?.ToString()
+            
+            ' 预览
+            If preview Then
+                Dim params = commandJson("params")
+                Dim title = params?("title")?.ToString()
+                Dim content = params?("content")?.ToString()
+
+                Dim previewMsg = $"即将执行 PowerPoint 命令:{vbCrLf}{vbCrLf}" &
+                                $"命令: {command}{vbCrLf}" &
+                                If(Not String.IsNullOrEmpty(title), $"标题: {title}{vbCrLf}", "") &
+                                If(Not String.IsNullOrEmpty(content), $"内容: {content.Substring(0, Math.Min(100, content.Length))}...{vbCrLf}", "") &
+                                $"{vbCrLf}是否继续执行？"
+
+                If MessageBox.Show(previewMsg, "PPT命令预览", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) <> DialogResult.OK Then
+                    ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
+                    Return True
+                End If
+            End If
+
+            ' 执行命令
+            Dim success = ExecutePPTCommand(commandJson)
+
+            If success Then
+                ShareRibbon.GlobalStatusStrip.ShowInfo($"命令 '{command}' 执行成功")
+            Else
+                ShareRibbon.GlobalStatusStrip.ShowWarning($"命令 '{command}' 执行失败")
+            End If
+
+            Return success
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecutePPTSingleCommand 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行具体的PPT命令
+    ''' </summary>
+    Private Function ExecutePPTCommand(commandJson As JObject) As Boolean
+        Try
+            Dim command = commandJson("command")?.ToString()
+            Dim params = commandJson("params")
+            
+            Dim pres = Globals.ThisAddIn.Application.ActivePresentation
+
+            Select Case command.ToLower()
+                Case "insertslide"
+                    Return ExecuteInsertSlide(params, pres)
+                Case "inserttext"
+                    Return ExecuteInsertText(params, pres)
+                Case "insertshape"
+                    Return ExecuteInsertShape(params, pres)
+                Case "formatslide"
+                    Return ExecuteFormatSlide(params, pres)
+                Case "inserttable"
+                    Return ExecuteInsertTable(params, pres)
+                Case Else
+                    Debug.WriteLine($"不支持的PPT命令: {command}")
+                    Return False
+            End Select
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecutePPTCommand 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    Private Function ExecuteInsertSlide(params As JToken, pres As Object) As Boolean
+        Try
+            Dim position = If(params("position")?.ToString(), "end")
+            Dim title = If(params("title")?.ToString(), "")
+            Dim content = If(params("content")?.ToString(), "")
+
+            Dim slideIndex As Integer
+            If position.ToLower() = "end" Then
+                slideIndex = pres.Slides.Count + 1
+            ElseIf position.ToLower() = "current" Then
+                slideIndex = Globals.ThisAddIn.Application.ActiveWindow.View.Slide.SlideIndex + 1
+            Else
+                slideIndex = pres.Slides.Count + 1
+            End If
+
+            ' 添加幻灯片 (使用标题和内容布局 ppLayoutTitleOnly = 11)
+            Dim slide = pres.Slides.Add(slideIndex, 11)
+
+            ' 设置标题
+            If Not String.IsNullOrEmpty(title) Then
+                For Each shape In slide.Shapes
+                    If shape.Type = Microsoft.Office.Core.MsoShapeType.msoPlaceholder Then
+                        If shape.PlaceholderFormat.Type = Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderTitle Then
+                            shape.TextFrame.TextRange.Text = title
+                            Exit For
+                        End If
+                    End If
+                Next
+            End If
+
+            ' 如果有内容，添加文本框
+            If Not String.IsNullOrEmpty(content) Then
+                Dim textBox = slide.Shapes.AddTextbox(
+                    Microsoft.Office.Core.MsoTextOrientation.msoTextOrientationHorizontal,
+                    50, 150, 600, 300)
+                textBox.TextFrame.TextRange.Text = content
+            End If
+
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteInsertSlide 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    Private Function ExecuteInsertText(params As JToken, pres As Object) As Boolean
+        Try
+            Dim content = params("content")?.ToString()
+            Dim slideIndex = If(params("slideIndex")?.Value(Of Integer)(), -1)
+            Dim x = If(params("x")?.Value(Of Single)(), 100)
+            Dim y = If(params("y")?.Value(Of Single)(), 200)
+
+            Dim slide As Object
+            If slideIndex < 0 Then
+                slide = Globals.ThisAddIn.Application.ActiveWindow.View.Slide
+            Else
+                slide = pres.Slides(Math.Min(slideIndex + 1, pres.Slides.Count))
+            End If
+
+            Dim textBox = slide.Shapes.AddTextbox(
+                Microsoft.Office.Core.MsoTextOrientation.msoTextOrientationHorizontal,
+                x, y, 400, 100)
+            textBox.TextFrame.TextRange.Text = content
+
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteInsertText 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    Private Function ExecuteInsertShape(params As JToken, pres As Object) As Boolean
+        Try
+            Dim shapeType = If(params("shapeType")?.ToString(), "rectangle")
+            Dim x = params("x")?.Value(Of Single)()
+            Dim y = params("y")?.Value(Of Single)()
+            Dim width = If(params("width")?.Value(Of Single)(), 100)
+            Dim height = If(params("height")?.Value(Of Single)(), 100)
+
+            Dim slide = Globals.ThisAddIn.Application.ActiveWindow.View.Slide
+
+            ' 根据shapeType添加不同形状
+            Dim msoShapeType As Integer = 1 ' msoShapeRectangle
+            Select Case shapeType.ToLower()
+                Case "rectangle"
+                    msoShapeType = 1
+                Case "oval", "circle"
+                    msoShapeType = 9 ' msoShapeOval
+                Case "triangle"
+                    msoShapeType = 7 ' msoShapeIsoscelesTriangle
+                Case "arrow"
+                    msoShapeType = 13 ' msoShapeRightArrow
+            End Select
+
+            slide.Shapes.AddShape(msoShapeType, x, y, width, height)
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteInsertShape 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    Private Function ExecuteFormatSlide(params As JToken, pres As Object) As Boolean
+        Try
+            Dim slideIndex = If(params("slideIndex")?.Value(Of Integer)(), -1)
+            
+            Dim slide As Object
+            If slideIndex < 0 Then
+                slide = Globals.ThisAddIn.Application.ActiveWindow.View.Slide
+            Else
+                slide = pres.Slides(Math.Min(slideIndex + 1, pres.Slides.Count))
+            End If
+
+            ' 设置背景
+            Dim background = params("background")?.ToString()
+            If Not String.IsNullOrEmpty(background) Then
+                Try
+                    ' 尝试解析颜色
+                    Dim color = System.Drawing.ColorTranslator.FromHtml(background)
+                    slide.FollowMasterBackground = False
+                    slide.Background.Fill.Solid()
+                    slide.Background.Fill.ForeColor.RGB = System.Drawing.ColorTranslator.ToOle(color)
+                Catch
+                End Try
+            End If
+
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteFormatSlide 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    Private Function ExecuteInsertTable(params As JToken, pres As Object) As Boolean
+        Try
+            Dim rows = params("rows")?.Value(Of Integer)()
+            Dim cols = params("cols")?.Value(Of Integer)()
+            Dim slideIndex = If(params("slideIndex")?.Value(Of Integer)(), -1)
+
+            If rows <= 0 OrElse cols <= 0 Then Return False
+
+            Dim slide As Object
+            If slideIndex < 0 Then
+                slide = Globals.ThisAddIn.Application.ActiveWindow.View.Slide
+            Else
+                slide = pres.Slides(Math.Min(slideIndex + 1, pres.Slides.Count))
+            End If
+
+            Dim table = slide.Shapes.AddTable(rows, cols, 50, 150, 600, 300)
+
+            ' 如果有data，填充表格
+            Dim data = params("data")
+            If data IsNot Nothing AndAlso data.Type = JTokenType.Array Then
+                Dim dataArr = CType(data, JArray)
+                Dim x As Integer = dataArr.Count - 1
+                Dim x2 As Integer = rows - 1
+                For rowIdx = 0 To Math.Min(x, x2)
+                    Dim rowData = dataArr(rowIdx)
+                    If rowData.Type = JTokenType.Array Then
+                        Dim rowArr = CType(rowData, JArray)
+                        Dim y As Integer = rowArr.Count - 1
+                        Dim y1 As Integer = cols - 1
+                        For colIdx = 0 To Math.Min(y, y1)
+                            table.Table.Cell(rowIdx + 1, colIdx + 1).Shape.TextFrame.TextRange.Text = rowArr(colIdx).ToString()
+                        Next
+                    End If
+                Next
+            End If
+
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteInsertTable 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
 
 End Class
 

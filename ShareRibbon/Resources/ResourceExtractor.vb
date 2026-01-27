@@ -54,7 +54,8 @@ Public Class ResourceExtractor
                 {"mcp_manager", "mcp-manager.js"},
                 {"revision_manager", "revision-manager.js"},
                 {"history_manager", "history-manager.js"},
-                {"autocomplete", "autocomplete.js"}
+                {"autocomplete", "autocomplete.js"},
+                {"intent_preview", "intent-preview.js"}
             }
 
             ' 释放JS资源
