@@ -76,12 +76,22 @@ Public MustInherit Class BaseTranslateService
 
     ' 构造翻译请求体（复用原有 CreateRequestBody 逻辑，简化为只用 system/user）
     Protected Function CreateRequestBodyForTranslate(systemPrompt As String, userContent As String, modelName As String) As String
+        ' 对内容进行JSON转义，避免特殊字符导致JSON格式错误
+        Dim escapedSystemPrompt = EscapeJsonString(systemPrompt)
+        Dim escapedUserContent = EscapeJsonString(userContent)
+        
         Dim messages As New List(Of String) From {
-            $"{{""role"": ""system"", ""content"": ""{systemPrompt}""}}",
-            $"{{""role"": ""user"", ""content"": ""{userContent}""}}"
+            $"{{""role"": ""system"", ""content"": ""{escapedSystemPrompt}""}}",
+            $"{{""role"": ""user"", ""content"": ""{escapedUserContent}""}}"
         }
         Dim messagesJson = String.Join(",", messages)
         Return $"{{""model"": ""{modelName}"", ""messages"": [{messagesJson}], ""stream"": false}}"
+    End Function
+    
+    ' JSON字符串转义
+    Private Function EscapeJsonString(input As String) As String
+        If String.IsNullOrEmpty(input) Then Return ""
+        Return input.Replace("\", "\\").Replace("""", "\""").Replace(vbCr, "\r").Replace(vbLf, "\n").Replace(vbTab, "\t")
     End Function
 
     ' 右下角弹窗展示

@@ -188,6 +188,8 @@
     </Compile>
     <Compile Include="Config\ChatSettings.vb" />
     <Compile Include="Config\ConfigSettings.vb" />
+    <Compile Include="Config\PromptConfiguration.vb" />
+    <Compile Include="Config\PromptManager.vb" />
     <Compile Include="Config\AboutForm.vb">
       <SubType>Form</SubType>
     </Compile>
@@ -212,6 +214,9 @@
     </Compile>
     <Compile Include="Translate\TranslateSettings.vb" />
     <Compile Include="Continuation\ContinuationService.vb" />
+    <Compile Include="Loop\RalphLoopMemory.vb" />
+    <Compile Include="Loop\RalphLoopController.vb" />
+    <Compile Include="Loop\RalphAgentController.vb" />
     <Compile Include="Config\WebView2Loader.vb" />
     <Compile Include="Controls\BaseChatControl.Designer.vb">
       <DependentUpon>BaseChatControl.vb</DependentUpon>
@@ -241,6 +246,9 @@
       <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="Controls\WebSiteContentConfirmDialog.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Controls\CommandPreviewForm.vb">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Log\SimpleLogger.vb" />
@@ -389,6 +397,8 @@
     <None Include="Resources\js\revision-manager.js" />
     <None Include="Resources\js\history-manager.js" />
     <None Include="Resources\js\intent-preview.js" />
+    <None Include="Resources\js\ralph-loop.js" />
+    <None Include="Resources\js\ralph-agent.js" />
     <None Include="Resources\js\autocomplete.js" />
   </ItemGroup>
   <ItemGroup>

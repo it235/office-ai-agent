@@ -1083,35 +1083,9 @@ Public Class ChatControl
                 Return False
             End If
 
-            ' 预览所有命令
+            ' 预览所有命令 - 使用增强的预览表单
             If preview Then
-                Dim previewMsg As New StringBuilder()
-                previewMsg.AppendLine($"即将执行 {commands.Count} 个PowerPoint命令:")
-                previewMsg.AppendLine()
-
-                Dim cmdIndex = 1
-                For Each cmd In commands
-                    If cmd.Type = JTokenType.Object Then
-                        Dim cmdObj = CType(cmd, JObject)
-                        Dim cmdName = cmdObj("command")?.ToString()
-                        Dim title = cmdObj("params")?("title")?.ToString()
-                        Dim content = cmdObj("params")?("content")?.ToString()
-                        
-                        previewMsg.AppendLine($"{cmdIndex}. {cmdName}")
-                        If Not String.IsNullOrEmpty(title) Then
-                            previewMsg.AppendLine($"   标题: {title}")
-                        End If
-                        If Not String.IsNullOrEmpty(content) Then
-                            previewMsg.AppendLine($"   内容: {content.Substring(0, Math.Min(50, content.Length))}...")
-                        End If
-                        previewMsg.AppendLine()
-                        cmdIndex += 1
-                    End If
-                Next
-
-                previewMsg.AppendLine("是否继续执行？")
-
-                If MessageBox.Show(previewMsg.ToString(), "PPT批量命令预览", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) <> DialogResult.OK Then
+                If Not ShareRibbon.CommandPreviewForm.ShowPreview($"PPT命令预览 - 共 {commands.Count} 个命令", commandsArray) Then
                     ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
                     Return True
                 End If
@@ -1154,19 +1128,9 @@ Public Class ChatControl
         Try
             Dim command = commandJson("command")?.ToString()
             
-            ' 预览
+            ' 预览 - 使用增强的预览表单
             If preview Then
-                Dim params = commandJson("params")
-                Dim title = params?("title")?.ToString()
-                Dim content = params?("content")?.ToString()
-
-                Dim previewMsg = $"即将执行 PowerPoint 命令:{vbCrLf}{vbCrLf}" &
-                                $"命令: {command}{vbCrLf}" &
-                                If(Not String.IsNullOrEmpty(title), $"标题: {title}{vbCrLf}", "") &
-                                If(Not String.IsNullOrEmpty(content), $"内容: {content.Substring(0, Math.Min(100, content.Length))}...{vbCrLf}", "") &
-                                $"{vbCrLf}是否继续执行？"
-
-                If MessageBox.Show(previewMsg, "PPT命令预览", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) <> DialogResult.OK Then
+                If Not ShareRibbon.CommandPreviewForm.ShowPreview("PPT命令预览", commandJson) Then
                     ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
                     Return True
                 End If

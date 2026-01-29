@@ -17,10 +17,24 @@ marked.setOptions({
 
 // Extend marked renderer for code blocks with action buttons
 const renderer = new marked.Renderer();
-const originalCodeRenderer = renderer.code;
+const originalCodeRenderer = renderer.code.bind(renderer);
 
-renderer.code = function (code, language, isEscaped) {
-    const codeHtml = originalCodeRenderer.call(this, code, language, isEscaped);
+// 新版 marked.js 传入的是 token 对象，而非分离参数
+renderer.code = function (token) {
+    // 兼容新旧版本 marked.js API
+    let code, language;
+    if (typeof token === 'object' && token !== null && 'text' in token) {
+        // 新版 API: token 是对象 {type, raw, text, lang, ...}
+        code = token.text || '';
+        language = token.lang || '';
+    } else {
+        // 旧版 API: token 就是 code 字符串
+        code = token || '';
+        language = arguments[1] || '';
+    }
+    
+    // 调用原始渲染器
+    const codeHtml = originalCodeRenderer(token);
     
     // 检测是否为可执行的代码类型
     const lang = (language || '').toLowerCase().trim();
@@ -29,7 +43,8 @@ renderer.code = function (code, language, isEscaped) {
     
     // 自动检测JSON格式（即使没有语言标记）
     if (!isExecutable && (!lang || lang === 'plaintext' || lang === 'text')) {
-        const trimmed = code.trim();
+        const codeStr = String(code);
+        const trimmed = codeStr.trim();
         if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
             (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
             try {

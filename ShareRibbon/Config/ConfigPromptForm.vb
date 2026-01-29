@@ -31,7 +31,7 @@ Public Class ConfigPromptForm
     Public Property propmtContent As String
     Public Property VBA_Q As String = "你是一名优秀的Office资深专家，擅长写VBA代码。如果你有输出代码，请你仔细思考和检查，没有数据或格式不对的行可以跳过用处理，同时我不需要任何通篇大论的废话，请你智能快速一点。"
 
-    Public Property EXCEL_TAB_Q As String = "你是一名优秀的Office资深专家，擅长通过VBA代码根据数据生成各种图表，例如：饼图、折线图、柱状图，请根据我的问题给出我需要的VBA代码。同时我不需要任何通篇大论的废话，请你智能快速一点。"
+    Public Property EXCEL_TAB_Q As String = "你是一名优秀的Office资深专家，我正在Office中工作，请根据我的需求给出你的答案。"
 
     Public Sub LoadConfig()
         ' 初始化配置数据
@@ -52,13 +52,13 @@ Public Class ConfigPromptForm
         Dim vbap = New PromptConfigItem() With {
                 .name = "VBA专家身份",
                 .content = VBA_Q,
-                .selected = True
+                .selected = False
             }
 
         Dim excelTabP = New PromptConfigItem() With {
-                .name = "Excel表格专家身份",
+                .name = "Office表格专家身份",
                 .content = EXCEL_TAB_Q,
-                .selected = False
+                .selected = True
             }
         ' 添加默认配置
         If Not File.Exists(configFilePath) Then
@@ -118,7 +118,7 @@ Public Class ConfigPromptForm
         Me.StartPosition = FormStartPosition.CenterScreen ' 设置表单居中显示
 
         descriptionLabel1 = New Label()
-        descriptionLabel1.Text = "提示词相当于给AI设定对应的身份，这样才能找到该领域的问题，回答起来更专业，例如：你是一名Excel VBA专家，接下来的问题都和Excel以及VBA相关"
+        descriptionLabel1.Text = "提示词相当于给AI设定对应的身份，这样才能找到该领域的问题，回答起来更专业，例如：你是一名Office专家，接下来的问题都和Office相关"
         descriptionLabel1.Dock = DockStyle.Top
         descriptionLabel1.Height = 40
         descriptionLabel1.Margin = New Padding(10, 10, 10, 10)

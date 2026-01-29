@@ -55,7 +55,9 @@ Public Class ResourceExtractor
                 {"revision_manager", "revision-manager.js"},
                 {"history_manager", "history-manager.js"},
                 {"autocomplete", "autocomplete.js"},
-                {"intent_preview", "intent-preview.js"}
+                {"intent_preview", "intent-preview.js"},
+                {"ralph_loop", "ralph-loop.js"},
+                {"ralph_agent", "ralph-agent.js"}
             }
 
             ' 释放JS资源

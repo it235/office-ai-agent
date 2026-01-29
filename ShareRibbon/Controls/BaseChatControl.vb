@@ -34,6 +34,12 @@ Public MustInherit Class BaseChatControl
     Protected _chatStateService As New ChatStateService()
     Private _historyService As HistoryService = Nothing
     Private _mcpService As McpService = Nothing
+    
+    ' Ralph Loop 控制器
+    Protected _ralphLoopController As New RalphLoopController()
+    
+    ' Ralph Agent 控制器
+    Protected _ralphAgentController As RalphAgentController
 
     ' 延迟初始化的历史服务
     Protected ReadOnly Property HistoryService As HistoryService
@@ -392,6 +398,22 @@ Public MustInherit Class BaseChatControl
                 Case "cancelIntent"
                     HandleCancelIntent()
 
+                ' Ralph Loop 循环功能消息处理
+                Case "continueLoop"
+                    HandleContinueLoop()
+                Case "cancelLoop"
+                    HandleCancelLoop()
+                Case "startLoop"
+                    HandleStartLoop(jsonDoc)
+
+                ' Ralph Agent 智能助手消息处理
+                Case "startAgent"
+                    HandleStartAgent(jsonDoc)
+                Case "startAgentExecution"
+                    HandleStartAgentExecution(jsonDoc)
+                Case "abortAgent"
+                    HandleAbortAgent()
+
                 ' 文件选择对话框
                 Case "openFileDialog"
                     HandleOpenFileDialog()
@@ -466,9 +488,9 @@ Public MustInherit Class BaseChatControl
             refinementPrompt.AppendLine()
             refinementPrompt.AppendLine("请直接输出调整后的续写内容，不要添加任何解释：")
 
-            ' 保持 responseMode = "continuation"，发送调整请求
+            ' 保持 responseMode = "continuation"，发送调整请求（不使用历史记录）
             Task.Run(Async Function()
-                         Await Send(refinementPrompt.ToString(), GetContinuationSystemPrompt(), True, "continuation")
+                         Await Send(refinementPrompt.ToString(), GetContinuationSystemPrompt(), False, "continuation")
                      End Function)
 
             GlobalStatusStrip.ShowInfo("正在调整续写内容...")
@@ -479,14 +501,14 @@ Public MustInherit Class BaseChatControl
     End Sub
 
     ''' <summary>
-    ''' 发送续写请求
+    ''' 发送续写请求（不使用聊天历史记录）
     ''' </summary>
     Protected Sub SendContinuationRequest(context As ContinuationContext, Optional style As String = "")
         Dim systemPrompt = GetContinuationSystemPrompt()
         Dim userPrompt = BuildContinuationUserPrompt(context, style)
 
         Task.Run(Async Function()
-                     Await Send(userPrompt, systemPrompt, True, "continuation")
+                     Await Send(userPrompt, systemPrompt, False, "continuation")
                  End Function)
     End Sub
 
@@ -556,9 +578,9 @@ Public MustInherit Class BaseChatControl
             refinementPrompt.AppendLine()
             refinementPrompt.AppendLine("请直接输出调整后的内容，不要添加任何解释：")
 
-            ' 保持 responseMode = "template_render"，发送调整请求
+            ' 保持 responseMode = "template_render"，发送调整请求（不使用历史记录）
             Task.Run(Async Function()
-                         Await Send(refinementPrompt.ToString(), GetTemplateRenderSystemPrompt(""), True, "template_render")
+                         Await Send(refinementPrompt.ToString(), GetTemplateRenderSystemPrompt(""), False, "template_render")
                      End Function)
 
             GlobalStatusStrip.ShowInfo("正在调整模板内容...")
@@ -1347,10 +1369,10 @@ Public MustInherit Class BaseChatControl
         Dim templateContext As String = If(messageValue("templateContext")?.ToString(), "")
 
         If responseMode = "template_render" AndAlso Not String.IsNullOrWhiteSpace(templateContext) Then
-            ' 模板渲染模式：使用专用systemPrompt
+            ' 模板渲染模式：使用专用systemPrompt，不使用历史记录
             Dim templateSystemPrompt = GetTemplateRenderSystemPrompt(templateContext)
             Task.Run(Async Function()
-                         Await Send(finalMessageToLLM, templateSystemPrompt, True, "template_render")
+                         Await Send(finalMessageToLLM, templateSystemPrompt, False, "template_render")
                      End Function)
         Else
             ' 获取当前聊天模式
@@ -1525,6 +1547,385 @@ Public MustInherit Class BaseChatControl
             Debug.WriteLine($"HandleCancelIntent 出错: {ex.Message}")
         End Try
     End Sub
+
+#Region "Ralph Loop 循环功能"
+
+    ''' <summary>
+    ''' 启动Ralph Loop - 用户输入目标后调用
+    ''' </summary>
+    Public Async Function StartRalphLoop(userGoal As String) As Task
+        Try
+            Debug.WriteLine($"[RalphLoop] 启动循环，目标: {userGoal}")
+            
+            ' 获取应用类型
+            Dim appType = GetApplicationType()
+            
+            ' 创建新的循环会话
+            Dim loopSession = Await _ralphLoopController.StartNewLoop(userGoal, appType)
+            
+            ' 显示规划中状态
+            Dim loopDataJson = $"{{""goal"":""{EscapeJavaScriptString(userGoal)}"",""steps"":[],""status"":""planning""}}"
+            ExecuteJavaScriptAsyncJS($"showLoopPlanCard({loopDataJson})")
+            
+            GlobalStatusStrip.ShowInfo("正在规划任务...")
+            
+            ' 调用AI进行任务规划
+            Dim planningPrompt = _ralphLoopController.GetPlanningPrompt(userGoal)
+            
+            ' 发送规划请求（使用特殊模式标记）
+            _isRalphLoopPlanning = True
+            Await Send(planningPrompt, "", False, "")
+            
+        Catch ex As Exception
+            Debug.WriteLine($"[RalphLoop] 启动失败: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"启动循环失败: {ex.Message}")
+        End Try
+    End Function
+    
+    ' Ralph Loop 规划模式标记
+    Private _isRalphLoopPlanning As Boolean = False
+    
+    ''' <summary>
+    ''' 处理前端startLoop消息
+    ''' </summary>
+    Protected Sub HandleStartLoop(jsonDoc As JObject)
+        Try
+            Dim goal = jsonDoc("goal")?.ToString()
+            If Not String.IsNullOrEmpty(goal) Then
+                StartRalphLoop(goal)
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"HandleStartLoop 出错: {ex.Message}")
+        End Try
+    End Sub
+    
+    ''' <summary>
+    ''' 处理继续执行循环
+    ''' </summary>
+    Protected Async Sub HandleContinueLoop()
+        Try
+            Debug.WriteLine("[RalphLoop] 用户点击继续执行")
+            
+            Dim nextStep = _ralphLoopController.ExecuteNextStep()
+            If nextStep Is Nothing Then
+                Debug.WriteLine("[RalphLoop] 没有更多步骤")
+                ExecuteJavaScriptAsyncJS("updateLoopStatus('completed')")
+                GlobalStatusStrip.ShowInfo("所有步骤已完成")
+                Return
+            End If
+            
+            ' 更新UI显示当前步骤
+            ExecuteJavaScriptAsyncJS($"updateLoopStep({nextStep.StepNumber - 1}, 'running')")
+            ExecuteJavaScriptAsyncJS("updateLoopStatus('running')")
+            GlobalStatusStrip.ShowInfo($"正在执行步骤 {nextStep.StepNumber}: {nextStep.Description}")
+            
+            ' 执行当前步骤
+            _currentRalphLoopStep = nextStep
+            Await Send(nextStep.Description, "", True, "")
+            
+        Catch ex As Exception
+            Debug.WriteLine($"HandleContinueLoop 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"执行步骤失败: {ex.Message}")
+        End Try
+    End Sub
+    
+    ' 当前执行的步骤
+    Private _currentRalphLoopStep As RalphLoopStep = Nothing
+    
+    ''' <summary>
+    ''' 处理取消循环
+    ''' </summary>
+    Protected Sub HandleCancelLoop()
+        Try
+            Debug.WriteLine("[RalphLoop] 用户取消循环")
+            
+            _ralphLoopController.ClearAndEndLoop()
+            _isRalphLoopPlanning = False
+            _currentRalphLoopStep = Nothing
+            
+            ExecuteJavaScriptAsyncJS("hideLoopPlanCard()")
+            GlobalStatusStrip.ShowInfo("已取消循环任务")
+            
+        Catch ex As Exception
+            Debug.WriteLine($"HandleCancelLoop 出错: {ex.Message}")
+        End Try
+    End Sub
+    
+    ''' <summary>
+    ''' 在流完成后检查是否需要处理Ralph Loop
+    ''' </summary>
+    Protected Sub CheckRalphLoopCompletion(responseContent As String)
+        Try
+            ' 检查是否在规划模式
+            If _isRalphLoopPlanning Then
+                _isRalphLoopPlanning = False
+                
+                ' 解析规划结果
+                If _ralphLoopController.ParsePlanningResult(responseContent) Then
+                    Dim loopSession = _ralphLoopController.GetActiveLoop()
+                    If loopSession IsNot Nothing Then
+                        ' 更新前端显示规划结果
+                        Dim stepsJson = BuildStepsJson(loopSession.Steps)
+                        Dim loopDataJson = $"{{""goal"":""{EscapeJavaScriptString(loopSession.OriginalGoal)}"",""steps"":{stepsJson},""status"":""ready""}}"
+                        ExecuteJavaScriptAsyncJS($"showLoopPlanCard({loopDataJson})")
+                        GlobalStatusStrip.ShowInfo("规划完成，点击[继续执行]开始")
+                    End If
+                Else
+                    GlobalStatusStrip.ShowWarning("规划结果解析失败")
+                    ExecuteJavaScriptAsyncJS("hideLoopPlanCard()")
+                End If
+                Return
+            End If
+            
+            ' 检查是否在执行步骤
+            If _currentRalphLoopStep IsNot Nothing Then
+                Dim stepNum = _currentRalphLoopStep.StepNumber
+                _ralphLoopController.CompleteCurrentStep(responseContent, True)
+                _currentRalphLoopStep = Nothing
+                
+                ' 更新UI
+                ExecuteJavaScriptAsyncJS($"updateLoopStep({stepNum - 1}, 'completed')")
+                
+                ' 检查是否还有更多步骤
+                Dim loopSession = _ralphLoopController.GetActiveLoop()
+                If loopSession IsNot Nothing Then
+                    If loopSession.Status = RalphLoopStatus.Paused Then
+                        ExecuteJavaScriptAsyncJS("updateLoopStatus('paused')")
+                        GlobalStatusStrip.ShowInfo($"步骤 {stepNum} 完成，点击继续执行下一步")
+                    ElseIf loopSession.Status = RalphLoopStatus.Completed Then
+                        ExecuteJavaScriptAsyncJS("updateLoopStatus('completed')")
+                        GlobalStatusStrip.ShowInfo("所有步骤已完成！")
+                    End If
+                End If
+            End If
+            
+        Catch ex As Exception
+            Debug.WriteLine($"CheckRalphLoopCompletion 出错: {ex.Message}")
+        End Try
+    End Sub
+    
+    ''' <summary>
+    ''' 构建步骤JSON
+    ''' </summary>
+    Private Function BuildStepsJson(steps As List(Of RalphLoopStep)) As String
+        Dim sb As New StringBuilder()
+        sb.Append("[")
+        For i = 0 To steps.Count - 1
+            If i > 0 Then sb.Append(",")
+            Dim s = steps(i)
+            Dim statusStr = s.Status.ToString().ToLower()
+            sb.Append($"{{""description"":""{EscapeJavaScriptString(s.Description)}"",""status"":""{statusStr}""}}")
+        Next
+        sb.Append("]")
+        Return sb.ToString()
+    End Function
+    
+    ''' <summary>
+    ''' 获取应用类型（子类重写）
+    ''' </summary>
+    Protected Overridable Function GetApplicationType() As String
+        Return "Office"
+    End Function
+
+#End Region
+
+#Region "Ralph Agent 智能助手"
+
+    ''' <summary>
+    ''' 初始化Agent控制器
+    ''' </summary>
+    Protected Sub InitializeAgentController()
+        If _ralphAgentController Is Nothing Then
+            _ralphAgentController = New RalphAgentController()
+            
+            ' 设置回调
+            _ralphAgentController.OnStatusChanged = Sub(status)
+                ExecuteJavaScriptAsyncJS($"updateAgentStatus('{_ralphAgentController.GetCurrentSession()?.Id}', 'running', '{EscapeJavaScriptString(status)}')")
+            End Sub
+            
+            _ralphAgentController.OnStepStarted = Sub(stepIndex, desc)
+                ExecuteJavaScriptAsyncJS($"updateAgentStep('{_ralphAgentController.GetCurrentSession()?.Id}', {stepIndex}, 'running', '')")
+            End Sub
+            
+            _ralphAgentController.OnStepCompleted = Sub(stepIndex, success, msg)
+                Dim status = If(success, "completed", "failed")
+                ExecuteJavaScriptAsyncJS($"updateAgentStep('{_ralphAgentController.GetCurrentSession()?.Id}', {stepIndex}, '{status}', '{EscapeJavaScriptString(msg)}')")
+            End Sub
+            
+            _ralphAgentController.OnAgentCompleted = Sub(success)
+                ExecuteJavaScriptAsyncJS($"completeAgent('{_ralphAgentController.GetCurrentSession()?.Id}', {success.ToString().ToLower()}, '')")
+            End Sub
+            
+            ' 设置AI请求委托
+            _ralphAgentController.SendAIRequest = Async Function(prompt, sysPrompt)
+                Return Await SendAndGetResponse(prompt, sysPrompt)
+            End Function
+            
+            ' 设置代码执行委托
+            _ralphAgentController.ExecuteCode = Sub(code, lang, preview)
+                _codeExecutionService?.ExecuteCode(code, lang, preview)
+            End Sub
+        End If
+    End Sub
+
+    ''' <summary>
+    ''' 处理启动Agent请求
+    ''' </summary>
+    Protected Async Sub HandleStartAgent(jsonDoc As JObject)
+        Try
+            Dim request = jsonDoc("request")?.ToString()
+            If String.IsNullOrEmpty(request) Then
+                GlobalStatusStrip.ShowWarning("请输入任务描述")
+                Return
+            End If
+            
+            Debug.WriteLine($"[RalphAgent] 启动Agent，需求: {request}")
+            
+            ' 初始化控制器
+            InitializeAgentController()
+            
+            ' 获取当前Office内容
+            Dim appType = GetApplicationType()
+            Dim currentContent = GetCurrentOfficeContent()
+            
+            GlobalStatusStrip.ShowInfo("正在分析您的需求...")
+            
+            ' 启动Agent规划
+            Dim success = Await _ralphAgentController.StartAgent(request, appType, currentContent)
+            
+            If success Then
+                ' 显示规划卡片
+                Dim session = _ralphAgentController.GetCurrentSession()
+                If session IsNot Nothing Then
+                    ShowAgentPlanCard(session)
+                End If
+            Else
+                GlobalStatusStrip.ShowWarning("无法分析您的需求，请重试")
+            End If
+            
+        Catch ex As Exception
+            Debug.WriteLine($"HandleStartAgent 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"启动Agent失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 显示Agent规划卡片
+    ''' </summary>
+    Private Sub ShowAgentPlanCard(session As RalphAgentSession)
+        Try
+            Dim stepsJson As New StringBuilder()
+            stepsJson.Append("[")
+            For i = 0 To session.Steps.Count - 1
+                If i > 0 Then stepsJson.Append(",")
+                Dim s = session.Steps(i)
+                stepsJson.Append($"{{""description"":""{EscapeJavaScriptString(s.Description)}"",""detail"":""{EscapeJavaScriptString(s.Detail)}"",""status"":""pending""}}")
+            Next
+            stepsJson.Append("]")
+            
+            Dim planJson = $"{{""sessionId"":""{session.Id}"",""understanding"":""{EscapeJavaScriptString(session.Understanding)}"",""steps"":{stepsJson.ToString()},""summary"":""{EscapeJavaScriptString(session.Summary)}""}}"
+            
+            ExecuteJavaScriptAsyncJS($"showAgentPlanCard({planJson})")
+            
+        Catch ex As Exception
+            Debug.WriteLine($"ShowAgentPlanCard 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 处理开始执行Agent
+    ''' </summary>
+    Protected Async Sub HandleStartAgentExecution(jsonDoc As JObject)
+        Try
+            Debug.WriteLine("[RalphAgent] 用户确认执行")
+            
+            If _ralphAgentController IsNot Nothing Then
+                Await _ralphAgentController.StartExecution()
+            End If
+            
+        Catch ex As Exception
+            Debug.WriteLine($"HandleStartAgentExecution 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"执行失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 处理终止Agent
+    ''' </summary>
+    Protected Sub HandleAbortAgent()
+        Try
+            Debug.WriteLine("[RalphAgent] 用户终止Agent")
+            
+            If _ralphAgentController IsNot Nothing Then
+                _ralphAgentController.AbortAgent()
+            End If
+            
+            GlobalStatusStrip.ShowInfo("已终止Agent")
+            
+        Catch ex As Exception
+            Debug.WriteLine($"HandleAbortAgent 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 获取当前Office内容（子类重写以提供具体实现）
+    ''' </summary>
+    Protected Overridable Function GetCurrentOfficeContent() As String
+        ' 基类默认实现：尝试获取选区内容
+        Try
+            Dim selInfo = CaptureCurrentSelectionInfo("")
+            If selInfo IsNot Nothing AndAlso Not String.IsNullOrEmpty(selInfo.SelectedText) Then
+                Return selInfo.SelectedText
+            End If
+        Catch
+        End Try
+        Return "(无选中内容)"
+    End Function
+
+    ''' <summary>
+    ''' 发送AI请求并获取完整响应（用于Agent规划）
+    ''' </summary>
+    Private Async Function SendAndGetResponse(prompt As String, systemPrompt As String) As Task(Of String)
+        ' 这里需要实现一个同步等待AI响应的方法
+        ' 简单实现：使用Send方法但收集完整响应
+        Try
+            Dim responseBuilder As New StringBuilder()
+            Dim completed As Boolean = False
+            Dim uuid = Guid.NewGuid().ToString()
+            
+            ' 创建临时的响应收集器
+            _agentResponseBuffer = New StringBuilder()
+            _agentResponseUuid = uuid
+            _agentResponseCompleted = False
+            
+            ' 发送请求
+            Await Send(prompt, systemPrompt, False, "agent_planning")
+            
+            ' 等待响应完成（最多60秒）
+            Dim timeout = 60000
+            Dim waited = 0
+            While Not _agentResponseCompleted AndAlso waited < timeout
+                Await Task.Delay(100)
+                waited += 100
+            End While
+            
+            Dim result = _agentResponseBuffer.ToString()
+            _agentResponseBuffer = Nothing
+            _agentResponseUuid = Nothing
+            
+            Return result
+        Catch ex As Exception
+            Debug.WriteLine($"SendAndGetResponse 出错: {ex.Message}")
+            Return ""
+        End Try
+    End Function
+    
+    ' Agent响应收集
+    Private _agentResponseBuffer As StringBuilder
+    Private _agentResponseUuid As String
+    Private _agentResponseCompleted As Boolean
+
+#End Region
 
     ''' <summary>
     ''' 处理打开文件对话框请求
@@ -1709,14 +2110,28 @@ Public MustInherit Class BaseChatControl
 
         Try
             If String.IsNullOrWhiteSpace(systemPrompt) Then
-                ' 组合更强的 system 提示，要求先给 Plan 再给 Answer，并在信息不足时提出澄清问题
-                systemPrompt =
-                "系统指令（必读）：" & vbCrLf & ConfigSettings.propmtContent & vbCrLf & vbCrLf &
-                "1) 首先输出一个名为 'Plan' 的简短计划，按步骤列出解决路径（要点式，最多6条）。" & vbCrLf &
-                "2) 然后输出名为 'Answer' 的部分，给出最终可执行的解决方案或操作步骤，使用 Markdown，必要时给出代码/示例或差异说明。" & vbCrLf &
-                "3) 如果信息不足，请不要猜测；在最后输出名为 'Clarifying Questions' 的部分，列出需要用户回答的问题并暂停执行。" & vbCrLf &
-                "4) 对于用户请求的改进（用户标记当前回答为不接受），在回复开头先写明 '改进点'（1-3 行），然后给出修正的 Plan 与 Answer。" & vbCrLf &
-                "5) 保持回答简洁、有条理，优先提供可直接执行的结论和示例。"
+                ' 使用PromptManager生成组合后的提示词
+                Dim appInfo = GetApplication()
+                Dim appType = If(appInfo IsNot Nothing, appInfo.Type.ToString(), "Excel")
+                
+                Dim context As New PromptContext With {
+                    .ApplicationType = appType,
+                    .IntentResult = CurrentIntentResult,
+                    .FunctionMode = responseMode
+                }
+                
+                systemPrompt = PromptManager.Instance.GetCombinedPrompt(context)
+                
+                ' 如果PromptManager返回空（没有配置），使用基础提示词
+                If String.IsNullOrWhiteSpace(systemPrompt) Then
+                    systemPrompt =
+                    "系统指令（必读）：" & vbCrLf & ConfigSettings.propmtContent & vbCrLf & vbCrLf &
+                    "1) 首先输出一个名为 'Plan' 的简短计划，按步骤列出解决路径（要点式，最多6条）。" & vbCrLf &
+                    "2) 然后输出名为 'Answer' 的部分，给出最终可执行的解决方案或操作步骤，使用 Markdown，必要时给出代码/示例或差异说明。" & vbCrLf &
+                    "3) 如果信息不足，请不要猜测；在最后输出名为 'Clarifying Questions' 的部分，列出需要用户回答的问题并暂停执行。" & vbCrLf &
+                    "4) 对于用户请求的改进（用户标记当前回答为不接受），在回复开头先写明 '改进点'（1-3 行），然后给出修正的 Plan 与 Answer。" & vbCrLf &
+                    "5) 保持回答简洁、有条理，优先提供可直接执行的结论和示例。"
+                End If
             End If
 
 
@@ -2036,19 +2451,14 @@ Public MustInherit Class BaseChatControl
 
                     ' 创建前端聊天节（使用 responseUuid 作为显示 id）
                     Dim jsCreate As String = $"createChatSection('{aiName}', formatDateTime(new Date()), '{responseUuid}');"
-                    If ChatBrowser.InvokeRequired Then
-                        ChatBrowser.Invoke(Sub() ChatBrowser.ExecuteScriptAsync(jsCreate))
-                    Else
-                        Await ChatBrowser.ExecuteScriptAsync(jsCreate)
-                    End If
+                    Await ExecuteJavaScriptAndWaitAsync(jsCreate)
+
+                    ' 等待确认 rendererMap 已创建
+                    Await WaitForRendererMapAsync(responseUuid)
 
                     ' 在前端 DOM 的 chat 节上设置 dataset.requestId，以便前端后续执行时可以把 requestUuid 发回
                     Dim jsSetMapping As String = $"(function(){{ var el = document.getElementById('chat-{responseUuid}'); if(el) el.dataset.requestId = '{requestUuid}'; }})();"
-                    If ChatBrowser.InvokeRequired Then
-                        ChatBrowser.Invoke(Sub() ChatBrowser.ExecuteScriptAsync(jsSetMapping))
-                    Else
-                        Await ChatBrowser.ExecuteScriptAsync(jsSetMapping)
-                    End If
+                    Await ExecuteJavaScriptAndWaitAsync(jsSetMapping)
 
                     ' 处理流（后续逻辑不变，但使用 responseUuid 进行 flush 等操作）
                     Dim stringBuilder As New StringBuilder()
@@ -2056,6 +2466,7 @@ Public MustInherit Class BaseChatControl
                         Using reader As New StreamReader(responseStream, Encoding.UTF8)
                             Dim buffer(102300) As Char
                             Dim readCount As Integer
+                            Dim chunkCount As Integer = 0
                             Do
                                 If stopReaderStream Then
                                     Debug.WriteLine("[Stream] 用户手动停止流读取")
@@ -2065,15 +2476,31 @@ Public MustInherit Class BaseChatControl
                                 End If
                                 readCount = Await reader.ReadAsync(buffer, 0, buffer.Length)
                                 If readCount = 0 Then Exit Do
+                                chunkCount += 1
                                 Dim chunk As String = New String(buffer, 0, readCount)
                                 chunk = chunk.Replace("data:", "")
                                 stringBuilder.Append(chunk)
+
+                                ' 调试：记录每次读取的数据
+                                If chunkCount <= 3 Then
+                                    Debug.WriteLine($"[Stream] chunk#{chunkCount} 长度={readCount}, 内容前100字符: {chunk.Substring(0, Math.Min(100, chunk.Length))}")
+                                End If
+
                                 If stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}).EndsWith("}") Then
                                     ProcessStreamChunk(stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}), responseUuid, originQuestion)
                                     stringBuilder.Clear()
                                 End If
                             Loop
-                            Debug.WriteLine("[Stream] 流接收完成")
+
+                            ' 调试：如果循环结束但stringBuilder不为空，说明有未处理的数据
+                            If stringBuilder.Length > 0 Then
+                                Debug.WriteLine($"[Stream] 警告：循环结束但stringBuilder还有未处理数据，长度={stringBuilder.Length}")
+                                Debug.WriteLine($"[Stream] 未处理数据内容: {stringBuilder.ToString().Substring(0, Math.Min(200, stringBuilder.Length))}")
+                                ' 尝试处理剩余数据
+                                ProcessStreamChunk(stringBuilder.ToString().Trim(), responseUuid, originQuestion)
+                            End If
+
+                            Debug.WriteLine($"[Stream] 流接收完成，共处理了 {chunkCount} 个chunk")
                         End Using
                     End Using
                 End Using
@@ -2146,6 +2573,9 @@ Public MustInherit Class BaseChatControl
                 ExecuteJavaScriptAsyncJS($"hideCodeActionButtons('{_finalUuid}');")
             End If
         End If
+
+        ' Ralph Loop 完成检查
+        CheckRalphLoopCompletion(allPlainMarkdownBuffer.ToString())
     End Sub
 
 
@@ -2163,17 +2593,23 @@ Public MustInherit Class BaseChatControl
 
     Private Sub ProcessStreamChunk(rawChunk As String, uuid As String, originQuestion As String)
         Try
+            Debug.WriteLine($"[ProcessStreamChunk] 收到原始数据长度: {rawChunk.Length}")
             Dim lines As String() = rawChunk.Split({vbCr, vbLf}, StringSplitOptions.RemoveEmptyEntries)
+            Debug.WriteLine($"[ProcessStreamChunk] 分割后行数: {lines.Length}")
 
             For Each line In lines
                 line = line.Trim()
                 If line = "[DONE]" Then
+                    Debug.WriteLine("[ProcessStreamChunk] 收到 [DONE] 标记")
                     ' 在流结束时处理所有完成的工具调用
                     If _pendingToolCalls.Count > 0 Then
                         Debug.WriteLine("[DONE] 时发现未处理的工具调用，开始处理")
                         ProcessCompletedToolCalls(uuid, originQuestion)
                     End If
                     FlushBuffer("content", uuid) ' 最后刷新缓冲区
+
+                    ' 标记Agent响应完成
+                    _agentResponseCompleted = True
                     Return
                 End If
                 If line = "" Then
@@ -2200,8 +2636,14 @@ Public MustInherit Class BaseChatControl
 
                 Dim content As String = jsonObj("choices")(0)("delta")("content")?.ToString()
                 If Not String.IsNullOrEmpty(content) Then
+                    Debug.WriteLine($"[ProcessStreamChunk] 解析到content: {content.Substring(0, Math.Min(50, content.Length))}...")
                     _currentMarkdownBuffer.Append(content)
                     FlushBuffer("content", uuid)
+
+                    ' 如果是Agent规划请求，同时收集到缓冲区
+                    If _agentResponseBuffer IsNot Nothing Then
+                        _agentResponseBuffer.Append(content)
+                    End If
                 End If
 
                 ' 检查是否有工具调用
@@ -2551,7 +2993,7 @@ Public MustInherit Class BaseChatControl
             allMarkdownBuffer.Append(escapedContent)
             allPlainMarkdownBuffer.Append(plainContent)
         End If
-
+        Debug.Print(js)
         Await ExecuteJavaScriptAsyncJS(js)
     End Sub
 
@@ -2563,6 +3005,76 @@ Public MustInherit Class BaseChatControl
         Else
             Await ChatBrowser.ExecuteScriptAsync(js)
         End If
+    End Function
+
+    ' 执行JS脚本并确保等待完成（解决跨线程调用时的时序问题）
+    Private Async Function ExecuteJavaScriptAndWaitAsync(js As String) As Task
+        Try
+            If ChatBrowser.InvokeRequired Then
+                ' 使用 TaskCompletionSource 确保等待完成
+                Dim tcs As New TaskCompletionSource(Of Boolean)()
+                ChatBrowser.Invoke(Sub()
+                                       Try
+                                           ChatBrowser.ExecuteScriptAsync(js).ContinueWith(Sub(t)
+                                                                                               If t.IsFaulted Then
+                                                                                                   tcs.SetException(t.Exception)
+                                                                                               Else
+                                                                                                   tcs.SetResult(True)
+                                                                                               End If
+                                                                                           End Sub)
+                                       Catch ex As Exception
+                                           tcs.SetException(ex)
+                                       End Try
+                                   End Sub)
+                Await tcs.Task
+            Else
+                Await ChatBrowser.ExecuteScriptAsync(js)
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"[ExecuteJavaScriptAndWaitAsync] 执行JS出错: {ex.Message}")
+        End Try
+    End Function
+
+    ' 等待前端 rendererMap 创建完成
+    Private Async Function WaitForRendererMapAsync(uuid As String) As Task
+        Dim maxRetries As Integer = 10
+        Dim delayMs As Integer = 50
+
+        For i As Integer = 0 To maxRetries - 1
+            Try
+                Dim checkJs As String = $"(window.rendererMap && window.rendererMap['{uuid}']) ? 'true' : 'false'"
+                Dim result As String = Nothing
+
+                If ChatBrowser.InvokeRequired Then
+                    Dim tcs As New TaskCompletionSource(Of String)()
+                    ChatBrowser.Invoke(Sub()
+                                           ChatBrowser.ExecuteScriptAsync(checkJs).ContinueWith(Sub(t)
+                                                                                                    If t.IsFaulted Then
+                                                                                                        tcs.SetResult("false")
+                                                                                                    Else
+                                                                                                        tcs.SetResult(t.Result)
+                                                                                                    End If
+                                                                                                End Sub)
+                                       End Sub)
+                    result = Await tcs.Task
+                Else
+                    result = Await ChatBrowser.ExecuteScriptAsync(checkJs)
+                End If
+
+                ' 结果可能包含引号，清理后判断
+                result = result?.Trim(""""c)
+                If result = "true" Then
+                    Debug.WriteLine($"[WaitForRendererMapAsync] rendererMap[{uuid}] 已就绪，重试次数={i}")
+                    Return
+                End If
+            Catch ex As Exception
+                Debug.WriteLine($"[WaitForRendererMapAsync] 检查时出错: {ex.Message}")
+            End Try
+
+            Await Task.Delay(delayMs)
+        Next
+
+        Debug.WriteLine($"[WaitForRendererMapAsync] 警告：等待超时，rendererMap[{uuid}] 可能未创建")
     End Function
 
     Private Function DecodeBase64(base64 As String) As String

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -31,7 +31,7 @@
                 <p>4.配置大模型提示词能够更快，更准确的得到你想要的答案</p>
                 <p>5.如果没解决你的痛点，<a href="https://jsj.top/f/OZJDfa" target="_blank">点击此处提出需求</a>，下个版本见</p>
                 <p>6.聊天记录存放在"当前用户/文档/OfficeAiAppData"目录下</p>
-                <p>7.当前版本:<span id="version">2.6.4</span>，<a href="https://www.officeso.cn" target="_blank">每月发布新功能</a></p>
+                <p>7.当前版本:<span id="version">2.8.0</span>，<a href="https://www.officeso.cn" target="_blank">每月发布新功能</a></p>
             </div>
         </div>
     </div>
@@ -135,6 +135,14 @@
                             <path d="M10 11v6"></path>
                             <path d="M14 11v6"></path>
                             <path d="M9 3V4a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2V3"></path>
+                        </svg>
+                    </button>
+
+                    <!-- Ralph Agent 智能助手按钮 -->
+                    <button id="ralph-agent-btn" title="启动 Ralph Agent (自动执行任务)" onclick="showAgentInputDialog()">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"></path>
                         </svg>
                     </button>
 
@@ -287,6 +295,8 @@
     <script src="https://officeai.local/js/revision-manager.js"></script>
     <script src="https://officeai.local/js/autocomplete.js"></script>
     <script src="https://officeai.local/js/intent-preview.js"></script>
+    <script src="https://officeai.local/js/ralph-loop.js"></script>
+    <script src="https://officeai.local/js/ralph-agent.js"></script>
 
     <!-- 工具函数 -->
     <script>

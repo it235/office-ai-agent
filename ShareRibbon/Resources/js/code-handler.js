@@ -354,8 +354,18 @@ function acceptAnswer(uuid) {
     }
 }
 
+// 防抖标志 - 防止重复点击"继续改进"按钮
+let rejectInProgress = false;
+
 // Reject answer handler
 function rejectAnswer(uuid) {
+    // 防抖检查
+    if (rejectInProgress) {
+        console.log('拒绝操作正在进行中，忽略重复点击');
+        return;
+    }
+    rejectInProgress = true;
+
     try {
         // 立即置灰按钮，防止重复点击
         const footer = document.getElementById('footer-' + uuid);
@@ -374,6 +384,7 @@ function rejectAnswer(uuid) {
                 if (footer) {
                     footer.querySelectorAll('.accept-btn, .reject-btn').forEach(b => b.disabled = false);
                 }
+                rejectInProgress = false;
                 return;
             }
         } catch (e) {
@@ -401,6 +412,9 @@ function rejectAnswer(uuid) {
         }
     } catch (err) {
         console.error('rejectAnswer error:', err);
+    } finally {
+        // 500ms后解除防抖锁定
+        setTimeout(() => { rejectInProgress = false; }, 500);
     }
 }
 
@@ -1866,8 +1880,13 @@ function restoreExecuteButtons(uuid, success) {
                 if (success) {
                     btn.textContent = '已执行';
                     btn.disabled = true;
+                    // 5秒后恢复可点击状态，允许重复执行
+                    setTimeout(() => {
+                        btn.textContent = btn.dataset.originalText || '执行此计划';
+                        btn.disabled = false;
+                    }, 5000);
                 } else {
-                    btn.textContent = btn.dataset.originalText || '执行此计划';
+                    btn.textContent = '重试';
                     btn.disabled = false;
                 }
             }
@@ -1884,18 +1903,28 @@ function restoreExecuteButtons(uuid, success) {
                     已执行
                 `;
                 btn.disabled = true;
+                // 5秒后恢复可点击状态，允许重复执行
+                setTimeout(() => {
+                    if (btn.dataset.originalHtml) {
+                        btn.innerHTML = btn.dataset.originalHtml;
+                    } else {
+                        btn.innerHTML = `
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                            </svg>
+                            执行
+                        `;
+                    }
+                    btn.disabled = false;
+                }, 5000);
             } else {
-                // 恢复原始HTML或默认文本
-                if (btn.dataset.originalHtml) {
-                    btn.innerHTML = btn.dataset.originalHtml;
-                } else {
-                    btn.innerHTML = `
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                        </svg>
-                        执行
-                    `;
-                }
+                // 执行失败，显示重试按钮
+                btn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                    重试
+                `;
                 btn.disabled = false;
             }
         });

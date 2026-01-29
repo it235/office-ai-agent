@@ -1694,46 +1694,6 @@ input:checked + .mcp-toggle-slider:before {
     background: #e0e0e0;
 }
 
-/* 意图确认倒计时样式 */
-.intent-countdown-container {
-    padding: 8px 0;
-    text-align: center;
-    border-bottom: 1px solid #eee;
-    margin-bottom: 8px;
-}
-
-.intent-countdown {
-    font-size: 13px;
-    color: #666;
-    margin-bottom: 4px;
-}
-
-.intent-countdown .countdown-number {
-    display: inline-block;
-    font-size: 16px;
-    font-weight: bold;
-    color: #4a6fa5;
-    min-width: 20px;
-    animation: pulse 1s infinite;
-}
-
-.intent-countdown.countdown-expired {
-    color: #ff5722;
-    font-weight: 500;
-}
-
-.intent-tip {
-    font-size: 11px;
-    color: #999;
-    font-style: italic;
-    transition: opacity 0.3s;
-}
-
-@keyframes pulse {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.1); opacity: 0.8; }
-}
-
 /* 意图预览处理中状态 */
 .intent-preview-card.processing {
     opacity: 0.85;
@@ -2035,4 +1995,701 @@ input:checked + .mcp-toggle-slider:before {
 .tooltip:hover::after {
     opacity: 1;
     visibility: visible;
+}
+
+/* ====== Ralph Loop 样式 ====== */
+.ralph-loop-card {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    margin: 10px 0;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.loop-header {
+    background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%);
+    color: white;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.loop-icon {
+    font-size: 16px;
+}
+
+.loop-title {
+    flex: 1;
+    font-weight: 500;
+    font-size: 13px;
+}
+
+.loop-close-btn {
+    background: transparent;
+    border: none;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 4px;
+    opacity: 0.8;
+}
+
+.loop-close-btn:hover {
+    opacity: 1;
+}
+
+.loop-goal {
+    padding: 10px 12px;
+    font-size: 12px;
+    color: #495057;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.loop-steps {
+    padding: 8px 12px;
+}
+
+.loop-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    margin: 4px 0;
+    border-radius: 4px;
+    background: white;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.loop-step.step-running {
+    background: #fff3cd;
+    border-left: 3px solid #ffc107;
+}
+
+.loop-step.step-completed {
+    background: #d4edda;
+    border-left: 3px solid #28a745;
+}
+
+.loop-step.step-failed {
+    background: #f8d7da;
+    border-left: 3px solid #dc3545;
+}
+
+.step-icon {
+    font-size: 14px;
+}
+
+.step-num {
+    background: #6c5ce7;
+    color: white;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: bold;
+}
+
+.step-desc {
+    flex: 1;
+    color: #495057;
+}
+
+.loop-status {
+    padding: 8px 12px;
+    font-size: 11px;
+    color: #6c757d;
+    border-top: 1px solid #dee2e6;
+}
+
+.status-text {
+    font-weight: 500;
+    color: #6c5ce7;
+}
+
+.loop-actions {
+    padding: 10px 12px;
+    display: flex;
+    gap: 8px;
+    border-top: 1px solid #dee2e6;
+}
+
+.loop-btn {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.loop-btn-continue {
+    background: #6c5ce7;
+    color: white;
+}
+
+.loop-btn-continue:hover:not(:disabled) {
+    background: #5b4cdb;
+}
+
+.loop-btn-continue:disabled {
+    background: #adb5bd;
+    cursor: not-allowed;
+}
+
+.loop-btn-cancel {
+    background: #f8f9fa;
+    color: #6c757d;
+    border: 1px solid #dee2e6;
+}
+
+.loop-btn-cancel:hover {
+    background: #e9ecef;
+}
+
+/* Ralph Loop 固定位置样式 */
+.ralph-loop-fixed {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    margin: 0;
+    border-radius: 0 0 8px 8px;
+}
+
+.ralph-loop-fixed .loop-body {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* Ralph Loop 最小化状态 */
+.ralph-loop-card.minimized .loop-body {
+    display: none;
+}
+
+.ralph-loop-card.minimized {
+    border-radius: 0 0 8px 8px;
+}
+
+.loop-minimize-btn {
+    background: transparent;
+    border: none;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 4px;
+    opacity: 0.8;
+    margin-right: 4px;
+}
+
+.loop-minimize-btn:hover {
+    opacity: 1;
+}
+
+/* Ralph Loop 输入对话框 */
+.ralph-loop-dialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.loop-dialog-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+}
+
+.loop-dialog-content {
+    position: relative;
+    background: white;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 400px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    overflow: hidden;
+}
+
+.loop-dialog-header {
+    background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%);
+    color: white;
+    padding: 12px 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+}
+
+.loop-dialog-close {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    opacity: 0.8;
+}
+
+.loop-dialog-close:hover {
+    opacity: 1;
+}
+
+.loop-dialog-body {
+    padding: 15px;
+}
+
+.loop-dialog-desc {
+    font-size: 12px;
+    color: #666;
+    margin: 0 0 12px 0;
+}
+
+.loop-goal-input {
+    width: 100%;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 10px;
+    font-size: 13px;
+    resize: none;
+    box-sizing: border-box;
+}
+
+.loop-goal-input:focus {
+    outline: none;
+    border-color: #6c5ce7;
+    box-shadow: 0 0 0 2px rgba(108,92,231,0.2);
+}
+
+.loop-dialog-actions {
+    padding: 12px 15px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    border-top: 1px solid #eee;
+}
+
+.loop-btn-start {
+    background: #6c5ce7;
+    color: white;
+}
+
+.loop-btn-start:hover {
+    background: #5b4cdb;
+}
+
+/* Ralph Loop 按钮样式 */
+#ralph-loop-btn {
+    color: #6c5ce7;
+}
+
+#ralph-loop-btn:hover {
+    background: rgba(108,92,231,0.1);
+}
+
+/* Ralph Loop 聊天消息步骤标记 */
+.ralph-loop-message {
+    border-left: 3px solid #6c5ce7;
+}
+
+.loop-step-badge {
+    display: inline-block;
+    background: #6c5ce7;
+    color: white;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin-left: 6px;
+    font-weight: normal;
+}
+
+/* ====== Ralph Agent 样式 ====== */
+
+/* Agent 容器 */
+.ralph-agent-container {
+    border-left: 3px solid #6c5ce7;
+}
+
+.agent-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%);
+    color: white;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 8px;
+    font-weight: normal;
+}
+
+/* Agent 规划内容 */
+.agent-plan-content {
+    padding: 0 !important;
+}
+
+.agent-understanding {
+    padding: 12px 15px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #eee;
+    font-size: 13px;
+    color: #495057;
+}
+
+.agent-steps-container {
+    padding: 0;
+}
+
+.agent-steps-header {
+    padding: 10px 15px;
+    background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%);
+    color: white;
+    font-size: 13px;
+    font-weight: 500;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.agent-step-count {
+    font-size: 11px;
+    opacity: 0.9;
+}
+
+.agent-steps-list {
+    padding: 10px;
+    background: #fafafa;
+}
+
+/* 步骤项 */
+.agent-step {
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    overflow: hidden;
+    transition: all 0.2s;
+}
+
+.agent-step:last-child {
+    margin-bottom: 0;
+}
+
+.agent-step-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+}
+
+.agent-step-icon {
+    font-size: 16px;
+}
+
+.agent-step-num {
+    background: #6c5ce7;
+    color: white;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.agent-step-desc {
+    flex: 1;
+    font-size: 13px;
+    color: #333;
+}
+
+/* 步骤状态 */
+.agent-step-running {
+    border-color: #ffc107;
+    background: #fffbeb;
+}
+
+.agent-step-running .agent-step-num {
+    background: #ffc107;
+    animation: pulse 1s infinite;
+}
+
+.agent-step-completed {
+    border-color: #28a745;
+    background: #f0fff4;
+}
+
+.agent-step-completed .agent-step-num {
+    background: #28a745;
+}
+
+.agent-step-failed {
+    border-color: #dc3545;
+    background: #fff5f5;
+}
+
+.agent-step-failed .agent-step-num {
+    background: #dc3545;
+}
+
+/* 步骤详情 */
+.agent-step-detail {
+    padding: 10px 12px;
+    background: #f8f9fa;
+    border-top: 1px solid #eee;
+    font-size: 12px;
+    color: #666;
+}
+
+.step-detail-text {
+    margin-bottom: 8px;
+}
+
+.step-result {
+    padding: 6px 10px;
+    border-radius: 4px;
+    margin-top: 8px;
+}
+
+.step-result.completed {
+    background: #d4edda;
+    color: #155724;
+}
+
+.step-result.failed {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.step-code-header {
+    font-size: 11px;
+    color: #888;
+    margin-bottom: 6px;
+}
+
+.step-code-area pre {
+    margin: 0;
+    padding: 8px;
+    background: #2d2d2d;
+    border-radius: 4px;
+    overflow-x: auto;
+}
+
+.step-code-area code {
+    font-size: 11px;
+}
+
+/* Agent 摘要 */
+.agent-summary {
+    padding: 12px 15px;
+    background: #f0f7ff;
+    border-top: 1px solid #e0e0e0;
+    font-size: 13px;
+    color: #495057;
+}
+
+/* Agent 操作按钮 */
+.agent-actions {
+    padding: 12px 15px;
+    display: flex;
+    gap: 10px;
+    border-top: 1px solid #eee;
+    background: white;
+}
+
+.agent-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+}
+
+.agent-btn-execute {
+    background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%);
+    color: white;
+}
+
+.agent-btn-execute:hover {
+    background: linear-gradient(135deg, #5b4cdb 0%, #9189f0 100%);
+}
+
+.agent-btn-abort {
+    background: #f8f9fa;
+    color: #dc3545;
+    border: 1px solid #dc3545;
+}
+
+.agent-btn-abort:hover {
+    background: #fff5f5;
+}
+
+.agent-btn-start {
+    background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%);
+    color: white;
+}
+
+.agent-btn-start:hover {
+    background: linear-gradient(135deg, #5b4cdb 0%, #9189f0 100%);
+}
+
+.agent-btn-cancel {
+    background: #f8f9fa;
+    color: #6c757d;
+    border: 1px solid #dee2e6;
+}
+
+.agent-complete-text {
+    font-size: 13px;
+    color: #28a745;
+    font-weight: 500;
+}
+
+/* Agent 状态栏 */
+.agent-status-bar {
+    padding: 8px 15px;
+    background: #f8f9fa;
+    border-top: 1px solid #eee;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #6c757d;
+}
+
+.agent-status-bar.status-running {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.agent-status-bar.status-completed {
+    background: #d4edda;
+    color: #155724;
+}
+
+.agent-status-bar.status-failed {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.agent-status-bar.status-aborted {
+    background: #e9ecef;
+    color: #6c757d;
+}
+
+/* Agent 对话框 */
+.ralph-agent-dialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.agent-dialog-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+}
+
+.agent-dialog-content {
+    position: relative;
+    background: white;
+    border-radius: 10px;
+    width: 90%;
+    max-width: 450px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+    overflow: hidden;
+}
+
+.agent-dialog-header {
+    background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%);
+    color: white;
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 500;
+    font-size: 15px;
+}
+
+.agent-icon {
+    font-size: 20px;
+}
+
+.agent-dialog-close {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: white;
+    font-size: 22px;
+    cursor: pointer;
+    opacity: 0.8;
+}
+
+.agent-dialog-close:hover {
+    opacity: 1;
+}
+
+.agent-dialog-body {
+    padding: 18px;
+}
+
+.agent-dialog-desc {
+    font-size: 12px;
+    color: #666;
+    margin: 0 0 14px 0;
+    line-height: 1.5;
+}
+
+.agent-request-input {
+    width: 100%;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 13px;
+    resize: none;
+    box-sizing: border-box;
+    line-height: 1.5;
+}
+
+.agent-request-input:focus {
+    outline: none;
+    border-color: #6c5ce7;
+    box-shadow: 0 0 0 3px rgba(108,92,231,0.15);
+}
+
+.agent-dialog-actions {
+    padding: 14px 18px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    border-top: 1px solid #eee;
+}
+
+/* 输入框锁定状态 */
+.input-locked {
+    background: #f5f5f5 !important;
+    color: #999 !important;
+    cursor: not-allowed !important;
 }

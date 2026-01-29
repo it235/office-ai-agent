@@ -820,26 +820,17 @@ requiresConfirmation: 如果意图明确且操作安全，设为false；如果�
     End Sub
 
     ''' <summary>
-    ''' 获取优化后的系统提示词 - 根据AppType和意图类型
+    ''' 获取优化后的系统提示词 - 使用PromptManager统一管理
     ''' </summary>
     Public Function GetOptimizedSystemPrompt(intent As IntentResult) As String
-        Dim sb As New StringBuilder()
+        ' 使用PromptManager获取组合后的提示词
+        Dim context As New PromptContext With {
+            .ApplicationType = AppType.ToString(),
+            .IntentResult = intent,
+            .FunctionMode = String.Empty
+        }
 
-        ' 根据AppType选择对应的提示词
-        Select Case AppType
-            Case OfficeApplicationType.Word
-                sb.AppendLine(GetWordPromptByIntent(intent.OfficeIntent))
-            Case OfficeApplicationType.PowerPoint
-                sb.AppendLine(GetPowerPointPromptByIntent(intent.OfficeIntent))
-            Case Else ' Excel
-                sb.AppendLine(GetExcelPromptByIntent(intent.IntentType))
-        End Select
-
-        ' 添加严格的JSON Schema约束
-        sb.AppendLine()
-        sb.AppendLine(GetStrictJsonSchemaConstraint())
-
-        Return sb.ToString()
+        Return PromptManager.Instance.GetCombinedPrompt(context)
     End Function
 
     ''' <summary>
@@ -958,7 +949,7 @@ requiresConfirmation: 如果意图明确且操作安全，设为false；如果�
 
 【占位符】使用 {lastRow} 表示最后一行
 
-如果需求不明确，直接用中文回复询问用户，不要返回JSON。"
+如果需求不明确，直接用中文回复询问用户。"
     End Function
 
     ''' <summary>
@@ -1000,7 +991,7 @@ requiresConfirmation: 如果意图明确且操作安全，设为false；如果�
 7. BeautifyDocument - 美化文档
    params: {theme{h1,h2,h3,body}, margins{top,bottom,left,right}}
 
-如果需求不明确，直接用中文回复询问用户，不要返回JSON。"
+如果需求不明确，直接用中文回复询问用户。"
     End Function
 
     ''' <summary>
@@ -1046,7 +1037,7 @@ requiresConfirmation: 如果意图明确且操作安全，设为false；如果�
 9. BeautifySlides - 美化幻灯片
    params: {scope(all/current), theme{background, titleFont, bodyFont}}
 
-如果需求不明确，直接用中文回复询问用户，不要返回JSON。"
+如果需求不明确，直接用中文回复询问用户。"
     End Function
 
     ''' <summary>
@@ -1418,7 +1409,7 @@ requiresConfirmation: 如果意图明确且操作安全，设为false；如果�
         Return "你是Word助手。
 
 【重要原则】
-1. 如果用户需求明确且可以执行，返回JSON命令
+1. 如果用户需求明确且可以执行，一定要返回可解析成code区的JSON代码，而不是普通文本
 2. 如果用户需求不明确，必须先询问用户澄清：
    - 用户想对文档哪部分操作？
    - 用户期望的结果是什么？

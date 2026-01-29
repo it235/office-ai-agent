@@ -36,6 +36,24 @@ function sendChatMessage() {
         userTypedText = chatInput.value.trim();
     }
     
+    // 检测 /loop 命令 - 启动 Ralph Loop
+    if (userTypedText.startsWith('/loop ')) {
+        const loopGoal = userTypedText.substring(6).trim();
+        if (loopGoal) {
+            // 清空输入
+            if (smartInput) smartInput.innerText = '';
+            if (chatInput) chatInput.value = '';
+            
+            // 发送启动循环消息
+            sendMessageToServer({
+                type: 'startLoop',
+                goal: loopGoal
+            });
+            console.log('[RalphLoop] 启动循环，目标:', loopGoal);
+            return;
+        }
+    }
+    
     const attachedFileObjects = window.attachedFiles;
     const selectedSheetContent = window.getAllSelectedContent();
 

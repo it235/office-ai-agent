@@ -5,6 +5,8 @@
 
 // Create chat section with sender info and content area
 window.createChatSection = function (sender, timestamp, uuid) {
+    console.log('[createChatSection] 被调用, sender=' + sender + ', uuid=' + uuid);
+    
     // Create chat container
     const chatContainer = document.createElement('div');
     chatContainer.className = 'chat-container';
@@ -22,6 +24,16 @@ window.createChatSection = function (sender, timestamp, uuid) {
     if (sender !== 'Me') {
         avatar.innerHTML = 'AI';
         avatar.className = 'avatar-ai';
+        
+        // 如果在Ralph Loop模式中，添加步骤标签
+        if (window.ralphLoopState && window.ralphLoopState.active && window.ralphLoopState.currentSession) {
+            const session = window.ralphLoopState.currentSession;
+            const runningStep = session.steps ? session.steps.findIndex(s => s.status === 'running') : -1;
+            if (runningStep >= 0) {
+                chatContainer.dataset.loopStep = runningStep;
+                chatContainer.classList.add('ralph-loop-message');
+            }
+        }
     } else {
         avatar.innerHTML = 'Me';
         avatar.className = 'avatar-me';
@@ -34,7 +46,14 @@ window.createChatSection = function (sender, timestamp, uuid) {
 
     const senderName = document.createElement('div');
     senderName.className = 'sender-name';
-    senderName.textContent = sender;
+    
+    // 如果是Ralph Loop步骤，添加步骤标记
+    if (chatContainer.dataset.loopStep !== undefined && sender !== 'Me') {
+        const stepNum = parseInt(chatContainer.dataset.loopStep) + 1;
+        senderName.innerHTML = sender + ' <span class="loop-step-badge">步骤 ' + stepNum + '</span>';
+    } else {
+        senderName.textContent = sender;
+    }
 
     const timestampElem = document.createElement('div');
     timestampElem.className = 'timestamp';
@@ -67,10 +86,10 @@ window.createChatSection = function (sender, timestamp, uuid) {
         document.body.appendChild(chatContainer);
     }
 
-    // Create renderer
-    window.rendererMap[uuid] = new MarkdownStreamRenderer(contentContainer.id);
+    // Create renderer - 直接传入 DOM 元素而不是 ID 字符串
+    window.rendererMap[uuid] = new MarkdownStreamRenderer(contentContainer);
 
-    return uuid;
+    return uuid;;
 };
 
 // Create reasoning container for a chat section
@@ -140,7 +159,10 @@ window.createReasoningContainer = function (uuid) {
 
 // Append content to renderer
 window.appendRenderer = function (uuid, text) {
+    console.log('[appendRenderer] 被调用, uuid=' + uuid + ', text长度=' + (text ? text.length : 0));
+    
     if (!uuid) {
+        console.error('[appendRenderer] uuid为空');
         return false;
     }
 
@@ -151,12 +173,15 @@ window.appendRenderer = function (uuid, text) {
     }
 
     const renderer = window.rendererMap[uuid];
+    console.log('[appendRenderer] rendererMap中是否存在该uuid:', !!renderer);
+    console.log('[appendRenderer] 当前rendererMap keys:', Object.keys(window.rendererMap || {}));
+    
     if (renderer) {
         renderer.append(text);
         contentScroll();
         return true;
     } else {
-        console.error('找不到UUID为' + uuid + '的渲染器');
+        console.error('[appendRenderer] 找不到UUID为' + uuid + '的渲染器');
         return false;
     }
 };
@@ -264,21 +289,21 @@ window.rebuildRendererMaps = function () {
     const contentContainers = document.querySelectorAll('.message-content');
     const reasoningContainers = document.querySelectorAll('.reasoning-content');
 
-    // Rebuild content renderer map
+    // Rebuild content renderer map - 直接传入 DOM 元素
     contentContainers.forEach(container => {
         const id = container.id;
         if (id && id.startsWith('content-')) {
             const uuid = id.replace('content-', '');
-            window.rendererMap[uuid] = new MarkdownStreamRenderer(id);
+            window.rendererMap[uuid] = new MarkdownStreamRenderer(container);
         }
     });
 
-    // Rebuild reasoning renderer map
+    // Rebuild reasoning renderer map - 直接传入 DOM 元素
     reasoningContainers.forEach(container => {
         const id = container.id;
         if (id && id.startsWith('reasoning-content-')) {
             const uuid = id.replace('reasoning-content-', '');
-            window.reasoningRendererMap[uuid] = new MarkdownStreamRenderer(id);
+            window.reasoningRendererMap[uuid] = new MarkdownStreamRenderer(container);
         }
     });
 

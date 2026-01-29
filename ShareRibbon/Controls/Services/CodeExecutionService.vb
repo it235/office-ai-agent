@@ -1,6 +1,7 @@
 ' ShareRibbon\Controls\Services\CodeExecutionService.vb
 ' 代码执行服务：VBA、JavaScript、Excel公式执行
 
+Imports System.Linq
 Imports System.Text.RegularExpressions
 Imports System.Windows.Forms
 Imports Microsoft.Vbe.Interop
@@ -75,6 +76,9 @@ Public Class CodeExecutionService
             ElseIf lowerLang.Contains("excel") OrElse lowerLang.Contains("formula") OrElse lowerLang.Contains("function") Then
                 Debug.WriteLine("[CodeExecutionService] 路由到Excel公式执行器")
                 ExecuteExcelFormula(code, preview)
+            ElseIf IsTextOnlyLanguage(lowerLang) Then
+                ' 文本类型语言（markdown、text等）静默跳过，不显示警告
+                Debug.WriteLine($"[CodeExecutionService] 跳过文本类型: '{language}'（不可执行）")
             Else
                 Debug.WriteLine($"[CodeExecutionService] 不支持的语言类型: '{language}'")
                 GlobalStatusStrip.ShowWarning("不支持的语言类型: " & language)
@@ -400,6 +404,22 @@ Public Class CodeExecutionService
                 MessageBox.Show("执行Excel公式时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
                 Return False
             End Try
+        End Function
+
+#End Region
+
+#Region "辅助方法"
+
+        ''' <summary>
+        ''' 判断是否为纯文本类型语言（不可执行）
+        ''' </summary>
+        Private Function IsTextOnlyLanguage(language As String) As Boolean
+            Dim textOnlyLanguages As String() = {
+                "markdown", "md", "text", "plaintext", "txt",
+                "html", "xml", "css", "yaml", "yml", "ini", "conf",
+                "log", "diff", "patch", "csv", "tsv"
+            }
+            Return textOnlyLanguages.Any(Function(t) language.Contains(t))
         End Function
 
 #End Region

@@ -8,8 +8,6 @@ window.intentPreviewState = {
     active: false,
     currentIntent: null,
     pendingMessage: null,
-    countdownTimer: null,
-    countdownSeconds: 0,
     autoConfirm: false  // Agent模式下自动确认
 };
 
@@ -24,30 +22,15 @@ const stepIcons = {
     'default': '⚡'
 };
 
-// 提示语列表
-const countdownTips = [
-    '点击"确认"立即执行，或修改您的需求',
-    '如需调整，请点击"修改"按钮',
-    '确认意图后将开始执行操作',
-    '您可以随时取消或修改需求'
-];
-
 /**
- * 显示意图预览卡片（带倒计时）
- * @param {Object} intentData - 意图数据 { description, plan, originalInput, autoConfirm, countdownSeconds }
+ * 显示意图预览卡片
+ * @param {Object} intentData - 意图数据 { description, plan, originalInput, autoConfirm }
  */
 function showIntentPreview(intentData) {
     try {
-        // 清除之前的倒计时
-        if (window.intentPreviewState.countdownTimer) {
-            clearInterval(window.intentPreviewState.countdownTimer);
-            window.intentPreviewState.countdownTimer = null;
-        }
-
         window.intentPreviewState.active = true;
         window.intentPreviewState.currentIntent = intentData;
         window.intentPreviewState.autoConfirm = intentData.autoConfirm || false;
-        window.intentPreviewState.countdownSeconds = intentData.countdownSeconds || 5; // 默认5秒倒计时
 
         // 移除已存在的预览卡片
         hideIntentPreview();
@@ -64,66 +47,17 @@ function showIntentPreview(intentData) {
         // 滚动到可见区域
         previewCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
-        // 启动倒计时（如果启用）
-        if (window.intentPreviewState.countdownSeconds > 0) {
-            startCountdown();
+        // Agent模式下自动确认
+        if (window.intentPreviewState.autoConfirm) {
+            setTimeout(function() {
+                confirmIntent();
+            }, 500);
         }
 
         console.log('显示意图预览:', intentData.description);
     } catch (err) {
         console.error('showIntentPreview error:', err);
     }
-}
-
-/**
- * 启动倒计时
- */
-function startCountdown() {
-    const countdownEl = document.getElementById('intent-countdown');
-    const tipEl = document.getElementById('intent-tip');
-    let seconds = window.intentPreviewState.countdownSeconds;
-    let tipIndex = 0;
-
-    // 更新倒计时显示
-    function updateCountdown() {
-        if (countdownEl) {
-            if (window.intentPreviewState.autoConfirm) {
-                countdownEl.innerHTML = `<span class="countdown-number">${seconds}</span> 秒后自动执行`;
-            } else {
-                countdownEl.innerHTML = `请在 <span class="countdown-number">${seconds}</span> 秒内确认您的意图`;
-            }
-        }
-        
-        // 更新提示语
-        if (tipEl && seconds % 2 === 0) {  // 每2秒更新一次提示
-            tipEl.textContent = countdownTips[tipIndex % countdownTips.length];
-            tipIndex++;
-        }
-    }
-
-    updateCountdown();
-
-    window.intentPreviewState.countdownTimer = setInterval(function() {
-        seconds--;
-        
-        if (seconds <= 0) {
-            clearInterval(window.intentPreviewState.countdownTimer);
-            window.intentPreviewState.countdownTimer = null;
-            
-            if (window.intentPreviewState.autoConfirm) {
-                // Agent模式：自动确认
-                confirmIntent();
-            } else {
-                // Chat模式：倒计时结束，提示用户
-                if (countdownEl) {
-                    countdownEl.innerHTML = '⏰ 请确认或取消操作';
-                    countdownEl.classList.add('countdown-expired');
-                }
-            }
-        } else {
-            updateCountdown();
-        }
-    }, 1000);
 }
 
 /**
@@ -136,11 +70,6 @@ function createIntentPreviewCard(intentData) {
     card.id = 'intent-preview-card';
     card.className = 'intent-preview-card intent-preview-compact';
 
-    // 根据是否自动确认显示不同的倒计时文案
-    const countdownText = intentData.autoConfirm 
-        ? `<span class="countdown-number">${window.intentPreviewState.countdownSeconds}</span> 秒后自动执行`
-        : `请在 <span class="countdown-number">${window.intentPreviewState.countdownSeconds}</span> 秒内确认您的意图`;
-
     card.innerHTML = `
         <div class="intent-preview-header">
             <span class="intent-preview-icon">🎯</span>
@@ -148,10 +77,6 @@ function createIntentPreviewCard(intentData) {
             <button class="intent-close-btn" onclick="cancelIntent()" title="关闭">×</button>
         </div>
         <div class="intent-preview-description">${escapeHtml(intentData.description || '处理您的请求')}</div>
-        <div class="intent-countdown-container">
-            <div id="intent-countdown" class="intent-countdown">${countdownText}</div>
-            <div id="intent-tip" class="intent-tip">${countdownTips[0]}</div>
-        </div>
         <div class="intent-preview-actions">
             <button class="intent-btn intent-btn-confirm" onclick="confirmIntent()">
                 ✔ 确认执行
@@ -208,12 +133,6 @@ function renderExecutionSteps(plan) {
  * 隐藏意图预览卡片
  */
 function hideIntentPreview() {
-    // 清除倒计时
-    if (window.intentPreviewState.countdownTimer) {
-        clearInterval(window.intentPreviewState.countdownTimer);
-        window.intentPreviewState.countdownTimer = null;
-    }
-
     const existingCard = document.getElementById('intent-preview-card');
     if (existingCard) {
         existingCard.remove();
@@ -222,10 +141,20 @@ function hideIntentPreview() {
     window.intentPreviewState.autoConfirm = false;
 }
 
+// 防抖标志 - 防止重复点击确认按钮
+let confirmInProgress = false;
+
 /**
  * 确认意图 - 发送消息
  */
 function confirmIntent() {
+    // 防抖检查
+    if (confirmInProgress) {
+        console.log('确认操作正在进行中，忽略重复点击');
+        return;
+    }
+    confirmInProgress = true;
+
     try {
         const intentData = window.intentPreviewState.currentIntent;
         
@@ -241,6 +170,9 @@ function confirmIntent() {
         console.log('用户确认意图');
     } catch (err) {
         console.error('confirmIntent error:', err);
+    } finally {
+        // 300ms后解除防抖锁定
+        setTimeout(() => { confirmInProgress = false; }, 300);
     }
 }
 

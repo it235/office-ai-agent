@@ -1187,29 +1187,8 @@ Public Class ChatControl
 
             ' 预览所有命令
             If preview Then
-                Dim previewMsg As New StringBuilder()
-                previewMsg.AppendLine($"即将执行 {commands.Count} 个Word命令:")
-                previewMsg.AppendLine()
-
-                Dim cmdIndex = 1
-                For Each cmd In commands
-                    If cmd.Type = JTokenType.Object Then
-                        Dim cmdObj = CType(cmd, JObject)
-                        Dim cmdName = cmdObj("command")?.ToString()
-                        Dim content = cmdObj("params")?("content")?.ToString()
-                        
-                        previewMsg.AppendLine($"{cmdIndex}. {cmdName}")
-                        If Not String.IsNullOrEmpty(content) Then
-                            previewMsg.AppendLine($"   内容: {content.Substring(0, Math.Min(50, content.Length))}...")
-                        End If
-                        previewMsg.AppendLine()
-                        cmdIndex += 1
-                    End If
-                Next
-
-                previewMsg.AppendLine("是否继续执行？")
-
-                If MessageBox.Show(previewMsg.ToString(), "Word批量命令预览", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) <> DialogResult.OK Then
+                ' 使用增强的预览表单
+                If Not ShareRibbon.CommandPreviewForm.ShowPreview($"Word命令预览 - 共 {commands.Count} 个命令", commandsArray) Then
                     ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
                     Return True
                 End If
@@ -1252,17 +1231,9 @@ Public Class ChatControl
         Try
             Dim command = commandJson("command")?.ToString()
             
-            ' 预览
+            ' 预览 - 使用增强的预览表单
             If preview Then
-                Dim params = commandJson("params")
-                Dim content = params?("content")?.ToString()
-
-                Dim previewMsg = $"即将执行 Word 命令:{vbCrLf}{vbCrLf}" &
-                                $"命令: {command}{vbCrLf}" &
-                                If(Not String.IsNullOrEmpty(content), $"内容: {content.Substring(0, Math.Min(100, content.Length))}...{vbCrLf}", "") &
-                                $"{vbCrLf}是否继续执行？"
-
-                If MessageBox.Show(previewMsg, "Word命令预览", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) <> DialogResult.OK Then
+                If Not ShareRibbon.CommandPreviewForm.ShowPreview("Word命令预览", commandJson) Then
                     ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
                     Return True
                 End If
@@ -1438,12 +1409,62 @@ Public Class ChatControl
             Dim styleName = params("styleName")?.ToString()
             If String.IsNullOrEmpty(styleName) Then Return False
 
+            ' 检查样式是否存在
+            Dim doc As Word.Document = Globals.ThisAddIn.Application.ActiveDocument
+            Dim styleExists As Boolean = False
+            Try
+                Dim testStyle = doc.Styles(styleName)
+                styleExists = True
+            Catch
+                styleExists = False
+            End Try
+
+            If Not styleExists Then
+                Debug.WriteLine($"ExecuteApplyStyle: 样式 '{styleName}' 不存在，跳过应用")
+                ' 尝试使用内置样式名称映射
+                Dim builtinStyleName = MapToBuiltinStyle(styleName)
+                If Not String.IsNullOrEmpty(builtinStyleName) Then
+                    Try
+                        selection.Style = builtinStyleName
+                        Return True
+                    Catch
+                        Debug.WriteLine($"ExecuteApplyStyle: 内置样式 '{builtinStyleName}' 也无法应用")
+                    End Try
+                End If
+                Return True ' 返回True避免中断后续命令执行
+            End If
+
             selection.Style = styleName
             Return True
         Catch ex As Exception
             Debug.WriteLine($"ExecuteApplyStyle 出错: {ex.Message}")
-            Return False
+            Return True ' 返回True避免因样式问题中断整个流程
         End Try
+    End Function
+
+    ''' <summary>
+    ''' 将常见样式名称映射到Word内置样式
+    ''' </summary>
+    Private Function MapToBuiltinStyle(styleName As String) As String
+        Dim styleMap As New Dictionary(Of String, String)(StringComparer.OrdinalIgnoreCase) From {
+            {"标题", "标题 1"},
+            {"Title", "Title"},
+            {"标题1", "标题 1"},
+            {"标题2", "标题 2"},
+            {"标题3", "标题 3"},
+            {"Heading1", "Heading 1"},
+            {"Heading2", "Heading 2"},
+            {"Heading3", "Heading 3"},
+            {"正文", "正文"},
+            {"Normal", "Normal"},
+            {"副标题", "副标题"},
+            {"Subtitle", "Subtitle"}
+        }
+        
+        If styleMap.ContainsKey(styleName) Then
+            Return styleMap(styleName)
+        End If
+        Return Nothing
     End Function
 
 #Region "高级Word命令实现"

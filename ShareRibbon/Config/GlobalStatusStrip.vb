@@ -9,18 +9,37 @@ Public Module GlobalStatusStrip
     Sub New()
         StatusStrip.Items.Add(ToolStripStatusLabel)
         StatusStrip.Visible = False
-        Timer.Interval = 5000 ' ÉèÖÃÌáÊ¾ÏÔÊ¾Ê±¼äÎª5Ãë
+        Timer.Interval = 5000 ' æç¤ºæ˜¾ç¤ºæ—¶é—´ä¸º5ç§’
         AddHandler Timer.Tick, AddressOf Timer_Tick
     End Sub
 
     Public Sub ShowWarning(message As String)
-        ToolStripStatusLabel.Text = "¾¯¸æ£º" & message
+        ' ç¡®ä¿åœ¨UIçº¿ç¨‹ä¸Šæ‰§è¡Œ
+        If StatusStrip.InvokeRequired Then
+            StatusStrip.Invoke(Sub() ShowWarningInternal(message))
+        Else
+            ShowWarningInternal(message)
+        End If
+    End Sub
+
+    Private Sub ShowWarningInternal(message As String)
+        ToolStripStatusLabel.Text = "è­¦å‘Šï¼š" & message
         ToolStripStatusLabel.ForeColor = Color.Red
         StatusStrip.Visible = True
         Timer.Start()
     End Sub
+
     Public Sub ShowInfo(message As String)
-        ToolStripStatusLabel.Text = "ÌáÊ¾£º" & message
+        ' ç¡®ä¿åœ¨UIçº¿ç¨‹ä¸Šæ‰§è¡Œ
+        If StatusStrip.InvokeRequired Then
+            StatusStrip.Invoke(Sub() ShowInfoInternal(message))
+        Else
+            ShowInfoInternal(message)
+        End If
+    End Sub
+
+    Private Sub ShowInfoInternal(message As String)
+        ToolStripStatusLabel.Text = "æç¤ºï¼š" & message
         ToolStripStatusLabel.ForeColor = Color.Black
         StatusStrip.Visible = True
         Timer.Start()

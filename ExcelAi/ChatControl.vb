@@ -492,23 +492,41 @@ Public Class ChatControl
                 ' 提取数据到数组
                 Dim data As Object(,) = ExtractRangeData(selectedRange)
 
-                If data IsNot Nothing AndAlso data.Length > 0 Then
-                    ' 使用ExcelContextService进行优化的数据格式化
-                    Dim contextService As New ShareRibbon.ExcelContextService()
-                    Dim workbookName As String = Path.GetFileName(activeWorkbook.FullName)
-                    Dim worksheetName As String = selectedRange.Worksheet.Name
-                    Dim rangeAddress As String = selectedRange.Address(False, False)
-
-                    ' 调用优化的格式化方法
-                    Dim formattedContent As String = contextService.FormatSelectionAsContext(
-                        data,
-                        workbookName,
-                        worksheetName,
-                        rangeAddress)
-
-                    If Not String.IsNullOrEmpty(formattedContent) Then
-                        message &= formattedContent
+                ' 检查数据是否为空（如果选中区域没有实际内容，不发送给LLM）
+                If data Is Nothing OrElse data.Length = 0 Then
+                    Debug.WriteLine("Excel选中区域数据为空，跳过发送给LLM")
+                    Return message
+                End If
+                
+                ' 检查数据是否全部为空值
+                Dim hasContent As Boolean = False
+                For Each item In data
+                    If item IsNot Nothing AndAlso Not String.IsNullOrEmpty(item.ToString()) Then
+                        hasContent = True
+                        Exit For
                     End If
+                Next
+                
+                If Not hasContent Then
+                    Debug.WriteLine("Excel选中区域内容全部为空，跳过发送给LLM")
+                    Return message
+                End If
+
+                ' 使用ExcelContextService进行优化的数据格式化
+                Dim contextService As New ShareRibbon.ExcelContextService()
+                Dim workbookName As String = Path.GetFileName(activeWorkbook.FullName)
+                Dim worksheetName As String = selectedRange.Worksheet.Name
+                Dim rangeAddress As String = selectedRange.Address(False, False)
+
+                ' 调用优化的格式化方法
+                Dim formattedContent As String = contextService.FormatSelectionAsContext(
+                    data,
+                    workbookName,
+                    worksheetName,
+                    rangeAddress)
+
+                If Not String.IsNullOrEmpty(formattedContent) Then
+                    message &= formattedContent
                 End If
             End If
         Catch ex As Exception
