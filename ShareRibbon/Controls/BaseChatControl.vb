@@ -3219,6 +3219,20 @@ Public MustInherit Class BaseChatControl
         AddHandler ChatBrowser.WebMessageReceived, AddressOf WebView2_WebMessageReceived
         ' 注入 VSTO 桥接脚本
         ChatBrowser.ExecuteScriptAsync(UtilsService.GetVstoBridgeScript())
+        ' 注入快捷问题配置
+        InjectQuickQuestionsConfig()
+    End Sub
+
+    ' 注入快捷问题配置到前端
+    Private Async Sub InjectQuickQuestionsConfig()
+        Try
+            Dim questions = ConfigPromptForm.GetQuickQuestionsList()
+            Dim questionsJson = JsonConvert.SerializeObject(questions)
+            Dim script = $"if(typeof updateQuickQuestions === 'function') {{ updateQuickQuestions({questionsJson}); }} else {{ window.predefinedPrompts = {questionsJson}; }}"
+            Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
+        Catch ex As Exception
+            Debug.WriteLine($"注入快捷问题失败: {ex.Message}")
+        End Try
     End Sub
 
     ' 选中内容发送到聊天区

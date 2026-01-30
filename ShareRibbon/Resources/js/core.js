@@ -99,8 +99,8 @@ window.autoScrollEnabled = true;
 window.selectedContentMap = {};
 window.attachedFiles = [];
 
-// Predefined prompt suggestions
-const predefinedPrompts = [
+// Predefined prompt suggestions (can be updated from VB config)
+window.predefinedPrompts = [
     "帮我把A列加B列的值写入C列",
     "帮我把Sheet1和Sheet2的表格按名字合并",
     "帮我把Sheet1的数据，按照中文名称拆分成多个xlsx文件",
@@ -108,6 +108,17 @@ const predefinedPrompts = [
     "给我生成一个3页的周报PPT文件",
     "什么？没有你想要的，点击此处维护吧",
 ];
+
+/**
+ * 更新快捷问题列表（从VB配置注入）
+ * @param {string[]} questions - 快捷问题数组
+ */
+function updateQuickQuestions(questions) {
+    if (Array.isArray(questions) && questions.length > 0) {
+        window.predefinedPrompts = questions;
+        console.log('Quick questions updated:', questions.length);
+    }
+}
 
 // ========== 等待动画指示器 ==========
 

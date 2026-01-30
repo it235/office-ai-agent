@@ -422,7 +422,8 @@ pre.collapsible.collapsed {
 }
 
 #stop-button {
-    background: #e9525f !important;
+    background: linear-gradient(135deg, #e9525f 0%, #ff7b7b 50%, #e9525f 100%) !important;
+    background-size: 200% 200% !important;
     border: none;
     border-radius: 6px;
     padding: 6px;
@@ -432,10 +433,19 @@ pre.collapsible.collapsed {
     justify-content: center;
     transition: background-color 0.2s;
     color: white;
+    animation: gradient-pulse 1.5s ease-in-out infinite;
+}
+
+/* 颜色渐变脉冲动画 */
+@keyframes gradient-pulse {
+    0% { background-position: 0% 50%; box-shadow: 0 0 5px rgba(233, 82, 95, 0.5); }
+    50% { background-position: 100% 50%; box-shadow: 0 0 15px rgba(255, 123, 123, 0.8); }
+    100% { background-position: 0% 50%; box-shadow: 0 0 5px rgba(233, 82, 95, 0.5); }
 }
 
 #stop-button:hover {
-    background: #c82333;
+    background: linear-gradient(135deg, #c82333 0%, #e9525f 50%, #c82333 100%) !important;
+    animation: none;
 }
 
 #stop-button svg {
@@ -2692,4 +2702,76 @@ input:checked + .mcp-toggle-slider:before {
     background: #f5f5f5 !important;
     color: #999 !important;
     cursor: not-allowed !important;
+}
+
+/* ====== 快捷问题建议列表样式 ====== */
+#prompt-suggestions {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #e0e5eb;
+    border-radius: 10px;
+    box-shadow: 0 -4px 16px rgba(0,0,0,0.1);
+    z-index: 1001;
+    overflow: hidden;
+    animation: promptSlideIn 0.15s ease-out;
+}
+
+@keyframes promptSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+#prompt-suggestions::before {
+    content: '# 快捷问题';
+    display: block;
+    padding: 10px 14px;
+    background: linear-gradient(135deg, #4a6fa5 0%, #6c8fc4 100%);
+    color: white;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+.prompt-suggestion-item {
+    padding: 12px 14px;
+    font-size: 13px;
+    color: #333;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.prompt-suggestion-item::before {
+    content: '💡';
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.prompt-suggestion-item:last-child {
+    border-bottom: none;
+}
+
+.prompt-suggestion-item:last-child::before {
+    content: '⚙️';
+}
+
+.prompt-suggestion-item:hover {
+    background: linear-gradient(90deg, #f0f7ff 0%, #e8f4fd 100%);
+    padding-left: 18px;
+}
+
+.prompt-suggestion-item:active {
+    background: #e3f2fd;
 }

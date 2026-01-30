@@ -906,23 +906,35 @@ requiresConfirmation: 如果意图明确且操作安全，设为false；如果�
     End Function
 
     ''' <summary>
-    ''' 获取严格的JSON Schema约束 - 根据AppType返回不同约束
+    ''' 获取严格的JSON Schema约束 - 优先从PromptManager读取，否则使用内置默认值
     ''' </summary>
     Private Function GetStrictJsonSchemaConstraint() As String
+        Try
+            ' 优先从PromptManager获取（支持用户自定义）
+            Dim appTypeName = AppType.ToString()
+            Dim constraint = PromptManager.Instance.GetJsonSchemaConstraint(appTypeName)
+            If Not String.IsNullOrEmpty(constraint) Then
+                Return constraint
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"从PromptManager获取JsonSchemaConstraint失败: {ex.Message}")
+        End Try
+        
+        ' 回退到内置默认值
         Select Case AppType
             Case OfficeApplicationType.Word
-                Return GetWordJsonSchemaConstraint()
+                Return GetWordJsonSchemaConstraintDefault()
             Case OfficeApplicationType.PowerPoint
-                Return GetPptJsonSchemaConstraint()
+                Return GetPptJsonSchemaConstraintDefault()
             Case Else ' Excel
-                Return GetExcelJsonSchemaConstraint()
+                Return GetExcelJsonSchemaConstraintDefault()
         End Select
     End Function
 
     ''' <summary>
-    ''' Excel专用JSON Schema约束
+    ''' Excel专用JSON Schema约束（内置默认值）
     ''' </summary>
-    Private Function GetExcelJsonSchemaConstraint() As String
+    Private Function GetExcelJsonSchemaConstraintDefault() As String
         Return "
 【Excel JSON输出格式规范 - 必须严格遵守】
 
@@ -964,9 +976,9 @@ requiresConfirmation: 如果意图明确且操作安全，设为false；如果�
     End Function
 
     ''' <summary>
-    ''' Word专用JSON Schema约束
+    ''' Word专用JSON Schema约束（内置默认值）
     ''' </summary>
-    Private Function GetWordJsonSchemaConstraint() As String
+    Private Function GetWordJsonSchemaConstraintDefault() As String
         Return "
 【Word JSON输出格式规范 - 必须严格遵守】
 
@@ -1017,9 +1029,10 @@ requiresConfirmation: 如果意图明确且操作安全，设为false；如果�
     End Function
 
     ''' <summary>
-    ''' PowerPoint专用JSON Schema约束
+    ''' <summary>
+    ''' PowerPoint专用JSON Schema约束（内置默认值）
     ''' </summary>
-    Private Function GetPptJsonSchemaConstraint() As String
+    Private Function GetPptJsonSchemaConstraintDefault() As String
         Return "
 【PowerPoint JSON输出格式规范 - 必须严格遵守】
 
@@ -1031,24 +1044,25 @@ requiresConfirmation: 如果意图明确且操作安全，设为false；如果�
 
 你必须且只能返回以下两种格式之一：
 
-单命令格式：
+单命令格式（必须包含command字段）：
 ```json
 {""command"": ""InsertSlide"", ""params"": {""title"": ""标题"", ""content"": ""内容""}}
 ```
 
-多命令格式：
+多命令格式（必须包含commands数组）：
 ```json
 {""commands"": [{""command"": ""InsertSlide"", ""params"": {""title"": ""标题1""}}, {""command"": ""AddAnimation"", ""params"": {""effect"": ""fadeIn""}}]}
 ```
 
 【绝对禁止】
 - 禁止使用 actions 数组
-- 禁止使用 operations 数组
+- 禁止使用 operations 数组  
 - 禁止省略 params 包装
 - 禁止自创任何其他格式
 - 禁止使用Excel命令(WriteData, ApplyFormula等)
 - 禁止使用Word命令(GenerateTOC, BeautifyDocument等)
 - 禁止返回不带代码块的裸JSON
+- 禁止缺少command/commands字段的JSON
 
 【PowerPoint command类型 - 只能使用以下9种】
 1. InsertSlide - 插入单页幻灯片

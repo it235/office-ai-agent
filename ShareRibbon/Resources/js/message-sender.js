@@ -268,7 +268,9 @@ function showPromptSuggestions() {
     const smartInput = document.getElementById('smart-input');
     
     promptSuggestionsDiv.innerHTML = '';
-    predefinedPrompts.forEach(promptText => {
+    // 使用window.predefinedPrompts以支持VB端动态注入
+    const prompts = window.predefinedPrompts || [];
+    prompts.forEach(promptText => {
         const item = document.createElement('div');
         item.className = 'prompt-suggestion-item';
         item.textContent = promptText;

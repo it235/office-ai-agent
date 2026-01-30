@@ -80,6 +80,31 @@ Public Class PromptManager
     End Sub
 
     ''' <summary>
+    ''' 更新指定应用的JSON Schema约束
+    ''' </summary>
+    Public Sub UpdateJsonSchemaConstraint(appType As String, constraint As String)
+        Dim appConfig = _promptConfig.Applications.FirstOrDefault(Function(a) a.Type.Equals(appType, StringComparison.OrdinalIgnoreCase))
+        If appConfig IsNot Nothing Then
+            appConfig.JsonSchemaConstraint = constraint
+        End If
+    End Sub
+
+    ''' <summary>
+    ''' 重置指定应用的JSON Schema约束为默认值
+    ''' </summary>
+    Public Sub ResetJsonSchemaConstraint(appType As String)
+        Dim defaultConfig = CreateDefaultConfiguration()
+        Dim defaultAppConfig = defaultConfig.Applications.FirstOrDefault(Function(a) a.Type.Equals(appType, StringComparison.OrdinalIgnoreCase))
+
+        If defaultAppConfig IsNot Nothing Then
+            Dim currentAppConfig = _promptConfig.Applications.FirstOrDefault(Function(a) a.Type.Equals(appType, StringComparison.OrdinalIgnoreCase))
+            If currentAppConfig IsNot Nothing Then
+                currentAppConfig.JsonSchemaConstraint = defaultAppConfig.JsonSchemaConstraint
+            End If
+        End If
+    End Sub
+
+    ''' <summary>
     ''' 获取组合后的提示词（融合模式）
     ''' </summary>
     ''' <param name="context">提示词上下文</param>
@@ -131,7 +156,7 @@ Public Class PromptManager
     ''' </summary>
     Private Function CheckIsFunctionalMode(functionMode As String) As Boolean
         If String.IsNullOrEmpty(functionMode) Then Return False
-        
+
         Dim functionalModes As String() = {"proofread", "reformat", "continuation", "template_render"}
         Return functionalModes.Contains(functionMode.ToLower())
     End Function
@@ -206,7 +231,7 @@ Public Class PromptManager
             If context.IntentResult.Confidence > 0.7 Then
                 Return True
             End If
-            
+
             ' 中等置信度（>0.2）且不是一般查询，需要JSON
             If context.IntentResult.Confidence > 0.2 AndAlso
                context.IntentResult.OfficeIntent <> OfficeIntentType.GENERAL_QUERY Then
@@ -218,11 +243,256 @@ Public Class PromptManager
     End Function
 
     ''' <summary>
-    ''' 获取JSON Schema约束（根据Office应用类型）
+    ''' 获取JSON Schema约束（根据Office应用类型）- 供外部调用
     ''' </summary>
-    Private Function GetJsonSchemaConstraint(appType As String) As String
+    Public Function GetJsonSchemaConstraint(appType As String) As String
         Dim appConfig = _promptConfig.Applications.FirstOrDefault(Function(a) a.Type.Equals(appType, StringComparison.OrdinalIgnoreCase))
-        Return If(appConfig?.JsonSchemaConstraint, String.Empty)
+        Dim userConstraint = appConfig?.JsonSchemaConstraint
+        
+        ' 如果用户配置为空或明显不完整，则使用内置默认值
+        If String.IsNullOrEmpty(userConstraint) OrElse Not IsValidJsonSchemaConstraint(userConstraint) Then
+            Return GetDefaultJsonSchemaConstraint(appType)
+        End If
+        
+        Return userConstraint
+    End Function
+    
+    ''' <summary>
+    ''' 获取默认的JSON Schema约束（内置硬编码）
+    ''' </summary>
+    Private Function GetDefaultJsonSchemaConstraint(appType As String) As String
+        Select Case appType?.ToLower()
+            Case "excel"
+                Return GetExcelJsonSchemaConstraintDefault()
+            Case "word"
+                Return GetWordJsonSchemaConstraintDefault()
+            Case "powerpoint"
+                Return GetPowerPointJsonSchemaConstraintDefault()
+            Case Else
+                Return GetExcelJsonSchemaConstraintDefault()
+        End Select
+    End Function
+    
+    ''' <summary>
+    ''' Excel专用JSON Schema约束（默认值）
+    ''' </summary>
+    Private Function GetExcelJsonSchemaConstraintDefault() As String
+        Return "
+【Excel JSON输出格式规范 - 必须严格遵守】
+
+【重要】JSON必须使用Markdown代码块格式返回，例如：
+```json
+{""command"": ""ApplyFormula"", ""params"": {...}}
+```
+禁止直接返回裸JSON文本！
+
+你必须且只能返回以下两种格式之一：
+
+单命令格式（必须包含command字段）：
+```json
+{""command"": ""ApplyFormula"", ""params"": {""range"": ""A1:B10"", ""formula"": ""=SUM(A1:A10)""}}
+```
+
+多命令格式（必须包含commands数组）：
+```json
+{""commands"": [{""command"": ""WriteData"", ""params"": {""data"": [[""姓名"", ""年龄""], [""张三"", 25]]}}, {""command"": ""ApplyFormula"", ""params"": {""range"": ""C2"", ""formula"": ""=B2*2""}}]}
+```
+
+【绝对禁止】
+- 禁止使用 actions 数组
+- 禁止使用 operations 数组
+- 禁止省略 params 包装
+- 禁止自创任何其他格式
+- 禁止使用Word命令(GenerateTOC, BeautifyDocument等)
+- 禁止使用PowerPoint命令(InsertSlide, AddAnimation等)
+- 禁止返回不带代码块的裸JSON
+- 禁止缺少command/commands字段的JSON
+
+【Excel command类型 - 只能使用以下12种】
+1. WriteData - 写入数据到单元格区域
+   params: {data:二维数组, range:目标区域}
+2. ApplyFormula - 应用公式到单元格
+   params: {range:单元格区域, formula:公式字符串}
+3. FormatCells - 格式化单元格
+   params: {range:区域, format:{字体,对齐,边框,填充}}
+4. CreateChart - 创建图表
+   params: {chartType:图表类型, dataRange:数据区域, location:放置位置}
+5. InsertPivotTable - 插入数据透视表
+   params: {sourceData:源数据, targetCell:目标单元格}
+6. ApplyConditionalFormatting - 应用条件格式
+   params: {range:区域, rules:规则数组}
+7. SortData - 排序数据
+   params: {range:排序区域, sortBy:排序依据列, order:升序/降序}
+8. FilterData - 筛选数据
+   params: {range:筛选区域, criteria:筛选条件}
+9. InsertTable - 插入表格
+   params: {range:表格区域, hasHeaders:是否有标题行}
+10. ProtectWorksheet - 保护工作表
+    params: {password:密码, allowEditRanges:允许编辑的区域}
+11. InsertComment - 插入批注
+    params: {cell:单元格地址, text:批注内容}
+12. DefineName - 定义名称
+    params: {name:名称, refersTo:引用范围}
+
+如果需求不明确，直接用中文回复询问用户。"
+    End Function
+    
+    ''' <summary>
+    ''' Word专用JSON Schema约束（默认值）
+    ''' </summary>
+    Private Function GetWordJsonSchemaConstraintDefault() As String
+        Return "
+【Word JSON输出格式规范 - 必须严格遵守】
+
+【重要】JSON必须使用Markdown代码块格式返回，例如：
+```json
+{""command"": ""InsertText"", ""params"": {...}}
+```
+禁止直接返回裸JSON文本！
+
+你必须且只能返回以下两种格式之一：
+
+单命令格式（必须包含command字段）：
+```json
+{""command"": ""InsertText"", ""params"": {""text"": ""插入的内容""}}
+```
+
+多命令格式（必须包含commands数组）：
+```json
+{""commands"": [{""command"": ""InsertText"", ""params"": {""text"": ""第一段内容""}}, {""command"": ""InsertParagraph"", ""params"": {""count"": 1}}]}
+```
+
+【绝对禁止】
+- 禁止使用 actions 数组
+- 禁止使用 operations 数组
+- 禁止省略 params 包装
+- 禁止自创任何其他格式
+- 禁止使用Excel命令(WriteData, ApplyFormula等)
+- 禁止使用PowerPoint命令(InsertSlide, AddAnimation等)
+- 禁止返回不带代码块的裸JSON
+- 禁止缺少command/commands字段的JSON
+
+【Word command类型 - 只能使用以下10种】
+1. InsertText - 插入文本
+   params: {text:文本内容, position:插入位置}
+2. InsertParagraph - 插入段落
+   params: {count:段落数量}
+3. FormatText - 格式化文本
+   params: {range:文本范围, format:{字体,字号,颜色,加粗等}}
+4. InsertTable - 插入表格
+   params: {rows:行数, cols:列数, data:表格数据}
+5. InsertImage - 插入图片
+   params: {path:图片路径, width:宽度, height:高度}
+6. InsertHyperlink - 插入超链接
+   params: {text:显示文本, url:链接地址}
+7. ApplyStyle - 应用样式
+   params: {styleName:样式名称, range:应用范围}
+8. InsertPageBreak - 插入分页符
+   params: {}
+9. InsertSectionBreak - 插入分节符
+   params: {type:分节符类型}
+10. GenerateTOC - 生成目录
+    params: {levels:目录级别}
+
+如果需求不明确，直接用中文回复询问用户。"
+    End Function
+    
+    ''' <summary>
+    ''' PowerPoint专用JSON Schema约束（默认值）
+    ''' </summary>
+    Private Function GetPowerPointJsonSchemaConstraintDefault() As String
+        Return "
+【PowerPoint JSON输出格式规范 - 必须严格遵守】
+
+【重要】JSON必须使用Markdown代码块格式返回，例如：
+```json
+{""command"": ""InsertSlide"", ""params"": {...}}
+```
+禁止直接返回裸JSON文本！
+
+你必须且只能返回以下两种格式之一：
+
+单命令格式（必须包含command字段）：
+```json
+{""command"": ""InsertSlide"", ""params"": {""title"": ""标题"", ""content"": ""内容""}}
+```
+
+多命令格式（必须包含commands数组）：
+```json
+{""commands"": [{""command"": ""InsertSlide"", ""params"": {""title"": ""标题1""}}, {""command"": ""AddAnimation"", ""params"": {""effect"": ""fadeIn""}}]}
+```
+
+【绝对禁止】
+- 禁止使用 actions 数组
+- 禁止使用 operations 数组
+- 禁止省略 params 包装
+- 禁止自创任何其他格式
+- 禁止使用Excel命令(WriteData, ApplyFormula等)
+- 禁止使用Word命令(GenerateTOC, BeautifyDocument等)
+- 禁止返回不带代码块的裸JSON
+- 禁止缺少command/commands字段的JSON
+
+【PowerPoint command类型 - 只能使用以下9种】
+1. InsertSlide - 插入单页幻灯片
+   params: {position(end/start/指定位置), title, content, layout}
+2. CreateSlides - 批量创建多页幻灯片(推荐)
+   params: {slides数组[{title, content, layout}]}
+3. InsertText - 插入文本到幻灯片
+   params: {content, slideIndex(-1当前/0第一页)}
+4. InsertShape - 插入形状
+   params: {shapeType, x, y, width, height}
+5. FormatSlide - 格式化幻灯片
+   params: {slideIndex, background, transition, layout}
+6. InsertTable - 插入表格到幻灯片
+   params: {rows, cols, data, slideIndex}
+7. AddAnimation - 添加动画效果
+   params: {slideIndex(-1当前), effect(fadeIn/flyIn/zoom等), targetShapes(all/title/content)}
+8. ApplyTransition - 应用切换效果
+   params: {scope(all/current), transitionType(fade/push/wipe等), duration}
+9. BeautifySlides - 美化幻灯片
+   params: {scope(all/current), theme{background, titleFont, bodyFont}}
+
+如果需求不明确，直接用中文回复询问用户。"
+    End Function
+    
+    ''' <summary>
+    ''' 验证JSON Schema约束是否有效（包含必要的格式要求）
+    ''' </summary>
+    Private Function IsValidJsonSchemaConstraint(constraint As String) As Boolean
+        If String.IsNullOrEmpty(constraint) Then Return False
+        
+        ' 检查是否包含关键约束词汇
+        Dim requiredKeywords() As String = {
+            "JSON必须使用Markdown代码块格式",
+            "禁止直接返回裸JSON文本",
+            "command",
+            "commands",
+            "params"
+        }
+        
+        For Each keyword In requiredKeywords
+            If Not constraint.Contains(keyword) Then
+                Return False
+            End If
+        Next
+        
+        Return True
+    End Function
+    
+    ''' <summary>
+    ''' 根据字符串获取应用类型枚举
+    ''' </summary>
+    Private Function GetApplicationTypeFromString(appType As String) As OfficeApplicationType
+        Select Case appType?.ToLower()
+            Case "excel"
+                Return OfficeApplicationType.Excel
+            Case "word" 
+                Return OfficeApplicationType.Word
+            Case "powerpoint"
+                Return OfficeApplicationType.PowerPoint
+            Case Else
+                Return OfficeApplicationType.Excel ' 默认值
+        End Select
     End Function
 
     ''' <summary>
