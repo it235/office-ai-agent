@@ -82,6 +82,9 @@ function sendChatMessage() {
 
     sendButton.style.setProperty('display', 'none', 'important');
     stopButton.style.setProperty('display', 'flex', 'important');
+    
+    // 显示右上角等待动画
+    showLoadingIndicator();
 
     // Prepare message payload
     const messagePayloadValue = {
@@ -182,6 +185,10 @@ function stopButton() {
     sendMessageToServer({
         type: 'stopMessage'
     });
+    // 隐藏等待动画
+    if (typeof hideLoadingIndicator === 'function') {
+        hideLoadingIndicator();
+    }
 }
 
 // Change send button state
@@ -191,6 +198,11 @@ function changeSendButton() {
 
     sendButton.style.setProperty('display', 'flex', 'important');
     stopButton.style.setProperty('display', 'none', 'important');
+    
+    // 隐藏等待动画
+    if (typeof hideLoadingIndicator === 'function') {
+        hideLoadingIndicator();
+    }
 }
 
 // Initialize input event handlers

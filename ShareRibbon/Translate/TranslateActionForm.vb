@@ -200,47 +200,80 @@ Public Class TranslateActionForm
         }
         Me.Controls.Add(grpOutput)
 
-        ' 沉浸式翻译作为默认选项
-        rbImmersive = New RadioButton() With {
-            .Text = If(_appType = "Word", "沉浸式翻译（译文放在每段后面）", "沉浸式翻译（译文放在每页后面）"),
-            .Location = New Point(15, 22),
-            .AutoSize = True,
-            .Checked = True
-        }
-        AddHandler rbImmersive.CheckedChanged, AddressOf OutputModeChanged
-        grpOutput.Controls.Add(rbImmersive)
+        If _appType = "Excel" Then
+            ' Excel只有3个选项：替换原文、右侧单元格、下方单元格
+            rbReplace = New RadioButton() With {
+                .Text = "替换原文",
+                .Location = New Point(15, 22),
+                .AutoSize = True,
+                .Checked = True
+            }
+            AddHandler rbReplace.CheckedChanged, AddressOf OutputModeChanged
+            grpOutput.Controls.Add(rbReplace)
 
-        rbSidePanel = New RadioButton() With {
-            .Text = "仅显示在侧栏（不修改原文）",
-            .Location = New Point(15, 48),
-            .AutoSize = True
-        }
-        AddHandler rbSidePanel.CheckedChanged, AddressOf OutputModeChanged
-        grpOutput.Controls.Add(rbSidePanel)
+            rbImmersive = New RadioButton() With {
+                .Text = "译文放在右侧单元格",
+                .Location = New Point(15, 48),
+                .AutoSize = True
+            }
+            AddHandler rbImmersive.CheckedChanged, AddressOf OutputModeChanged
+            grpOutput.Controls.Add(rbImmersive)
 
-        rbReplace = New RadioButton() With {
-            .Text = "替换原文",
-            .Location = New Point(280, 22),
-            .AutoSize = True
-        }
-        AddHandler rbReplace.CheckedChanged, AddressOf OutputModeChanged
-        grpOutput.Controls.Add(rbReplace)
+            rbNewDoc = New RadioButton() With {
+                .Text = "译文放在下方单元格",
+                .Location = New Point(200, 22),
+                .AutoSize = True
+            }
+            AddHandler rbNewDoc.CheckedChanged, AddressOf OutputModeChanged
+            grpOutput.Controls.Add(rbNewDoc)
 
-        rbNewDoc = New RadioButton() With {
-            .Text = If(_appType = "Word", "创建新文档", "创建新演示文稿"),
-            .Location = New Point(280, 48),
-            .AutoSize = True
-        }
-        AddHandler rbNewDoc.CheckedChanged, AddressOf OutputModeChanged
-        grpOutput.Controls.Add(rbNewDoc)
+            ' Excel不需要侧栏选项
+            rbSidePanel = New RadioButton() With {.Visible = False}
+        Else
+            ' Word/PowerPoint的原有选项
+            ' 沉浸式翻译作为默认选项
+            rbImmersive = New RadioButton() With {
+                .Text = If(_appType = "Word", "沉浸式翻译（译文放在每段后面）", "沉浸式翻译（译文放在每页后面）"),
+                .Location = New Point(15, 22),
+                .AutoSize = True,
+                .Checked = (_appType = "Word") ' Word默认选沉浸式
+            }
+            AddHandler rbImmersive.CheckedChanged, AddressOf OutputModeChanged
+            grpOutput.Controls.Add(rbImmersive)
+
+            rbSidePanel = New RadioButton() With {
+                .Text = "仅显示在侧栏（不修改原文）",
+                .Location = New Point(15, 48),
+                .AutoSize = True,
+                .Checked = (_appType = "PowerPoint") ' PowerPoint默认选侧栏
+            }
+            AddHandler rbSidePanel.CheckedChanged, AddressOf OutputModeChanged
+            grpOutput.Controls.Add(rbSidePanel)
+
+            rbReplace = New RadioButton() With {
+                .Text = "替换原文",
+                .Location = New Point(280, 22),
+                .AutoSize = True
+            }
+            AddHandler rbReplace.CheckedChanged, AddressOf OutputModeChanged
+            grpOutput.Controls.Add(rbReplace)
+
+            rbNewDoc = New RadioButton() With {
+                .Text = If(_appType = "Word", "创建新文档", "创建新演示文稿"),
+                .Location = New Point(280, 48),
+                .AutoSize = True
+            }
+            AddHandler rbNewDoc.CheckedChanged, AddressOf OutputModeChanged
+            grpOutput.Controls.Add(rbNewDoc)
+        End If
 
         yPos += 90
 
-        ' ========== 沉浸式翻译样式 ==========
+        ' ========== 沉浸式翻译样式（Excel不显示） ==========
         pnlImmersiveStyle = New Panel() With {
             .Location = New Point(10, yPos),
             .Size = New Size(465, 70),
-            .Visible = True
+            .Visible = (_appType <> "Excel") ' Excel不显示沉浸式样式面板
         }
         Me.Controls.Add(pnlImmersiveStyle)
 
@@ -413,8 +446,8 @@ Public Class TranslateActionForm
     End Sub
 
     Private Sub OutputModeChanged(sender As Object, e As EventArgs)
-        ' 只有选择沉浸式翻译时才显示样式设置
-        pnlImmersiveStyle.Visible = rbImmersive.Checked
+        ' 只有选择沉浸式翻译且非Excel时才显示样式设置
+        pnlImmersiveStyle.Visible = rbImmersive.Checked AndAlso _appType <> "Excel"
     End Sub
 
     Private Sub PreserveFormatChanged(sender As Object, e As EventArgs)

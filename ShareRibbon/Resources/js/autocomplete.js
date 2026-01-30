@@ -160,17 +160,15 @@ function handleSmartInputKeydown(e) {
         }
     }
     
-    // Enter键 - 发送消息（如果没有补全显示）
+    // Enter键 - 发送消息（不用于选择补全，补全使用Tab键）
     if (key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
-        // 如果下拉列表可见，先采纳补全
-        if (window.autocompleteState.isDropdownVisible && 
-            window.autocompleteState.currentCompletions.length > 0) {
-            e.preventDefault();
-            acceptCompletion(window.autocompleteState.selectedIndex);
-            return;
+        // 隐藏补全下拉框（如果有的话），然后发送消息
+        if (window.autocompleteState.isDropdownVisible) {
+            hideAutocompleteDropdown();
+            clearGhostText();
         }
         
-        // 否则发送消息
+        // 发送消息
         e.preventDefault();
         syncToHiddenTextarea();
         sendChatMessage();

@@ -109,6 +109,28 @@ const predefinedPrompts = [
     "什么？没有你想要的，点击此处维护吧",
 ];
 
+// ========== 等待动画指示器 ==========
+
+/**
+ * 显示右上角等待动画（发送消息时调用）
+ */
+function showLoadingIndicator() {
+    const indicator = document.getElementById('loading-indicator');
+    if (indicator) {
+        indicator.style.display = 'flex';
+    }
+}
+
+/**
+ * 隐藏右上角等待动画（收到AI响应时调用）
+ */
+function hideLoadingIndicator() {
+    const indicator = document.getElementById('loading-indicator');
+    if (indicator) {
+        indicator.style.display = 'none';
+    }
+}
+
 // DOM Content Loaded initialization
 document.addEventListener('DOMContentLoaded', function () {
     // Initialize MCP button events

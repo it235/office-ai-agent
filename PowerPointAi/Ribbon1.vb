@@ -149,9 +149,12 @@ Public Class Ribbon1
             ' 获取ChatControl并触发续写（自动模式，显示对话框）
             Dim chatCtrl = Globals.ThisAddIn.chatControl
             If chatCtrl IsNot Nothing Then
-                ' 稍等一下让WebView2加载完成，然后触发续写对话框
+                ' 稍等一下让WebView2加载完成，然后显示续写按钮并触发续写对话框
                 Task.Run(Async Function()
                              Await Task.Delay(300)
+                             ' 先显示续写按钮
+                             Await chatCtrl.ExecuteJavaScriptAsyncJS("setContinuationButtonVisible(true);")
+                             ' 再触发续写对话框
                              Await chatCtrl.ExecuteJavaScriptAsyncJS("triggerContinuation(true);")
                          End Function)
             Else

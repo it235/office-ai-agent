@@ -973,6 +973,17 @@ function triggerContinuation(autoTrigger) {
     }
 }
 
+/**
+ * 显示或隐藏AI续写按钮（由Ribbon续写功能调用）
+ * @param {boolean} visible - 是否显示
+ */
+function setContinuationButtonVisible(visible) {
+    const btn = document.getElementById('continuation-button');
+    if (btn) {
+        btn.style.display = visible ? 'inline-flex' : 'none';
+    }
+}
+
 // ========== 校对/排版模式吸顶提示 ==========
 
 /**

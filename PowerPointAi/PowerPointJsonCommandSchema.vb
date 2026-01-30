@@ -355,6 +355,14 @@ Public Class PowerPointJsonCommandSchema
 
     Private Shared Function ValidateInsertText(params As JToken, ByRef errorMessage As String) As Boolean
         Dim content = params("content")?.ToString()
+        ' 兼容处理：大模型在GENERAL_QUERY模式下可能返回text而不是content
+        If String.IsNullOrEmpty(content) Then
+            content = params("text")?.ToString()
+            ' 如果text存在，将其复制到content字段以便后续执行
+            If Not String.IsNullOrEmpty(content) AndAlso params.Type = JTokenType.Object Then
+                CType(params, JObject)("content") = content
+            End If
+        End If
         If String.IsNullOrEmpty(content) Then
             errorMessage = "InsertText缺少content参数"
             Return False

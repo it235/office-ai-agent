@@ -316,19 +316,30 @@ Public Class PromptManager
         excelApp.JsonSchemaConstraint = "
 【Excel JSON输出格式规范 - 必须严格遵守】
 
+【重要】JSON必须使用Markdown代码块格式返回，例如：
+```json
+{""command"": ""ApplyFormula"", ""params"": {...}}
+```
+禁止直接返回裸JSON文本！
+
 你必须且只能返回以下两种格式之一：
 
 单JSON代码格式：
+```json
 {""command"": ""ApplyFormula"", ""params"": {""targetRange"": ""C1:C{lastRow}"", ""formula"": ""=A1+B1"", ""fillDown"": true}}
+```
 
-多JSON代码格式
+多JSON代码格式：
+```json
 {""commands"": [{""command"": ""ApplyFormula"", ""params"": {...}}, {...}]}
+```
 
 【绝对禁止】
 - 禁止使用 actions 数组
 - 禁止使用 operations 数组
 - 禁止省略 params 包装
 - 禁止返回下方未指定的command类型
+- 禁止返回不带代码块的裸JSON
 
 【Excel command类型】
 1. ApplyFormula - 应用公式 (targetRange, formula, fillDown)
@@ -431,14 +442,23 @@ Public Class PromptManager
         wordApp.JsonSchemaConstraint = "
 【Word JSON输出格式规范 - 必须严格遵守】
 
+【重要】JSON必须使用Markdown代码块格式返回，例如：
+```json
+{""command"": ""InsertText"", ""params"": {...}}
+```
+禁止直接返回裸JSON文本！
+
 你必须且只能返回以下两种格式之一：
 
 单JSON代码格式：
+```json
 {""command"": ""InsertText"", ""params"": {""content"": ""内容"", ""position"": ""cursor""}}
+```
 
 多JSON代码格式：
+```json
 {""commands"": [{""command"": ""InsertText"", ""params"": {...}}, {...}]}
-
+```
 
 【Word command类型】
 1. InsertText - 插入文本 (content, position: cursor/start/end)
@@ -452,7 +472,8 @@ Public Class PromptManager
 【绝对禁止】
 - 禁止使用Excel命令(WriteData, ApplyFormula等)
 - 禁止使用PPT命令(InsertSlide, CreateSlides等)
-- 禁止返回上方未指定的command类型"
+- 禁止返回上方未指定的command类型
+- 禁止返回不带代码块的裸JSON"
 
         Return wordApp
     End Function
@@ -516,18 +537,28 @@ Public Class PromptManager
         pptApp.JsonSchemaConstraint = "
 【PowerPoint JSON输出格式规范 - 必须严格遵守】
 
+【重要】JSON必须使用Markdown代码块格式返回，例如：
+```json
+{""command"": ""InsertSlide"", ""params"": {...}}
+```
+禁止直接返回裸JSON文本！
+
 你必须且只能返回以下两种格式之一：
 
 单JSON代码格式：
+```json
 {""command"": ""InsertSlide"", ""params"": {""title"": ""标题"", ""content"": ""内容""}}
+```
 
-多JSON代码格式
+多JSON代码格式：
+```json
 {""commands"": [{""command"": ""CreateSlides"", ""params"": {...}}, {...}]}
+```
 
 【PowerPoint command类型】
 1. InsertSlide - 插入单页幻灯片 (title, content, layout)
 2. CreateSlides - 批量创建多页幻灯片 (slides数组，每项含title/content/layout) 【推荐用于多页】
-3. InsertText - 插入文本 (text, slideIndex)
+3. InsertText - 插入文本 (content, slideIndex)
 4. InsertShape - 插入形状 (shapeType, text)
 5. FormatSlide - 格式化幻灯片 (slideIndex, background, theme)
 6. InsertTable - 插入表格 (rows, cols, data)
@@ -542,7 +573,8 @@ Public Class PromptManager
 【绝对禁止】
 - 禁止使用Excel命令(WriteData, ApplyFormula等)
 - 禁止使用Word命令(InsertText的Word版本、GenerateTOC等)
-- 禁止返回上方未指定的command类型"
+- 禁止返回上方未指定的command类型
+- 禁止返回不带代码块的裸JSON"
 
         Return pptApp
     End Function

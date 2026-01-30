@@ -119,7 +119,7 @@ Public Class TranslateGlobalSettingsForm
         numBatchSize = New NumericUpDown() With {
             .Location = New Point(120, 22),
             .Size = New Size(60, 24),
-            .Minimum = 1,
+            .Minimum = 0,
             .Maximum = 20,
             .Value = 5
         }

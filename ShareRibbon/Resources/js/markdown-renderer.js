@@ -19,6 +19,14 @@ class MarkdownStreamRenderer {
 
     append(text) {
         console.log('[MarkdownStreamRenderer.append] text长度=' + (text ? text.length : 0) + ', text内容="' + text + '"');
+        
+        // 收到第一个内容时隐藏等待动画
+        if (this.fullContent === '' && text) {
+            if (typeof hideLoadingIndicator === 'function') {
+                hideLoadingIndicator();
+            }
+        }
+        
         this.fullContent += text + '';
         console.log('[MarkdownStreamRenderer.append] fullContent累计="' + this.fullContent + '"');
 

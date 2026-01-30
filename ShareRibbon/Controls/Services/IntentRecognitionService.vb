@@ -926,19 +926,30 @@ requiresConfirmation: 如果意图明确且操作安全，设为false；如果�
         Return "
 【Excel JSON输出格式规范 - 必须严格遵守】
 
+【重要】JSON必须使用Markdown代码块格式返回，例如：
+```json
+{""command"": ""ApplyFormula"", ""params"": {...}}
+```
+禁止直接返回裸JSON文本！
+
 你必须且只能返回以下两种格式之一：
 
 单命令格式：
+```json
 {""command"": ""ApplyFormula"", ""params"": {""targetRange"": ""C1:C{lastRow}"", ""formula"": ""=A1+B1""}}
+```
 
 多命令格式：
+```json
 {""commands"": [{""command"": ""ApplyFormula"", ""params"": {""targetRange"": ""C1"", ""formula"": ""=A1+B1""}}, {""command"": ""ApplyFormula"", ""params"": {""targetRange"": ""E1"", ""formula"": ""=C1*D1""}}]}
+```
 
 【绝对禁止】
 - 禁止使用 actions 数组
 - 禁止使用 operations 数组
 - 禁止省略 params 包装
 - 禁止自创任何其他格式
+- 禁止返回不带代码块的裸JSON
 
 【Excel command类型 - 只能使用以下5种】
 1. ApplyFormula - 应用公式
@@ -959,13 +970,23 @@ requiresConfirmation: 如果意图明确且操作安全，设为false；如果�
         Return "
 【Word JSON输出格式规范 - 必须严格遵守】
 
+【重要】JSON必须使用Markdown代码块格式返回，例如：
+```json
+{""command"": ""InsertText"", ""params"": {...}}
+```
+禁止直接返回裸JSON文本！
+
 你必须且只能返回以下两种格式之一：
 
 单命令格式：
-{""command"": ""InsertText"", ""params"": {""text"": ""内容"", ""position"": ""cursor""}}
+```json
+{""command"": ""InsertText"", ""params"": {""content"": ""内容"", ""position"": ""cursor""}}
+```
 
 多命令格式：
-{""commands"": [{""command"": ""InsertText"", ""params"": {""text"": ""内容1""}}, {""command"": ""FormatText"", ""params"": {""bold"": true}}]}
+```json
+{""commands"": [{""command"": ""InsertText"", ""params"": {""content"": ""内容1""}}, {""command"": ""FormatText"", ""params"": {""bold"": true}}]}
+```
 
 【绝对禁止】
 - 禁止使用 actions 数组
@@ -974,16 +995,17 @@ requiresConfirmation: 如果意图明确且操作安全，设为false；如果�
 - 禁止自创任何其他格式
 - 禁止使用Excel命令(WriteData, ApplyFormula等)
 - 禁止使用PPT命令(InsertSlide, CreateSlides等)
+- 禁止返回不带代码块的裸JSON
 
 【Word command类型 - 只能使用以下7种】
 1. InsertText - 插入文本
-   params: {text, position(cursor/start/end)}
+   params: {content, position(cursor/start/end)}
 2. FormatText - 格式化文本
    params: {bold, italic, underline, fontSize, fontName, color}
 3. ReplaceText - 替换文本
-   params: {findText, replaceWith, replaceAll}
+   params: {find, replace, matchCase}
 4. InsertTable - 插入表格
-   params: {rows, columns, data(二维数组)}
+   params: {rows, cols, data(二维数组)}
 5. ApplyStyle - 应用样式
    params: {styleName(Heading1/Heading2/Normal等)}
 6. GenerateTOC - 生成目录
@@ -1001,13 +1023,23 @@ requiresConfirmation: 如果意图明确且操作安全，设为false；如果�
         Return "
 【PowerPoint JSON输出格式规范 - 必须严格遵守】
 
+【重要】JSON必须使用Markdown代码块格式返回，例如：
+```json
+{""command"": ""InsertSlide"", ""params"": {...}}
+```
+禁止直接返回裸JSON文本！
+
 你必须且只能返回以下两种格式之一：
 
 单命令格式：
+```json
 {""command"": ""InsertSlide"", ""params"": {""title"": ""标题"", ""content"": ""内容""}}
+```
 
 多命令格式：
+```json
 {""commands"": [{""command"": ""InsertSlide"", ""params"": {""title"": ""标题1""}}, {""command"": ""AddAnimation"", ""params"": {""effect"": ""fadeIn""}}]}
+```
 
 【绝对禁止】
 - 禁止使用 actions 数组
@@ -1016,6 +1048,7 @@ requiresConfirmation: 如果意图明确且操作安全，设为false；如果�
 - 禁止自创任何其他格式
 - 禁止使用Excel命令(WriteData, ApplyFormula等)
 - 禁止使用Word命令(GenerateTOC, BeautifyDocument等)
+- 禁止返回不带代码块的裸JSON
 
 【PowerPoint command类型 - 只能使用以下9种】
 1. InsertSlide - 插入单页幻灯片
@@ -1023,13 +1056,13 @@ requiresConfirmation: 如果意图明确且操作安全，设为false；如果�
 2. CreateSlides - 批量创建多页幻灯片(推荐)
    params: {slides数组[{title, content, layout}]}
 3. InsertText - 插入文本到幻灯片
-   params: {text, slideIndex(-1当前/0第一页)}
+   params: {content, slideIndex(-1当前/0第一页)}
 4. InsertShape - 插入形状
-   params: {shapeType, text, position}
+   params: {shapeType, x, y, width, height}
 5. FormatSlide - 格式化幻灯片
-   params: {slideIndex, background, titleStyle}
+   params: {slideIndex, background, transition, layout}
 6. InsertTable - 插入表格到幻灯片
-   params: {rows, columns, data, slideIndex}
+   params: {rows, cols, data, slideIndex}
 7. AddAnimation - 添加动画效果
    params: {slideIndex(-1当前), effect(fadeIn/flyIn/zoom等), targetShapes(all/title/content)}
 8. ApplyTransition - 应用切换效果
