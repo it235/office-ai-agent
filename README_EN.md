@@ -1,5 +1,11 @@
 # Office AI Assistant
 
+![ExcelView](./AiHelper.assets/excelai_display.png)
+
+![WordView](./AiHelper.assets/wordai_display.png)
+
+![PPTView](./AiHelper.assets/pptai_display.png)
+
 <div align="center">
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)

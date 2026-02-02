@@ -1,7 +1,16 @@
 # Office AI 智能体
 
-<div align="center">
+> 1年了，实话说持续开源真的难，挺佩服那帮老外，当插件功能越来越多，代码越来越庞大时就感觉到力不从心，不光人力耗费大、现在AI写代码还需要额外投入`money`，否则手写将投入更多时间成本。继续投入吧，希望`star`数2026能破1000，希望有更多有实力、有想法的老铁加入。
 
+## 预览
+
+![ExcelView](./AiHelper.assets/excelai_display.png)
+
+![WordView](./AiHelper.assets/wordai_display.png)
+
+![PPTView](./AiHelper.assets/pptai_display.png)
+
+<div align="center">
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows-blue.svg)](https://www.microsoft.com/windows)
 [![Office](https://img.shields.io/badge/office-Excel%20Word%20PowerPoint-green.svg)](https://www.microsoft.com/office)
@@ -12,7 +21,9 @@
 
 </div>
 
-> **注意**: 本项目50%以上代码基于Cursor + Copilot编程工具开发
+> **注意**: 本项目80%以上代码基于Cursor + Copilot + Qoder编程工具开发
+>
+> 帮助文档官网：https://www.officeso.cn
 >
 > 源码本地运行教程：https://www.bilibili.com/cheese/play/ep2098181
 >
@@ -51,20 +62,12 @@
 
 - **AI驱动分析**: 智能数据分析和处理
 - **多文档支持**: 处理Excel、Word和PowerPoint文件
-- **外部数据集成**: 导入和分析外部数据源
-- **智能内容生成**: 自动生成报告和摘要
-- **实时辅助**: 交互式聊天界面提供即时帮助
+- **AI智能翻译**: 多语言，多模型AI翻译，支持段落、整页翻译
+- **智能排版/续写/审阅**: 智能对文档或PPT内容进行排版，续写，错句词审阅修订
+- **Ralph Loop集成**: 首个将智能规划Ralph Loop集成到Office中的插件
 - **MCP客户端集成**: 已集成MCP-Client，支持MCP-Server配置
 - **DeepSeek增强**: 已对Deepseek增强，提供更好的AI性能
-
-### 🔧 技术特性
-
-- **VSTO集成**: 与Microsoft Office无缝集成
-- **跨平台兼容性**: 支持Microsoft Office和WPS
-- **现代UI**: 简洁响应的用户界面
-- **可扩展架构**: 易于扩展和定制
-- **MCP协议支持**: 原生MCP-Client实现，支持服务器通信
-- **DeepSeek优化**: 增强的DeepSeek API集成，性能更优
+- **Doubao增强**: 已对Doubao增强，提供更好的AI性能
 
 ---
 
@@ -72,9 +75,9 @@
 
 | 产品 | 状态 | 功能 |
 |------|------|------|
-| **Microsoft Excel** | ✅ 支持 | 数据分析、图表生成、公式辅助 |
-| **Microsoft Word** | ✅ 支持 | 文档处理、内容生成、格式设置 |
-| **Microsoft PowerPoint** | ✅ 支持 | 演示文稿创建、幻灯片设计、内容优化 |
+| **Microsoft Excel** | ✅ 支持 | 数据分析、图表生成、公式辅助、ALLM/CLLM函数 |
+| **Microsoft Word** | ✅ 支持 | 文档处理、内容生成/补全、审阅、续写、排版、智能翻译 |
+| **Microsoft PowerPoint** | ✅ 支持 | 演示文稿创建、幻灯片设计、审阅、续写、排版、智能翻译 |
 | **WPS Office** | ✅ 兼容 | 与WPS套件完全兼容 |
 
 ---
@@ -103,8 +106,8 @@
 
 ### 系统要求
 
-- **操作系统**: Windows 10/11
-- **办公套件**: Microsoft Office 2016+ 或 WPS Office
+- **操作系统**: Windows 10+
+- **办公套件**: Microsoft Office 2013+ 或 WPS Office
 - **开发环境**: Visual Studio Community 2022 (开发用)
 - **.NET Framework**: 4.7.2 或更高版本
 
