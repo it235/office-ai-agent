@@ -13,76 +13,18 @@ Public Class ConfigManager
         ' 初始化配置数据
         ConfigData = New List(Of ConfigItem)()
 
-        Dim ollama = New ConfigItem() With {
-                .pltform = "Ollama本地模型",
-                .url = "http://localhost:11434/v1/chat/completions",
-                .model = New List(Of ConfigItemModel) From {
-                    New ConfigItemModel() With {.modelName = "deepseek-r1:1.5b", .selected = True},
-                    New ConfigItemModel() With {.modelName = "deepseek-r1:7b", .selected = False},
-                    New ConfigItemModel() With {.modelName = "deepseek-r1:14b", .selected = False}
-                },
-                .key = "",
-                .selected = False,
-                .translateSelected = False
-            }
-
-        Dim ds = New ConfigItem() With {
-                .pltform = "深度求索",
-                .url = "https://api.deepseek.com/chat/completions",
-                .model = New List(Of ConfigItemModel) From {
-                    New ConfigItemModel() With {.modelName = "deepseek-chat", .selected = True},
-                    New ConfigItemModel() With {.modelName = "deepseek-reasoner", .selected = False}
-                },
-                .key = "",
-                .selected = True,
-                .translateSelected = True
-            }
-        Dim aliyun = New ConfigItem() With {
-                .pltform = "阿里云百炼",
-                .url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
-                .model = New List(Of ConfigItemModel) From {
-                    New ConfigItemModel() With {.modelName = "qwen-coder-plus", .selected = True},
-                    New ConfigItemModel() With {.modelName = "qwen-max", .selected = False},
-                    New ConfigItemModel() With {.modelName = "qwen-plus", .selected = False}
-                },
-                .key = "",
-                .selected = False,
-                .translateSelected = False
-            }
-        Dim volces = New ConfigItem() With {
-            .pltform = "百度千帆",
-            .url = "https://qianfan.baidubce.com/v2/chat/completions",
-            .model = New List(Of ConfigItemModel) From {
-                New ConfigItemModel() With {.modelName = "deepseek-v3", .selected = True},
-                New ConfigItemModel() With {.modelName = "deepseek-r1", .selected = False}
-            },
-            .key = "",
-            .selected = False,
-            .translateSelected = False
-        }
-        Dim siliconflow = New ConfigItem() With {
-            .pltform = "华为硅基流动",
-            .url = "https://api.siliconflow.cn/v1/chat/completions",
-            .model = New List(Of ConfigItemModel) From {
-            New ConfigItemModel() With {.modelName = "deepseek-ai/DeepSeek-V3", .selected = True},
-            New ConfigItemModel() With {.modelName = "deepseek-ai/DeepSeek-R1", .selected = False}
-            },
-            .key = "",
-            .selected = False,
-            .translateSelected = False
-        }
-
         ' 添加默认配置
         If Not File.Exists(configFilePath) Then
-            ConfigData.Add(ds)
-            ConfigData.Add(siliconflow)
-            ConfigData.Add(aliyun)
-            ConfigData.Add(ollama)
-            ConfigData.Add(volces)
+            ' 首次使用，加载预置配置
+            ConfigData.AddRange(PresetProviders.GetCloudProviders())
+            ConfigData.AddRange(PresetProviders.GetLocalProviders())
         Else
-            ' 加载自定义配置
+            ' 加载用户已有配置
             Dim json As String = File.ReadAllText(configFilePath)
-            ConfigData = JsonConvert.DeserializeObject(Of List(Of ConfigItem))(json)
+            Dim loadedData = JsonConvert.DeserializeObject(Of List(Of ConfigItem))(json)
+
+            ' 合并预置配置和用户配置
+            MergeConfigurations(loadedData)
         End If
 
         ' 初始化配置，将数据初始化到 ConfigSettings，方便全局调用
@@ -99,6 +41,77 @@ Public Class ConfigManager
                         ConfigSettings.fimUrl = If(String.IsNullOrEmpty(item_m.fimUrl), item.url, item_m.fimUrl)
                     End If
                 Next
+            End If
+        Next
+    End Sub
+
+    ''' <summary>
+    ''' 合并预置配置和用户配置
+    ''' 保留用户的key、selected、validated等状态
+    ''' </summary>
+    Private Sub MergeConfigurations(loadedData As List(Of ConfigItem))
+        ' 先添加云端预置配置
+        For Each preset In PresetProviders.GetCloudProviders()
+            Dim existing = loadedData.FirstOrDefault(Function(x) x.pltform = preset.pltform OrElse x.url = preset.url)
+            If existing IsNot Nothing Then
+                ' 保留用户的key和selected状态
+                preset.key = existing.key
+                preset.selected = existing.selected
+                preset.validated = existing.validated
+                preset.translateSelected = existing.translateSelected
+                ' 合并模型列表
+                For Each userModel In existing.model
+                    Dim presetModel = preset.model.FirstOrDefault(Function(x) x.modelName = userModel.modelName)
+                    If presetModel IsNot Nothing Then
+                        presetModel.selected = userModel.selected
+                        presetModel.mcpValidated = userModel.mcpValidated
+                        presetModel.mcpable = userModel.mcpable
+                        presetModel.translateSelected = userModel.translateSelected
+                        presetModel.fimSupported = userModel.fimSupported
+                        presetModel.fimUrl = userModel.fimUrl
+                    Else
+                        ' 用户添加的自定义模型，保留
+                        preset.model.Add(userModel)
+                    End If
+                Next
+            End If
+            ConfigData.Add(preset)
+        Next
+
+        ' 添加本地预置配置
+        For Each preset In PresetProviders.GetLocalProviders()
+            Dim existing = loadedData.FirstOrDefault(Function(x) x.pltform = preset.pltform OrElse x.url = preset.url)
+            If existing IsNot Nothing Then
+                preset.key = existing.key
+                preset.selected = existing.selected
+                preset.validated = existing.validated
+                preset.translateSelected = existing.translateSelected
+                ' 本地模型URL可能被用户修改
+                If Not String.IsNullOrEmpty(existing.url) Then
+                    preset.url = existing.url
+                End If
+                ' 合并模型列表
+                For Each userModel In existing.model
+                    Dim presetModel = preset.model.FirstOrDefault(Function(x) x.modelName = userModel.modelName)
+                    If presetModel IsNot Nothing Then
+                        presetModel.selected = userModel.selected
+                        presetModel.mcpValidated = userModel.mcpValidated
+                        presetModel.mcpable = userModel.mcpable
+                    Else
+                        preset.model.Add(userModel)
+                    End If
+                Next
+            End If
+            ConfigData.Add(preset)
+        Next
+
+        ' 添加用户自定义的非预置配置
+        For Each userConfig In loadedData
+            Dim isPresetPlatform = ConfigData.Any(Function(x) x.pltform = userConfig.pltform OrElse x.url = userConfig.url)
+            If Not isPresetPlatform Then
+                ' 用户自定义的服务商，直接添加
+                userConfig.isPreset = False
+                ConfigData.Add(userConfig)
             End If
         Next
     End Sub
@@ -135,6 +148,18 @@ Public Class ConfigManager
         ' 是否通过了API验证
         Public Property validated As Boolean
 
+        ' 服务商类型: Cloud(云端) / Local(本地)
+        Public Property providerType As ProviderType = ProviderType.Cloud
+
+        ' 获取APIKey的注册链接
+        Public Property registerUrl As String = ""
+
+        ' 是否为预置配置
+        Public Property isPreset As Boolean = False
+
+        ' 本地模型默认APIKey提示
+        Public Property defaultApiKey As String = ""
+
         Public Overrides Function ToString() As String
             Return pltform
         End Function
@@ -155,9 +180,15 @@ Public Class ConfigManager
         
         ' FIM API端点（如果与chat端点不同）
         Public Property fimUrl As String = ""
+
+        ' 是否为推理模型
+        Public Property isReasoningModel As Boolean = False
+
+        ' 显示名称(含[推理][MCP]标签)
+        Public Property displayName As String = ""
         
         Public Overrides Function ToString() As String
-            Return modelName
+            Return If(String.IsNullOrEmpty(displayName), modelName, displayName)
         End Function
     End Class
 End Class

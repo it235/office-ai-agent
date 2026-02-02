@@ -57,7 +57,8 @@ Public Class ResourceExtractor
                 {"autocomplete", "autocomplete.js"},
                 {"intent_preview", "intent-preview.js"},
                 {"ralph_loop", "ralph-loop.js"},
-                {"ralph_agent", "ralph-agent.js"}
+                {"ralph_agent", "ralph-agent.js"},
+                {"model_switcher", "model-switcher.js"}
             }
 
             ' 释放JS资源

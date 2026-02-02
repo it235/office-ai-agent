@@ -418,6 +418,12 @@ Public MustInherit Class BaseChatControl
                 Case "openFileDialog"
                     HandleOpenFileDialog()
 
+                ' 模型配置相关
+                Case "openApiConfigForm"
+                    HandleOpenApiConfigForm()
+                Case "getCurrentModel"
+                    HandleGetCurrentModel()
+
                 Case Else
                     Debug.WriteLine($"未知消息类型: {messageType}")
             End Select
@@ -1965,6 +1971,58 @@ Public MustInherit Class BaseChatControl
         Catch ex As Exception
             Debug.WriteLine($"HandleOpenFileDialog 出错: {ex.Message}")
             GlobalStatusStrip.ShowWarning("打开文件对话框时出错")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 处理打开API配置窗口请求
+    ''' </summary>
+    Protected Sub HandleOpenApiConfigForm()
+        Try
+            ' 需要在UI线程上执行
+            If Me.InvokeRequired Then
+                Me.Invoke(Sub() HandleOpenApiConfigForm())
+                Return
+            End If
+
+            Dim configForm As New ConfigApiForm()
+            If configForm.ShowDialog() = DialogResult.OK Then
+                ' 配置已更新，刷新前端显示
+                UpdateModelDisplayInUI()
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"HandleOpenApiConfigForm 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning("打开配置窗口时出错")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 处理获取当前模型信息请求
+    ''' </summary>
+    Protected Sub HandleGetCurrentModel()
+        Try
+            UpdateModelDisplayInUI()
+        Catch ex As Exception
+            Debug.WriteLine($"HandleGetCurrentModel 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 更新前端的模型显示
+    ''' </summary>
+    Protected Sub UpdateModelDisplayInUI()
+        Try
+            Dim platform = ConfigSettings.platform
+            Dim modelName = ConfigSettings.ModelName
+
+            ' 转义特殊字符
+            platform = If(platform, "").Replace("'", "\'").Replace("""", "\""")
+            modelName = If(modelName, "").Replace("'", "\'").Replace("""", "\""")
+
+            Dim js = $"updateCurrentModelDisplay('{platform}', '{modelName}');"
+            ExecuteJavaScriptAsyncJS(js)
+        Catch ex As Exception
+            Debug.WriteLine($"UpdateModelDisplayInUI 出错: {ex.Message}")
         End Try
     End Sub
 

@@ -175,7 +175,7 @@ Public Class TranslateActionForm
         Me.Controls.Add(grpScope)
 
         rbAll = New RadioButton() With {
-            .Text = If(_appType = "Word", "整个文档", "所有幻灯片"),
+            .Text = If(_appType = "Word", "整个文档", If(_appType = "Excel", "所有单元格", "所有幻灯片")),
             .Location = New Point(15, 22),
             .AutoSize = True,
             .Checked = True
@@ -183,7 +183,7 @@ Public Class TranslateActionForm
         grpScope.Controls.Add(rbAll)
 
         rbSelection = New RadioButton() With {
-            .Text = If(_hasSelection, "仅选中内容", "仅选中内容（未选中）"),
+            .Text = If(_hasSelection, If(_appType = "Excel", "仅选中的单元格", "仅选中内容"), If(_appType = "Excel", "仅选中的单元格（未选中）", "仅选中内容（未选中）")),
             .Location = New Point(150, 22),
             .AutoSize = True,
             .Enabled = _hasSelection
@@ -201,7 +201,7 @@ Public Class TranslateActionForm
         Me.Controls.Add(grpOutput)
 
         If _appType = "Excel" Then
-            ' Excel只有3个选项：替换原文、右侧单元格、下方单元格
+            ' Excel只有3个选项：替换原文、右侧单元格（新增列）、下方单元格（新增行）
             rbReplace = New RadioButton() With {
                 .Text = "替换原文",
                 .Location = New Point(15, 22),
@@ -212,7 +212,7 @@ Public Class TranslateActionForm
             grpOutput.Controls.Add(rbReplace)
 
             rbImmersive = New RadioButton() With {
-                .Text = "译文放在右侧单元格",
+                .Text = "译文放在右侧单元格（自动新增一列）",
                 .Location = New Point(15, 48),
                 .AutoSize = True
             }
@@ -220,8 +220,8 @@ Public Class TranslateActionForm
             grpOutput.Controls.Add(rbImmersive)
 
             rbNewDoc = New RadioButton() With {
-                .Text = "译文放在下方单元格",
-                .Location = New Point(200, 22),
+                .Text = "译文放在下方单元格（自动新增一行）",
+                .Location = New Point(250, 22),
                 .AutoSize = True
             }
             AddHandler rbNewDoc.CheckedChanged, AddressOf OutputModeChanged

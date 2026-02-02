@@ -211,6 +211,19 @@
     <div class="settings-dialog" id="settings-dialog">
         <div class="settings-title">AI对话设置</div>
 
+        <!-- 模型切换 -->
+        <div class="setting-item" style="border-bottom: 1px solid #eee;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <label class="setting-label" style="float:left;">当前模型</label>
+                    <button onclick="openModelConfig()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 2px 10px;margin-left:20px; border-radius: 6px; cursor: pointer; font-size: 13px;">
+                        切换模型
+                    </button>
+                    <div id="current-model-display" style="font-size: 12px; color: #666; margin-top: 4px;">加载中...</div>
+                </div>
+            </div>
+        </div>
+
         <div class="setting-item checkbox-item">
             <div>
                 <label class="setting-label">实时滚动对话内容</label>
@@ -311,6 +324,7 @@
     <script src="https://officeai.local/js/intent-preview.js"></script>
     <script src="https://officeai.local/js/ralph-loop.js"></script>
     <script src="https://officeai.local/js/ralph-agent.js"></script>
+    <script src="https://officeai.local/js/model-switcher.js"></script>
 
     <!-- 工具函数 -->
     <script>

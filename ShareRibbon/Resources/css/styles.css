@@ -474,9 +474,9 @@ pre.collapsible.collapsed {
     position: fixed;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, -48%);
     background: white;
-    padding: 20px;
+    padding: 5px 20px 0px 20px;
     border-radius: 8px;
     box-shadow: 0 4px 20px rgba(0,0,0,0.15);
     width: 300px;
@@ -560,7 +560,6 @@ pre.collapsible.collapsed {
     display: flex;
     justify-content: flex-end;
     gap: 10px;
-    margin-top: 20px;
 }
 
 .settings-button {

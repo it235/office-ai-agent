@@ -225,6 +225,14 @@ Public Class PromptManager
                 Return True
         End Select
 
+        ' Office应用始终需要JSON Schema约束
+        ' 因为用户请求可能涉及命令操作（如翻译、公式、图表等）
+        ' JSON Schema中已说明"对于简单问候或问答，直接用中文回复"
+        Dim appType = context.ApplicationType?.ToLower()
+        If appType = "excel" OrElse appType = "word" OrElse appType = "powerpoint" Then
+            Return True
+        End If
+
         ' 意图判断
         If context.IntentResult IsNot Nothing Then
             ' 高置信度（>0.7）时，即使是GENERAL_QUERY也返回JSON（用户需求明确）
@@ -298,43 +306,33 @@ Public Class PromptManager
 {""commands"": [{""command"": ""WriteData"", ""params"": {""data"": [[""姓名"", ""年龄""], [""张三"", 25]]}}, {""command"": ""ApplyFormula"", ""params"": {""range"": ""C2"", ""formula"": ""=B2*2""}}]}
 ```
 
+【Excel command类型 - 只能使用以下5种】
+1. WriteData - 写入数据到单元格区域
+   params: {data:二维数组, targetRange:目标区域}
+2. ApplyFormula - 应用公式到单元格
+   params: {targetRange:单元格区域, formula:公式字符串, fillDown:可选}
+3. FormatRange - 格式化单元格
+   params: {range:区域, style:样式对象}
+4. CreateChart - 创建图表
+   params: {dataRange:数据区域, chartType:图表类型}
+5. CleanData - 清洗数据
+   params: {range:区域, operation:操作类型}
+
 【绝对禁止】
 - 禁止使用 actions 数组
 - 禁止使用 operations 数组
 - 禁止省略 params 包装
-- 禁止自创任何其他格式
+- 禁止自创任何其他命令（如translateText, TranslateRange等）
 - 禁止使用Word命令(GenerateTOC, BeautifyDocument等)
 - 禁止使用PowerPoint命令(InsertSlide, AddAnimation等)
 - 禁止返回不带代码块的裸JSON
-- 禁止缺少command/commands字段的JSON
 
-【Excel command类型 - 只能使用以下12种】
-1. WriteData - 写入数据到单元格区域
-   params: {data:二维数组, range:目标区域}
-2. ApplyFormula - 应用公式到单元格
-   params: {range:单元格区域, formula:公式字符串}
-3. FormatCells - 格式化单元格
-   params: {range:区域, format:{字体,对齐,边框,填充}}
-4. CreateChart - 创建图表
-   params: {chartType:图表类型, dataRange:数据区域, location:放置位置}
-5. InsertPivotTable - 插入数据透视表
-   params: {sourceData:源数据, targetCell:目标单元格}
-6. ApplyConditionalFormatting - 应用条件格式
-   params: {range:区域, rules:规则数组}
-7. SortData - 排序数据
-   params: {range:排序区域, sortBy:排序依据列, order:升序/降序}
-8. FilterData - 筛选数据
-   params: {range:筛选区域, criteria:筛选条件}
-9. InsertTable - 插入表格
-   params: {range:表格区域, hasHeaders:是否有标题行}
-10. ProtectWorksheet - 保护工作表
-    params: {password:密码, allowEditRanges:允许编辑的区域}
-11. InsertComment - 插入批注
-    params: {cell:单元格地址, text:批注内容}
-12. DefineName - 定义名称
-    params: {name:名称, refersTo:引用范围}
+【不支持的功能 - 请告知用户使用工具栏按钮】
+- 翻译功能：请告知用户点击工具栏上的「AI翻译」按钮进行翻译操作
+- 校对功能：请告知用户点击工具栏上的「AI校对」按钮
+- 续写功能：请告知用户点击工具栏上的「AI续写」按钮
 
-如果需求不明确，直接用中文回复询问用户。"
+如果用户需求不明确或无法通过以上5种命令实现，直接用中文回复询问或建议用户使用相应的工具栏功能。"
     End Function
     
     ''' <summary>

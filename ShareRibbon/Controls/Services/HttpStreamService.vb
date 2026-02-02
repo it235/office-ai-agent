@@ -74,6 +74,9 @@ Public Class HttpStreamService
             _pendingMcpTasks = 0
             _stateService.ResetSessionTokens()
 
+            ' 检测是否是 Anthropic API
+            Dim isAnthropic As Boolean = apiUrl.Contains("anthropic.com")
+
             Try
                 ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
 
@@ -81,7 +84,16 @@ Public Class HttpStreamService
                     client.Timeout = System.Threading.Timeout.InfiniteTimeSpan
 
                     Dim request As New HttpRequestMessage(HttpMethod.Post, apiUrl)
-                    request.Headers.Authorization = New AuthenticationHeaderValue("Bearer", apiKey)
+
+                    ' Anthropic 使用不同的认证方式
+                    If isAnthropic Then
+                        request.Headers.Add("x-api-key", apiKey)
+                        request.Headers.Add("anthropic-version", "2023-06-01")
+                        requestBody = ConvertToAnthropicFormat(requestBody)
+                    Else
+                        request.Headers.Authorization = New AuthenticationHeaderValue("Bearer", apiKey)
+                    End If
+
                     request.Content = New StringContent(requestBody, Encoding.UTF8, "application/json")
 
                     Dim aiName As String = ConfigSettings.platform & " " & ConfigSettings.ModelName
@@ -115,7 +127,14 @@ Public Class HttpStreamService
                                     If readCount = 0 Then Exit Do
 
                                     Dim chunk As String = New String(buffer, 0, readCount)
-                                    chunk = chunk.Replace("data:", "")
+                                    
+                                    ' Anthropic 使用 SSE 格式，但数据格式不同
+                                    If isAnthropic Then
+                                        chunk = ProcessAnthropicChunk(chunk)
+                                    Else
+                                        chunk = chunk.Replace("data:", "")
+                                    End If
+                                    
                                     stringBuilder.Append(chunk)
 
                                     If stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}).EndsWith("}") Then
@@ -132,6 +151,130 @@ Public Class HttpStreamService
             Finally
                 _mainStreamCompleted = True
                 FinalizeStream(addHistory)
+            End Try
+        End Function
+
+        ''' <summary>
+        ''' 转换请求体为 Anthropic 格式
+        ''' </summary>
+        Private Function ConvertToAnthropicFormat(requestBody As String) As String
+            Try
+                Dim json = JObject.Parse(requestBody)
+                Dim anthropicBody = New JObject()
+                
+                ' 模型名称
+                anthropicBody("model") = json("model")
+                
+                ' max_tokens 是必需的
+                anthropicBody("max_tokens") = 4096
+                
+                ' 转换 messages
+                Dim messages = json("messages")
+                If messages IsNot Nothing Then
+                    Dim newMessages = New JArray()
+                    Dim systemContent As String = ""
+                    
+                    For Each msg In messages
+                        Dim role = msg("role")?.ToString()
+                        Dim content = msg("content")?.ToString()
+                        
+                        ' Anthropic 不支持 system 角色在 messages 中，需要单独设置
+                        If role = "system" Then
+                            systemContent = content
+                        Else
+                            newMessages.Add(New JObject From {
+                                {"role", role},
+                                {"content", content}
+                            })
+                        End If
+                    Next
+                    
+                    anthropicBody("messages") = newMessages
+                    
+                    ' 设置 system 提示词
+                    If Not String.IsNullOrEmpty(systemContent) Then
+                        anthropicBody("system") = systemContent
+                    End If
+                End If
+                
+                ' 流式输出
+                anthropicBody("stream") = True
+                
+                Return anthropicBody.ToString(Newtonsoft.Json.Formatting.None)
+            Catch ex As Exception
+                ' 转换失败，返回原始请求体
+                Return requestBody
+            End Try
+        End Function
+
+        ''' <summary>
+        ''' 处理 Anthropic SSE 数据块，转换为 OpenAI 兼容格式
+        ''' </summary>
+        Private Function ProcessAnthropicChunk(chunk As String) As String
+            Try
+                ' Anthropic SSE 格式: event: xxx\ndata: {...}
+                Dim result = New StringBuilder()
+                Dim lines = chunk.Split({vbCr, vbLf}, StringSplitOptions.RemoveEmptyEntries)
+                
+                For Each line In lines
+                    If line.StartsWith("data:") Then
+                        Dim dataContent = line.Substring(5).Trim()
+                        If dataContent = "[DONE]" Then
+                            result.AppendLine("[DONE]")
+                            Continue For
+                        End If
+                        
+                        Try
+                            Dim anthropicJson = JObject.Parse(dataContent)
+                            Dim eventType = anthropicJson("type")?.ToString()
+                            
+                            Select Case eventType
+                                Case "content_block_delta"
+                                    ' 转换为 OpenAI 格式
+                                    Dim delta = anthropicJson("delta")
+                                    If delta IsNot Nothing Then
+                                        Dim text = delta("text")?.ToString()
+                                        If Not String.IsNullOrEmpty(text) Then
+                                            Dim openaiFormat = New JObject From {
+                                                {"choices", New JArray From {
+                                                    New JObject From {
+                                                        {"delta", New JObject From {
+                                                            {"content", text}
+                                                        }}
+                                                    }
+                                                }}
+                                            }
+                                            result.AppendLine(openaiFormat.ToString(Newtonsoft.Json.Formatting.None))
+                                        End If
+                                    End If
+                                    
+                                Case "message_stop"
+                                    result.AppendLine("[DONE]")
+                                    
+                                Case "message_delta"
+                                    ' 包含 usage 信息
+                                    Dim usage = anthropicJson("usage")
+                                    If usage IsNot Nothing Then
+                                        Dim openaiFormat = New JObject From {
+                                            {"choices", New JArray From {
+                                                New JObject From {
+                                                    {"delta", New JObject()}
+                                                }
+                                            }},
+                                            {"usage", usage}
+                                        }
+                                        result.AppendLine(openaiFormat.ToString(Newtonsoft.Json.Formatting.None))
+                                    End If
+                            End Select
+                        Catch
+                            ' 解析失败，跳过
+                        End Try
+                    End If
+                Next
+                
+                Return result.ToString()
+            Catch ex As Exception
+                Return chunk.Replace("data:", "")
             End Try
         End Function
 
