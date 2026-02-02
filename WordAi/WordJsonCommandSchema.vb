@@ -12,16 +12,38 @@ Imports Newtonsoft.Json.Schema
 Public Class WordJsonCommandSchema
 
     ''' <summary>
-    ''' 支持的命令类型
+    ''' 支持的命令类型 (22个命令覆盖主流Word操作场景)
+    ''' 基础文本操作: InsertText, FormatText, ReplaceText, DeleteText, CopyPasteText
+    ''' 段落和样式: ApplyStyle, SetParagraphFormat, InsertParagraph, SetLineSpacing, SetIndent
+    ''' 表格操作: InsertTable, FormatTable, InsertTableRow, DeleteTableRow
+    ''' 文档结构: GenerateTOC, InsertHeader, InsertFooter, InsertPageNumber
+    ''' 文档美化: BeautifyDocument, SetPageMargins
+    ''' 高级功能: InsertImage
+    ''' VBA回退: ExecuteVBA
     ''' </summary>
     Public Shared ReadOnly SupportedCommands As String() = {
         "InsertText",
         "FormatText",
         "ReplaceText",
-        "InsertTable",
+        "DeleteText",
+        "CopyPasteText",
         "ApplyStyle",
+        "SetParagraphFormat",
+        "InsertParagraph",
+        "SetLineSpacing",
+        "SetIndent",
+        "InsertTable",
+        "FormatTable",
+        "InsertTableRow",
+        "DeleteTableRow",
         "GenerateTOC",
-        "BeautifyDocument"
+        "InsertHeader",
+        "InsertFooter",
+        "InsertPageNumber",
+        "BeautifyDocument",
+        "SetPageMargins",
+        "InsertImage",
+        "ExecuteVBA"
     }
 
     ''' <summary>
@@ -46,21 +68,8 @@ Public Class WordJsonCommandSchema
 ```json
 {
   ""commands"": [
-    {
-      ""command"": ""InsertText"",
-      ""params"": {
-        ""position"": ""cursor"",
-        ""content"": ""第一段内容""
-      }
-    },
-    {
-      ""command"": ""FormatText"",
-      ""params"": {
-        ""range"": ""selection"",
-        ""bold"": true,
-        ""fontSize"": 14
-      }
-    }
+    {""command"": ""InsertText"", ""params"": {""position"": ""cursor"", ""content"": ""标题""}},
+    {""command"": ""FormatText"", ""params"": {""range"": ""selection"", ""bold"": true, ""fontSize"": 16}}
   ]
 }
 ```
@@ -69,48 +78,51 @@ Public Class WordJsonCommandSchema
 - 禁止 {""command"": ""xxx"", ""actions"": [...]}
 - 禁止 {""command"": ""xxx"", ""content"": ""...""} (缺少params包装)
 - 禁止 {""operations"": [...]}
-- 禁止任何其他自创格式
 
-【command类型限制】
-只能使用: InsertText, FormatText, ReplaceText, InsertTable, ApplyStyle, GenerateTOC, BeautifyDocument
+【Word支持的22个命令】
 
-【params必须包含的字段】
-- InsertText: content(必需), position(可选: cursor/start/end)
-- FormatText: range(必需: selection/all), bold/italic/fontSize/fontName(可选)
-- ReplaceText: find(必需), replace(必需), matchCase(可选)
-- InsertTable: rows(必需), cols(必需), data(可选)
-- ApplyStyle: styleName(必需), range(可选: selection/paragraph)
-- GenerateTOC: position(可选: start/cursor), levels(可选: 1-9), includePageNumbers(可选)
-- BeautifyDocument: theme(可选，含h1/h2/body字体设置), margins(可选)
+=== 基础文本操作 (5个) ===
+1. InsertText - 插入文本 {content:必需, position:cursor/start/end}
+2. FormatText - 格式化 {range:selection/all, bold/italic/fontSize/fontName/underline/color}
+3. ReplaceText - 查找替换 {find:必需, replace:必需, matchCase:可选, matchWholeWord:可选}
+4. DeleteText - 删除文本 {range:selection/all}
+5. CopyPasteText - 复制粘贴 {sourceRange:必需, targetPosition:cursor/start/end}
 
-【生成目录示例】
-```json
-{
-  ""command"": ""GenerateTOC"",
-  ""params"": {
-    ""position"": ""start"",
-    ""levels"": 3,
-    ""includePageNumbers"": true
-  }
-}
-```
+=== 段落和样式 (5个) ===
+6. ApplyStyle - 应用样式 {styleName:必需如""标题 1""/""正文"", range:selection/paragraph}
+7. SetParagraphFormat - 段落格式 {alignment:left/center/right/justify, firstLineIndent:可选, beforeSpacing/afterSpacing:可选}
+8. InsertParagraph - 插入段落 {count:默认1, pageBreak:true则插入分页符}
+9. SetLineSpacing - 行距 {spacing:1/1.5/2或具体值, range:selection/all}
+10. SetIndent - 缩进 {left:左缩进cm, right:右缩进cm, firstLine:首行缩进cm, range:selection/paragraph}
 
-【文档美化示例】
-```json
-{
-  ""command"": ""BeautifyDocument"",
-  ""params"": {
-    ""theme"": {
-      ""h1"": {""font"": ""微软雅黑"", ""size"": 22, ""color"": ""#000000"", ""bold"": true},
-      ""h2"": {""font"": ""微软雅黑"", ""size"": 18, ""color"": ""#333333"", ""bold"": true},
-      ""body"": {""font"": ""宋体"", ""size"": 12, ""lineSpacing"": 1.5}
-    },
-    ""margins"": {""top"": 2.5, ""bottom"": 2.5, ""left"": 3.0, ""right"": 3.0}
-  }
-}
-```
+=== 表格操作 (4个) ===
+11. InsertTable - 插入表格 {rows:必需, cols:必需, data:可选二维数组, style:可选}
+12. FormatTable - 格式化表格 {tableIndex:表格索引从1开始, style:可选, borders:可选, headerRow:可选}
+13. InsertTableRow - 插入行 {tableIndex:必需, position:after/before, rowIndex:可选}
+14. DeleteTableRow - 删除行 {tableIndex:必需, rowIndex:必需}
 
-如果用户需求不明确，请直接用中文询问用户，不要返回JSON。"
+=== 文档结构 (4个) ===
+15. GenerateTOC - 生成目录 {position:start/cursor, levels:1-9, includePageNumbers:默认true}
+16. InsertHeader - 页眉 {content:必需, alignment:left/center/right}
+17. InsertFooter - 页脚 {content:必需, alignment:left/center/right}
+18. InsertPageNumber - 页码 {position:header/footer, alignment:left/center/right, format:可选}
+
+=== 文档美化 (2个) ===
+19. BeautifyDocument - 美化文档 {theme:{h1/h2/body字体设置}, margins:{top/bottom/left/right}}
+20. SetPageMargins - 页边距 {top:cm, bottom:cm, left:cm, right:cm}
+
+=== 高级功能 (1个) ===
+21. InsertImage - 插入图片 {imagePath:必需, width:可选, height:可选, position:cursor/start/end}
+
+=== VBA回退 (1个) ===
+22. ExecuteVBA - 执行VBA代码 {code:必需,完整的Sub或Function代码}
+    当以上命令无法满足需求时,生成VBA代码作为回退方案
+
+【重要决策规则】
+1. 优先使用上述22个命令处理用户需求
+2. 复杂需求无法用命令实现时，使用ExecuteVBA生成VBA代码
+3. 翻译需求请告知用户使用工具栏的""翻译""按钮
+4. 如果用户需求不明确，直接用中文询问"
     End Function
 
     ''' <summary>
@@ -284,20 +296,57 @@ Public Class WordJsonCommandSchema
             
             ' 根据命令类型校验参数
             Select Case command.ToLower()
+                ' === 基础文本操作 ===
                 Case "inserttext"
                     Return ValidateInsertText(params, errorMessage)
                 Case "formattext"
                     Return ValidateFormatText(params, errorMessage)
                 Case "replacetext"
                     Return ValidateReplaceText(params, errorMessage)
-                Case "inserttable"
-                    Return ValidateInsertTable(params, errorMessage)
+                Case "deletetext"
+                    Return ValidateDeleteText(params, errorMessage)
+                Case "copypastetext"
+                    Return ValidateCopyPasteText(params, errorMessage)
+                ' === 段落和样式 ===
                 Case "applystyle"
                     Return ValidateApplyStyle(params, errorMessage)
+                Case "setparagraphformat"
+                    Return ValidateSetParagraphFormat(params, errorMessage)
+                Case "insertparagraph"
+                    Return ValidateInsertParagraph(params, errorMessage)
+                Case "setlinespacing"
+                    Return ValidateSetLineSpacing(params, errorMessage)
+                Case "setindent"
+                    Return ValidateSetIndent(params, errorMessage)
+                ' === 表格操作 ===
+                Case "inserttable"
+                    Return ValidateInsertTable(params, errorMessage)
+                Case "formattable"
+                    Return ValidateFormatTable(params, errorMessage)
+                Case "inserttablerow"
+                    Return ValidateInsertTableRow(params, errorMessage)
+                Case "deletetablerow"
+                    Return ValidateDeleteTableRow(params, errorMessage)
+                ' === 文档结构 ===
                 Case "generatetoc"
                     Return ValidateGenerateTOC(params, errorMessage)
+                Case "insertheader"
+                    Return ValidateInsertHeader(params, errorMessage)
+                Case "insertfooter"
+                    Return ValidateInsertFooter(params, errorMessage)
+                Case "insertpagenumber"
+                    Return ValidateInsertPageNumber(params, errorMessage)
+                ' === 文档美化 ===
                 Case "beautifydocument"
                     Return ValidateBeautifyDocument(params, errorMessage)
+                Case "setpagemargins"
+                    Return ValidateSetPageMargins(params, errorMessage)
+                ' === 高级功能 ===
+                Case "insertimage"
+                    Return ValidateInsertImage(params, errorMessage)
+                ' === VBA回退 ===
+                Case "executevba"
+                    Return ValidateExecuteVBA(params, errorMessage)
                 Case Else
                     Return True
             End Select
@@ -391,5 +440,143 @@ Public Class WordJsonCommandSchema
         End If
         Return True
     End Function
+
+#Region "新增命令验证方法"
+
+    Private Shared Function ValidateDeleteText(params As JToken, ByRef errorMessage As String) As Boolean
+        ' DeleteText可以用range指定范围,默认删除选中内容
+        Return True
+    End Function
+
+    Private Shared Function ValidateCopyPasteText(params As JToken, ByRef errorMessage As String) As Boolean
+        Dim sourceRange = params("sourceRange")?.ToString()
+        If String.IsNullOrEmpty(sourceRange) Then
+            errorMessage = "CopyPasteText缺少sourceRange参数"
+            Return False
+        End If
+        Return True
+    End Function
+
+    Private Shared Function ValidateSetParagraphFormat(params As JToken, ByRef errorMessage As String) As Boolean
+        ' 至少需要一个段落格式属性
+        If params("alignment") Is Nothing AndAlso params("firstLineIndent") Is Nothing AndAlso
+           params("beforeSpacing") Is Nothing AndAlso params("afterSpacing") Is Nothing Then
+            errorMessage = "SetParagraphFormat至少需要一个格式属性"
+            Return False
+        End If
+        Return True
+    End Function
+
+    Private Shared Function ValidateInsertParagraph(params As JToken, ByRef errorMessage As String) As Boolean
+        ' 所有参数都是可选的
+        Return True
+    End Function
+
+    Private Shared Function ValidateSetLineSpacing(params As JToken, ByRef errorMessage As String) As Boolean
+        If params("spacing") Is Nothing Then
+            errorMessage = "SetLineSpacing缺少spacing参数"
+            Return False
+        End If
+        Return True
+    End Function
+
+    Private Shared Function ValidateSetIndent(params As JToken, ByRef errorMessage As String) As Boolean
+        ' 至少需要一个缩进属性
+        If params("left") Is Nothing AndAlso params("right") Is Nothing AndAlso params("firstLine") Is Nothing Then
+            errorMessage = "SetIndent至少需要一个缩进属性(left/right/firstLine)"
+            Return False
+        End If
+        Return True
+    End Function
+
+    Private Shared Function ValidateFormatTable(params As JToken, ByRef errorMessage As String) As Boolean
+        Dim tableIndex = params("tableIndex")
+        If tableIndex Is Nothing Then
+            errorMessage = "FormatTable缺少tableIndex参数"
+            Return False
+        End If
+        Return True
+    End Function
+
+    Private Shared Function ValidateInsertTableRow(params As JToken, ByRef errorMessage As String) As Boolean
+        Dim tableIndex = params("tableIndex")
+        If tableIndex Is Nothing Then
+            errorMessage = "InsertTableRow缺少tableIndex参数"
+            Return False
+        End If
+        Return True
+    End Function
+
+    Private Shared Function ValidateDeleteTableRow(params As JToken, ByRef errorMessage As String) As Boolean
+        If params("tableIndex") Is Nothing Then
+            errorMessage = "DeleteTableRow缺少tableIndex参数"
+            Return False
+        End If
+        If params("rowIndex") Is Nothing Then
+            errorMessage = "DeleteTableRow缺少rowIndex参数"
+            Return False
+        End If
+        Return True
+    End Function
+
+    Private Shared Function ValidateInsertHeader(params As JToken, ByRef errorMessage As String) As Boolean
+        Dim content = params("content")?.ToString()
+        If String.IsNullOrEmpty(content) Then
+            errorMessage = "InsertHeader缺少content参数"
+            Return False
+        End If
+        Return True
+    End Function
+
+    Private Shared Function ValidateInsertFooter(params As JToken, ByRef errorMessage As String) As Boolean
+        Dim content = params("content")?.ToString()
+        If String.IsNullOrEmpty(content) Then
+            errorMessage = "InsertFooter缺少content参数"
+            Return False
+        End If
+        Return True
+    End Function
+
+    Private Shared Function ValidateInsertPageNumber(params As JToken, ByRef errorMessage As String) As Boolean
+        ' 所有参数都是可选的
+        Return True
+    End Function
+
+    Private Shared Function ValidateSetPageMargins(params As JToken, ByRef errorMessage As String) As Boolean
+        ' 至少需要一个边距属性
+        If params("top") Is Nothing AndAlso params("bottom") Is Nothing AndAlso
+           params("left") Is Nothing AndAlso params("right") Is Nothing Then
+            errorMessage = "SetPageMargins至少需要一个边距属性"
+            Return False
+        End If
+        Return True
+    End Function
+
+    Private Shared Function ValidateInsertImage(params As JToken, ByRef errorMessage As String) As Boolean
+        Dim imagePath = params("imagePath")?.ToString()
+        If String.IsNullOrEmpty(imagePath) Then
+            errorMessage = "InsertImage缺少imagePath参数"
+            Return False
+        End If
+        Return True
+    End Function
+
+    Private Shared Function ValidateExecuteVBA(params As JToken, ByRef errorMessage As String) As Boolean
+        Dim code = params("code")?.ToString()
+        If String.IsNullOrEmpty(code) Then
+            errorMessage = "ExecuteVBA缺少code参数"
+            Return False
+        End If
+        
+        ' 基本的VBA代码验证
+        If Not code.ToLower().Contains("sub") AndAlso Not code.ToLower().Contains("function") Then
+            errorMessage = "ExecuteVBA的code必须包含Sub或Function定义"
+            Return False
+        End If
+        
+        Return True
+    End Function
+
+#End Region
 
 End Class

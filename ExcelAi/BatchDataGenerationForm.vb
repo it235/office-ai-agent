@@ -1,5 +1,6 @@
 ﻿Imports System.Drawing
 Imports System.Windows.Forms
+Imports ShareRibbon
 
 Public Class BatchDataGenerationForm
     Inherits Form
@@ -90,7 +91,7 @@ Public Class BatchDataGenerationForm
     Private Sub GenerateButton_Click(sender As Object, e As EventArgs)
         ' 实现数据生成逻辑
         ' 这里将根据Excel应用程序的上下文生成数据
-        MessageBox.Show("数据生成功能将在Excel环境中实现")
+        GlobalStatusStripAll.ShowWarning("数据生成功能将在Excel环境中实现")
         Me.DialogResult = DialogResult.OK
         Me.Close()
     End Sub

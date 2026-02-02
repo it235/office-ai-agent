@@ -45,6 +45,7 @@ Public Class ExcelDirectOperationService
             Debug.WriteLine($"执行命令: {command}")
 
             Select Case command.ToLower()
+                ' === 基础操作 ===
                 Case "writedata", "write", "setvalue", "setvalues"
                     Return ExecuteWriteData(params)
                 Case "applyformula", "formula", "calculatesum", "calculate", "range_operations"
@@ -55,6 +56,45 @@ Public Class ExcelDirectOperationService
                     Return ExecuteCreateChart(params)
                 Case "cleandata", "clean"
                     Return ExecuteCleanData(params)
+                ' === 数据操作 ===
+                Case "sortdata", "sort"
+                    Return ExecuteSortData(params)
+                Case "filterdata", "filter"
+                    Return ExecuteFilterData(params)
+                Case "removeduplicates"
+                    Return ExecuteRemoveDuplicates(params)
+                Case "conditionalformat"
+                    Return ExecuteConditionalFormat(params)
+                Case "mergecells", "merge"
+                    Return ExecuteMergeCells(params)
+                Case "autofit"
+                    Return ExecuteAutoFit(params)
+                Case "findreplace"
+                    Return ExecuteFindReplace(params)
+                Case "createpivottable", "pivot"
+                    Return ExecuteCreatePivotTable(params)
+                ' === 工作表操作 ===
+                Case "createsheet"
+                    Return ExecuteCreateSheet(params)
+                Case "deletesheet"
+                    Return ExecuteDeleteSheet(params)
+                Case "renamesheet"
+                    Return ExecuteRenameSheet(params)
+                Case "copysheet"
+                    Return ExecuteCopySheet(params)
+                ' === 高级功能 ===
+                Case "insertrowcol"
+                    Return ExecuteInsertRowCol(params)
+                Case "deleterowcol"
+                    Return ExecuteDeleteRowCol(params)
+                Case "hiderowcol"
+                    Return ExecuteHideRowCol(params)
+                Case "protectsheet"
+                    Return ExecuteProtectSheet(params)
+                ' === VBA回退 ===
+                Case "executevba", "vba"
+                    Return ExecuteVBA(params)
+                ' === 旧版兼容 ===
                 Case "dataanalysis", "analyze"
                     Return ExecuteDataAnalysis(params)
                 Case "transformdata", "transform"
@@ -397,11 +437,13 @@ Public Class ExcelDirectOperationService
             End Select
 
             ' 应用单独的格式属性
-            If params("bold")?.Value(Of Boolean)() = True Then
+            Dim boldParam = params("bold")
+            If boldParam IsNot Nothing AndAlso boldParam.Value(Of Boolean)() = True Then
                 range.Font.Bold = True
             End If
 
-            If params("italic")?.Value(Of Boolean)() = True Then
+            Dim italicParam = params("italic")
+            If italicParam IsNot Nothing AndAlso italicParam.Value(Of Boolean)() = True Then
                 range.Font.Italic = True
             End If
 
@@ -420,9 +462,18 @@ Public Class ExcelDirectOperationService
                 range.Font.Color = ParseColor(fontColor)
             End If
 
-            If params("borders")?.Value(Of Boolean)() = True Then
-                range.Borders.LineStyle = XlLineStyle.xlContinuous
-                range.Borders.Weight = XlBorderWeight.xlThin
+            Dim bordersParam = params("borders")
+            If bordersParam IsNot Nothing Then
+                ' 支持多种格式: true/false, "all", "none", "outline"
+                Dim bordersValue = bordersParam.ToString().ToLower()
+                If bordersValue = "true" OrElse bordersValue = "all" Then
+                    range.Borders.LineStyle = XlLineStyle.xlContinuous
+                    range.Borders.Weight = XlBorderWeight.xlThin
+                ElseIf bordersValue = "outline" Then
+                    range.BorderAround(XlLineStyle.xlContinuous, XlBorderWeight.xlThin)
+                ElseIf bordersValue = "none" OrElse bordersValue = "false" Then
+                    range.Borders.LineStyle = XlLineStyle.xlLineStyleNone
+                End If
             End If
 
             ShareRibbon.GlobalStatusStrip.ShowInfo($"格式已应用到 {targetRange}")
@@ -443,6 +494,10 @@ Public Class ExcelDirectOperationService
             Dim dataRange = params("dataRange")?.ToString()
             Dim title = params("title")?.ToString()
             Dim position = params("position")?.ToString()
+            Dim categoryAxis = params("categoryAxis")?.ToString()
+            Dim seriesNames = params("seriesNames")
+            Dim legendPosition = params("legendPosition")?.ToString()
+            Dim plotBy = params("plotBy")?.ToString()
 
             If String.IsNullOrEmpty(dataRange) Then
                 Return False
@@ -481,21 +536,66 @@ Public Class ExcelDirectOperationService
             Dim chartObj As ChartObject = ws.ChartObjects.Add(
                 positionRange.Left,
                 positionRange.Top,
-                400,
-                300)
+                450,
+                320)
 
             With chartObj.Chart
                 .ChartType = xlChartType
-                .SetSourceData(sourceRange)
+                
+                ' 设置数据源和绘图方向
+                If Not String.IsNullOrEmpty(plotBy) AndAlso plotBy.ToLower() = "row" Then
+                    .SetSourceData(sourceRange, XlRowCol.xlRows)
+                Else
+                    .SetSourceData(sourceRange, XlRowCol.xlColumns)
+                End If
 
+                ' 设置图表标题
                 If Not String.IsNullOrEmpty(title) Then
                     .HasTitle = True
                     .ChartTitle.Text = title
                 End If
 
-                ' 添加图例
-                Dim hasLegend = params("hasLegend")?.Value(Of Boolean)()
-                .HasLegend = If(hasLegend, True, True)
+                ' 设置系列名称（解决"系列1"问题）
+                If seriesNames IsNot Nothing AndAlso seriesNames.Type = JTokenType.Array Then
+                    Dim names = seriesNames.ToObject(Of List(Of String))()
+                    For i As Integer = 1 To Math.Min(.SeriesCollection.Count, names.Count)
+                        Try
+                            .SeriesCollection(i).Name = names(i - 1)
+                        Catch
+                        End Try
+                    Next
+                End If
+
+                ' 设置分类轴标签
+                If Not String.IsNullOrEmpty(categoryAxis) Then
+                    Try
+                        Dim catRange As Range = ws.Range(categoryAxis)
+                        For i As Integer = 1 To .SeriesCollection.Count
+                            Try
+                                .SeriesCollection(i).XValues = catRange
+                            Catch
+                            End Try
+                        Next
+                    Catch
+                    End Try
+                End If
+
+                ' 设置图例
+                .HasLegend = True
+                If Not String.IsNullOrEmpty(legendPosition) Then
+                    Select Case legendPosition.ToLower()
+                        Case "right"
+                            .Legend.Position = XlLegendPosition.xlLegendPositionRight
+                        Case "left"
+                            .Legend.Position = XlLegendPosition.xlLegendPositionLeft
+                        Case "top"
+                            .Legend.Position = XlLegendPosition.xlLegendPositionTop
+                        Case "bottom"
+                            .Legend.Position = XlLegendPosition.xlLegendPositionBottom
+                        Case "corner"
+                            .Legend.Position = XlLegendPosition.xlLegendPositionCorner
+                    End Select
+                End If
             End With
 
             ShareRibbon.GlobalStatusStrip.ShowInfo("图表已创建")
@@ -721,6 +821,691 @@ Public Class ExcelDirectOperationService
             Debug.WriteLine($"ExecuteGenerateReport 出错: {ex.Message}")
             Return False
         End Try
+    End Function
+
+#End Region
+
+#Region "新增命令执行方法"
+
+    ''' <summary>
+    ''' 执行数据排序命令
+    ''' </summary>
+    Private Function ExecuteSortData(params As JToken) As Boolean
+        Try
+            Dim range = params("range")?.ToString()
+            Dim sortColumn = params("sortColumn")?.Value(Of Integer)()
+            Dim order = If(params("order")?.ToString()?.ToLower() = "desc", XlSortOrder.xlDescending, XlSortOrder.xlAscending)
+            Dim hasHeader = If(params("hasHeader")?.Value(Of Boolean)(), True)
+
+            If String.IsNullOrEmpty(range) OrElse Not sortColumn.HasValue Then
+                Return False
+            End If
+
+            Dim ws As Worksheet = _excelApp.ActiveSheet
+            Dim dataRange As Range = ws.Range(range)
+            
+            dataRange.Sort(
+                Key1:=dataRange.Columns(sortColumn.Value),
+                Order1:=order,
+                Header:=If(hasHeader, XlYesNoGuess.xlYes, XlYesNoGuess.xlNo))
+
+            ShareRibbon.GlobalStatusStrip.ShowInfo($"数据排序完成: {range}")
+            Return True
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteSortData 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"排序失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行数据筛选命令
+    ''' </summary>
+    Private Function ExecuteFilterData(params As JToken) As Boolean
+        Try
+            Dim ws As Worksheet = _excelApp.ActiveSheet
+            
+            ' 清除筛选
+            Dim clearFilter = params("clearFilter")
+            If clearFilter IsNot Nothing AndAlso clearFilter.Value(Of Boolean)() = True Then
+                If ws.AutoFilterMode Then
+                    ws.AutoFilterMode = False
+                End If
+                ShareRibbon.GlobalStatusStrip.ShowInfo("筛选已清除")
+                Return True
+            End If
+
+            Dim range = params("range")?.ToString()
+            Dim column = params("column")?.Value(Of Integer)()
+            Dim criteria = params("criteria")?.ToString()
+
+            If String.IsNullOrEmpty(range) OrElse Not column.HasValue Then
+                Return False
+            End If
+
+            Dim dataRange As Range = ws.Range(range)
+            
+            dataRange.AutoFilter(Field:=column.Value, Criteria1:=criteria)
+
+            ShareRibbon.GlobalStatusStrip.ShowInfo($"筛选已应用: 列{column} {criteria}")
+            Return True
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteFilterData 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"筛选失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行删除重复项命令
+    ''' </summary>
+    Private Function ExecuteRemoveDuplicates(params As JToken) As Boolean
+        Try
+            Dim range = params("range")?.ToString()
+            Dim hasHeader = If(params("hasHeader")?.Value(Of Boolean)(), True)
+
+            If String.IsNullOrEmpty(range) Then
+                Return False
+            End If
+
+            Dim ws As Worksheet = _excelApp.ActiveSheet
+            Dim dataRange As Range = ws.Range(range)
+            
+            ' 默认检查所有列
+            Dim columnsArray = params("columns")
+            Dim cols As Object
+            If columnsArray IsNot Nothing AndAlso columnsArray.Type = JTokenType.Array Then
+                cols = columnsArray.ToObject(Of Integer())()
+            Else
+                ' 所有列
+                Dim colCount = dataRange.Columns.Count
+                Dim allCols(colCount - 1) As Integer
+                For i = 0 To colCount - 1
+                    allCols(i) = i + 1
+                Next
+                cols = allCols
+            End If
+
+            dataRange.RemoveDuplicates(Columns:=cols, Header:=If(hasHeader, XlYesNoGuess.xlYes, XlYesNoGuess.xlNo))
+
+            ShareRibbon.GlobalStatusStrip.ShowInfo($"重复项已删除: {range}")
+            Return True
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteRemoveDuplicates 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"删除重复项失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行条件格式命令
+    ''' </summary>
+    Private Function ExecuteConditionalFormat(params As JToken) As Boolean
+        Try
+            Dim range = params("range")?.ToString()
+            Dim rule = params("rule")?.ToString()?.ToLower()
+            Dim condition = params("condition")?.ToString()
+            Dim color = params("color")?.ToString()
+
+            If String.IsNullOrEmpty(range) OrElse String.IsNullOrEmpty(rule) Then
+                Return False
+            End If
+
+            Dim ws As Worksheet = _excelApp.ActiveSheet
+            Dim dataRange As Range = ws.Range(range)
+
+            Select Case rule
+                Case "highlight"
+                    ' 突出显示单元格规则
+                    Dim fc = dataRange.FormatConditions.Add(
+                        Type:=XlFormatConditionType.xlCellValue,
+                        Operator:=XlFormatConditionOperator.xlGreater,
+                        Formula1:=If(String.IsNullOrEmpty(condition), "0", condition))
+                    fc.Interior.Color = If(String.IsNullOrEmpty(color), RGB(255, 199, 206), ParseColor(color))
+
+                Case "databar"
+                    ' 数据条
+                    dataRange.FormatConditions.AddDatabar()
+
+                Case "colorscale"
+                    ' 色阶
+                    dataRange.FormatConditions.AddColorScale(ColorScaleType:=3)
+
+                Case "iconset"
+                    ' 图标集
+                    dataRange.FormatConditions.AddIconSetCondition()
+            End Select
+
+            ShareRibbon.GlobalStatusStrip.ShowInfo($"条件格式已应用: {range}")
+            Return True
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteConditionalFormat 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"条件格式失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行合并单元格命令
+    ''' </summary>
+    Private Function ExecuteMergeCells(params As JToken) As Boolean
+        Try
+            Dim range = params("range")?.ToString()
+            Dim unmergeParam = params("unmerge")
+            Dim unmerge As Boolean = If(unmergeParam IsNot Nothing, unmergeParam.Value(Of Boolean)(), False)
+
+            If String.IsNullOrEmpty(range) Then
+                Return False
+            End If
+
+            Dim ws As Worksheet = _excelApp.ActiveSheet
+            Dim dataRange As Range = ws.Range(range)
+
+            If unmerge Then
+                dataRange.UnMerge()
+                ShareRibbon.GlobalStatusStrip.ShowInfo($"已取消合并: {range}")
+            Else
+                dataRange.Merge()
+                ShareRibbon.GlobalStatusStrip.ShowInfo($"已合并单元格: {range}")
+            End If
+
+            Return True
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteMergeCells 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"合并单元格失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行自动调整列宽/行高命令
+    ''' </summary>
+    Private Function ExecuteAutoFit(params As JToken) As Boolean
+        Try
+            Dim range = params("range")?.ToString()
+            Dim fitType = If(params("type")?.ToString()?.ToLower(), "columns")
+
+            If String.IsNullOrEmpty(range) Then
+                Return False
+            End If
+
+            Dim ws As Worksheet = _excelApp.ActiveSheet
+            Dim dataRange As Range = ws.Range(range)
+
+            Select Case fitType
+                Case "columns"
+                    dataRange.Columns.AutoFit()
+                Case "rows"
+                    dataRange.Rows.AutoFit()
+                Case "both"
+                    dataRange.Columns.AutoFit()
+                    dataRange.Rows.AutoFit()
+            End Select
+
+            ShareRibbon.GlobalStatusStrip.ShowInfo($"自动调整完成: {range}")
+            Return True
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteAutoFit 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"自动调整失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行查找替换命令
+    ''' </summary>
+    Private Function ExecuteFindReplace(params As JToken) As Boolean
+        Try
+            Dim range = params("range")?.ToString()
+            Dim findText = params("find")?.ToString()
+            Dim replaceText = params("replace")?.ToString()
+            Dim matchCase = If(params("matchCase")?.Value(Of Boolean)(), False)
+            Dim matchEntireCell = If(params("matchEntireCell")?.Value(Of Boolean)(), False)
+
+            If String.IsNullOrEmpty(findText) Then
+                Return False
+            End If
+
+            Dim ws As Worksheet = _excelApp.ActiveSheet
+            Dim searchRange As Range
+            
+            If String.IsNullOrEmpty(range) OrElse range.ToLower() = "all" Then
+                searchRange = ws.UsedRange
+            Else
+                searchRange = ws.Range(range)
+            End If
+
+            searchRange.Replace(
+                What:=findText,
+                Replacement:=If(replaceText, ""),
+                LookAt:=If(matchEntireCell, XlLookAt.xlWhole, XlLookAt.xlPart),
+                MatchCase:=matchCase)
+
+            ShareRibbon.GlobalStatusStrip.ShowInfo($"查找替换完成: {findText} -> {replaceText}")
+            Return True
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteFindReplace 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"查找替换失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行创建数据透视表命令
+    ''' </summary>
+    Private Function ExecuteCreatePivotTable(params As JToken) As Boolean
+        Try
+            Dim sourceRange = params("sourceRange")?.ToString()
+            Dim targetCell = params("targetCell")?.ToString()
+            Dim rowFields = params("rowFields")
+            Dim valueFields = params("valueFields")
+            Dim columnFields = params("columnFields")
+
+            If String.IsNullOrEmpty(sourceRange) OrElse String.IsNullOrEmpty(targetCell) Then
+                Return False
+            End If
+
+            Dim ws As Worksheet = _excelApp.ActiveSheet
+            Dim source As Range = ws.Range(sourceRange)
+            
+            ' 创建新工作表放置透视表
+            Dim pivotWs As Worksheet = _excelApp.Worksheets.Add()
+            pivotWs.Name = "透视表_" & DateTime.Now.ToString("HHmmss")
+            
+            Dim pivotCache As PivotCache = _excelApp.ActiveWorkbook.PivotCaches.Create(
+                SourceType:=XlPivotTableSourceType.xlDatabase,
+                SourceData:=source)
+            
+            Dim pivotTable As PivotTable = pivotCache.CreatePivotTable(
+                TableDestination:=pivotWs.Range("A3"),
+                TableName:="PivotTable1")
+
+            ' 添加行字段
+            If rowFields IsNot Nothing Then
+                For Each field In rowFields
+                    Dim fieldName = field.ToString()
+                    pivotTable.PivotFields(fieldName).Orientation = XlPivotFieldOrientation.xlRowField
+                Next
+            End If
+
+            ' 添加值字段
+            If valueFields IsNot Nothing Then
+                For Each field In valueFields
+                    Dim fieldName = field.ToString()
+                    pivotTable.AddDataField(pivotTable.PivotFields(fieldName), , XlConsolidationFunction.xlSum)
+                Next
+            End If
+
+            ' 添加列字段
+            If columnFields IsNot Nothing Then
+                For Each field In columnFields
+                    Dim fieldName = field.ToString()
+                    pivotTable.PivotFields(fieldName).Orientation = XlPivotFieldOrientation.xlColumnField
+                Next
+            End If
+
+            pivotWs.Activate()
+            ShareRibbon.GlobalStatusStrip.ShowInfo($"透视表已创建: {pivotWs.Name}")
+            Return True
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteCreatePivotTable 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"创建透视表失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行创建工作表命令
+    ''' </summary>
+    Private Function ExecuteCreateSheet(params As JToken) As Boolean
+        Try
+            Dim name = params("name")?.ToString()
+            Dim position = params("position")?.ToString()?.ToLower()
+            Dim referenceSheet = params("referenceSheet")?.ToString()
+
+            If String.IsNullOrEmpty(name) Then
+                Return False
+            End If
+
+            Dim newSheet As Worksheet
+            
+            If Not String.IsNullOrEmpty(referenceSheet) AndAlso Not String.IsNullOrEmpty(position) Then
+                Dim refWs As Worksheet = _excelApp.Worksheets(referenceSheet)
+                If position = "before" Then
+                    newSheet = _excelApp.Worksheets.Add(Before:=refWs)
+                Else
+                    newSheet = _excelApp.Worksheets.Add(After:=refWs)
+                End If
+            Else
+                newSheet = _excelApp.Worksheets.Add()
+            End If
+            
+            newSheet.Name = name
+
+            ShareRibbon.GlobalStatusStrip.ShowInfo($"工作表已创建: {name}")
+            Return True
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteCreateSheet 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"创建工作表失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行删除工作表命令
+    ''' </summary>
+    Private Function ExecuteDeleteSheet(params As JToken) As Boolean
+        Try
+            Dim name = params("name")?.ToString()
+
+            If String.IsNullOrEmpty(name) Then
+                Return False
+            End If
+
+            _excelApp.DisplayAlerts = False
+            _excelApp.Worksheets(name).Delete()
+            _excelApp.DisplayAlerts = True
+
+            ShareRibbon.GlobalStatusStrip.ShowInfo($"工作表已删除: {name}")
+            Return True
+
+        Catch ex As Exception
+            _excelApp.DisplayAlerts = True
+            Debug.WriteLine($"ExecuteDeleteSheet 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"删除工作表失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行重命名工作表命令
+    ''' </summary>
+    Private Function ExecuteRenameSheet(params As JToken) As Boolean
+        Try
+            Dim oldName = params("oldName")?.ToString()
+            Dim newName = params("newName")?.ToString()
+
+            If String.IsNullOrEmpty(oldName) OrElse String.IsNullOrEmpty(newName) Then
+                Return False
+            End If
+
+            _excelApp.Worksheets(oldName).Name = newName
+
+            ShareRibbon.GlobalStatusStrip.ShowInfo($"工作表已重命名: {oldName} -> {newName}")
+            Return True
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteRenameSheet 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"重命名工作表失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行复制工作表命令
+    ''' </summary>
+    Private Function ExecuteCopySheet(params As JToken) As Boolean
+        Try
+            Dim sourceName = params("sourceName")?.ToString()
+            Dim newName = params("newName")?.ToString()
+
+            If String.IsNullOrEmpty(sourceName) OrElse String.IsNullOrEmpty(newName) Then
+                Return False
+            End If
+
+            Dim sourceWs As Worksheet = _excelApp.Worksheets(sourceName)
+            sourceWs.Copy(After:=sourceWs)
+            
+            ' 复制后的工作表是活动工作表
+            Dim newWs As Worksheet = _excelApp.ActiveSheet
+            newWs.Name = newName
+
+            ShareRibbon.GlobalStatusStrip.ShowInfo($"工作表已复制: {sourceName} -> {newName}")
+            Return True
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteCopySheet 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"复制工作表失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行插入行/列命令
+    ''' </summary>
+    Private Function ExecuteInsertRowCol(params As JToken) As Boolean
+        Try
+            Dim type = params("type")?.ToString()?.ToLower()
+            Dim position = params("position")?.ToString()
+            Dim count = If(params("count")?.Value(Of Integer)(), 1)
+
+            If String.IsNullOrEmpty(type) OrElse String.IsNullOrEmpty(position) Then
+                Return False
+            End If
+
+            Dim ws As Worksheet = _excelApp.ActiveSheet
+
+            For i = 1 To count
+                If type = "row" Then
+                    Dim rowNum = Integer.Parse(position)
+                    ws.Rows(rowNum).Insert(Shift:=XlInsertShiftDirection.xlShiftDown)
+                Else
+                    ws.Columns(position).Insert(Shift:=XlInsertShiftDirection.xlShiftToRight)
+                End If
+            Next
+
+            ShareRibbon.GlobalStatusStrip.ShowInfo($"已插入 {count} {If(type = "row", "行", "列")}")
+            Return True
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteInsertRowCol 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"插入失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行删除行/列命令
+    ''' </summary>
+    Private Function ExecuteDeleteRowCol(params As JToken) As Boolean
+        Try
+            Dim type = params("type")?.ToString()?.ToLower()
+            Dim position = params("position")?.ToString()
+            Dim count = If(params("count")?.Value(Of Integer)(), 1)
+
+            If String.IsNullOrEmpty(type) OrElse String.IsNullOrEmpty(position) Then
+                Return False
+            End If
+
+            Dim ws As Worksheet = _excelApp.ActiveSheet
+
+            If type = "row" Then
+                Dim rowNum = Integer.Parse(position)
+                ws.Rows($"{rowNum}:{rowNum + count - 1}").Delete(Shift:=XlDeleteShiftDirection.xlShiftUp)
+            Else
+                ' 计算列范围
+                ws.Columns($"{position}:{GetColumnOffset(position, count - 1)}").Delete(Shift:=XlDeleteShiftDirection.xlShiftToLeft)
+            End If
+
+            ShareRibbon.GlobalStatusStrip.ShowInfo($"已删除 {count} {If(type = "row", "行", "列")}")
+            Return True
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteDeleteRowCol 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"删除失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行隐藏/显示行/列命令
+    ''' </summary>
+    Private Function ExecuteHideRowCol(params As JToken) As Boolean
+        Try
+            Dim type = params("type")?.ToString()?.ToLower()
+            Dim position = params("position")?.ToString()
+            Dim unhide = If(params("unhide")?.Value(Of Boolean)(), False)
+
+            If String.IsNullOrEmpty(type) OrElse String.IsNullOrEmpty(position) Then
+                Return False
+            End If
+
+            Dim ws As Worksheet = _excelApp.ActiveSheet
+
+            If type = "row" Then
+                Dim rowNum = Integer.Parse(position)
+                ws.Rows(rowNum).Hidden = Not unhide
+            Else
+                ws.Columns(position).Hidden = Not unhide
+            End If
+
+            ShareRibbon.GlobalStatusStrip.ShowInfo($"已{If(unhide, "显示", "隐藏")}{If(type = "row", "行", "列")}: {position}")
+            Return True
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteHideRowCol 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"隐藏/显示失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行保护工作表命令
+    ''' </summary>
+    Private Function ExecuteProtectSheet(params As JToken) As Boolean
+        Try
+            Dim sheetName = params("sheetName")?.ToString()
+            Dim password = params("password")?.ToString()
+            Dim unprotect = If(params("unprotect")?.Value(Of Boolean)(), False)
+
+            Dim ws As Worksheet
+            If String.IsNullOrEmpty(sheetName) Then
+                ws = _excelApp.ActiveSheet
+            Else
+                ws = _excelApp.Worksheets(sheetName)
+            End If
+
+            If unprotect Then
+                ws.Unprotect(Password:=password)
+                ShareRibbon.GlobalStatusStrip.ShowInfo($"工作表保护已取消: {ws.Name}")
+            Else
+                ws.Protect(Password:=password)
+                ShareRibbon.GlobalStatusStrip.ShowInfo($"工作表已保护: {ws.Name}")
+            End If
+
+            Return True
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteProtectSheet 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"保护工作表失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行VBA代码命令（自动回退机制）
+    ''' </summary>
+    Private Function ExecuteVBA(params As JToken) As Boolean
+        Try
+            Dim code = params("code")?.ToString()
+
+            If String.IsNullOrEmpty(code) Then
+                ShareRibbon.GlobalStatusStrip.ShowWarning("ExecuteVBA: 缺少code参数")
+                Return False
+            End If
+
+            ' 处理转义字符
+            code = code.Replace("\n", vbCrLf).Replace("\t", vbTab).Replace("\""", """")
+
+            ' 获取VBProject
+            Dim vbProj As Microsoft.Vbe.Interop.VBProject = Nothing
+            Try
+                vbProj = _excelApp.VBE.ActiveVBProject
+            Catch ex As Exception
+                ShareRibbon.GlobalStatusStrip.ShowWarning("无法访问VBA项目，请在信任中心设置中启用'信任对VBA项目对象模型的访问'")
+                Return False
+            End Try
+
+            If vbProj Is Nothing Then
+                ShareRibbon.GlobalStatusStrip.ShowWarning("无法获取VBA项目")
+                Return False
+            End If
+
+            Dim vbComp As Microsoft.Vbe.Interop.VBComponent = Nothing
+            Dim tempModuleName As String = "TempMod" & DateTime.Now.Ticks.ToString().Substring(0, 8)
+
+            Try
+                ' 创建临时模块
+                vbComp = vbProj.VBComponents.Add(Microsoft.Vbe.Interop.vbext_ComponentType.vbext_ct_StdModule)
+                vbComp.Name = tempModuleName
+
+                ' 检查代码是否已包含Sub/Function定义
+                Dim hasProcedure = System.Text.RegularExpressions.Regex.IsMatch(code, "^\s*(Sub|Function)\s+\w+", System.Text.RegularExpressions.RegexOptions.Multiline Or System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+
+                If hasProcedure Then
+                    vbComp.CodeModule.AddFromString(code)
+                    ' 查找第一个过程名
+                    Dim procMatch = System.Text.RegularExpressions.Regex.Match(code, "^\s*(Sub|Function)\s+(\w+)", System.Text.RegularExpressions.RegexOptions.Multiline Or System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+                    If procMatch.Success Then
+                        Dim procName = procMatch.Groups(2).Value
+                        _excelApp.Run(tempModuleName & "." & procName)
+                    End If
+                Else
+                    ' 包装为Sub
+                    Dim wrappedCode = "Sub Auto_Run()" & vbCrLf & code & vbCrLf & "End Sub"
+                    vbComp.CodeModule.AddFromString(wrappedCode)
+                    _excelApp.Run(tempModuleName & ".Auto_Run")
+                End If
+
+                ShareRibbon.GlobalStatusStrip.ShowInfo("VBA代码执行成功")
+                Return True
+
+            Catch ex As Exception
+                ShareRibbon.GlobalStatusStrip.ShowWarning($"VBA执行失败: {ex.Message}")
+                Return False
+            Finally
+                ' 删除临时模块
+                Try
+                    If vbProj IsNot Nothing AndAlso vbComp IsNot Nothing Then
+                        vbProj.VBComponents.Remove(vbComp)
+                    End If
+                Catch
+                End Try
+            End Try
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteVBA 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"VBA执行失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 获取列偏移后的列字母
+    ''' </summary>
+    Private Function GetColumnOffset(column As String, offset As Integer) As String
+        Dim colNum = 0
+        For Each c In column.ToUpper()
+            colNum = colNum * 26 + (Asc(c) - Asc("A"c) + 1)
+        Next
+        colNum += offset
+        
+        Dim result = ""
+        While colNum > 0
+            colNum -= 1
+            result = Chr(Asc("A"c) + (colNum Mod 26)) & result
+            colNum \= 26
+        End While
+        Return result
     End Function
 
 #End Region

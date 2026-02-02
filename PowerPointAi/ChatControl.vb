@@ -28,6 +28,18 @@ Public Class ChatControl
 
     Private sheetContentItems As New Dictionary(Of String, Tuple(Of System.Windows.Forms.Label, System.Windows.Forms.Button))
 
+    ' 排版上下文：存储待格式化的形状和类型信息
+    Private _reformatShapes As List(Of Object) = Nothing
+    Private _reformatTypes As List(Of String) = Nothing
+
+    ''' <summary>
+    ''' 设置排版上下文，用于规则匹配后应用格式
+    ''' </summary>
+    Public Sub SetReformatContext(shapes As List(Of Object), types As List(Of String))
+        _reformatShapes = shapes
+        _reformatTypes = types
+    End Sub
+
 
     Public Sub New()
         ' 此调用是设计师所必需的。
@@ -232,7 +244,112 @@ Public Class ChatControl
     End Sub
 
     Protected Overrides Function ParseFile(filePath As String) As FileContentResult
+        Try
+            ' 创建一个新的PowerPoint应用程序实例
+            Dim pptApp As New Microsoft.Office.Interop.PowerPoint.Application()
+            pptApp.Visible = Microsoft.Office.Core.MsoTriState.msoFalse
 
+            Dim presentation As Microsoft.Office.Interop.PowerPoint.Presentation = Nothing
+            Try
+                presentation = pptApp.Presentations.Open(filePath, 
+                    ReadOnly:=Microsoft.Office.Core.MsoTriState.msoTrue,
+                    Untitled:=Microsoft.Office.Core.MsoTriState.msoFalse,
+                    WithWindow:=Microsoft.Office.Core.MsoTriState.msoFalse)
+
+                Dim contentBuilder As New StringBuilder()
+                contentBuilder.AppendLine($"文件: {Path.GetFileName(filePath)}")
+                contentBuilder.AppendLine($"共 {presentation.Slides.Count} 张幻灯片")
+                contentBuilder.AppendLine()
+
+                ' 限制处理的幻灯片数量
+                Dim maxSlides As Integer = Math.Min(presentation.Slides.Count, 20)
+
+                For slideIndex As Integer = 1 To maxSlides
+                    Dim slide As Microsoft.Office.Interop.PowerPoint.Slide = presentation.Slides(slideIndex)
+                    contentBuilder.AppendLine($"=== 幻灯片 {slideIndex} ===")
+
+                    ' 遍历幻灯片中的形状
+                    For Each shape As Microsoft.Office.Interop.PowerPoint.Shape In slide.Shapes
+                        Try
+                            ' 检查是否有文本框架
+                            If shape.HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                                If shape.TextFrame.HasText = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                                    Dim text As String = shape.TextFrame.TextRange.Text.Trim()
+                                    If Not String.IsNullOrEmpty(text) Then
+                                        ' 判断形状类型
+                                        Dim shapeType As String = "文本"
+                                        If shape.PlaceholderFormat IsNot Nothing Then
+                                            Select Case shape.PlaceholderFormat.Type
+                                                Case Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderTitle,
+                                                     Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderCenterTitle
+                                                    shapeType = "标题"
+                                                Case Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderSubtitle
+                                                    shapeType = "副标题"
+                                                Case Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderBody
+                                                    shapeType = "正文"
+                                            End Select
+                                        End If
+                                        contentBuilder.AppendLine($"  [{shapeType}] {text}")
+                                    End If
+                                End If
+                            End If
+
+                            ' 检查是否是表格
+                            If shape.HasTable = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                                Dim table = shape.Table
+                                contentBuilder.AppendLine($"  [表格 {table.Rows.Count}行×{table.Columns.Count}列]")
+                                ' 读取表格内容（限制行数）
+                                Dim maxRows = Math.Min(table.Rows.Count, 10)
+                                For rowIdx = 1 To maxRows
+                                    Dim rowContent As New StringBuilder("    ")
+                                    For colIdx = 1 To table.Columns.Count
+                                        Try
+                                            Dim cellText = table.Cell(rowIdx, colIdx).Shape.TextFrame.TextRange.Text.Trim()
+                                            If cellText.Length > 20 Then cellText = cellText.Substring(0, 17) & "..."
+                                            rowContent.Append(cellText & " | ")
+                                        Catch
+                                        End Try
+                                    Next
+                                    contentBuilder.AppendLine(rowContent.ToString().TrimEnd(" |".ToCharArray()))
+                                Next
+                            End If
+                        Catch shapeEx As Exception
+                            Debug.WriteLine($"处理形状时出错: {shapeEx.Message}")
+                        End Try
+                    Next
+
+                    contentBuilder.AppendLine()
+                Next
+
+                If presentation.Slides.Count > maxSlides Then
+                    contentBuilder.AppendLine($"... 共 {presentation.Slides.Count} 张幻灯片，仅显示前 {maxSlides} 张")
+                End If
+
+                Return New FileContentResult With {
+                    .FileName = Path.GetFileName(filePath),
+                    .FileType = "PowerPoint",
+                    .ParsedContent = contentBuilder.ToString(),
+                    .RawData = Nothing
+                }
+
+            Finally
+                If presentation IsNot Nothing Then
+                    presentation.Close()
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(presentation)
+                End If
+                pptApp.Quit()
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(pptApp)
+                GC.Collect()
+                GC.WaitForPendingFinalizers()
+            End Try
+        Catch ex As Exception
+            Debug.WriteLine($"解析PowerPoint文件时出错: {ex.Message}")
+            Return New FileContentResult With {
+                .FileName = Path.GetFileName(filePath),
+                .FileType = "PowerPoint",
+                .ParsedContent = $"[解析PowerPoint文件时出错: {ex.Message}]"
+            }
+        End Try
     End Function
     Protected Overrides Function AppendCurrentSelectedContent(message As String) As String
         Try
@@ -1034,6 +1151,12 @@ Public Class ChatControl
     ''' </summary>
     Protected Overrides Function ExecuteJsonCommand(jsonCode As String, preview As Boolean) As Boolean
         Try
+            ' 预览模式下跳过自动执行（排版/校对模式的JSON用于预览，由用户手动点击应用）
+            If IsInPreviewMode() Then
+                Debug.WriteLine($"[PPTChatControl] 预览模式({GetCurrentResponseMode()})下跳过JSON命令自动执行")
+                Return True ' 返回True表示"成功处理"，避免显示错误
+            End If
+
             ' 使用严格的结构验证
             Dim errorMessage As String = ""
             Dim normalizedJson As JToken = Nothing
@@ -1669,6 +1792,195 @@ Public Class ChatControl
             End If
         Catch ex As Exception
             Debug.WriteLine($"ApplyFontStyle 出错: {ex.Message}")
+        End Try
+    End Sub
+
+#End Region
+
+#Region "排版功能"
+
+    ''' <summary>
+    ''' 处理排版JSON响应（支持规则模式）
+    ''' </summary>
+    Protected Overrides Sub HandleApplyDocumentPlanItem(jsonDoc As JObject)
+        Try
+            ' 检测是否为规则模式
+            If jsonDoc("rules") IsNot Nothing AndAlso jsonDoc("rules").Type = JTokenType.Array Then
+                ApplyReformatRules(jsonDoc)
+                Return
+            End If
+
+            ' 无效格式
+            GlobalStatusStrip.ShowWarning("排版响应格式无效")
+
+        Catch ex As Exception
+            Debug.WriteLine("HandleApplyDocumentPlanItem 错误: " & ex.Message)
+            GlobalStatusStrip.ShowWarning("排版应用出错: " & ex.Message)
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 应用规则模式的排版
+    ''' </summary>
+    Private Sub ApplyReformatRules(jsonDoc As JObject)
+        Try
+            Dim rules = jsonDoc("rules").ToObject(Of List(Of JObject))()
+            Dim sampleClassification = jsonDoc("sampleClassification")?.ToObject(Of List(Of JObject))()
+
+            If rules Is Nothing OrElse rules.Count = 0 Then
+                GlobalStatusStrip.ShowWarning("没有收到有效的排版规则")
+                Return
+            End If
+
+            ' 构建规则字典
+            Dim ruleDict As New Dictionary(Of String, JObject)()
+            For Each rule In rules
+                Dim ruleType = rule("type")?.ToString()
+                If Not String.IsNullOrEmpty(ruleType) AndAlso rule("formatting") IsNot Nothing Then
+                    ruleDict(ruleType) = DirectCast(rule("formatting"), JObject)
+                End If
+            Next
+
+            ' 检查上下文
+            If _reformatShapes Is Nothing OrElse _reformatShapes.Count = 0 Then
+                GlobalStatusStrip.ShowWarning("排版上下文丢失，请重新选择内容并排版")
+                Return
+            End If
+
+            ' 基于样本分类推断规则
+            Dim sampleRuleMap As New Dictionary(Of Integer, String)()
+            If sampleClassification IsNot Nothing Then
+                For Each sc In sampleClassification
+                    Dim idx = sc("sampleIndex")?.ToObject(Of Integer)()
+                    Dim appliedRule = sc("appliedRule")?.ToString()
+                    If idx IsNot Nothing AndAlso Not String.IsNullOrEmpty(appliedRule) Then
+                        sampleRuleMap(idx) = appliedRule
+                    End If
+                Next
+            End If
+
+            ' 应用格式到所有形状
+            Dim appliedCount As Integer = 0
+            Dim defaultRule As String = If(ruleDict.ContainsKey("body"), "body", ruleDict.Keys.FirstOrDefault())
+
+            For i As Integer = 0 To _reformatShapes.Count - 1
+                Try
+                    Dim shp = DirectCast(_reformatShapes(i), Microsoft.Office.Interop.PowerPoint.Shape)
+                    Dim shapeType = If(i < _reformatTypes.Count, _reformatTypes(i), "")
+
+                    ' 确定使用哪个规则
+                    Dim ruleToApply As String = defaultRule
+
+                    If sampleRuleMap.ContainsKey(i) Then
+                        ruleToApply = sampleRuleMap(i)
+                    Else
+                        ' 基于形状类型推断规则
+                        If shapeType.Contains("标题") Then
+                            For Each key In ruleDict.Keys
+                                If key.ToLower().Contains("title") OrElse key = "标题" Then
+                                    ruleToApply = key
+                                    Exit For
+                                End If
+                            Next
+                        ElseIf shapeType.Contains("副标题") Then
+                            For Each key In ruleDict.Keys
+                                If key.ToLower().Contains("subtitle") OrElse key = "副标题" Then
+                                    ruleToApply = key
+                                    Exit For
+                                End If
+                            Next
+                        End If
+                    End If
+
+                    ' 应用规则
+                    If ruleDict.ContainsKey(ruleToApply) Then
+                        Dim formatting = ruleDict(ruleToApply)
+                        ApplyFormattingToShape(shp, formatting)
+                        appliedCount += 1
+                    End If
+                Catch ex As Exception
+                    Debug.WriteLine($"应用形状 {i} 格式失败: " & ex.Message)
+                End Try
+            Next
+
+            ' 清理上下文
+            _reformatShapes = Nothing
+            _reformatTypes = Nothing
+
+            GlobalStatusStrip.ShowInfo($"排版完成，共处理 {appliedCount} 个文本框")
+
+        Catch ex As Exception
+            Debug.WriteLine("ApplyReformatRules 错误: " & ex.Message)
+            GlobalStatusStrip.ShowWarning("应用排版规则出错: " & ex.Message)
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 应用格式化属性到形状
+    ''' </summary>
+    Private Sub ApplyFormattingToShape(shp As Microsoft.Office.Interop.PowerPoint.Shape, formatting As JObject)
+        Try
+            If shp.HasTextFrame <> Microsoft.Office.Core.MsoTriState.msoTrue Then Return
+
+            Dim textRange = shp.TextFrame.TextRange
+
+            ' 中文字体
+            If formatting("fontNameCN") IsNot Nothing Then
+                Try
+                    textRange.Font.NameFarEast = formatting("fontNameCN").ToString()
+                Catch
+                End Try
+            End If
+
+            ' 英文字体
+            If formatting("fontNameEN") IsNot Nothing Then
+                Try
+                    textRange.Font.Name = formatting("fontNameEN").ToString()
+                Catch
+                End Try
+            End If
+
+            ' 字号
+            If formatting("fontSize") IsNot Nothing Then
+                Dim fontSize As Single = 0
+                Single.TryParse(formatting("fontSize").ToString(), fontSize)
+                If fontSize > 0 Then
+                    Try
+                        textRange.Font.Size = fontSize
+                    Catch
+                    End Try
+                End If
+            End If
+
+            ' 加粗
+            If formatting("bold") IsNot Nothing Then
+                Try
+                    Dim bold As Boolean = formatting("bold").ToObject(Of Boolean)()
+                    textRange.Font.Bold = If(bold, Microsoft.Office.Core.MsoTriState.msoTrue, Microsoft.Office.Core.MsoTriState.msoFalse)
+                Catch
+                End Try
+            End If
+
+            ' 对齐方式
+            If formatting("alignment") IsNot Nothing Then
+                Dim alignment As String = formatting("alignment").ToString().ToLower()
+                Try
+                    Select Case alignment
+                        Case "left"
+                            textRange.ParagraphFormat.Alignment = Microsoft.Office.Interop.PowerPoint.PpParagraphAlignment.ppAlignLeft
+                        Case "center"
+                            textRange.ParagraphFormat.Alignment = Microsoft.Office.Interop.PowerPoint.PpParagraphAlignment.ppAlignCenter
+                        Case "right"
+                            textRange.ParagraphFormat.Alignment = Microsoft.Office.Interop.PowerPoint.PpParagraphAlignment.ppAlignRight
+                        Case "justify"
+                            textRange.ParagraphFormat.Alignment = Microsoft.Office.Interop.PowerPoint.PpParagraphAlignment.ppAlignJustify
+                    End Select
+                Catch
+                End Try
+            End If
+
+        Catch ex As Exception
+            Debug.WriteLine("ApplyFormattingToShape 出错: " & ex.Message)
         End Try
     End Sub
 

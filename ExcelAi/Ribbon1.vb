@@ -1,4 +1,4 @@
-' WordAi\Ribbon1.vb
+﻿' WordAi\Ribbon1.vb
 Imports System.Diagnostics
 Imports System.Text.RegularExpressions
 Imports System.Windows.Forms
@@ -58,12 +58,12 @@ Public Class Ribbon1
 
     Protected Overrides Async Sub DataAnalysisButton_Click(sender As Object, e As RibbonControlEventArgs)
         If String.IsNullOrWhiteSpace(ConfigSettings.ApiKey) Then
-            MsgBox("请输入ApiKey！")
+            GlobalStatusStripAll.ShowWarning("请输入ApiKey！")
             Return
         End If
 
         If String.IsNullOrWhiteSpace(ConfigSettings.ApiUrl) Then
-            MsgBox("请选择大模型！")
+            GlobalStatusStripAll.ShowWarning("请选择大模型！")
             Return
         End If
 
@@ -125,10 +125,10 @@ Public Class Ribbon1
                     WriteResponseToSheet(response)
                 End If
             Else
-                MsgBox("选中的单元格无文本内容！")
+                GlobalStatusStripAll.ShowWarning("选中的单元格无文本内容！")
             End If
         Else
-            MsgBox("请选择一个单元格区域！")
+            GlobalStatusStripAll.ShowWarning("请选择一个单元格区域！")
 
         End If
 
@@ -297,10 +297,7 @@ Public Class Ribbon1
         MessageBox.Show("AI续写功能主要用于Word和PowerPoint文档，Excel暂不支持此功能。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
     End Sub
 
-    ' 接受补全功能 - Excel暂不支持
-    Protected Overrides Sub AcceptCompletionButton_Click(sender As Object, e As RibbonControlEventArgs)
-        MessageBox.Show("AI自动补全功能主要用于Word和PowerPoint文档，Excel暂不支持此功能。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
-    End Sub
+
 
     ' 模板排版功能 - Excel暂不支持
     Protected Overrides Sub TemplateFormatButton_Click(sender As Object, e As RibbonControlEventArgs)

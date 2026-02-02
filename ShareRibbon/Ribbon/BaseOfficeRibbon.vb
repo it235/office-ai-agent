@@ -1,4 +1,4 @@
-' ShareRibbon\Ribbon\BaseOfficeRibbon.vb
+﻿' ShareRibbon\Ribbon\BaseOfficeRibbon.vb
 Imports System.IO
 Imports System.Net
 Imports System.Net.Http
@@ -150,9 +150,6 @@ Public MustInherit Class BaseOfficeRibbon
 
     ' AI续写按钮点击事件（抽象方法，由子类实现）
     Protected MustOverride Sub ContinuationButton_Click(sender As Object, e As RibbonControlEventArgs) Handles ContinuationButton.Click
-
-    ' 接受补全按钮点击事件（抽象方法，由子类实现）
-    Protected MustOverride Sub AcceptCompletionButton_Click(sender As Object, e As RibbonControlEventArgs) Handles AcceptCompletionButton.Click
 
     ' 模板排版按钮点击事件（抽象方法，由子类实现）
     Protected MustOverride Sub TemplateFormatButton_Click(sender As Object, e As RibbonControlEventArgs) Handles TemplateFormatButton.Click

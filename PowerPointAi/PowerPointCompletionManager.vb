@@ -20,6 +20,7 @@ Public Class PowerPointCompletionManager
     Private _isEnabled As Boolean = False
     Private _debounceTimer As System.Threading.Timer
     Private _lastShapeText As String = ""
+    Private _lastFullShapeContent As String = ""  ' 用于检测内容是否真正变化
     Private _uiSyncContext As SynchronizationContext  ' UI线程同步上下文
     Private _cancellationTokenSource As CancellationTokenSource
     
@@ -148,6 +149,16 @@ Public Class PowerPointCompletionManager
             If String.IsNullOrWhiteSpace(shapeText) OrElse shapeText.Length < 3 Then
                 Return
             End If
+
+            ' 检查形状内容是否真正变化（核心：防止光标移动触发补全）
+            Dim cleanShapeText = shapeText.TrimEnd(vbCr, vbLf)
+            If cleanShapeText = _lastFullShapeContent Then
+                ' 形状内容未变化，仅是光标移动，不触发补全
+                Return
+            End If
+
+            ' 更新形状内容记录
+            _lastFullShapeContent = cleanShapeText
             
             ' 获取光标前的文本（简化处理，使用当前段落文本）
             Dim textBeforeCursor = textRange.Text
@@ -160,11 +171,13 @@ Public Class PowerPointCompletionManager
                 Return
             End If
             
-            ' 检查文本是否真的发生了变化（防抖核心逻辑）
+            ' 检查文本是否真的发生了变化（二次防抖）
             If textBeforeCursor = _lastShapeText Then
-                Debug.WriteLine("[PPTCompletion] 文本未变化，跳过请求")
+                Debug.WriteLine("[PPTCompletion] 光标前文本未变化，跳过请求")
                 Return
             End If
+
+            Debug.WriteLine($"[PPTCompletion] 内容变化检测到，准备请求补全")
             
             ' 取消之前的定时器和请求
             CancelPendingOperations()

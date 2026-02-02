@@ -366,6 +366,9 @@ Public MustInherit Class BaseChatControl
                     HandleApplyDocumentPlanItem(jsonDoc)
                 Case "rejectShowComparison"
                     ' 排版答案内容格式有误，重试
+                Case "retryReformat"
+                    ' JSON解析失败，重试排版请求
+                    HandleRetryReformat(jsonDoc)
 
                 Case "applyRevisionAccept" ' 前端请求接受单个 Revision
                     HandleApplyRevisionAccept(jsonDoc)
@@ -1252,93 +1255,98 @@ Public MustInherit Class BaseChatControl
                     currentWorkingDir = GetCurrentWorkingDirectory()
                 End Sub)
 
-                If String.IsNullOrEmpty(currentWorkingDir) Then
-                    Me.Invoke(Sub()
-                        GlobalStatusStrip.ShowWarning("请保存当前文件，并且把引用文件和当前文件放在同一目录下后重试")
-                        ExecuteJavaScriptAsyncJS("showFileParsingProgress(false)")
-                    End Sub)
-                    Return
-                End If
+                         For Each filePath As String In filePaths
+                             Try
+                                 processedFiles += 1
 
-                For Each filePath As String In filePaths
-                    Try
-                        processedFiles += 1
-                        
-                        ' 更新进度
-                        Me.Invoke(Sub()
-                            GlobalStatusStrip.ShowInfo($"正在解析文件 ({processedFiles}/{totalFiles}): {Path.GetFileName(filePath)}")
-                            ExecuteJavaScriptAsyncJS($"updateFileParsingProgress({processedFiles}, {totalFiles}, '{EscapeJsString(Path.GetFileName(filePath))}')")
-                        End Sub)
+                                 ' 更新进度
+                                 Me.Invoke(Sub()
+                                               GlobalStatusStrip.ShowInfo($"正在解析文件 ({processedFiles}/{totalFiles}): {Path.GetFileName(filePath)}")
+                                               ExecuteJavaScriptAsyncJS($"updateFileParsingProgress({processedFiles}, {totalFiles}, '{EscapeJsString(Path.GetFileName(filePath))}')")
+                                           End Sub)
 
-                        ' 检查文件是否为绝对路径
-                        Dim fullFilePath As String = filePath
+                                 ' 确定完整文件路径
+                                 Dim fullFilePath As String = filePath
 
-                        ' 如果不是绝对路径，则尝试在当前工作目录下查找
-                        If Not Path.IsPathRooted(filePath) AndAlso Not String.IsNullOrEmpty(currentWorkingDir) Then
-                            fullFilePath = Path.Combine(currentWorkingDir, Path.GetFileName(filePath))
-                            Debug.WriteLine($"尝试在工作目录查找文件: {fullFilePath}")
-                        End If
+                                 ' 如果是绝对路径且文件存在，直接使用
+                                 If Path.IsPathRooted(filePath) AndAlso File.Exists(filePath) Then
+                                     fullFilePath = filePath
+                                     Debug.WriteLine($"使用绝对路径: {fullFilePath}")
+                                 ElseIf Not String.IsNullOrEmpty(currentWorkingDir) Then
+                                     ' 尝试在当前工作目录下查找
+                                     Dim tryPath = Path.Combine(currentWorkingDir, Path.GetFileName(filePath))
+                                     If File.Exists(tryPath) Then
+                                         fullFilePath = tryPath
+                                         Debug.WriteLine($"在工作目录找到文件: {fullFilePath}")
+                                     End If
+                                 End If
 
-                        If File.Exists(fullFilePath) Then
-                            ' 根据文件扩展名选择合适的解析方法
-                            Dim fileExtension As String = Path.GetExtension(fullFilePath).ToLower()
-                            Dim fileContentResult As FileContentResult = Nothing
+                                 If File.Exists(fullFilePath) Then
+                                     ' 根据文件扩展名选择合适的解析方法
+                                     Dim fileExtension As String = Path.GetExtension(fullFilePath).ToLower()
+                                     Dim fileContentResult As FileContentResult = Nothing
 
-                            Select Case fileExtension
-                                Case ".xlsx", ".xls", ".xlsm", ".xlsb"
-                                    ' Excel文件解析需要在主线程
-                                    Me.Invoke(Sub()
-                                        fileContentResult = ParseFile(fullFilePath)
-                                    End Sub)
-                                Case ".docx", ".doc"
-                                    Me.Invoke(Sub()
-                                        fileContentResult = ParseFile(fullFilePath)
-                                    End Sub)
-                                Case ".csv", ".txt"
-                                    fileContentResult = _fileParserService.ParseTextFile(fullFilePath)
-                                Case Else
-                                    fileContentResult = New FileContentResult With {
+                                     Select Case fileExtension
+                                         Case ".xlsx", ".xls", ".xlsm", ".xlsb"
+                                             ' Excel文件解析需要在主线程
+                                             Me.Invoke(Sub()
+                                                           fileContentResult = ParseFile(fullFilePath)
+                                                       End Sub)
+                                         Case ".docx", ".doc", ".wps"
+                                             Me.Invoke(Sub()
+                                                           fileContentResult = ParseFile(fullFilePath)
+                                                       End Sub)
+                                         Case ".pptx", ".ppt"
+                                             Me.Invoke(Sub()
+                                                           fileContentResult = ParseFile(fullFilePath)
+                                                       End Sub)
+                                         Case ".csv", ".txt"
+                                             fileContentResult = _fileParserService.ParseTextFile(fullFilePath)
+                                         Case Else
+                                             fileContentResult = New FileContentResult With {
                                         .FileName = Path.GetFileName(fullFilePath),
                                         .FileType = "Unknown",
                                         .ParsedContent = $"[不支持的文件类型: {fileExtension}]"
                                     }
-                            End Select
+                                     End Select
 
-                            If fileContentResult IsNot Nothing Then
-                                parsedFiles.Add(fileContentResult)
-                                fileContentBuilder.AppendLine($"文件名: {fileContentResult.FileName}")
-                                fileContentBuilder.AppendLine($"文件内容:")
-                                fileContentBuilder.AppendLine(fileContentResult.ParsedContent)
-                                fileContentBuilder.AppendLine("---")
-                            End If
-                        Else
-                            fileContentBuilder.AppendLine($"文件 '{Path.GetFileName(filePath)}' 未找到或路径无效")
-                            Debug.WriteLine($"文件未找到: {fullFilePath}")
-                        End If
-                    Catch ex As Exception
-                        Debug.WriteLine($"Error processing file '{filePath}': {ex.Message}")
-                        fileContentBuilder.AppendLine($"处理文件 '{Path.GetFileName(filePath)}' 时出错: {ex.Message}")
-                        fileContentBuilder.AppendLine("---")
-                    End Try
-                Next
+                                     If fileContentResult IsNot Nothing Then
+                                         parsedFiles.Add(fileContentResult)
+                                         fileContentBuilder.AppendLine($"文件名: {fileContentResult.FileName}")
+                                         fileContentBuilder.AppendLine($"文件内容:")
+                                         fileContentBuilder.AppendLine(fileContentResult.ParsedContent)
+                                         fileContentBuilder.AppendLine("---")
+                                     End If
+                                 Else
+                                     fileContentBuilder.AppendLine($"文件 '{Path.GetFileName(filePath)}' 未找到，尝试路径: {fullFilePath}")
+                                     Debug.WriteLine($"文件未找到: {fullFilePath}")
+                                 End If
+                             Catch ex As Exception
+                                 Debug.WriteLine($"Error processing file '{filePath}': {ex.Message}")
+                                 fileContentBuilder.AppendLine($"处理文件 '{Path.GetFileName(filePath)}' 时出错: {ex.Message}")
+                                 fileContentBuilder.AppendLine("---")
+                             End Try
+                         Next
 
-                fileContentBuilder.AppendLine("--- 文件内容结束 ---" & vbCrLf)
+                         fileContentBuilder.AppendLine("--- 文件内容结束 ---" & vbCrLf)
 
-                ' 文件解析完成，在主线程继续处理消息
-                Me.Invoke(Sub()
-                    GlobalStatusStrip.ShowInfo($"文件解析完成，共解析 {parsedFiles.Count} 个文件")
-                    ExecuteJavaScriptAsyncJS("showFileParsingProgress(false)")
-                    
-                    Dim questionWithFiles = question & " 用户提问结束，后续引用的文件都在同一目录下所以可以放心读取。 ---"
-                    HandleSendMessageCore(questionWithFiles, originalQuestion, filePaths, selectedContents, messageValue, fileContentBuilder.ToString())
-                End Sub)
+                         ' 文件解析完成，在主线程继续处理消息
+                         Me.Invoke(Sub()
+                                       GlobalStatusStrip.ShowInfo($"文件解析完成，共解析 {parsedFiles.Count} 个文件")
+                                       ExecuteJavaScriptAsyncJS("showFileParsingProgress(false)")
 
-            Catch ex As Exception
-                Debug.WriteLine($"HandleSendMessageWithFilesAsync 出错: {ex.Message}")
-                Me.Invoke(Sub()
-                    GlobalStatusStrip.ShowWarning($"文件解析失败: {ex.Message}")
-                    ExecuteJavaScriptAsyncJS("showFileParsingProgress(false)")
-                End Sub)
+                                       Dim questionWithFiles = question & " 用户提问结束，后续引用的文件都在同一目录下所以可以放心读取。 ---"
+                                       HandleSendMessageCore(questionWithFiles, originalQuestion, filePaths, selectedContents, messageValue, fileContentBuilder.ToString())
+                                   End Sub)
+
+                     Catch ex As Exception
+                         Debug.WriteLine($"HandleSendMessageWithFilesAsync 出错: {ex.Message}")
+                         Me.Invoke(Sub()
+                                       GlobalStatusStrip.ShowWarning($"文件解析失败: {ex.Message}")
+                                       ExecuteJavaScriptAsyncJS("showFileParsingProgress(false)")
+                                       ' 重置发送按钮状态
+                                       ExecuteJavaScriptAsyncJS("changeSendButton()")
+                                   End Sub)
             End Try
         End Sub)
     End Sub
@@ -2102,6 +2110,33 @@ Public MustInherit Class BaseChatControl
 
     ' 在类字段区：新增 response mode 映射
     Protected _responseModeMap As New Dictionary(Of String, String)() ' responseUuid -> mode (e.g. "reformat","proofread","revisions_only","comparison_only")
+
+    ''' <summary>
+    ''' 获取当前响应的模式（用于子类检查是否应该跳过某些操作）
+    ''' </summary>
+    Protected Function GetCurrentResponseMode() As String
+        If String.IsNullOrEmpty(_finalUuid) Then Return ""
+        If _responseModeMap.ContainsKey(_finalUuid) Then
+            Return _responseModeMap(_finalUuid)
+        End If
+        Return ""
+    End Function
+
+    ''' <summary>
+    ''' 检查当前是否处于排版模式（排版模式下JSON不应自动执行命令）
+    ''' </summary>
+    Protected Function IsInReformatMode() As Boolean
+        Return GetCurrentResponseMode() = "reformat"
+    End Function
+
+    ''' <summary>
+    ''' 检查当前是否处于预览模式（预览模式下JSON用于前端显示，不应自动执行命令）
+    ''' 包括：排版(reformat)、校对(proofread)
+    ''' </summary>
+    Protected Function IsInPreviewMode() As Boolean
+        Dim mode = GetCurrentResponseMode()
+        Return mode = "reformat" OrElse mode = "proofread"
+    End Function
 
     ' 测试方法已移除，如需调试请使用单独的测试类
 
@@ -3309,5 +3344,69 @@ Public MustInherit Class BaseChatControl
 
 
     Protected Overridable Sub HandleApplyDocumentPlanItem(jsonDoc As JObject)
+    End Sub
+
+    ' 排版重试相关
+    Private _reformatRetryContext As New Dictionary(Of String, Tuple(Of String, String))() ' uuid -> (systemPrompt, userMessage)
+    Private _reformatRetryCount As New Dictionary(Of String, Integer)() ' uuid -> retry count
+
+    ''' <summary>
+    ''' 保存排版请求上下文，用于重试
+    ''' </summary>
+    Public Sub SaveReformatContext(uuid As String, systemPrompt As String, userMessage As String)
+        _reformatRetryContext(uuid) = Tuple.Create(systemPrompt, userMessage)
+        _reformatRetryCount(uuid) = 0
+    End Sub
+
+    ''' <summary>
+    ''' 处理排版JSON解析失败的重试请求
+    ''' </summary>
+    Protected Overridable Async Sub HandleRetryReformat(jsonDoc As JObject)
+        Try
+            Dim uuid As String = If(jsonDoc("uuid")?.ToString(), "")
+            Dim errorMsg As String = If(jsonDoc("error")?.ToString(), "格式不符合规范")
+
+            If String.IsNullOrEmpty(uuid) Then
+                GlobalStatusStrip.ShowWarning("重试失败：缺少uuid")
+                Return
+            End If
+
+            ' 检查重试次数
+            Dim retryCount As Integer = 0
+            If _reformatRetryCount.ContainsKey(uuid) Then
+                retryCount = _reformatRetryCount(uuid)
+            End If
+
+            If retryCount >= 1 Then
+                GlobalStatusStrip.ShowWarning("排版重试次数已达上限")
+                Return
+            End If
+
+            _reformatRetryCount(uuid) = retryCount + 1
+
+            ' 构建重试提示
+            Dim retryPrompt As New System.Text.StringBuilder()
+            retryPrompt.AppendLine("你上次返回的JSON格式有错误，请修正后重新返回。")
+            retryPrompt.AppendLine()
+            retryPrompt.AppendLine($"错误信息：{errorMsg}")
+            retryPrompt.AppendLine()
+            retryPrompt.AppendLine("请注意以下JSON格式要求：")
+            retryPrompt.AppendLine("1. 所有字符串必须使用英文双引号("")")
+            retryPrompt.AppendLine("2. 不要在数组或对象的最后一个元素后加逗号")
+            retryPrompt.AppendLine("3. 属性名必须用双引号包裹")
+            retryPrompt.AppendLine("4. 不要在JSON中包含注释")
+            retryPrompt.AppendLine("5. 确保所有括号正确匹配")
+            retryPrompt.AppendLine()
+            retryPrompt.AppendLine("请只返回修正后的纯JSON，不要包含任何解释文字或代码块标记。")
+
+            GlobalStatusStrip.ShowWarning("JSON解析失败，正在重试...")
+
+            ' 发送重试请求
+            Await Send(retryPrompt.ToString(), "", False, "reformat")
+
+        Catch ex As Exception
+            Debug.WriteLine("HandleRetryReformat 错误: " & ex.Message)
+            GlobalStatusStrip.ShowWarning("重试失败: " & ex.Message)
+        End Try
     End Sub
 End Class

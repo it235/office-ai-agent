@@ -19,6 +19,7 @@ Public Class WordCompletionManager
     Private _isEnabled As Boolean = False
     Private _debounceTimer As System.Threading.Timer
     Private _lastParagraphText As String = ""
+    Private _lastFullParagraphContent As String = ""  ' 用于检测内容是否真正变化
     Private _uiSyncContext As SynchronizationContext  ' UI线程同步上下文
     Private _cancellationTokenSource As CancellationTokenSource
 
@@ -109,8 +110,6 @@ Public Class WordCompletionManager
     ''' </summary>
     Private Sub OnSelectionChange(sel As Microsoft.Office.Interop.Word.Selection)
         Try
-            Debug.WriteLine($"[WordCompletion] OnSelectionChange 触发, _isEnabled={_isEnabled}")
-
             If Not _isEnabled OrElse Not ChatSettings.EnableAutocomplete Then
                 Return
             End If
@@ -142,6 +141,16 @@ Public Class WordCompletionManager
                 Return
             End If
 
+            ' 检查段落内容是否真正变化（核心：防止光标移动触发补全）
+            Dim cleanParagraphText = paragraphText.TrimEnd(vbCr, vbLf)
+            If cleanParagraphText = _lastFullParagraphContent Then
+                ' 段落内容未变化，仅是光标移动，不触发补全
+                Return
+            End If
+
+            ' 更新段落内容记录
+            _lastFullParagraphContent = cleanParagraphText
+
             ' 获取光标前的文本
             Dim cursorPos = sel.Range.Start
             Dim paraStart = currentParagraph.Range.Start
@@ -156,11 +165,13 @@ Public Class WordCompletionManager
                 Return
             End If
 
-            ' 检查文本是否真的发生了变化（防抖核心逻辑）
+            ' 检查光标位置的文本是否变化（二次防抖）
             If textBeforeCursor = _lastParagraphText Then
-                Debug.WriteLine("[WordCompletion] 文本未变化，跳过请求")
+                Debug.WriteLine("[WordCompletion] 光标前文本未变化，跳过请求")
                 Return
             End If
+
+            Debug.WriteLine($"[WordCompletion] 内容变化检测到，准备请求补全")
 
             ' 取消之前的定时器和请求
             CancelPendingOperations()

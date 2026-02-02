@@ -81,4 +81,16 @@
             Return CType(_resourceManager.GetObject("aiwrite"), System.Drawing.Image)
         End Get
     End Property
+
+    Public Shared ReadOnly Property autocomplete() As System.Drawing.Image
+        Get
+            Return CType(_resourceManager.GetObject("autocomplete1"), System.Drawing.Image)
+        End Get
+    End Property
+
+    Public Shared ReadOnly Property promptconfig() As System.Drawing.Image
+        Get
+            Return CType(_resourceManager.GetObject("promptconfig"), System.Drawing.Image)
+        End Get
+    End Property
 End Class

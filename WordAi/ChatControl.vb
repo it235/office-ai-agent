@@ -33,6 +33,20 @@ Public Class ChatControl
 
     Private sheetContentItems As New Dictionary(Of String, Tuple(Of System.Windows.Forms.Label, System.Windows.Forms.Button))
 
+    ' 排版上下文：存储待格式化的段落和样式信息
+    Private _reformatParagraphs As List(Of Object) = Nothing
+    Private _reformatStyles As List(Of String) = Nothing
+    Private _reformatTypes As List(Of String) = Nothing ' text/image/table/formula
+
+    ''' <summary>
+    ''' 设置排版上下文，用于规则匹配后应用格式
+    ''' </summary>
+    Public Sub SetReformatContext(paragraphs As List(Of Object), styles As List(Of String), Optional types As List(Of String) = Nothing)
+        _reformatParagraphs = paragraphs
+        _reformatStyles = styles
+        _reformatTypes = types
+    End Sub
+
 
     Public Sub New()
         ' 此调用是设计师所必需的。
@@ -208,21 +222,106 @@ Public Class ChatControl
     ' 解析 Word 文件为文本（用于 file 引用）
     Protected Overrides Function ParseFile(filePath As String) As FileContentResult
         Try
-            Dim app = Globals.ThisAddIn.Application
-            Dim doc = app.Documents.Open(FileName:=filePath, ReadOnly:=True, Visible:=False)
-            Dim txt = doc.Content.Text
-            doc.Close(False)
-            Return New FileContentResult With {
-                .FileName = Path.GetFileName(filePath),
-                .FileType = "Word",
-                .ParsedContent = txt,
-                .RawData = Nothing
-            }
+            ' 创建一个新的Word应用程序实例（避免影响当前文档）
+            Dim wordApp As New Microsoft.Office.Interop.Word.Application()
+            wordApp.Visible = False
+            wordApp.DisplayAlerts = Microsoft.Office.Interop.Word.WdAlertLevel.wdAlertsNone
+
+            Dim doc As Microsoft.Office.Interop.Word.Document = Nothing
+            Try
+                doc = wordApp.Documents.Open(FileName:=filePath, ReadOnly:=True, Visible:=False)
+                Dim contentBuilder As New StringBuilder()
+
+                contentBuilder.AppendLine($"文件: {Path.GetFileName(filePath)}")
+                contentBuilder.AppendLine($"共 {doc.Paragraphs.Count} 个段落")
+                contentBuilder.AppendLine()
+
+                ' 限制处理的段落数量
+                Dim maxParagraphs As Integer = Math.Min(doc.Paragraphs.Count, 50)
+                Dim paraIndex As Integer = 0
+
+                For Each para As Microsoft.Office.Interop.Word.Paragraph In doc.Paragraphs
+                    paraIndex += 1
+                    If paraIndex > maxParagraphs Then Exit For
+
+                    Dim text As String = para.Range.Text.Trim()
+                    If Not String.IsNullOrEmpty(text) AndAlso text <> vbCr Then
+                        ' 获取段落样式
+                        Dim styleName As String = ""
+                        Try
+                            styleName = para.Style.NameLocal
+                        Catch
+                        End Try
+
+                        ' 判断是否是标题
+                        Dim prefix As String = $"段落{paraIndex}"
+                        If styleName.Contains("标题") OrElse styleName.ToLower().Contains("heading") Then
+                            prefix = $"[{styleName}]"
+                        End If
+
+                        contentBuilder.AppendLine($"{prefix}: {text}")
+                    End If
+                Next
+
+                ' 处理表格
+                If doc.Tables.Count > 0 Then
+                    contentBuilder.AppendLine()
+                    contentBuilder.AppendLine($"=== 文档包含 {doc.Tables.Count} 个表格 ===")
+                    
+                    Dim tableIndex As Integer = 0
+                    For Each tbl As Microsoft.Office.Interop.Word.Table In doc.Tables
+                        tableIndex += 1
+                        If tableIndex > 5 Then Exit For ' 限制表格数量
+                        
+                        contentBuilder.AppendLine($"表格 {tableIndex}: {tbl.Rows.Count}行×{tbl.Columns.Count}列")
+                        
+                        ' 读取表格前几行
+                        Dim maxRows = Math.Min(tbl.Rows.Count, 5)
+                        For rowIdx = 1 To maxRows
+                            Dim rowContent As New StringBuilder("  ")
+                            For colIdx = 1 To tbl.Columns.Count
+                                Try
+                                    Dim cellText = tbl.Cell(rowIdx, colIdx).Range.Text.Trim()
+                                    cellText = cellText.Replace(vbCr, "").Replace(Chr(7), "")
+                                    If cellText.Length > 20 Then cellText = cellText.Substring(0, 17) & "..."
+                                    rowContent.Append(cellText & " | ")
+                                Catch
+                                End Try
+                            Next
+                            contentBuilder.AppendLine(rowContent.ToString().TrimEnd(" |".ToCharArray()))
+                        Next
+                        contentBuilder.AppendLine()
+                    Next
+                End If
+
+                If doc.Paragraphs.Count > maxParagraphs Then
+                    contentBuilder.AppendLine()
+                    contentBuilder.AppendLine($"... 共 {doc.Paragraphs.Count} 个段落，仅显示前 {maxParagraphs} 个")
+                End If
+
+                Return New FileContentResult With {
+                    .FileName = Path.GetFileName(filePath),
+                    .FileType = "Word",
+                    .ParsedContent = contentBuilder.ToString(),
+                    .RawData = Nothing
+                }
+
+            Finally
+                If doc IsNot Nothing Then
+                    doc.Close(False)
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(doc)
+                End If
+                wordApp.Quit()
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(wordApp)
+                GC.Collect()
+                GC.WaitForPendingFinalizers()
+            End Try
         Catch ex As Exception
+            Debug.WriteLine($"解析Word文件时出错: {ex.Message}")
             Return New FileContentResult With {
                 .FileName = Path.GetFileName(filePath),
                 .FileType = "Word",
-                .ParsedContent = $"[解析文档失败: {ex.Message}]"
+                .ParsedContent = $"[解析Word文件时出错: {ex.Message}]"
             }
         End Try
     End Function
@@ -695,12 +794,18 @@ Public Class ChatControl
         Return Nothing
     End Function
 
-    ' 排版功能（使用Word对象模型应用格式化属性）
+    ' 排版功能（支持新的规则模式和旧的逐段落模式）
     Protected Overrides Sub HandleApplyDocumentPlanItem(jsonDoc As JObject)
         Try
             Dim responseUuid As String = If(jsonDoc("uuid") IsNot Nothing, jsonDoc("uuid").ToString(), String.Empty)
 
-            ' 期望收到字段： paraIndex, formatting (对象)
+            ' 检测是否为新的规则模式（有rules字段）
+            If jsonDoc("rules") IsNot Nothing AndAlso jsonDoc("rules").Type = JTokenType.Array Then
+                ApplyReformatRules(jsonDoc)
+                Return
+            End If
+
+            ' 旧模式：逐段落格式化（保留向后兼容）
             Dim paraIndex As Integer = If(jsonDoc("paraIndex") IsNot Nothing, CInt(jsonDoc("paraIndex")), -1)
             Dim formatting As JObject = Nothing
             If jsonDoc("formatting") IsNot Nothing Then
@@ -765,6 +870,115 @@ Public Class ChatControl
         Catch ex As Exception
             Debug.WriteLine("HandleApplyDocumentPlanItem 错误: " & ex.Message)
             GlobalStatusStrip.ShowWarning("排版应用出错: " & ex.Message)
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 应用规则模式的排版（优化版：减少token消耗）
+    ''' </summary>
+    Private Sub ApplyReformatRules(jsonDoc As JObject)
+        Try
+            Dim rules = jsonDoc("rules").ToObject(Of List(Of JObject))()
+            Dim sampleClassification = jsonDoc("sampleClassification")?.ToObject(Of List(Of JObject))()
+
+            If rules Is Nothing OrElse rules.Count = 0 Then
+                GlobalStatusStrip.ShowWarning("没有收到有效的排版规则")
+                Return
+            End If
+
+            ' 构建规则字典
+            Dim ruleDict As New Dictionary(Of String, JObject)()
+            For Each rule In rules
+                Dim ruleType = rule("type")?.ToString()
+                If Not String.IsNullOrEmpty(ruleType) AndAlso rule("formatting") IsNot Nothing Then
+                    ruleDict(ruleType) = DirectCast(rule("formatting"), JObject)
+                End If
+            Next
+
+            ' 如果没有保存的段落上下文，使用当前选中内容
+            If _reformatParagraphs Is Nothing OrElse _reformatParagraphs.Count = 0 Then
+                GlobalStatusStrip.ShowWarning("排版上下文丢失，请重新选择内容并排版")
+                Return
+            End If
+
+            ' 基于样本分类推断所有段落的规则
+            Dim sampleRuleMap As New Dictionary(Of Integer, String)()
+            If sampleClassification IsNot Nothing Then
+                For Each sc In sampleClassification
+                    Dim idx = sc("sampleIndex")?.ToObject(Of Integer)()
+                    Dim appliedRule = sc("appliedRule")?.ToString()
+                    If idx IsNot Nothing AndAlso Not String.IsNullOrEmpty(appliedRule) Then
+                        sampleRuleMap(idx) = appliedRule
+                    End If
+                Next
+            End If
+
+            ' 应用格式到所有段落
+            Dim appliedCount As Integer = 0
+            Dim skippedCount As Integer = 0
+            Dim defaultRule As String = If(ruleDict.ContainsKey("body"), "body", ruleDict.Keys.FirstOrDefault())
+
+            For i As Integer = 0 To _reformatParagraphs.Count - 1
+                Try
+                    ' 检查段落类型，跳过非文本元素
+                    Dim paraType As String = "text"
+                    If _reformatTypes IsNot Nothing AndAlso i < _reformatTypes.Count Then
+                        paraType = _reformatTypes(i)
+                    End If
+
+                    If paraType <> "text" Then
+                        ' 跳过图片、表格、公式等非文本元素
+                        skippedCount += 1
+                        Continue For
+                    End If
+
+                    Dim para = _reformatParagraphs(i)
+                    Dim styleName = If(i < _reformatStyles.Count, _reformatStyles(i), "")
+
+                    ' 确定使用哪个规则
+                    Dim ruleToApply As String = defaultRule
+
+                    ' 先检查是否有样本分类指定
+                    If sampleRuleMap.ContainsKey(i) Then
+                        ruleToApply = sampleRuleMap(i)
+                    Else
+                        ' 基于样式名推断规则
+                        If styleName.Contains("标题") OrElse styleName.ToLower().Contains("heading") Then
+                            ' 找到第一个标题类规则
+                            For Each key In ruleDict.Keys
+                                If key.ToLower().Contains("title") OrElse key.ToLower().Contains("heading") Then
+                                    ruleToApply = key
+                                    Exit For
+                                End If
+                            Next
+                        End If
+                    End If
+
+                    ' 应用规则
+                    If ruleDict.ContainsKey(ruleToApply) Then
+                        Dim formatting = ruleDict(ruleToApply)
+                        ApplyFormattingToRange(para.Range, formatting)
+                        appliedCount += 1
+                    End If
+                Catch ex As Exception
+                    Debug.WriteLine($"应用段落 {i} 格式失败: " & ex.Message)
+                End Try
+            Next
+
+            ' 清理上下文
+            _reformatParagraphs = Nothing
+            _reformatStyles = Nothing
+            _reformatTypes = Nothing
+
+            Dim resultMsg = $"排版完成，共处理 {appliedCount} 个文本段落"
+            If skippedCount > 0 Then
+                resultMsg &= $"，跳过 {skippedCount} 个特殊元素"
+            End If
+            GlobalStatusStrip.ShowInfo(resultMsg)
+
+        Catch ex As Exception
+            Debug.WriteLine("ApplyReformatRules 错误: " & ex.Message)
+            GlobalStatusStrip.ShowWarning("应用排版规则出错: " & ex.Message)
         End Try
     End Sub
 
@@ -1136,6 +1350,12 @@ Public Class ChatControl
     ''' </summary>
     Protected Overrides Function ExecuteJsonCommand(jsonCode As String, preview As Boolean) As Boolean
         Try
+            ' 预览模式下跳过自动执行（排版/校对模式的JSON用于预览，由用户手动点击应用）
+            If IsInPreviewMode() Then
+                Debug.WriteLine($"[WordChatControl] 预览模式({GetCurrentResponseMode()})下跳过JSON命令自动执行")
+                Return True ' 返回True表示"成功处理"，避免显示错误
+            End If
+
             ' 使用严格的结构验证
             Dim errorMessage As String = ""
             Dim normalizedJson As JToken = Nothing

@@ -298,41 +298,67 @@ Public Class PromptManager
 
 单命令格式（必须包含command字段）：
 ```json
-{""command"": ""ApplyFormula"", ""params"": {""range"": ""A1:B10"", ""formula"": ""=SUM(A1:A10)""}}
+{""command"": ""ApplyFormula"", ""params"": {""targetRange"": ""A1:B10"", ""formula"": ""=SUM(A1:A10)""}}
 ```
 
 多命令格式（必须包含commands数组）：
 ```json
-{""commands"": [{""command"": ""WriteData"", ""params"": {""data"": [[""姓名"", ""年龄""], [""张三"", 25]]}}, {""command"": ""ApplyFormula"", ""params"": {""range"": ""C2"", ""formula"": ""=B2*2""}}]}
+{""commands"": [{""command"": ""WriteData"", ""params"": {""data"": [[""姓名"", ""年龄""]], ""targetRange"": ""A1""}}, {""command"": ""FormatRange"", ""params"": {""range"": ""A1:B1"", ""style"": ""header""}}]}
 ```
 
-【Excel command类型 - 只能使用以下5种】
-1. WriteData - 写入数据到单元格区域
-   params: {data:二维数组, targetRange:目标区域}
-2. ApplyFormula - 应用公式到单元格
-   params: {targetRange:单元格区域, formula:公式字符串, fillDown:可选}
-3. FormatRange - 格式化单元格
-   params: {range:区域, style:样式对象}
-4. CreateChart - 创建图表
-   params: {dataRange:数据区域, chartType:图表类型}
-5. CleanData - 清洗数据
-   params: {range:区域, operation:操作类型}
+【Excel支持的22个命令】
+
+=== 基础操作 (5个) ===
+1. ApplyFormula - 应用公式 {targetRange:必需, formula:必需, fillDown:可选}
+2. WriteData - 写入数据 {targetRange:必需, data:必需(单值或二维数组)}
+3. FormatRange - 格式化 {range:必需, style:header/total/data, bold/italic/fontSize/backgroundColor/fontColor, borders:true/""all""/""outline""/""none""}
+4. CreateChart - 创建图表 {dataRange:必需, type:column/line/pie/bar/scatter/area, title:可选, position:可选, seriesNames:系列名称数组, categoryAxis:分类轴范围, legendPosition:right/left/top/bottom}
+5. CleanData - 数据清洗 {range:必需, operation:removeduplicates/fillempty/trim/replace}
+
+=== 数据操作 (8个) ===
+6. SortData - 排序 {range:必需, sortColumn:列号从1开始, order:asc/desc, hasHeader:默认true}
+7. FilterData - 筛选 {range:必需, column:列号, criteria:筛选条件如"">100"", clearFilter:true则清除}
+8. RemoveDuplicates - 删除重复 {range:必需, columns:列号数组(可选), hasHeader:可选}
+9. ConditionalFormat - 条件格式 {range:必需, rule:highlight/databar/colorscale/iconset, condition:可选, color:可选}
+10. MergeCells - 合并单元格 {range:必需, unmerge:true则取消合并}
+11. AutoFit - 自动调整 {range:必需, type:columns/rows/both}
+12. FindReplace - 查找替换 {range:""all""或指定范围, find:必需, replace:必需, matchCase:可选, matchEntireCell:可选}
+13. CreatePivotTable - 透视表 {sourceRange:必需, targetCell:必需, rowFields:数组, valueFields:数组, columnFields:可选}
+
+=== 工作表操作 (4个) ===
+14. CreateSheet - 创建工作表 {name:必需, position:before/after, referenceSheet:可选}
+15. DeleteSheet - 删除工作表 {name:必需}
+16. RenameSheet - 重命名 {oldName:必需, newName:必需}
+17. CopySheet - 复制工作表 {sourceName:必需, newName:必需}
+
+=== 高级功能 (4个) ===
+18. InsertRowCol - 插入行列 {type:row/column, position:行号或列字母, count:默认1}
+19. DeleteRowCol - 删除行列 {type:row/column, position:必需, count:默认1}
+20. HideRowCol - 隐藏行列 {type:row/column, position:必需, unhide:true则取消隐藏}
+21. ProtectSheet - 保护工作表 {sheetName:可选, password:可选, unprotect:true则取消保护}
+
+=== VBA回退 (1个) ===
+22. ExecuteVBA - 执行VBA代码 {code:必需,完整的Sub或Function代码}
+    当以上命令无法满足需求时,生成VBA代码作为回退方案
+
+【动态范围占位符】
+使用 {lastRow} 表示最后一行，{lastCol} 表示最后一列，{selection} 表示当前选择
 
 【绝对禁止】
-- 禁止使用 actions 数组
-- 禁止使用 operations 数组
+- 禁止使用 actions/operations 数组
 - 禁止省略 params 包装
-- 禁止自创任何其他命令（如translateText, TranslateRange等）
-- 禁止使用Word命令(GenerateTOC, BeautifyDocument等)
-- 禁止使用PowerPoint命令(InsertSlide, AddAnimation等)
+- 禁止自创其他命令（如translateText等）
+- 禁止使用Word/PowerPoint专属命令
 - 禁止返回不带代码块的裸JSON
 
 【不支持的功能 - 请告知用户使用工具栏按钮】
-- 翻译功能：请告知用户点击工具栏上的「AI翻译」按钮进行翻译操作
+- 翻译功能：请告知用户点击工具栏上的「AI翻译」按钮
 - 校对功能：请告知用户点击工具栏上的「AI校对」按钮
-- 续写功能：请告知用户点击工具栏上的「AI续写」按钮
 
-如果用户需求不明确或无法通过以上5种命令实现，直接用中文回复询问或建议用户使用相应的工具栏功能。"
+【决策优先级】
+1. 优先使用上述22个命令处理需求
+2. 复杂需求无法用命令实现时，使用ExecuteVBA生成VBA代码
+3. 需求不明确时，用中文询问用户"
     End Function
     
     ''' <summary>
@@ -350,49 +376,64 @@ Public Class PromptManager
 
 你必须且只能返回以下两种格式之一：
 
-单命令格式（必须包含command字段）：
+单命令格式：
 ```json
-{""command"": ""InsertText"", ""params"": {""text"": ""插入的内容""}}
+{""command"": ""InsertText"", ""params"": {""content"": ""插入的内容"", ""position"": ""cursor""}}
 ```
 
-多命令格式（必须包含commands数组）：
+多命令格式：
 ```json
-{""commands"": [{""command"": ""InsertText"", ""params"": {""text"": ""第一段内容""}}, {""command"": ""InsertParagraph"", ""params"": {""count"": 1}}]}
+{""commands"": [{""command"": ""InsertText"", ""params"": {""content"": ""标题""}}, {""command"": ""FormatText"", ""params"": {""range"": ""selection"", ""bold"": true}}]}
 ```
+
+【Word支持的22个命令】
+
+=== 基础文本操作 (5个) ===
+1. InsertText - 插入文本 {content:必需, position:cursor/start/end}
+2. FormatText - 格式化 {range:selection/all, bold/italic/fontSize/fontName/underline/color}
+3. ReplaceText - 查找替换 {find:必需, replace:必需, matchCase:可选}
+4. DeleteText - 删除文本 {range:selection/all}
+5. CopyPasteText - 复制粘贴 {sourceRange:必需, targetPosition:可选}
+
+=== 段落和样式 (5个) ===
+6. ApplyStyle - 应用样式 {styleName:必需如""标题 1"", range:selection/paragraph}
+7. SetParagraphFormat - 段落格式 {alignment:left/center/right/justify, firstLineIndent/beforeSpacing/afterSpacing}
+8. InsertParagraph - 插入段落 {count:默认1, pageBreak:true则分页}
+9. SetLineSpacing - 行距 {spacing:1/1.5/2, range:selection/all}
+10. SetIndent - 缩进 {left/right/firstLine:cm值}
+
+=== 表格操作 (4个) ===
+11. InsertTable - 插入表格 {rows:必需, cols:必需, data:可选}
+12. FormatTable - 格式化表格 {tableIndex:从1开始, style/borders/headerRow}
+13. InsertTableRow - 插入行 {tableIndex:必需, position:after/before}
+14. DeleteTableRow - 删除行 {tableIndex:必需, rowIndex:必需}
+
+=== 文档结构 (4个) ===
+15. GenerateTOC - 生成目录 {position:start/cursor, levels:1-9}
+16. InsertHeader - 页眉 {content:必需, alignment:left/center/right}
+17. InsertFooter - 页脚 {content:必需, alignment:left/center/right}
+18. InsertPageNumber - 页码 {position:header/footer, alignment}
+
+=== 文档美化 (2个) ===
+19. BeautifyDocument - 美化 {theme:{h1/h2/body设置}, margins:{top/bottom/left/right}}
+20. SetPageMargins - 页边距 {top/bottom/left/right:cm值}
+
+=== 高级功能 (1个) ===
+21. InsertImage - 插入图片 {imagePath:必需, width/height:可选}
+
+=== VBA回退 (1个) ===
+22. ExecuteVBA - VBA代码 {code:必需,完整Sub/Function}
 
 【绝对禁止】
-- 禁止使用 actions 数组
-- 禁止使用 operations 数组
+- 禁止使用 actions/operations 数组
 - 禁止省略 params 包装
-- 禁止自创任何其他格式
-- 禁止使用Excel命令(WriteData, ApplyFormula等)
-- 禁止使用PowerPoint命令(InsertSlide, AddAnimation等)
-- 禁止返回不带代码块的裸JSON
-- 禁止缺少command/commands字段的JSON
+- 禁止使用Excel/PowerPoint专属命令
 
-【Word command类型 - 只能使用以下10种】
-1. InsertText - 插入文本
-   params: {text:文本内容, position:插入位置}
-2. InsertParagraph - 插入段落
-   params: {count:段落数量}
-3. FormatText - 格式化文本
-   params: {range:文本范围, format:{字体,字号,颜色,加粗等}}
-4. InsertTable - 插入表格
-   params: {rows:行数, cols:列数, data:表格数据}
-5. InsertImage - 插入图片
-   params: {path:图片路径, width:宽度, height:高度}
-6. InsertHyperlink - 插入超链接
-   params: {text:显示文本, url:链接地址}
-7. ApplyStyle - 应用样式
-   params: {styleName:样式名称, range:应用范围}
-8. InsertPageBreak - 插入分页符
-   params: {}
-9. InsertSectionBreak - 插入分节符
-   params: {type:分节符类型}
-10. GenerateTOC - 生成目录
-    params: {levels:目录级别}
-
-如果需求不明确，直接用中文回复询问用户。"
+【决策优先级】
+1. 优先使用上述22个命令
+2. 复杂需求用ExecuteVBA
+3. 翻译用工具栏按钮
+4. 需求不明确时中文询问"
     End Function
     
     ''' <summary>
@@ -408,49 +449,62 @@ Public Class PromptManager
 ```
 禁止直接返回裸JSON文本！
 
-你必须且只能返回以下两种格式之一：
-
-单命令格式（必须包含command字段）：
+单命令格式：
 ```json
-{""command"": ""InsertSlide"", ""params"": {""title"": ""标题"", ""content"": ""内容""}}
+{""command"": ""InsertSlide"", ""params"": {""title"": ""标题"", ""layout"": ""titleAndContent""}}
 ```
 
-多命令格式（必须包含commands数组）：
+多命令格式：
 ```json
-{""commands"": [{""command"": ""InsertSlide"", ""params"": {""title"": ""标题1""}}, {""command"": ""AddAnimation"", ""params"": {""effect"": ""fadeIn""}}]}
+{""commands"": [{""command"": ""CreateSlides"", ""params"": {""slides"": [{""title"": ""第一页""}]}}, {""command"": ""AddAnimation"", ""params"": {""effect"": ""fadeIn"", ""scope"": ""all""}}]}
 ```
+
+【PowerPoint支持的22个命令】
+
+=== 幻灯片操作 (5个) ===
+1. InsertSlide - 插入幻灯片 {position:current/end, layout, title, content}
+2. DeleteSlide - 删除幻灯片 {slideIndex:必需,-1当前}
+3. DuplicateSlide - 复制幻灯片 {slideIndex:必需}
+4. MoveSlide - 移动幻灯片 {fromIndex:必需, toIndex:必需}
+5. CreateSlides - 批量创建 {slides:数组含title/content/layout}
+
+=== 内容操作 (5个) ===
+6. InsertText - 插入文本 {content:必需, slideIndex:-1当前, x/y:可选}
+7. FormatText - 格式化文本 {bold/italic/fontSize/fontName/color}
+8. InsertShape - 插入形状 {shapeType:必需, x:必需, y:必需}
+9. InsertImage - 插入图片 {imagePath:必需, x/y/width/height:可选}
+10. InsertTable - 插入表格 {rows:必需, cols:必需, data:可选}
+
+=== 样式和动画 (5个) ===
+11. FormatSlide - 格式化幻灯片 {background, layout}
+12. AddAnimation - 添加动画 {effect:fadeIn/flyIn/zoom/wipe, targetShapes:all/title}
+13. ApplyTransition - 切换效果 {transitionType:fade/push/wipe, scope:all/current}
+14. BeautifySlides - 美化 {scope:all/current, theme:{background/titleFont/bodyFont}}
+15. SetSlideLayout - 设置布局 {layout:title/titleAndContent/blank}
+
+=== 高级功能 (4个) ===
+16. InsertChart - 插入图表 {chartType:column/line/pie, data:二维数组}
+17. InsertVideo - 插入视频 {videoPath:必需, autoPlay:可选}
+18. AddSpeakerNotes - 演讲备注 {notes:必需, slideIndex:可选}
+19. SetSlideShow - 放映设置 {loopUntilEsc/advanceMode等}
+
+=== 母版和主题 (2个) ===
+20. ApplyTheme - 应用主题 {themeName或themeFile}
+21. EditSlideMaster - 编辑母版 {background/titleFont/bodyFont}
+
+=== VBA回退 (1个) ===
+22. ExecuteVBA - VBA代码 {code:必需,完整Sub/Function}
 
 【绝对禁止】
-- 禁止使用 actions 数组
-- 禁止使用 operations 数组
+- 禁止使用 actions/operations 数组
 - 禁止省略 params 包装
-- 禁止自创任何其他格式
-- 禁止使用Excel命令(WriteData, ApplyFormula等)
-- 禁止使用Word命令(GenerateTOC, BeautifyDocument等)
-- 禁止返回不带代码块的裸JSON
-- 禁止缺少command/commands字段的JSON
+- 禁止使用Excel/Word专属命令
 
-【PowerPoint command类型 - 只能使用以下9种】
-1. InsertSlide - 插入单页幻灯片
-   params: {position(end/start/指定位置), title, content, layout}
-2. CreateSlides - 批量创建多页幻灯片(推荐)
-   params: {slides数组[{title, content, layout}]}
-3. InsertText - 插入文本到幻灯片
-   params: {content, slideIndex(-1当前/0第一页)}
-4. InsertShape - 插入形状
-   params: {shapeType, x, y, width, height}
-5. FormatSlide - 格式化幻灯片
-   params: {slideIndex, background, transition, layout}
-6. InsertTable - 插入表格到幻灯片
-   params: {rows, cols, data, slideIndex}
-7. AddAnimation - 添加动画效果
-   params: {slideIndex(-1当前), effect(fadeIn/flyIn/zoom等), targetShapes(all/title/content)}
-8. ApplyTransition - 应用切换效果
-   params: {scope(all/current), transitionType(fade/push/wipe等), duration}
-9. BeautifySlides - 美化幻灯片
-   params: {scope(all/current), theme{background, titleFont, bodyFont}}
-
-如果需求不明确，直接用中文回复询问用户。"
+【决策优先级】
+1. 优先使用上述22个命令
+2. 复杂需求用ExecuteVBA
+3. 翻译用工具栏按钮
+4. 需求不明确时中文询问"
     End Function
     
     ''' <summary>

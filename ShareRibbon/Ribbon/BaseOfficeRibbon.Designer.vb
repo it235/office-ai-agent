@@ -51,7 +51,6 @@ Partial Class BaseOfficeRibbon
         Me.ProofreadButton = Me.Factory.CreateRibbonButton
         Me.ReformatButton = Me.Factory.CreateRibbonButton
         Me.TemplateFormatButton = Me.Factory.CreateRibbonButton
-        Me.AcceptCompletionButton = Me.Factory.CreateRibbonButton
 
         ' Group 5: MCP连接
         Me.GroupMCP = Me.Factory.CreateRibbonGroup
@@ -168,7 +167,6 @@ Partial Class BaseOfficeRibbon
         Me.GroupAIContent.Items.Add(Me.ProofreadButton)
         Me.GroupAIContent.Items.Add(Me.ReformatButton)
         Me.GroupAIContent.Items.Add(Me.TemplateFormatButton)
-        Me.GroupAIContent.Items.Add(Me.AcceptCompletionButton)
         Me.GroupAIContent.Label = "AI内容提效"
         Me.GroupAIContent.Name = "GroupAIContent"
 
@@ -200,12 +198,6 @@ Partial Class BaseOfficeRibbon
         Me.TemplateFormatButton.ScreenTip = "使用模板格式排版"
         Me.TemplateFormatButton.SuperTip = "选择格式模板，AI生成内容时将参考模板中的字体、字号、段落等格式"
 
-        Me.AcceptCompletionButton.Label = "接受补全"
-        Me.AcceptCompletionButton.Name = "AcceptCompletionButton"
-        Me.AcceptCompletionButton.ControlSize = Microsoft.Office.Core.RibbonControlSize.RibbonControlSizeLarge
-        Me.AcceptCompletionButton.ShowImage = True
-        Me.AcceptCompletionButton.ScreenTip = "接受AI自动补全"
-        Me.AcceptCompletionButton.SuperTip = "接受当前显示的灰色补全文本，将其转为正常文本"
 
         ' ========== Group 5: 工具箱 (Excel专用) ==========
         Me.GroupTools.Items.Add(Me.DataAnalysisButton)
@@ -321,7 +313,6 @@ Partial Class BaseOfficeRibbon
     Protected WithEvents ProofreadButton As Microsoft.Office.Tools.Ribbon.RibbonButton
     Protected WithEvents ReformatButton As Microsoft.Office.Tools.Ribbon.RibbonButton
     Protected WithEvents TemplateFormatButton As Microsoft.Office.Tools.Ribbon.RibbonButton
-    Protected WithEvents AcceptCompletionButton As Microsoft.Office.Tools.Ribbon.RibbonButton
 
     ' Group 5: 工具箱
     Protected WithEvents GroupTools As Microsoft.Office.Tools.Ribbon.RibbonGroup
