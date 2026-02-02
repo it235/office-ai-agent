@@ -1,16 +1,13 @@
 # Office AI 智能体
 
-> 1年了，实话说持续开源真的难，挺佩服那帮老外，当插件功能越来越多，代码越来越庞大时就感觉到力不从心，不光人力耗费大、现在AI写代码还需要额外投入`money`，否则手写将投入更多时间成本。继续投入吧，希望`star`数2026能破1000，希望有更多有实力、有想法的老铁加入。
-
-## 预览
-
-![ExcelView](./AiHelper.assets/excelai_display.png)
-
-![WordView](./AiHelper.assets/wordai_display.png)
-
-![PPTView](./AiHelper.assets/pptai_display.png)
+> 从0到现在1年了，2025年之前没写过VB.net，连visual studio都几乎没用过，写`java/js/python`轻轻松松，突然写这玩意还是挺生疏的。
+>
+> 持续开源真的艰难，佩服那帮老外，随随便便就写个爆火的开源项目。当插件功能越来越多，代码越来越庞大时就感觉到力不从心，不光开发/验证人力耗费大、现在AI写代码还需要额外投入**dollar**，纯手写效果不好还要投入更多时间成本。
+>
+> 继续战斗...  争取在`2026`能破`1000 star`，趁着这块还属于蓝海，希望有更多有实力、有想法的老铁加入。
 
 <div align="center">
+
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows-blue.svg)](https://www.microsoft.com/windows)
 [![Office](https://img.shields.io/badge/office-Excel%20Word%20PowerPoint-green.svg)](https://www.microsoft.com/office)
@@ -21,6 +18,7 @@
 
 </div>
 
+
 > **注意**: 本项目80%以上代码基于Cursor + Copilot + Qoder编程工具开发
 >
 > 帮助文档官网：https://www.officeso.cn
@@ -28,6 +26,17 @@
 > 源码本地运行教程：https://www.bilibili.com/cheese/play/ep2098181
 >
 > Excel/Word/PPT插件三合一部署打包教程：https://www.bilibili.com/cheese/play/ep2098188
+
+
+
+
+## 预览
+
+![ExcelView](./AiHelper.assets/excelai_display.png)
+
+![WordView](./AiHelper.assets/wordai_display.png)
+
+![PPTView](./AiHelper.assets/pptai_display.png)
 
 ## 📖 目录
 
