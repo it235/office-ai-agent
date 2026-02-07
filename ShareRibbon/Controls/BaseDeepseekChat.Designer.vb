@@ -3,7 +3,7 @@ Imports Microsoft.Web.WebView2.WinForms
 
 <Global.Microsoft.VisualBasic.CompilerServices.DesignerGenerated()>
 Partial Class BaseDeepseekChat
-    Inherits System.Windows.Forms.UserControl
+    Inherits BaseChat
 
     'UserControl 重写 Dispose，以清理组件列表。
     <System.Diagnostics.DebuggerNonUserCode()>
@@ -42,12 +42,14 @@ Partial Class BaseDeepseekChat
         Me.ChatBrowser.TabIndex = 1
         Me.ChatBrowser.ZoomFactor = 1.0R
         '
-        '
+'
         'DeepseekControl
         '
         Me.Controls.Add(Me.ChatBrowser)
         Me.Name = "DeepseekControl"
         Me.Size = New System.Drawing.Size(400, 600)
+        Me.TabStop = True
+        Me.TabIndex = 0
         CType(Me.ChatBrowser, System.ComponentModel.ISupportInitialize).EndInit()
         Me.ResumeLayout(False)
         Me.PerformLayout()

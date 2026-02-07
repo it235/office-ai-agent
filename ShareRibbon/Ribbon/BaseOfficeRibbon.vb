@@ -13,12 +13,6 @@ Imports Newtonsoft.Json.Linq
 Public MustInherit Class BaseOfficeRibbon
     Inherits Microsoft.Office.Tools.Ribbon.RibbonBase
 
-    'Public Sub New(ByVal factory As Microsoft.Office.Tools.Ribbon.RibbonFactory)
-    '    MyBase.New(factory)
-    '    InitializeComponent()  ' Designer 中定义的初始化
-    '    InitializeBaseRibbon()  ' 基类中的通用初始化
-    'End Sub
-
     Private Sub Ribbon1_Load(ByVal sender As System.Object, ByVal e As RibbonUIEventArgs) Handles MyBase.Load
         Dim apiConfig As New ConfigManager()
         apiConfig.LoadConfig()
@@ -28,17 +22,13 @@ Public MustInherit Class BaseOfficeRibbon
     End Sub
 
     Protected Overridable Sub InitializeBaseRibbon()
-        ' 设置基础的事件处理程序
-        'AddHandler ChatButton.Click, AddressOf ChatButton_Click
-        'AddHandler ClearCacheButton.Click, AddressOf ClearCacheButton_Click
-        'AddHandler AboutButton.Click, AddressOf AboutButton_Click
-        'AddHandler DataAnalysisButton.Click, AddressOf DataAnalysisButton_Click
+        ' 基类初始化方法，子类可以重写
     End Sub
 
-    ' 关于我按钮点击事件
+    ' 关于我按钮点击事件 - 显示带git链接的对话框
     Private Sub AboutButton_Click_1(sender As Object, e As RibbonControlEventArgs) Handles AboutButton.Click
-        MsgBox("大家好，我是B站的君哥，账号 君哥聊编程 。该插件的灵感是来自于一位B站的粉丝，他是银行审计相关的工作，经常与表格打交道，很多时候表格中的数据无法通过固定的公式来计算，但是在人类理解上又具有相同的意义，所以Excel AI诞生了。
-插件在持续优化中，我本身与Excel打交道比较少，如果你有更多好的idea可以过来给我留言或评论，不断完善该插件。ExcelAi数据的默认存放目录在当前用户/文档/" + ConfigSettings.OfficeAiAppDataFolder + "下。")
+        Dim aboutForm As New AboutForm()
+        aboutForm.ShowDialog()
     End Sub
 
     ' 清理缓存配置按钮点击事件
@@ -79,6 +69,36 @@ Public MustInherit Class BaseOfficeRibbon
         End If
     End Sub
 
+    ' 自动补全设置按钮点击事件
+    Private Sub AutocompleteSettingsButton_Click(sender As Object, e As RibbonControlEventArgs) Handles AutocompleteSettingsButton.Click
+        ' 创建并显示自动补全设置对话框
+        Dim settingsForm As New AutocompleteSettingsForm()
+        settingsForm.ShowDialog()
+    End Sub
+
+    ' 教学文档按钮点击事件 - 根据应用类型跳转不同URL
+    Private Sub StudyButton_Click(sender As Object, e As RibbonControlEventArgs) Handles StudyButton.Click
+        Dim appInfo = GetApplication()
+        Dim url As String = "https://www.officeso.cn/study/"
+
+        Select Case appInfo.Type
+            Case OfficeApplicationType.Word
+                url &= "word"
+            Case OfficeApplicationType.Excel
+                url &= "excel"
+            Case OfficeApplicationType.PowerPoint
+                url &= "ppt"
+            Case Else
+                url &= "word"
+        End Select
+
+        Try
+            System.Diagnostics.Process.Start(url)
+        Catch ex As Exception
+            MessageBox.Show("无法打开教学文档链接: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub
+
 
     ' 定义 ComboBoxItem 类
     Private Class ComboBoxItem
@@ -95,51 +115,6 @@ Public MustInherit Class BaseOfficeRibbon
         End Function
     End Class
 
-
-    ' 共用的事件处理方法
-    'Protected Sub ConfigApiButton_Click(sender As Object, e As RibbonControlEventArgs)
-    '    Using configForm As New ConfigApiForm()
-    '        configForm.ShowDialog()
-    '    End Using
-    'End Sub
-
-    'Protected Sub PromptConfigButton_Click(sender As Object, e As RibbonControlEventArgs)
-    '    Using configForm As New ConfigPromptForm()
-    '        configForm.ShowDialog()
-    '    End Using
-    'End Sub
-
-    Protected Sub ClearCacheButton_Click(sender As Object, e As RibbonControlEventArgs)
-        If MessageBox.Show(
-            $"将删除文档\{ConfigSettings.OfficeAiAppDataFolder}目录下所有的配置，聊天记录信息，您确定要清理吗？",
-            "确认操作",
-            MessageBoxButtons.OKCancel,
-            MessageBoxIcon.Question) <> DialogResult.OK Then
-            Return
-        End If
-
-        Dim appDataPath As String = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            ConfigSettings.OfficeAiAppDataFolder)
-
-        If Directory.Exists(appDataPath) Then
-            Try
-                For Each file In Directory.GetFiles(appDataPath)
-                    'file.Delete(file)
-                Next
-                MessageBox.Show("缓存配置已清理！")
-            Catch ex As Exception
-                MessageBox.Show($"清理缓存配置时出错：{ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-            End Try
-        End If
-    End Sub
-
-    Protected Sub AboutButton_Click(sender As Object, e As RibbonControlEventArgs)
-        MessageBox.Show(
-            $"大家好，我是B站的君哥，账号 君哥聊编程。该插件的灵感是来自于一位B站的粉丝，他是银行审计相关的工作，经常与表格打交道，很多时候表格中的数据无法通过固定的公式来计算，但是在人类理解上又具有相同的意义，所以Excel AI诞生了。{vbCrLf}插件在持续优化中，我本身与Excel打交道比较少，如果你有更多好的idea可以过来给我留言或评论，不断完善该插件。ExcelAi数据的默认存放目录在当前用户/文档/{ConfigSettings.OfficeAiAppDataFolder}下。"
-        )
-    End Sub
-
     ' AI聊天实现
     Protected MustOverride Sub ChatButton_Click(sender As Object, e As RibbonControlEventArgs) Handles ChatButton.Click
 
@@ -154,8 +129,15 @@ Public MustInherit Class BaseOfficeRibbon
     Protected MustOverride Function GetApplication() As ApplicationInfo
 
 
+    ' 新增：校对与排版按钮的抽象事件（由子类实现具体流程）
+    Protected MustOverride Sub ProofreadButton_Click(sender As Object, e As RibbonControlEventArgs) Handles ProofreadButton.Click
+    Protected MustOverride Sub ReformatButton_Click(sender As Object, e As RibbonControlEventArgs) Handles ReformatButton.Click
+
     ' Deepseek按钮点击事件
     Protected MustOverride Sub DeepseekButton_Click(sender As Object, e As RibbonControlEventArgs) Handles DeepseekButton.Click
+
+    ' Doubao按钮点击事件
+    Protected MustOverride Sub DoubaoButton_Click(sender As Object, e As RibbonControlEventArgs) Handles DoubaoButton.Click
 
     ' 批量数据生成按钮点击事件
     Protected MustOverride Sub BatchDataGenButton_Click(sender As Object, e As RibbonControlEventArgs) Handles BatchDataGenButton.Click
@@ -163,4 +145,12 @@ Public MustInherit Class BaseOfficeRibbon
     ' MCP按钮点击事件
     Protected MustOverride Sub MCPButton_Click(sender As Object, e As RibbonControlEventArgs) Handles MCPButton.Click
 
+    ' 一键翻译按钮点击事件（抽象方法，由子类实现）
+    Protected MustOverride Sub TranslateButton_Click(sender As Object, e As RibbonControlEventArgs) Handles TranslateButton.Click
+
+    ' AI续写按钮点击事件（抽象方法，由子类实现）
+    Protected MustOverride Sub ContinuationButton_Click(sender As Object, e As RibbonControlEventArgs) Handles ContinuationButton.Click
+
+    ' 模板排版按钮点击事件（抽象方法，由子类实现）
+    Protected MustOverride Sub TemplateFormatButton_Click(sender As Object, e As RibbonControlEventArgs) Handles TemplateFormatButton.Click
 End Class

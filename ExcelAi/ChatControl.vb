@@ -130,7 +130,7 @@ Public Class ChatControl
     End Function
 
 
-    Protected Overrides Function RunCodePreview(vbaCode As String, preview As Boolean)
+    Protected Overrides Function RunCodePreview(vbaCode As String, preview As Boolean) As Boolean
         ' 如果需要预览
         Dim previewTool As New EnhancedPreviewAndConfirm()
         ' 允许用户预览代码变更
@@ -455,9 +455,30 @@ Public Class ChatControl
     Protected Overrides Sub SendChatMessage(message As String)
         ' 这里可以实现word的特殊逻辑
         Debug.Print(message)
-        Send(message)
+        Send(message, "", True, "")
     End Sub
 
+    ''' <summary>
+    ''' 使用意图识别结果发送聊天消息（Excel特定实现）
+    ''' </summary>
+    Protected Overrides Sub SendChatMessageWithIntent(message As String, intent As IntentResult)
+        If intent IsNot Nothing AndAlso intent.Confidence > 0.2 Then
+            ' 使用意图优化的systemPrompt
+            Dim optimizedPrompt = IntentService.GetOptimizedSystemPrompt(intent)
+            Debug.WriteLine($"Excel使用意图优化提示词: {intent.IntentType}, 置信度: {intent.Confidence:F2}")
+
+            Task.Run(Async Function()
+                         Await Send(message, optimizedPrompt, True, "")
+                     End Function)
+        Else
+            ' 回退到普通发送
+            Send(message, "", True, "")
+        End If
+    End Sub
+
+    ''' <summary>
+    ''' 获取选中内容并格式化（使用ExcelContextService优化）
+    ''' </summary>
     Protected Overrides Function AppendCurrentSelectedContent(message As String) As String
         Try
             ' 获取当前活动工作表和选择区域
@@ -468,73 +489,44 @@ Public Class ChatControl
             If selection IsNot Nothing AndAlso TypeOf selection Is Microsoft.Office.Interop.Excel.Range Then
                 Dim selectedRange As Microsoft.Office.Interop.Excel.Range = DirectCast(selection, Microsoft.Office.Interop.Excel.Range)
 
-                ' 创建内容构建器，按照 ParseFile 的结构
-                Dim contentBuilder As New StringBuilder()
-                contentBuilder.AppendLine(vbCrLf & "--- 用户选中的WorkbookSheet参考内容如下 ---")
+                ' 提取数据到数组
+                Dim data As Object(,) = ExtractRangeData(selectedRange)
 
-                ' 添加活动工作簿信息
-                contentBuilder.AppendLine($"工作簿: {Path.GetFileName(activeWorkbook.FullName)}")
-
-                ' 获取选择的工作表信息
-                Dim worksheet As Microsoft.Office.Interop.Excel.Worksheet = selectedRange.Worksheet
-                Dim sheetName As String = worksheet.Name
-
-                ' 添加工作表信息
-                contentBuilder.AppendLine($"工作表: {sheetName}")
-
-                ' 获取选择区域的范围地址
-                Dim address As String = selectedRange.Address(False, False)
-                contentBuilder.AppendLine($"  使用范围: {address}")
-
-                ' 读取选择区域中的单元格内容
-                Dim usedRange As Microsoft.Office.Interop.Excel.Range = selectedRange
-
-                ' 获取区域的行列信息
-                Dim firstRow As Integer = usedRange.Row
-                Dim firstCol As Integer = usedRange.Column
-                Dim lastRow As Integer = firstRow + usedRange.Rows.Count - 1
-                Dim lastCol As Integer = firstCol + usedRange.Columns.Count - 1
-
-                ' 限制读取的单元格数量（防止数据过大）
-                Dim maxRows As Integer = Math.Min(lastRow, firstRow + 30)
-                Dim maxCols As Integer = Math.Min(lastCol, firstCol + 10)
-
-                ' 检查是否有实际内容的标志
+                ' 检查数据是否为空（如果选中区域没有实际内容，不发送给LLM）
+                If data Is Nothing OrElse data.Length = 0 Then
+                    Debug.WriteLine("Excel选中区域数据为空，跳过发送给LLM")
+                    Return message
+                End If
+                
+                ' 检查数据是否全部为空值
                 Dim hasContent As Boolean = False
-
-                ' 逐个单元格读取内容
-                For rowIndex As Integer = firstRow To maxRows
-                    For colIndex As Integer = firstCol To maxCols
-                        Try
-                            Dim cell As Microsoft.Office.Interop.Excel.Range = worksheet.Cells(rowIndex, colIndex)
-                            Dim cellValue As Object = cell.Value
-
-                            If cellValue IsNot Nothing Then
-                                Dim cellAddress As String = $"{GetExcelColumnName(colIndex)}{rowIndex}"
-                                contentBuilder.AppendLine($"  {cellAddress}: {cellValue}")
-                                hasContent = True
-                            End If
-                        Catch cellEx As Exception
-                            Debug.WriteLine($"读取单元格时出错: {cellEx.Message}")
-                            ' 继续处理下一个单元格
-                        End Try
-                    Next
+                For Each item In data
+                    If item IsNot Nothing AndAlso Not String.IsNullOrEmpty(item.ToString()) Then
+                        hasContent = True
+                        Exit For
+                    End If
                 Next
-
-                ' 如果有更多行或列未显示，添加提示
-                If lastRow > maxRows Then
-                    contentBuilder.AppendLine($"  ... 共有 {lastRow - firstRow + 1} 行，仅显示前 {maxRows - firstRow + 1} 行")
-                End If
-                If lastCol > maxCols Then
-                    contentBuilder.AppendLine($"  ... 共有 {lastCol - firstCol + 1} 列，仅显示前 {maxCols - firstCol + 1} 列")
+                
+                If Not hasContent Then
+                    Debug.WriteLine("Excel选中区域内容全部为空，跳过发送给LLM")
+                    Return message
                 End If
 
-                contentBuilder.AppendLine("--- WorkbookSheet参考内容到这结束 ---" & vbCrLf)
+                ' 使用ExcelContextService进行优化的数据格式化
+                Dim contextService As New ShareRibbon.ExcelContextService()
+                Dim workbookName As String = Path.GetFileName(activeWorkbook.FullName)
+                Dim worksheetName As String = selectedRange.Worksheet.Name
+                Dim rangeAddress As String = selectedRange.Address(False, False)
 
-                ' 只有在有实际内容时才添加到消息中
-                If hasContent Then
-                    ' 将选中内容添加到消息中
-                    message &= contentBuilder.ToString()
+                ' 调用优化的格式化方法
+                Dim formattedContent As String = contextService.FormatSelectionAsContext(
+                    data,
+                    workbookName,
+                    worksheetName,
+                    rangeAddress)
+
+                If Not String.IsNullOrEmpty(formattedContent) Then
+                    message &= formattedContent
                 End If
             End If
         Catch ex As Exception
@@ -542,6 +534,467 @@ Public Class ChatControl
             ' 出错时不添加选中内容，继续发送原始消息
         End Try
         Return message
+    End Function
+
+    ''' <summary>
+    ''' 从Excel Range提取数据到二维数组（高性能批量读取）
+    ''' </summary>
+    Private Function ExtractRangeData(selectedRange As Microsoft.Office.Interop.Excel.Range) As Object(,)
+        Try
+            Const MAX_ROWS As Integer = 100
+            Const MAX_COLS As Integer = 26
+
+            ' 限制读取范围
+            Dim rowCount = Math.Min(selectedRange.Rows.Count, MAX_ROWS)
+            Dim colCount = Math.Min(selectedRange.Columns.Count, MAX_COLS)
+
+            ' 如果范围过大，只取部分
+            Dim actualRange As Microsoft.Office.Interop.Excel.Range
+            If selectedRange.Rows.Count > MAX_ROWS OrElse selectedRange.Columns.Count > MAX_COLS Then
+                actualRange = selectedRange.Resize(rowCount, colCount)
+            Else
+                actualRange = selectedRange
+            End If
+
+            ' 一次性读取所有数据（性能优化关键）
+            Dim values As Object = actualRange.Value2
+
+            ' 处理单个单元格的情况
+            If Not TypeOf values Is Object(,) Then
+                ' 创建1-based数组（与Excel返回的多单元格数组一致）
+                Dim result = DirectCast(Array.CreateInstance(GetType(Object), {1, 1}, {1, 1}), Object(,))
+                result(1, 1) = values
+                Return result
+            End If
+
+            Return DirectCast(values, Object(,))
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExtractRangeData 出错: {ex.Message}")
+            Return Nothing
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 尝试执行AI返回的直接操作命令
+    ''' </summary>
+    ''' <param name="aiResponse">AI响应文本</param>
+    ''' <returns>是否成功执行了命令</returns>
+    Public Function TryExecuteDirectCommands(aiResponse As String) As Boolean
+        Try
+            ' 提取JSON命令
+            Dim commands = ExcelDirectOperationService.ExtractCommandsFromResponse(aiResponse)
+
+            If commands.Count = 0 Then
+                Return False
+            End If
+
+            ' 创建操作服务
+            Dim operationService As New ExcelDirectOperationService(Globals.ThisAddIn.Application)
+
+            ' 执行所有命令
+            Dim allSuccess As Boolean = True
+            For Each cmd As Newtonsoft.Json.Linq.JObject In commands
+                Dim success = operationService.ExecuteCommand(cmd)
+                If Not success Then
+                    allSuccess = False
+                End If
+            Next
+
+            Return allSuccess
+
+        Catch ex As Exception
+            Debug.WriteLine($"TryExecuteDirectCommands 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行JSON命令（重写基类方法）- 带占位符替换和校验
+    ''' </summary>
+    Protected Overrides Function ExecuteJsonCommand(jsonCode As String, preview As Boolean) As Boolean
+        Try
+            ' 获取Excel上下文用于占位符替换
+            Dim context = ExcelJsonCommandSchema.GetExcelContext(Globals.ThisAddIn.Application)
+            
+            ' 先替换占位符再解析JSON
+            Dim processedJson = jsonCode
+            For Each kvp In context
+                processedJson = processedJson.Replace("{" & kvp.Key & "}", kvp.Value)
+            Next
+            
+            ' 使用严格的结构验证
+            Dim errorMessage As String = ""
+            Dim normalizedJson As Newtonsoft.Json.Linq.JToken = Nothing
+            
+            If Not ExcelJsonCommandSchema.ValidateJsonStructure(processedJson, errorMessage, normalizedJson) Then
+                ' 格式验证失败，显示详细错误
+                Debug.WriteLine($"JSON格式验证失败: {errorMessage}")
+                Debug.WriteLine($"原始JSON: {processedJson.Substring(0, Math.Min(200, processedJson.Length))}...")
+                
+                ShareRibbon.GlobalStatusStrip.ShowWarning($"JSON格式不符合规范: {errorMessage}")
+                
+                ' 通知前端显示格式修正提示
+                Dim correctionPrompt = ExcelJsonCommandSchema.GetFormatCorrectionPrompt(
+                    processedJson.Substring(0, Math.Min(500, processedJson.Length)),
+                    errorMessage)
+                Debug.WriteLine($"格式修正提示已生成，长度: {correctionPrompt.Length}")
+                
+                Return False
+            End If
+            
+            ' 验证通过，根据类型执行
+            If normalizedJson.Type = Newtonsoft.Json.Linq.JTokenType.Object Then
+                Dim jsonObj = CType(normalizedJson, Newtonsoft.Json.Linq.JObject)
+                
+                ' 命令数组格式
+                If jsonObj("commands") IsNot Nothing Then
+                    Return ExecuteCommandsArray(jsonObj("commands"), processedJson, preview, context)
+                End If
+                
+                ' 单命令格式
+                Return ExecuteSingleCommand(jsonObj, processedJson, preview)
+            End If
+            
+            ShareRibbon.GlobalStatusStrip.ShowWarning("无效的JSON格式")
+            Return False
+
+        Catch ex As Newtonsoft.Json.JsonReaderException
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"JSON格式无效: {ex.Message}")
+            Return False
+        Catch ex As Exception
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"执行失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 将 actions 数组转换为标准的 commands 数组格式
+    ''' <summary>
+    ''' 执行命令数组
+    ''' </summary>
+    Private Function ExecuteCommandsArray(commandsArray As Newtonsoft.Json.Linq.JToken, originalJson As String, preview As Boolean, context As Dictionary(Of String, String)) As Boolean
+        Try
+            Dim commands = CType(commandsArray, Newtonsoft.Json.Linq.JArray)
+            If commands.Count = 0 Then
+                ShareRibbon.GlobalStatusStrip.ShowWarning("命令数组为空")
+                Return False
+            End If
+
+            ' 创建操作服务
+            Dim operationService As New ExcelDirectOperationService(Globals.ThisAddIn.Application)
+
+            ' 预览所有命令 - 使用 JsonPreviewDialog
+            If preview Then
+                Try
+                    ' 生成批量命令的预览结果
+                    Dim previewResult = GenerateBatchPreviewResult(commands, originalJson)
+                    
+                    ' 显示预览对话框
+                    Using dialog As New JsonPreviewDialog()
+                        If dialog.ShowPreview(previewResult) <> DialogResult.OK Then
+                            ShareRibbon.GlobalStatusStrip.ShowInfo("用户取消执行")
+                            ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
+                            Return True
+                        End If
+                    End Using
+                Catch previewEx As Exception
+                    Debug.WriteLine($"批量预览生成失败，使用简单预览: {previewEx.Message}")
+                    ' 回退到简单预览
+                    Dim previewMsg As New StringBuilder()
+                    previewMsg.AppendLine($"即将执行 {commands.Count} 个命令:")
+                    previewMsg.AppendLine()
+
+                    Dim cmdIndex = 1
+                    For Each cmd In commands
+                        If cmd.Type = Newtonsoft.Json.Linq.JTokenType.Object Then
+                            Dim cmdObj = CType(cmd, Newtonsoft.Json.Linq.JObject)
+                            Dim cmdName = cmdObj("command")?.ToString()
+                            Dim range = If(cmdObj("range")?.ToString(), cmdObj("params")?("range")?.ToString())
+                            Dim formula = If(cmdObj("formula")?.ToString(), cmdObj("params")?("formula")?.ToString())
+                            
+                            previewMsg.AppendLine($"{cmdIndex}. {cmdName}")
+                            If Not String.IsNullOrEmpty(range) Then previewMsg.AppendLine($"   范围: {range}")
+                            If Not String.IsNullOrEmpty(formula) Then previewMsg.AppendLine($"   公式: {formula}")
+                            previewMsg.AppendLine()
+                            cmdIndex += 1
+                        End If
+                    Next
+
+                    previewMsg.AppendLine("是否继续执行？")
+
+                    If MessageBox.Show(previewMsg.ToString(), "批量命令预览", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) <> DialogResult.OK Then
+                        ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
+                        Return True
+                    End If
+                End Try
+            End If
+
+            ' 执行所有命令
+            Dim successCount = 0
+            Dim failCount = 0
+            Dim cmdNumber = 1
+
+            For Each cmd In commands
+                If cmd.Type = Newtonsoft.Json.Linq.JTokenType.Object Then
+                    Dim cmdObj = CType(cmd, Newtonsoft.Json.Linq.JObject)
+                    
+                    ' 标准化命令结构
+                    cmdObj = ExcelJsonCommandSchema.NormalizeCommandStructure(cmdObj)
+                    
+                    ' 校验命令
+                    Dim errorMsg As String = ""
+                    If Not ExcelJsonCommandSchema.ValidateCommand(cmdObj, errorMsg) Then
+                        Debug.WriteLine($"命令 {cmdNumber} 校验失败: {errorMsg}")
+                        failCount += 1
+                        cmdNumber += 1
+                        Continue For
+                    End If
+
+                    ' 执行命令
+                    If operationService.ExecuteCommand(cmdObj) Then
+                        successCount += 1
+                    Else
+                        failCount += 1
+                    End If
+                End If
+                cmdNumber += 1
+            Next
+
+            If failCount = 0 Then
+                ShareRibbon.GlobalStatusStrip.ShowInfo($"所有 {successCount} 个命令执行成功")
+            Else
+                ShareRibbon.GlobalStatusStrip.ShowWarning($"执行完成: {successCount} 成功, {failCount} 失败")
+            End If
+
+            Return failCount = 0
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteCommandsArray 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"批量执行失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 生成批量命令的预览结果
+    ''' </summary>
+    Private Function GenerateBatchPreviewResult(commands As Newtonsoft.Json.Linq.JArray, originalJson As String) As JsonPreviewResult
+        Dim result As New JsonPreviewResult()
+        result.OriginalJson = originalJson
+
+        ' 生成执行计划
+        result.ExecutionPlan = New List(Of ExecutionStep)()
+        Dim stepNumber = 1
+
+        For Each cmd In commands
+            If cmd.Type = Newtonsoft.Json.Linq.JTokenType.Object Then
+                Dim cmdObj = CType(cmd, Newtonsoft.Json.Linq.JObject)
+                Dim cmdName = cmdObj("command")?.ToString()
+                Dim range = If(cmdObj("range")?.ToString(), 
+                            If(cmdObj("params")?("range")?.ToString(),
+                            If(cmdObj("params")?("targetRange")?.ToString(), "")))
+                Dim formula = If(cmdObj("formula")?.ToString(), cmdObj("params")?("formula")?.ToString())
+
+                Dim stepIcon = GetCommandIcon(cmdName)
+                Dim stepDesc = GetCommandDescription(cmdName, formula, range)
+
+                result.ExecutionPlan.Add(New ExecutionStep(stepNumber, stepDesc, stepIcon) With {
+                    .WillModify = range
+                })
+                stepNumber += 1
+            End If
+        Next
+
+        ' 生成摘要
+        Dim summaryBuilder As New StringBuilder()
+        summaryBuilder.AppendLine($"即将执行 {commands.Count} 个命令")
+        summaryBuilder.AppendLine()
+        summaryBuilder.AppendLine("命令列表:")
+        
+        Dim cmdIndex = 1
+        For Each cmd In commands
+            If cmd.Type = Newtonsoft.Json.Linq.JTokenType.Object Then
+                Dim cmdObj = CType(cmd, Newtonsoft.Json.Linq.JObject)
+                Dim cmdName = cmdObj("command")?.ToString()
+                Dim formula = If(cmdObj("formula")?.ToString(), cmdObj("params")?("formula")?.ToString())
+                Dim range = If(cmdObj("range")?.ToString(), cmdObj("params")?("range")?.ToString())
+                
+                summaryBuilder.AppendLine($"  {cmdIndex}. {cmdName}")
+                If Not String.IsNullOrEmpty(formula) Then summaryBuilder.AppendLine($"      公式: {formula}")
+                If Not String.IsNullOrEmpty(range) Then summaryBuilder.AppendLine($"      范围: {range}")
+                cmdIndex += 1
+            End If
+        Next
+
+        result.Summary = summaryBuilder.ToString()
+
+        Return result
+    End Function
+
+    ''' <summary>
+    ''' 获取命令对应的图标类型
+    ''' </summary>
+    Private Function GetCommandIcon(command As String) As String
+        Select Case command?.ToLower()
+            Case "applyformula"
+                Return "formula"
+            Case "writedata"
+                Return "data"
+            Case "formatrange"
+                Return "format"
+            Case "createchart"
+                Return "chart"
+            Case "cleandata"
+                Return "clean"
+            Case Else
+                Return "default"
+        End Select
+    End Function
+
+    ''' <summary>
+    ''' 获取命令描述
+    ''' </summary>
+    Private Function GetCommandDescription(command As String, formula As String, range As String) As String
+        Select Case command?.ToLower()
+            Case "applyformula"
+                If Not String.IsNullOrEmpty(formula) Then
+                    Return $"应用公式 {formula}"
+                End If
+                Return "应用公式"
+            Case "writedata"
+                Return "写入数据"
+            Case "formatrange"
+                Return "设置格式"
+            Case "createchart"
+                Return "创建图表"
+            Case "cleandata"
+                Return "清洗数据"
+            Case Else
+                Return command
+        End Select
+    End Function
+
+    ''' <summary>
+    ''' 执行单个命令
+    ''' </summary>
+    Private Function ExecuteSingleCommand(commandJson As Newtonsoft.Json.Linq.JObject, processedJson As String, preview As Boolean) As Boolean
+        Try
+            Dim command = commandJson("command")?.ToString()
+            
+            ' 校验JSON命令
+            Dim errorMsg As String = ""
+            If Not ExcelJsonCommandSchema.ValidateCommand(commandJson, errorMsg) Then
+                ShareRibbon.GlobalStatusStrip.ShowWarning($"JSON命令格式错误: {errorMsg}")
+                Return False
+            End If
+
+            ' 创建操作服务
+            Dim operationService As New ExcelDirectOperationService(Globals.ThisAddIn.Application)
+
+            ' JSON预览对话框
+            If preview Then
+                Try
+                    ' 生成预览结果
+                    Dim previewResult = GenerateJsonPreviewResult(commandJson, processedJson, operationService)
+                    
+                    ' 显示预览对话框
+                    Using dialog As New JsonPreviewDialog()
+                        If dialog.ShowPreview(previewResult) <> DialogResult.OK Then
+                            ShareRibbon.GlobalStatusStrip.ShowInfo("用户取消执行")
+                            ' 通知前端用户取消了执行（恢复按钮可点击状态）
+                            ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
+                            Return True ' 返回True表示正常取消，而非错误
+                        End If
+                    End Using
+                Catch previewEx As Exception
+                    Debug.WriteLine($"预览生成失败，使用简单预览: {previewEx.Message}")
+                    ' 回退到简单预览
+                    Dim params = commandJson("params")
+                    Dim targetRange = If(params?("targetRange")?.ToString(), params?("range")?.ToString())
+                    Dim formula = params?("formula")?.ToString()
+
+                    Dim previewMsg = $"即将执行 Excel 命令:{vbCrLf}{vbCrLf}" &
+                                    $"命令: {command}{vbCrLf}" &
+                                    If(Not String.IsNullOrEmpty(targetRange), $"目标: {targetRange}{vbCrLf}", "") &
+                                    If(Not String.IsNullOrEmpty(formula), $"公式: {formula}{vbCrLf}", "") &
+                                    $"{vbCrLf}是否继续执行？"
+
+                    If MessageBox.Show(previewMsg, "JSON命令预览", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) <> DialogResult.OK Then
+                        ' 通知前端用户取消了执行
+                        ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
+                        Return True
+                    End If
+                End Try
+            End If
+
+            ' 执行命令
+            Dim success = operationService.ExecuteCommand(commandJson)
+
+            If success Then
+                ShareRibbon.GlobalStatusStrip.ShowInfo($"命令 '{command}' 执行成功")
+            Else
+                ShareRibbon.GlobalStatusStrip.ShowWarning($"命令 '{command}' 执行失败")
+            End If
+
+            Return success
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteSingleCommand 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 生成JSON命令预览结果
+    ''' </summary>
+    Private Function GenerateJsonPreviewResult(commandJson As JObject, originalJson As String, operationService As ExcelDirectOperationService) As JsonPreviewResult
+        Dim result As New JsonPreviewResult()
+        result.OriginalJson = originalJson
+
+        Try
+            Dim command = commandJson("command")?.ToString()
+            Dim params = commandJson("params")
+
+            ' 使用 ExecutionPlanRenderer 生成执行计划
+            Dim renderer As New ShareRibbon.ExecutionPlanRenderer()
+            result.ExecutionPlan = renderer.ParseJsonToExecutionPlan(originalJson)
+
+            ' 生成摘要
+            Dim summaryBuilder As New StringBuilder()
+            summaryBuilder.AppendLine($"将执行 {command} 命令")
+
+            Dim targetRange = If(params?("targetRange")?.ToString(), params?("range")?.ToString())
+            If Not String.IsNullOrEmpty(targetRange) Then
+                summaryBuilder.AppendLine($"目标范围: {targetRange}")
+            End If
+
+            Dim formula = params?("formula")?.ToString()
+            If Not String.IsNullOrEmpty(formula) Then
+                summaryBuilder.AppendLine($"公式: {formula}")
+            End If
+
+            result.Summary = summaryBuilder.ToString()
+
+            ' 尝试预测单元格变更（简化实现，仅显示目标范围）
+            If Not String.IsNullOrEmpty(targetRange) Then
+                result.CellChanges = New List(Of CellChange)()
+                
+                ' 简化的变更预测：标记目标范围会被修改
+                result.CellChanges.Add(New CellChange() With {
+                    .Address = targetRange,
+                    .ChangeType = "Modified",
+                    .OldValue = "(当前值)",
+                    .NewValue = "(新值)"
+                })
+            End If
+
+        Catch ex As Exception
+            Debug.WriteLine($"GenerateJsonPreviewResult 出错: {ex.Message}")
+            result.Summary = "无法生成详细预览"
+        End Try
+
+        Return result
     End Function
 
     Protected Overrides Function ParseFile(filePath As String) As FileContentResult
@@ -662,6 +1115,87 @@ Public Class ChatControl
 
         ' 如果无法获取工作簿路径，则返回应用程序目录
         Return System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)
+    End Function
+
+
+    Protected Overrides Sub CheckAndCompleteProcessingHook(_finalUuid As String, allPlainMarkdownBuffer As StringBuilder)
+
+    End Sub
+
+    ''' <summary>
+    ''' 获取当前Excel上下文快照（用于自动补全）
+    ''' </summary>
+    Protected Overrides Function GetContextSnapshot() As JObject
+        Dim snapshot As New JObject()
+        snapshot("appType") = "Excel"
+
+        Try
+            Dim selection = Globals.ThisAddIn.Application.Selection
+            If selection IsNot Nothing AndAlso TypeOf selection Is Microsoft.Office.Interop.Excel.Range Then
+                Dim selRange = DirectCast(selection, Microsoft.Office.Interop.Excel.Range)
+
+                ' 获取选中区域地址
+                Dim rangeAddr = ""
+                Try
+                    rangeAddr = selRange.Address(False, False)
+                Catch
+                End Try
+                snapshot("selectionAddress") = rangeAddr
+
+                ' 获取选中内容（限制大小）
+                Dim selText = ""
+                Try
+                    Dim cellValue = selRange.Value2
+                    If cellValue IsNot Nothing Then
+                        If TypeOf cellValue Is Object(,) Then
+                            Dim values = DirectCast(cellValue, Object(,))
+                            Dim sb As New StringBuilder()
+
+                            ' 使用正确的数组边界（Excel返回1-based数组）
+                            Dim rowStart = values.GetLowerBound(0)
+                            Dim rowEnd = values.GetUpperBound(0)
+                            Dim colStart = values.GetLowerBound(1)
+                            Dim colEnd = values.GetUpperBound(1)
+
+                            Dim maxRowEnd = Math.Min(rowEnd, rowStart + 4)
+                            Dim maxColEnd = Math.Min(colEnd, colStart + 4)
+
+                            For r = rowStart To maxRowEnd
+                                For c = colStart To maxColEnd
+                                    If values(r, c) IsNot Nothing Then
+                                        sb.Append(values(r, c).ToString())
+                                    End If
+                                    If c < maxColEnd Then sb.Append(vbTab)
+                                Next
+                                sb.AppendLine()
+                            Next
+                            selText = sb.ToString()
+                        Else
+                            selText = cellValue.ToString()
+                        End If
+                    End If
+                Catch
+                End Try
+
+                If selText.Length > 300 Then
+                    selText = selText.Substring(0, 300) & "..."
+                End If
+                snapshot("selection") = selText
+            Else
+                snapshot("selection") = ""
+            End If
+
+            ' 获取工作表名
+            Dim ws = Globals.ThisAddIn.Application.ActiveSheet
+            If ws IsNot Nothing Then
+                snapshot("sheetName") = CStr(ws.Name)
+            End If
+
+        Catch ex As Exception
+            Debug.WriteLine($"GetContextSnapshot 出错: {ex.Message}")
+        End Try
+
+        Return snapshot
     End Function
 End Class
 

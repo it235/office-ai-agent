@@ -1,5 +1,6 @@
 # Office AI Assistant
 
+
 <div align="center">
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
@@ -12,7 +13,22 @@
 
 </div>
 
-> **Note**: This project is developed with 50%+ code using Cursor + Copilot programming tools
+> **Note**: This project is developed with 80%+ code using Cursor + Copilot + Qoder programming tools
+>
+> Source code local running tutorial：https://www.bilibili.com/cheese/play/ep2098181
+>
+> Excel/Word/PPT Plugin Tri-Pack Deployment Packaging Tutorial：https://www.bilibili.com/cheese/play/ep2098188
+>
+> 
+
+
+![ExcelView](./AiHelper.assets/excelai_display.png)
+
+![WordView](./AiHelper.assets/wordai_display.png)
+
+![PPTView](./AiHelper.assets/pptai_display.png)
+
+
 
 ## 📖 Table of Contents
 

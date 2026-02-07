@@ -11,737 +11,894 @@ Imports System.Windows.Forms
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 Imports ShareRibbon.ConfigManager
+
+''' <summary>
+''' API配置窗体 - 双Tab布局 (云端模型/本地模型)
+''' </summary>
 Public Class ConfigApiForm
     Inherits Form
 
-    Private modelComboBox As ComboBox
-    ' 编辑按钮
-    Private editConfigButton As Button
-    Private apiKeyTextBox As TextBox
-    Private modelNameComboBox As ComboBox
-    Private confirmButton As Button
-    Private addConfigButton As Button
-    Private newModelPlatformTextBox As TextBox
-    Private newApiUrlTextBox As TextBox
-    Private newModelNameTextBoxes As List(Of TextBox)
-    Private addModelNameButton As Button
-    Private saveConfigButton As Button
-    Private getApiKeyButton As Button
+    ' 主控件
+    Private mainTabControl As TabControl
+    Private cloudTab As TabPage
+    Private localTab As TabPage
 
+    ' 云端模型Tab控件
+    Private cloudProviderListBox As ListBox
+    Private cloudPlatformLabel As Label
+    Private cloudPlatformTextBox As TextBox
+    Private cloudUrlLabel As Label
+    Private cloudUrlTextBox As TextBox
+    Private cloudApiKeyTextBox As TextBox
+    Private cloudGetApiKeyButton As Button
+    Private cloudModelCheckedListBox As CheckedListBox
+    Private cloudRefreshModelsButton As Button
+    Private cloudTranslateCheckBox As CheckBox
+    Private cloudSaveButton As Button
+    Private cloudDeleteButton As Button
 
-    Public Property platform As String
-    Public Property apiUrl As String
-    Public Property apiKey As String
-    Public Property modelName As String
+    ' 本地模型Tab控件
+    Private localProviderListBox As ListBox
+    Private localPlatformTextBox As TextBox
+    Private localUrlTextBox As TextBox
+    Private localApiKeyTextBox As TextBox
+    Private localDefaultKeyLabel As Label
+    Private localModelCheckedListBox As CheckedListBox
+    Private localRefreshModelsButton As Button
+    Private localTranslateCheckBox As CheckBox
+    Private localSaveButton As Button
+    Private localDeleteButton As Button
+    Private localAddButton As Button
 
+    ' 当前选中的配置
+    Private currentCloudConfig As ConfigItem
+    Private currentLocalConfig As ConfigItem
 
     Public Sub New()
-        ' 初始化表单
+        InitializeForm()
+        InitializeCloudTab()
+        InitializeLocalTab()
+        LoadDataToUI()
+    End Sub
+
+    ''' <summary>
+    ''' 初始化窗体
+    ''' </summary>
+    Private Sub InitializeForm()
         Me.Text = "配置大模型API"
-        Me.Size = New Size(450, 350)
-        Me.StartPosition = FormStartPosition.CenterScreen ' 设置表单居中显示
+        Me.Size = New Size(700, 550)
+        Me.StartPosition = FormStartPosition.CenterScreen
+        Me.FormBorderStyle = FormBorderStyle.FixedDialog
+        Me.MaximizeBox = False
+        Me.MinimizeBox = False
 
-        ' 初始化模型选择 ComboBox
-        modelComboBox = New ComboBox()
-        modelComboBox.DisplayMember = "pltform"
-        modelComboBox.ValueMember = "url"
-        modelComboBox.Location = New Point(10, 10)
-        modelComboBox.Size = New Size(260, 30)
-        AddHandler modelComboBox.SelectedIndexChanged, AddressOf ModelComboBox_SelectedIndexChanged
-        Me.Controls.Add(modelComboBox)
+        ' 创建TabControl
+        mainTabControl = New TabControl()
+        mainTabControl.Dock = DockStyle.Fill
+        Me.Controls.Add(mainTabControl)
 
-        ' 初始化编辑配置按钮
-        editConfigButton = New Button()
-        editConfigButton.Text = "修改"
-        editConfigButton.Font = New Font(editConfigButton.Font.FontFamily, 8) ' 设置字体大小
-        editConfigButton.Location = New Point(280, 10)
-        editConfigButton.Size = New Size(80, modelComboBox.Height + 2)
-        AddHandler editConfigButton.Click, AddressOf EditConfigButton_Click
-        Me.Controls.Add(editConfigButton)
+        ' 创建云端模型Tab
+        cloudTab = New TabPage()
+        cloudTab.Text = "云端模型"
+        cloudTab.Padding = New Padding(10)
+        mainTabControl.TabPages.Add(cloudTab)
 
-        ' 初始化获取ApiKey按钮
-        getApiKeyButton = New Button()
-        getApiKeyButton.Text = "获取ApiKey"
-        getApiKeyButton.Font = New Font(getApiKeyButton.Font.FontFamily, 8) ' 设置字体大小
-        getApiKeyButton.Location = New Point(280, 90) ' 位置
-        getApiKeyButton.Size = New Size(80, modelComboBox.Height + 2) ' 按钮大小
-        'getApiKeyButton.ForeColor = Color.Blue ' 使用蓝色字体以表示这是一个链接
-        AddHandler getApiKeyButton.Click, AddressOf GetApiKeyButton_Click
-        Me.Controls.Add(getApiKeyButton)
+        ' 创建本地模型Tab
+        localTab = New TabPage()
+        localTab.Text = "本地模型"
+        localTab.Padding = New Padding(10)
+        mainTabControl.TabPages.Add(localTab)
+    End Sub
 
-        ' 初始化模型名称选择 ComboBox
-        modelNameComboBox = New ComboBox()
-        modelNameComboBox.Location = New Point(10, 50)
-        modelNameComboBox.Size = New Size(260, 30)
-        modelNameComboBox.AutoCompleteMode = AutoCompleteMode.SuggestAppend
-        modelNameComboBox.AutoCompleteSource = AutoCompleteSource.ListItems
-        Me.Controls.Add(modelNameComboBox)
+    ''' <summary>
+    ''' 初始化云端模型Tab
+    ''' </summary>
+    Private Sub InitializeCloudTab()
+        ' 左侧：服务商列表
+        Dim providerLabel As New Label()
+        providerLabel.Text = "服务商列表："
+        providerLabel.Location = New Point(10, 10)
+        providerLabel.AutoSize = True
+        cloudTab.Controls.Add(providerLabel)
 
-        ' 用来接收之前选择的模型和 API Key
-        Dim platformForDB As String
-        Dim apiUrlForDB As String
-        Dim apiKeyForDB As String
-        Dim modelNameForDB As String
+        cloudProviderListBox = New ListBox()
+        cloudProviderListBox.Location = New Point(10, 30)
+        cloudProviderListBox.Size = New Size(180, 380)
+        AddHandler cloudProviderListBox.SelectedIndexChanged, AddressOf CloudProviderListBox_SelectedIndexChanged
+        cloudTab.Controls.Add(cloudProviderListBox)
 
-        For Each config In ConfigData
-            If config.selected Then
-                platformForDB = config.pltform
-                apiKeyForDB = config.key
-                apiUrlForDB = config.url
-                For Each item_m In config.model
-                    If item_m.selected Then
-                        modelNameForDB = item_m.modelName
-                    End If
-                Next
-            End If
+        ' 添加新服务按钮
+        Dim cloudAddButton As New Button()
+        cloudAddButton.Text = "添加新服务"
+        cloudAddButton.Location = New Point(10, 415)
+        cloudAddButton.Size = New Size(180, 30)
+        AddHandler cloudAddButton.Click, AddressOf CloudAddButton_Click
+        cloudTab.Controls.Add(cloudAddButton)
+
+        ' 右侧：配置面板
+        Dim rightX As Integer = 210
+
+        ' 平台名称 (Label for preset, TextBox for custom)
+        cloudPlatformLabel = New Label()
+        cloudPlatformLabel.Location = New Point(rightX, 10)
+        cloudPlatformLabel.Size = New Size(440, 25)
+        cloudPlatformLabel.Font = New Font(Me.Font.FontFamily, 11, FontStyle.Bold)
+        cloudTab.Controls.Add(cloudPlatformLabel)
+
+        cloudPlatformTextBox = New TextBox()
+        cloudPlatformTextBox.Location = New Point(rightX, 10)
+        cloudPlatformTextBox.Size = New Size(440, 25)
+        cloudPlatformTextBox.Font = New Font(Me.Font.FontFamily, 11, FontStyle.Bold)
+        cloudPlatformTextBox.Visible = False
+        cloudTab.Controls.Add(cloudPlatformTextBox)
+
+        ' API URL
+        Dim urlTitleLabel As New Label()
+        urlTitleLabel.Text = "API端点："
+        urlTitleLabel.Location = New Point(rightX, 45)
+        urlTitleLabel.AutoSize = True
+        cloudTab.Controls.Add(urlTitleLabel)
+
+        cloudUrlLabel = New Label()
+        cloudUrlLabel.Location = New Point(rightX, 65)
+        cloudUrlLabel.Size = New Size(440, 20)
+        cloudUrlLabel.ForeColor = Color.DarkBlue
+        cloudTab.Controls.Add(cloudUrlLabel)
+
+        cloudUrlTextBox = New TextBox()
+        cloudUrlTextBox.Location = New Point(rightX, 65)
+        cloudUrlTextBox.Size = New Size(440, 20)
+        cloudUrlTextBox.Visible = False
+        cloudTab.Controls.Add(cloudUrlTextBox)
+
+        ' API Key
+        Dim apiKeyLabel As New Label()
+        apiKeyLabel.Text = "API Key："
+        apiKeyLabel.Location = New Point(rightX, 95)
+        apiKeyLabel.AutoSize = True
+        cloudTab.Controls.Add(apiKeyLabel)
+
+        cloudApiKeyTextBox = New TextBox()
+        cloudApiKeyTextBox.Location = New Point(rightX, 115)
+        cloudApiKeyTextBox.Size = New Size(340, 25)
+        cloudApiKeyTextBox.PasswordChar = "*"c
+        AddHandler cloudApiKeyTextBox.Enter, AddressOf CloudApiKeyTextBox_Enter
+        AddHandler cloudApiKeyTextBox.Leave, AddressOf CloudApiKeyTextBox_Leave
+        cloudTab.Controls.Add(cloudApiKeyTextBox)
+
+        ' 获取ApiKey按钮
+        cloudGetApiKeyButton = New Button()
+        cloudGetApiKeyButton.Text = "获取Key"
+        cloudGetApiKeyButton.Location = New Point(rightX + 350, 113)
+        cloudGetApiKeyButton.Size = New Size(90, 27)
+        AddHandler cloudGetApiKeyButton.Click, AddressOf CloudGetApiKeyButton_Click
+        cloudTab.Controls.Add(cloudGetApiKeyButton)
+
+        ' 模型列表标题
+        Dim modelLabel As New Label()
+        modelLabel.Text = "模型列表："
+        modelLabel.Location = New Point(rightX, 150)
+        modelLabel.AutoSize = True
+        cloudTab.Controls.Add(modelLabel)
+
+        ' 刷新模型按钮
+        cloudRefreshModelsButton = New Button()
+        cloudRefreshModelsButton.Text = "刷新列表"
+        cloudRefreshModelsButton.Location = New Point(rightX + 350, 145)
+        cloudRefreshModelsButton.Size = New Size(90, 25)
+        AddHandler cloudRefreshModelsButton.Click, AddressOf CloudRefreshModelsButton_Click
+        cloudTab.Controls.Add(cloudRefreshModelsButton)
+
+        ' 模型CheckedListBox
+        cloudModelCheckedListBox = New CheckedListBox()
+        cloudModelCheckedListBox.Location = New Point(rightX, 175)
+        cloudModelCheckedListBox.Size = New Size(440, 200)
+        cloudModelCheckedListBox.CheckOnClick = True
+        AddHandler cloudModelCheckedListBox.ItemCheck, AddressOf CloudModelCheckedListBox_ItemCheck
+        cloudTab.Controls.Add(cloudModelCheckedListBox)
+
+        ' 用于翻译复选框
+        cloudTranslateCheckBox = New CheckBox()
+        cloudTranslateCheckBox.Text = "用于翻译"
+        cloudTranslateCheckBox.Location = New Point(rightX, 385)
+        cloudTranslateCheckBox.AutoSize = True
+        cloudTab.Controls.Add(cloudTranslateCheckBox)
+
+        ' 翻译提示
+        Dim cloudTranslateTip As New Label()
+        cloudTranslateTip.Text = "勾选后，翻译功能将使用该模型"
+        cloudTranslateTip.Location = New Point(rightX + 85, 387)
+        cloudTranslateTip.ForeColor = Color.Gray
+        cloudTranslateTip.Font = New Font(Me.Font.FontFamily, 8)
+        cloudTranslateTip.AutoSize = True
+        cloudTab.Controls.Add(cloudTranslateTip)
+
+        ' 验证并保存按钮
+        cloudSaveButton = New Button()
+        cloudSaveButton.Text = "验证并保存"
+        cloudSaveButton.Location = New Point(rightX + 200, 410)
+        cloudSaveButton.Size = New Size(110, 35)
+        AddHandler cloudSaveButton.Click, AddressOf CloudSaveButton_Click
+        cloudTab.Controls.Add(cloudSaveButton)
+
+        ' 删除按钮
+        cloudDeleteButton = New Button()
+        cloudDeleteButton.Text = "删除"
+        cloudDeleteButton.Location = New Point(rightX + 330, 410)
+        cloudDeleteButton.Size = New Size(110, 35)
+        AddHandler cloudDeleteButton.Click, AddressOf CloudDeleteButton_Click
+        cloudTab.Controls.Add(cloudDeleteButton)
+    End Sub
+
+    ''' <summary>
+    ''' 初始化本地模型Tab
+    ''' </summary>
+    Private Sub InitializeLocalTab()
+        ' 左侧：服务商列表
+        Dim providerLabel As New Label()
+        providerLabel.Text = "本地服务列表："
+        providerLabel.Location = New Point(10, 10)
+        providerLabel.AutoSize = True
+        localTab.Controls.Add(providerLabel)
+
+        localProviderListBox = New ListBox()
+        localProviderListBox.Location = New Point(10, 30)
+        localProviderListBox.Size = New Size(180, 380)
+        AddHandler localProviderListBox.SelectedIndexChanged, AddressOf LocalProviderListBox_SelectedIndexChanged
+        localTab.Controls.Add(localProviderListBox)
+
+        ' 添加新服务按钮
+        localAddButton = New Button()
+        localAddButton.Text = "添加新服务"
+        localAddButton.Location = New Point(10, 415)
+        localAddButton.Size = New Size(180, 30)
+        AddHandler localAddButton.Click, AddressOf LocalAddButton_Click
+        localTab.Controls.Add(localAddButton)
+
+        ' 右侧：配置面板
+        Dim rightX As Integer = 210
+
+        ' 服务名称
+        Dim platformLabel As New Label()
+        platformLabel.Text = "服务名称："
+        platformLabel.Location = New Point(rightX, 10)
+        platformLabel.AutoSize = True
+        localTab.Controls.Add(platformLabel)
+
+        localPlatformTextBox = New TextBox()
+        localPlatformTextBox.Location = New Point(rightX, 30)
+        localPlatformTextBox.Size = New Size(440, 25)
+        localTab.Controls.Add(localPlatformTextBox)
+
+        ' API URL
+        Dim urlLabel As New Label()
+        urlLabel.Text = "API端点 (可编辑)："
+        urlLabel.Location = New Point(rightX, 65)
+        urlLabel.AutoSize = True
+        localTab.Controls.Add(urlLabel)
+
+        localUrlTextBox = New TextBox()
+        localUrlTextBox.Location = New Point(rightX, 85)
+        localUrlTextBox.Size = New Size(440, 25)
+        localTab.Controls.Add(localUrlTextBox)
+
+        ' API Key
+        Dim apiKeyLabel As New Label()
+        apiKeyLabel.Text = "API Key (大多数本地服务可留空)："
+        apiKeyLabel.Location = New Point(rightX, 120)
+        apiKeyLabel.AutoSize = True
+        localTab.Controls.Add(apiKeyLabel)
+
+        localApiKeyTextBox = New TextBox()
+        localApiKeyTextBox.Location = New Point(rightX, 140)
+        localApiKeyTextBox.Size = New Size(440, 25)
+        localTab.Controls.Add(localApiKeyTextBox)
+
+        ' 默认Key提示
+        localDefaultKeyLabel = New Label()
+        localDefaultKeyLabel.Location = New Point(rightX, 168)
+        localDefaultKeyLabel.Size = New Size(440, 20)
+        localDefaultKeyLabel.ForeColor = Color.Gray
+        localDefaultKeyLabel.Font = New Font(Me.Font.FontFamily, 8)
+        localTab.Controls.Add(localDefaultKeyLabel)
+
+        ' 模型列表标题
+        Dim modelLabel As New Label()
+        modelLabel.Text = "模型列表："
+        modelLabel.Location = New Point(rightX, 195)
+        modelLabel.AutoSize = True
+        localTab.Controls.Add(modelLabel)
+
+        ' 刷新模型按钮
+        localRefreshModelsButton = New Button()
+        localRefreshModelsButton.Text = "刷新列表"
+        localRefreshModelsButton.Location = New Point(rightX + 350, 190)
+        localRefreshModelsButton.Size = New Size(90, 25)
+        AddHandler localRefreshModelsButton.Click, AddressOf LocalRefreshModelsButton_Click
+        localTab.Controls.Add(localRefreshModelsButton)
+
+        ' 模型CheckedListBox
+        localModelCheckedListBox = New CheckedListBox()
+        localModelCheckedListBox.Location = New Point(rightX, 220)
+        localModelCheckedListBox.Size = New Size(440, 150)
+        localModelCheckedListBox.CheckOnClick = True
+        AddHandler localModelCheckedListBox.ItemCheck, AddressOf LocalModelCheckedListBox_ItemCheck
+        localTab.Controls.Add(localModelCheckedListBox)
+
+        ' 用于翻译复选框
+        localTranslateCheckBox = New CheckBox()
+        localTranslateCheckBox.Text = "用于翻译"
+        localTranslateCheckBox.Location = New Point(rightX, 380)
+        localTranslateCheckBox.AutoSize = True
+        localTab.Controls.Add(localTranslateCheckBox)
+
+        ' 翻译提示
+        Dim localTranslateTip As New Label()
+        localTranslateTip.Text = "勾选后，翻译功能将使用该模型"
+        localTranslateTip.Location = New Point(rightX + 85, 382)
+        localTranslateTip.ForeColor = Color.Gray
+        localTranslateTip.Font = New Font(Me.Font.FontFamily, 8)
+        localTranslateTip.AutoSize = True
+        localTab.Controls.Add(localTranslateTip)
+
+        ' 保存按钮
+        localSaveButton = New Button()
+        localSaveButton.Text = "验证并保存"
+        localSaveButton.Location = New Point(rightX + 200, 410)
+        localSaveButton.Size = New Size(110, 35)
+        AddHandler localSaveButton.Click, AddressOf LocalSaveButton_Click
+        localTab.Controls.Add(localSaveButton)
+
+        ' 删除按钮
+        localDeleteButton = New Button()
+        localDeleteButton.Text = "删除"
+        localDeleteButton.Location = New Point(rightX + 330, 410)
+        localDeleteButton.Size = New Size(110, 35)
+        AddHandler localDeleteButton.Click, AddressOf LocalDeleteButton_Click
+        localTab.Controls.Add(localDeleteButton)
+    End Sub
+
+    ''' <summary>
+    ''' 加载数据到UI
+    ''' </summary>
+    Private Sub LoadDataToUI()
+        ' 加载云端服务商
+        cloudProviderListBox.Items.Clear()
+        For Each config In ConfigData.Where(Function(c) c.providerType = ProviderType.Cloud)
+            cloudProviderListBox.Items.Add(config)
         Next
-
-        ' 初始化 API Key 输入框
-        apiKeyTextBox = New TextBox()
-        apiKeyTextBox.Text = If(String.IsNullOrEmpty(apiKeyForDB), "输入 API Key", apiKeyForDB)
-        apiKeyTextBox.ForeColor = If(String.IsNullOrEmpty(apiKeyForDB), Color.Gray, Color.Black)
-        apiKeyTextBox.Location = New Point(10, 90)
-        apiKeyTextBox.Size = New Size(260, 30)
-        AddHandler apiKeyTextBox.Enter, AddressOf ApiKeyTextBox_Enter ' 添加 Enter 事件处理程序
-        AddHandler apiKeyTextBox.Leave, AddressOf ApiKeyTextBox_Leave ' 添加 Leave 事件处理程序
-        Me.Controls.Add(apiKeyTextBox)
-
-        ' 初始化确认按钮
-        confirmButton = New Button()
-        confirmButton.Text = "确认"
-        confirmButton.Location = New Point(100, 130)
-        confirmButton.Size = New Size(100, 30)
-        AddHandler confirmButton.Click, AddressOf ConfirmButton_Click
-        Me.Controls.Add(confirmButton)
-
-        ' 初始化添加配置按钮
-        addConfigButton = New Button()
-        addConfigButton.Text = "添加模型配置"
-        addConfigButton.Location = New Point(100, 170)
-        addConfigButton.Size = New Size(100, 30)
-        AddHandler addConfigButton.Click, AddressOf AddConfigButton_Click
-        Me.Controls.Add(addConfigButton)
-
-        ' 初始化新配置控件
-        newModelPlatformTextBox = New TextBox()
-        newModelPlatformTextBox.Text = "模型平台"
-        newModelPlatformTextBox.ForeColor = Color.Gray
-        newModelPlatformTextBox.Location = New Point(10, 210)
-        newModelPlatformTextBox.Size = New Size(260, 30)
-        newModelPlatformTextBox.Visible = False
-        AddHandler newModelPlatformTextBox.Enter, AddressOf NewModelPlatformTextBox_Enter
-        AddHandler newModelPlatformTextBox.Leave, AddressOf NewModelPlatformTextBox_Leave
-        Me.Controls.Add(newModelPlatformTextBox)
-
-        newApiUrlTextBox = New TextBox()
-        newApiUrlTextBox.Text = "API URL"
-        newApiUrlTextBox.ForeColor = Color.Gray
-        newApiUrlTextBox.Location = New Point(10, 250)
-        newApiUrlTextBox.Size = New Size(260, 30)
-        newApiUrlTextBox.Visible = False
-        AddHandler newApiUrlTextBox.Enter, AddressOf NewApiUrlTextBox_Enter
-        AddHandler newApiUrlTextBox.Leave, AddressOf NewApiUrlTextBox_Leave
-        Me.Controls.Add(newApiUrlTextBox)
-
-        newModelNameTextBoxes = New List(Of TextBox)()
-        AddNewModelNameTextBox(False)
-
-        addModelNameButton = New Button()
-        addModelNameButton.Text = "+"
-        addModelNameButton.Location = New Point(280, 290)
-        addModelNameButton.Size = New Size(20, 20)
-        addModelNameButton.Visible = False
-        AddHandler addModelNameButton.Click, AddressOf AddModelNameButton_Click
-        Me.Controls.Add(addModelNameButton)
-
-        saveConfigButton = New Button()
-        saveConfigButton.Text = "保存"
-        saveConfigButton.Location = New Point(100, 420)
-        saveConfigButton.Size = New Size(100, 30)
-        saveConfigButton.Visible = False
-        AddHandler saveConfigButton.Click, AddressOf SaveConfigButton_Click
-        Me.Controls.Add(saveConfigButton)
-
-        ' 加载配置到复选框
-        For Each configItem In ConfigData
-            modelComboBox.Items.Add(configItem)
-        Next
-
-        ' 设置之前选择的模型
-        If Not String.IsNullOrEmpty(platformForDB) Then
-            For i As Integer = 0 To modelComboBox.Items.Count - 1
-                If CType(modelComboBox.Items(i), ConfigManager.ConfigItem).pltform = platformForDB Then
-                    modelComboBox.SelectedIndex = i
+        If cloudProviderListBox.Items.Count > 0 Then
+            ' 选中当前使用的配置
+            Dim selectedIndex = 0
+            For i = 0 To cloudProviderListBox.Items.Count - 1
+                Dim item = CType(cloudProviderListBox.Items(i), ConfigItem)
+                If item.selected Then
+                    selectedIndex = i
                     Exit For
                 End If
             Next
+            cloudProviderListBox.SelectedIndex = selectedIndex
+        End If
+
+        ' 加载本地服务商
+        localProviderListBox.Items.Clear()
+        For Each config In ConfigData.Where(Function(c) c.providerType = ProviderType.Local)
+            localProviderListBox.Items.Add(config)
+        Next
+        If localProviderListBox.Items.Count > 0 Then
+            Dim selectedIndex = 0
+            For i = 0 To localProviderListBox.Items.Count - 1
+                Dim item = CType(localProviderListBox.Items(i), ConfigItem)
+                If item.selected Then
+                    selectedIndex = i
+                    Exit For
+                End If
+            Next
+            localProviderListBox.SelectedIndex = selectedIndex
+        End If
+    End Sub
+
+#Region "云端模型事件处理"
+
+    Private Sub CloudProviderListBox_SelectedIndexChanged(sender As Object, e As EventArgs)
+        If cloudProviderListBox.SelectedItem Is Nothing Then Return
+
+        currentCloudConfig = CType(cloudProviderListBox.SelectedItem, ConfigItem)
+        
+        ' 根据是否为预置配置切换显示模式
+        Dim isPreset = currentCloudConfig.isPreset
+        
+        ' 平台名称：预置用Label，自定义用TextBox
+        cloudPlatformLabel.Visible = isPreset
+        cloudPlatformTextBox.Visible = Not isPreset
+        If isPreset Then
+            cloudPlatformLabel.Text = currentCloudConfig.pltform
         Else
-            If modelComboBox.Items.Count > 0 Then
-                modelComboBox.SelectedIndex = 0
-            End If
+            cloudPlatformTextBox.Text = currentCloudConfig.pltform
         End If
-
-        ' 设置之前选择的模型名称
-        If Not String.IsNullOrEmpty(modelNameForDB) Then
-            For i As Integer = 0 To modelNameComboBox.Items.Count - 1
-                If modelNameComboBox.Items(i).ToString() = modelNameForDB Then
-                    modelNameComboBox.SelectedIndex = i
-                    Exit For
-                End If
-            Next
+        
+        ' API URL：预置用Label，自定义用TextBox
+        cloudUrlLabel.Visible = isPreset
+        cloudUrlTextBox.Visible = Not isPreset
+        If isPreset Then
+            cloudUrlLabel.Text = currentCloudConfig.url
+        Else
+            cloudUrlTextBox.Text = currentCloudConfig.url
         End If
+        
+        cloudApiKeyTextBox.Text = If(String.IsNullOrEmpty(currentCloudConfig.key), "", currentCloudConfig.key)
+        cloudTranslateCheckBox.Checked = currentCloudConfig.translateSelected
 
-        ' 设置之前的 API Key
-        If Not String.IsNullOrEmpty(apiKeyForDB) Then
-            apiKeyTextBox.Text = apiKeyForDB
-            apiKeyTextBox.ForeColor = Color.Black
-        End If
-    End Sub
-
-    Private Sub ApiKeyTextBox_Enter(sender As Object, e As EventArgs)
-        If apiKeyTextBox.Text = "输入 API Key" Then
-            apiKeyTextBox.Text = ""
-            apiKeyTextBox.ForeColor = Color.Black
-        End If
-    End Sub
-
-    Private Sub ApiKeyTextBox_Leave(sender As Object, e As EventArgs)
-        If String.IsNullOrWhiteSpace(apiKeyTextBox.Text) Then
-            apiKeyTextBox.Text = "输入 API Key"
-            apiKeyTextBox.ForeColor = Color.Gray
-        End If
-    End Sub
-
-    Private Sub EditConfigButton_Click(sender As Object, e As EventArgs)
-        ' 获取选中的模型和 API Key
-        Dim selectedPlatform As ConfigManager.ConfigItem = CType(modelComboBox.SelectedItem, ConfigManager.ConfigItem)
-        Dim selectedModelName As String = If(modelNameComboBox.SelectedItem IsNot Nothing, modelNameComboBox.SelectedItem.ToString(), modelNameComboBox.Text)
-
-        ' 将选中的数据带入到新配置控件中
-        newModelPlatformTextBox.Text = selectedPlatform.pltform
-        newModelPlatformTextBox.ForeColor = Color.Black
-        newApiUrlTextBox.Text = selectedPlatform.url
-        newApiUrlTextBox.ForeColor = Color.Black
-
-        ' 清空并重新添加 newModelNameTextBoxes
-        For Each textBox In newModelNameTextBoxes
-            Me.Controls.Remove(textBox)
-        Next
-        newModelNameTextBoxes.Clear()
-
-        For Each model In selectedPlatform.model
-            AddNewModelNameTextBox(True)
-            Dim newModelNameTextBox = newModelNameTextBoxes.Last()
-            newModelNameTextBox.Text = model.modelName
-            newModelNameTextBox.ForeColor = Color.Black
-            If model.modelName = selectedModelName Then
-                newModelNameTextBox.BackColor = Color.LightBlue ' 标记选中的模型名称
-            End If
+        ' 加载模型列表
+        cloudModelCheckedListBox.Items.Clear()
+        For Each model In currentCloudConfig.model
+            Dim displayText = If(String.IsNullOrEmpty(model.displayName), model.modelName, model.displayName)
+            cloudModelCheckedListBox.Items.Add(model, model.selected)
         Next
 
-        ' 显示新配置控件
-        Me.Size = New Size(450, 500)
-        newModelPlatformTextBox.Visible = True
-        newApiUrlTextBox.Visible = True
-        For Each textBox In newModelNameTextBoxes
-            textBox.Visible = True
-        Next
-        addModelNameButton.Visible = True
-        saveConfigButton.Visible = True
+        ' 控制删除按钮可见性（预置配置不可删除）
+        cloudDeleteButton.Enabled = Not isPreset
     End Sub
 
-    ' 处理获取ApiKey按钮点击事件
-    Private Sub GetApiKeyButton_Click(sender As Object, e As EventArgs)
-        ' 指定URL
-        Dim urll As String = "https://cloud.siliconflow.cn/i/PGhr3knx"
+    Private Sub CloudApiKeyTextBox_Enter(sender As Object, e As EventArgs)
+        cloudApiKeyTextBox.PasswordChar = Nothing
+    End Sub
+
+    Private Sub CloudApiKeyTextBox_Leave(sender As Object, e As EventArgs)
+        cloudApiKeyTextBox.PasswordChar = "*"c
+    End Sub
+
+    Private Sub CloudGetApiKeyButton_Click(sender As Object, e As EventArgs)
+        If currentCloudConfig Is Nothing OrElse String.IsNullOrEmpty(currentCloudConfig.registerUrl) Then
+            MessageBox.Show("该服务商暂无注册链接", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
         Try
-            ' 尝试使用Edge浏览器打开URL
-            Process.Start("microsoft-edge:" & urll)
+            Process.Start(New ProcessStartInfo(currentCloudConfig.registerUrl) With {.UseShellExecute = True})
         Catch ex As Exception
-            ' 如果无法使用Edge，则使用默认浏览器
-            Try
-                Process.Start(urll)
-            Catch ex2 As Exception
-                MessageBox.Show("无法打开浏览器。请手动访问: " & urll, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-            End Try
+            MessageBox.Show($"无法打开浏览器: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
 
-    ' 切换大模型后的确认按钮
-    Private Async Sub ConfirmButton_Click(sender As Object, e As EventArgs)
-        ' 获取选中的模型和API Key
-        Dim selectedPlatform As ConfigManager.ConfigItem = CType(modelComboBox.SelectedItem, ConfigManager.ConfigItem)
-        Dim apiUrl As String = selectedPlatform.url
-        Dim selectedModelName As String = If(modelNameComboBox.SelectedItem IsNot Nothing, modelNameComboBox.SelectedItem.ToString(), modelNameComboBox.Text)
-        Dim inputApiKey As String = apiKeyTextBox.Text
+    Private Async Sub CloudRefreshModelsButton_Click(sender As Object, e As EventArgs)
+        If currentCloudConfig Is Nothing Then Return
 
-        ' 检查API Key是否有效
-        If inputApiKey = "输入 API Key" OrElse String.IsNullOrWhiteSpace(inputApiKey) Then
-            MessageBox.Show("请输入有效的API Key", "验证失败", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+        Dim apiKey = cloudApiKeyTextBox.Text
+        If String.IsNullOrEmpty(apiKey) Then
+            MessageBox.Show("请先输入API Key", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             Return
         End If
 
-        ' 获取当前选中的模型对象
-        Dim selectedModel As ConfigManager.ConfigItemModel = Nothing
-        For Each model In selectedPlatform.model
-            If model.modelName = selectedModelName Then
-                selectedModel = model
-                Exit For
-            End If
-        Next
-
-        ' 判断是否需要验证：
-        ' 1. 如果之前已验证过且API Key未变更，则无需再次验证
-        ' 2. 如果之前未验证过或API Key已变更，则需要验证
-        Dim needValidation As Boolean = True
-
-
-        ' 检查两层验证状态
-        If selectedPlatform.validated AndAlso selectedPlatform.key = inputApiKey AndAlso
-           selectedModel IsNot Nothing AndAlso selectedModel.mcpValidated Then
-            needValidation = False
-        End If
-
-        ' 如果不需要验证，直接保存并退出
-        If Not needValidation Then
-            ' 重置选择后的selected属性
-            For Each config In ConfigData
-                config.selected = False
-                If selectedPlatform.pltform = config.pltform Then
-                    config.selected = True
-                    For Each item_m In config.model
-                        item_m.selected = False
-                        If item_m.modelName = selectedModelName Then
-                            item_m.selected = True
-                        End If
-                    Next
-                End If
-            Next
-
-            ' 保存到文件
-            SaveConfig()
-
-            ' 刷新内存中的api配置
-            ConfigSettings.ApiUrl = apiUrl
-            ConfigSettings.ApiKey = inputApiKey
-            ConfigSettings.platform = selectedPlatform.pltform
-            ConfigSettings.ModelName = selectedModelName
-            ConfigSettings.mcpable = selectedModel.mcpable
-
-            ' 关闭对话框
-            Me.DialogResult = DialogResult.OK
-            Me.Close()
+        ' 对于自定义配置，从TextBox获取URL
+        Dim apiUrl = If(currentCloudConfig.isPreset, currentCloudConfig.url, cloudUrlTextBox.Text)
+        If String.IsNullOrEmpty(apiUrl) Then
+            MessageBox.Show("请先输入API端点", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             Return
         End If
 
-        ' 需要验证，显示加载提示
+        cloudRefreshModelsButton.Enabled = False
+        cloudRefreshModelsButton.Text = "刷新中..."
         Cursor = Cursors.WaitCursor
-        confirmButton.Enabled = False
-        confirmButton.Text = "验证中..."
 
-        GlobalStatusStripAll.ShowWarning("推理模型比普通模型会更加慢一些，请耐心等待")
         Try
-            ' 首先使用简单的请求体进行快速验证
-            Dim simpleRequestBody As String = $"{{""model"": ""{selectedModelName}"", ""stream"": true ,""messages"": [{{""role"": ""user"", ""content"": ""hi""}}]}}"
-            Dim response As String = Await SendHttpRequestForValidation(apiUrl, inputApiKey, simpleRequestBody)
-
-            ' 检查响应是否有效
-            Dim validationSuccess As Boolean = Not String.IsNullOrEmpty(response)
-
-            If validationSuccess Then
-
-                Dim mcpSupported As Boolean = False
-
-
-                ' 重置选择后的selected属性和key，设置validated为true
-                For Each config In ConfigData
-                    config.selected = False
-                    If selectedPlatform.pltform = config.pltform Then
-                        config.selected = True
-                        config.key = inputApiKey
-                        config.validated = True ' 标记为已验证
-                        For Each item_m In config.model
-                            item_m.selected = False
-                            If item_m.modelName = selectedModelName Then
-                                item_m.mcpable = mcpSupported
-                                item_m.mcpValidated = False
-                                item_m.selected = True
-                            End If
-                        Next
+            Dim models = Await ModelApiClient.GetModelsAsync(apiUrl, apiKey)
+            If models.Count > 0 Then
+                ' 保留已有模型的选中状态，添加新模型
+                For Each modelName In models
+                    Dim existing = currentCloudConfig.model.FirstOrDefault(Function(m) m.modelName = modelName)
+                    If existing Is Nothing Then
+                        currentCloudConfig.model.Add(New ConfigItemModel() With {
+                            .modelName = modelName,
+                            .displayName = modelName
+                        })
                     End If
                 Next
 
-                ' 保存到文件
-                SaveConfig()
-
-                If mcpSupported Then
-                    Debug.WriteLine($"检测到 {selectedModelName} 模型支持MCP工具功能！", "MCP功能支持", MessageBoxButtons.OK, MessageBoxIcon.Information)
-                End If
-
-                ' 刷新内存中的api配置
-                ConfigSettings.ApiUrl = apiUrl
-                ConfigSettings.ApiKey = inputApiKey
-                ConfigSettings.platform = selectedPlatform.pltform
-                ConfigSettings.ModelName = selectedModelName
-                ConfigSettings.mcpable = mcpSupported
-
-
-                ' 检测MCP功能
-                ' 验证成功后，异步检查function tools支持
-                ' 注意：这里我们不等待结果，让它在后台运行
-                Task.Run(Async Function()
-                             Try
-
-                                 Dim mcpSupportedTemp As Boolean = Await CheckFunctionToolsSupport(apiUrl, inputApiKey, selectedModelName)
-
-                                 ' 更新配置中的MCP支持状态
-                                 For Each config In ConfigData
-                                     If config.pltform = selectedPlatform.pltform Then
-                                         For Each item_m In config.model
-                                             If item_m.modelName = selectedModelName Then
-                                                 item_m.mcpable = mcpSupportedTemp
-                                                 item_m.mcpValidated = True
-                                                 ConfigSettings.mcpable = mcpSupportedTemp
-                                                 Exit For
-                                             End If
-                                         Next
-                                         Exit For
-                                     End If
-                                 Next
-
-                                 ' 保存更新后的配置
-                                 SaveConfig()
-
-                                 If mcpSupportedTemp Then
-                                     Debug.WriteLine($"检测到 {selectedModelName} 模型支持MCP工具功能！")
-                                 End If
-                             Catch ex As Exception
-                                 Debug.WriteLine($"后台检查MCP支持时出错: {ex.Message}")
-                             End Try
-                         End Function)
-
-                ' 关闭对话框
-                Me.DialogResult = DialogResult.OK
-                Me.Close()
-
+                ' 刷新UI
+                CloudProviderListBox_SelectedIndexChanged(Nothing, Nothing)
+                MessageBox.Show($"已获取 {models.Count} 个模型", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Else
-                ' 验证失败，提示用户修改
-                MessageBox.Show("API验证失败。请检查API URL、模型名称和API Key是否正确。", "验证失败",
-                          MessageBoxButtons.OK, MessageBoxIcon.Warning)
-
-                ' 标记为未验证
-                selectedPlatform.validated = False
-                If selectedModel IsNot Nothing Then
-                    selectedModel.mcpValidated = False
-                End If
+                MessageBox.Show("未获取到模型列表，请检查API Key是否正确", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             End If
         Catch ex As Exception
-            ' 处理异常
-            MessageBox.Show($"验证过程中出错: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-
-            ' 标记为未验证
-            selectedPlatform.validated = False
-            If selectedModel IsNot Nothing Then
-                selectedModel.mcpValidated = False
-            End If
+            MessageBox.Show($"刷新模型列表失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         Finally
-            ' 恢复按钮状态
-            confirmButton.Enabled = True
-            confirmButton.Text = "确认"
+            cloudRefreshModelsButton.Enabled = True
+            cloudRefreshModelsButton.Text = "刷新列表"
             Cursor = Cursors.Default
         End Try
     End Sub
 
-    ' 首先，添加一个异步方法来检查function tools支持
-    Private Async Function CheckFunctionToolsSupport(apiUrl As String, apiKey As String, modelName As String) As Task(Of Boolean)
+    Private Sub CloudModelCheckedListBox_ItemCheck(sender As Object, e As ItemCheckEventArgs)
+        ' 单选逻辑：只允许选中一个模型
+        If e.NewValue = CheckState.Checked Then
+            For i = 0 To cloudModelCheckedListBox.Items.Count - 1
+                If i <> e.Index Then
+                    cloudModelCheckedListBox.SetItemChecked(i, False)
+                End If
+            Next
+        End If
+    End Sub
+
+    Private Async Sub CloudSaveButton_Click(sender As Object, e As EventArgs)
+        If currentCloudConfig Is Nothing Then Return
+
+        ' 对于自定义配置，从TextBox获取平台名和URL
+        Dim platformName As String
+        Dim apiUrl As String
+        If currentCloudConfig.isPreset Then
+            platformName = currentCloudConfig.pltform
+            apiUrl = currentCloudConfig.url
+        Else
+            platformName = cloudPlatformTextBox.Text
+            apiUrl = cloudUrlTextBox.Text
+            
+            If String.IsNullOrEmpty(platformName) Then
+                MessageBox.Show("请输入服务名称", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                Return
+            End If
+            
+            If String.IsNullOrEmpty(apiUrl) OrElse Not (apiUrl.StartsWith("http://") OrElse apiUrl.StartsWith("https://")) Then
+                MessageBox.Show("请输入有效的API端点 (以http://或https://开头)", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                Return
+            End If
+        End If
+
+        Dim apiKey = cloudApiKeyTextBox.Text
+        If String.IsNullOrEmpty(apiKey) Then
+            MessageBox.Show("请输入API Key", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End If
+
+        ' 获取选中的模型
+        Dim selectedModelName As String = ""
+        For i = 0 To cloudModelCheckedListBox.Items.Count - 1
+            If cloudModelCheckedListBox.GetItemChecked(i) Then
+                Dim model = CType(cloudModelCheckedListBox.Items(i), ConfigItemModel)
+                selectedModelName = model.modelName
+                Exit For
+            End If
+        Next
+
+        If String.IsNullOrEmpty(selectedModelName) Then
+            MessageBox.Show("请选择一个模型", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End If
+
+        cloudSaveButton.Enabled = False
+        cloudSaveButton.Text = "验证中..."
+        Cursor = Cursors.WaitCursor
+
         Try
-            ' 构建一个带tools定义的请求体
-            Dim functionToolRequestBody As String = "{" &
-            $"""model"": ""{modelName}"", ""stream"": true," &
-            $"""messages"": [{{""role"": ""user"", ""content"": ""请计算5+7的结果，并通过工具函数返回""}}]," &
-            $"""tools"": [" &
-                "{" &
-                    """type"": ""function""," &
-                    """function"": {" &
-                        """name"": ""calculator""," &
-                        """description"": ""计算数学表达式的结果""," &
-                        """parameters"": {" &
-                            """type"": ""object""," &
-                            """properties"": {" &
-                                """result"": {" &
-                                    """type"": ""number""," &
-                                    """description"": ""计算结果""" &
-                                "}" &
-                            "}," &
-                            """required"": [""result""]" &
-                        "}" &
-                    "}" &
-                "}" &
-            "]," &
-            """tool_choice"": ""auto""" &
-        "}"
-            Dim toolResponse As String = Await SendHttpRequestForValidation(apiUrl, apiKey, functionToolRequestBody, True)
+            ' 验证API
+            Dim validationResult = Await ValidateApiAsync(apiUrl, apiKey, selectedModelName)
+            If validationResult Then
+                ' 更新配置
+                currentCloudConfig.pltform = platformName
+                currentCloudConfig.url = apiUrl
+                currentCloudConfig.key = apiKey
+                currentCloudConfig.validated = True
+                currentCloudConfig.translateSelected = cloudTranslateCheckBox.Checked
 
-            Return Not String.IsNullOrEmpty(toolResponse)
+                ' 更新模型选中状态
+                For Each model In currentCloudConfig.model
+                    model.selected = (model.modelName = selectedModelName)
+                Next
 
+                ' 更新全局选中状态
+                For Each config In ConfigData
+                    config.selected = (config Is currentCloudConfig)
+                    If config IsNot currentCloudConfig Then
+                        config.translateSelected = If(cloudTranslateCheckBox.Checked, False, config.translateSelected)
+                    End If
+                Next
+
+                ' 更新全局配置
+                ConfigSettings.ApiUrl = currentCloudConfig.url
+                ConfigSettings.ApiKey = apiKey
+                ConfigSettings.platform = currentCloudConfig.pltform
+                ConfigSettings.ModelName = selectedModelName
+
+                Dim selectedModel = currentCloudConfig.model.FirstOrDefault(Function(m) m.modelName = selectedModelName)
+                If selectedModel IsNot Nothing Then
+                    ConfigSettings.mcpable = selectedModel.mcpable
+                End If
+
+                ' 保存配置
+                SaveConfig()
+
+                MessageBox.Show("配置已保存", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                Me.DialogResult = DialogResult.OK
+                Me.Close()
+            Else
+                MessageBox.Show("API验证失败，请检查API Key和模型名称是否正确", "验证失败", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            End If
         Catch ex As Exception
-            Debug.WriteLine($"检查function tools支持时出错: {ex.Message}")
+            MessageBox.Show($"验证失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        Finally
+            cloudSaveButton.Enabled = True
+            cloudSaveButton.Text = "验证并保存"
+            Cursor = Cursors.Default
+        End Try
+    End Sub
+
+    Private Sub CloudDeleteButton_Click(sender As Object, e As EventArgs)
+        If currentCloudConfig Is Nothing Then Return
+        If currentCloudConfig.isPreset Then
+            MessageBox.Show("预置配置不可删除", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        If MessageBox.Show($"确定要删除 {currentCloudConfig.pltform} 吗？", "确认删除", MessageBoxButtons.YesNo, MessageBoxIcon.Question) = DialogResult.Yes Then
+            ConfigData.Remove(currentCloudConfig)
+            SaveConfig()
+            LoadDataToUI()
+        End If
+    End Sub
+
+    Private Sub CloudAddButton_Click(sender As Object, e As EventArgs)
+        ' 创建新的云端服务配置
+        Dim newConfig As New ConfigItem() With {
+            .pltform = "新云端服务",
+            .url = "https://api.example.com/v1/chat/completions",
+            .providerType = ProviderType.Cloud,
+            .isPreset = False,
+            .key = "",
+            .registerUrl = "",
+            .translateSelected = True,
+            .model = New List(Of ConfigItemModel)()
+        }
+
+        ConfigData.Add(newConfig)
+        cloudProviderListBox.Items.Add(newConfig)
+        cloudProviderListBox.SelectedItem = newConfig
+    End Sub
+
+#End Region
+
+#Region "本地模型事件处理"
+
+    Private Sub LocalProviderListBox_SelectedIndexChanged(sender As Object, e As EventArgs)
+        If localProviderListBox.SelectedItem Is Nothing Then Return
+
+        currentLocalConfig = CType(localProviderListBox.SelectedItem, ConfigItem)
+        
+        ' 更新配置面板
+        localPlatformTextBox.Text = currentLocalConfig.pltform
+        localUrlTextBox.Text = currentLocalConfig.url
+        localApiKeyTextBox.Text = If(String.IsNullOrEmpty(currentLocalConfig.key), "", currentLocalConfig.key)
+        localDefaultKeyLabel.Text = If(String.IsNullOrEmpty(currentLocalConfig.defaultApiKey), "", $"提示: 默认APIKey为 '{currentLocalConfig.defaultApiKey}'，大多数情况可留空")
+        localTranslateCheckBox.Checked = currentLocalConfig.translateSelected
+
+        ' 加载模型列表
+        localModelCheckedListBox.Items.Clear()
+        For Each model In currentLocalConfig.model
+            Dim displayText = If(String.IsNullOrEmpty(model.displayName), model.modelName, model.displayName)
+            localModelCheckedListBox.Items.Add(model, model.selected)
+        Next
+
+        ' 控制删除按钮可见性（预置配置可删除但会提示）
+        localDeleteButton.Enabled = True
+        localPlatformTextBox.ReadOnly = currentLocalConfig.isPreset
+    End Sub
+
+    Private Sub LocalAddButton_Click(sender As Object, e As EventArgs)
+        ' 创建新的本地服务配置
+        Dim newConfig As New ConfigItem() With {
+            .pltform = "新本地服务",
+            .url = "http://localhost:8000/v1/chat/completions",
+            .providerType = ProviderType.Local,
+            .isPreset = False,
+            .key = "",
+            .defaultApiKey = "",
+            .translateSelected = True,
+            .model = New List(Of ConfigItemModel)()
+        }
+
+        ConfigData.Add(newConfig)
+        localProviderListBox.Items.Add(newConfig)
+        localProviderListBox.SelectedItem = newConfig
+    End Sub
+
+    Private Async Sub LocalRefreshModelsButton_Click(sender As Object, e As EventArgs)
+        If currentLocalConfig Is Nothing Then Return
+
+        Dim apiUrl = localUrlTextBox.Text
+        Dim apiKey = If(String.IsNullOrEmpty(localApiKeyTextBox.Text), currentLocalConfig.defaultApiKey, localApiKeyTextBox.Text)
+
+        If String.IsNullOrEmpty(apiUrl) Then
+            MessageBox.Show("请先输入API端点", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End If
+
+        localRefreshModelsButton.Enabled = False
+        localRefreshModelsButton.Text = "刷新中..."
+        Cursor = Cursors.WaitCursor
+
+        Try
+            Dim models = Await ModelApiClient.GetModelsAsync(apiUrl, apiKey)
+            If models.Count > 0 Then
+                ' 清空并重新加载模型列表
+                currentLocalConfig.model.Clear()
+                For Each modelName In models
+                    currentLocalConfig.model.Add(New ConfigItemModel() With {
+                        .modelName = modelName,
+                        .displayName = modelName,
+                        .selected = (currentLocalConfig.model.Count = 0)
+                    })
+                Next
+
+                ' 刷新UI
+                LocalProviderListBox_SelectedIndexChanged(Nothing, Nothing)
+                MessageBox.Show($"已获取 {models.Count} 个模型", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Else
+                MessageBox.Show("未获取到模型列表，请确保本地服务已启动", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            End If
+        Catch ex As Exception
+            MessageBox.Show($"刷新模型列表失败: {ex.Message}" & vbCrLf & "请确保本地服务已启动", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        Finally
+            localRefreshModelsButton.Enabled = True
+            localRefreshModelsButton.Text = "刷新列表"
+            Cursor = Cursors.Default
+        End Try
+    End Sub
+
+    Private Sub LocalModelCheckedListBox_ItemCheck(sender As Object, e As ItemCheckEventArgs)
+        ' 单选逻辑
+        If e.NewValue = CheckState.Checked Then
+            For i = 0 To localModelCheckedListBox.Items.Count - 1
+                If i <> e.Index Then
+                    localModelCheckedListBox.SetItemChecked(i, False)
+                End If
+            Next
+        End If
+    End Sub
+
+    Private Async Sub LocalSaveButton_Click(sender As Object, e As EventArgs)
+        If currentLocalConfig Is Nothing Then Return
+
+        Dim platformName = localPlatformTextBox.Text
+        Dim apiUrl = localUrlTextBox.Text
+        Dim apiKey = If(String.IsNullOrEmpty(localApiKeyTextBox.Text), currentLocalConfig.defaultApiKey, localApiKeyTextBox.Text)
+
+        If String.IsNullOrEmpty(platformName) Then
+            MessageBox.Show("请输入服务名称", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End If
+
+        If String.IsNullOrEmpty(apiUrl) OrElse Not (apiUrl.StartsWith("http://") OrElse apiUrl.StartsWith("https://")) Then
+            MessageBox.Show("请输入有效的API端点 (以http://或https://开头)", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End If
+
+        ' 获取选中的模型
+        Dim selectedModelName As String = ""
+        For i = 0 To localModelCheckedListBox.Items.Count - 1
+            If localModelCheckedListBox.GetItemChecked(i) Then
+                Dim model = CType(localModelCheckedListBox.Items(i), ConfigItemModel)
+                selectedModelName = model.modelName
+                Exit For
+            End If
+        Next
+
+        localSaveButton.Enabled = False
+        localSaveButton.Text = "验证中..."
+        Cursor = Cursors.WaitCursor
+
+        Try
+            ' 本地模型验证 - 尝试连接
+            Dim validationResult = True
+            If Not String.IsNullOrEmpty(selectedModelName) Then
+                validationResult = Await ValidateApiAsync(apiUrl, apiKey, selectedModelName)
+            End If
+
+            If validationResult OrElse String.IsNullOrEmpty(selectedModelName) Then
+                ' 更新配置
+                currentLocalConfig.pltform = platformName
+                currentLocalConfig.url = apiUrl
+                currentLocalConfig.key = apiKey
+                currentLocalConfig.validated = validationResult
+                currentLocalConfig.translateSelected = localTranslateCheckBox.Checked
+
+                ' 更新模型选中状态
+                For Each model In currentLocalConfig.model
+                    model.selected = (model.modelName = selectedModelName)
+                Next
+
+                ' 更新全局选中状态
+                For Each config In ConfigData
+                    config.selected = (config Is currentLocalConfig)
+                    If config IsNot currentLocalConfig Then
+                        config.translateSelected = If(localTranslateCheckBox.Checked, False, config.translateSelected)
+                    End If
+                Next
+
+                ' 更新全局配置
+                If Not String.IsNullOrEmpty(selectedModelName) Then
+                    ConfigSettings.ApiUrl = apiUrl
+                    ConfigSettings.ApiKey = apiKey
+                    ConfigSettings.platform = platformName
+                    ConfigSettings.ModelName = selectedModelName
+                End If
+
+                ' 保存配置
+                SaveConfig()
+
+                ' 刷新ListBox显示
+                Dim selectedIndex = localProviderListBox.SelectedIndex
+                localProviderListBox.Items(selectedIndex) = currentLocalConfig
+
+                MessageBox.Show("配置已保存", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                Me.DialogResult = DialogResult.OK
+                Me.Close()
+            Else
+                MessageBox.Show("无法连接到本地服务，请确保服务已启动", "验证失败", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            End If
+        Catch ex As Exception
+            MessageBox.Show($"保存失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        Finally
+            localSaveButton.Enabled = True
+            localSaveButton.Text = "验证并保存"
+            Cursor = Cursors.Default
+        End Try
+    End Sub
+
+    Private Sub LocalDeleteButton_Click(sender As Object, e As EventArgs)
+        If currentLocalConfig Is Nothing Then Return
+
+        Dim message = If(currentLocalConfig.isPreset, $"{currentLocalConfig.pltform} 是预置配置，删除后重启将恢复，确定要删除吗？", $"确定要删除 {currentLocalConfig.pltform} 吗？")
+
+        If MessageBox.Show(message, "确认删除", MessageBoxButtons.YesNo, MessageBoxIcon.Question) = DialogResult.Yes Then
+            ConfigData.Remove(currentLocalConfig)
+            SaveConfig()
+            LoadDataToUI()
+        End If
+    End Sub
+
+#End Region
+
+#Region "通用方法"
+
+    ''' <summary>
+    ''' 验证API连接
+    ''' </summary>
+    Private Async Function ValidateApiAsync(apiUrl As String, apiKey As String, modelName As String) As Task(Of Boolean)
+        Try
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
+
+            Using client As New HttpClient()
+                client.Timeout = TimeSpan.FromSeconds(60)
+
+                Dim requestBody As String
+                Dim request As HttpRequestMessage
+
+                ' 检查是否是Anthropic
+                If apiUrl.Contains("anthropic.com") Then
+                    ' Anthropic格式
+                    requestBody = $"{{""model"": ""{modelName}"", ""max_tokens"": 100, ""messages"": [{{""role"": ""user"", ""content"": ""hi""}}]}}"
+                    request = New HttpRequestMessage(HttpMethod.Post, apiUrl)
+                    request.Headers.Add("x-api-key", apiKey)
+                    request.Headers.Add("anthropic-version", "2023-06-01")
+                Else
+                    ' OpenAI兼容格式
+                    requestBody = $"{{""model"": ""{modelName}"", ""stream"": false, ""messages"": [{{""role"": ""user"", ""content"": ""hi""}}]}}"
+                    request = New HttpRequestMessage(HttpMethod.Post, apiUrl)
+                    request.Headers.Authorization = New AuthenticationHeaderValue("Bearer", apiKey)
+                End If
+
+                request.Content = New StringContent(requestBody, Encoding.UTF8, "application/json")
+
+                Using response = Await client.SendAsync(request)
+                    Return response.IsSuccessStatusCode
+                End Using
+            End Using
+        Catch ex As Exception
+            Debug.WriteLine($"API验证异常: {ex.Message}")
             Return False
         End Try
     End Function
 
-    ' 用于验证的API请求方法
-    Private Async Function SendHttpRequestForValidation(apiUrl As String, apiKey As String, requestBody As String, Optional checkFunctionTool As Boolean = False) As Task(Of String)
-        Try
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
-            Using client As New Net.Http.HttpClient()
-                client.Timeout = TimeSpan.FromSeconds(60)
-                Dim request As New Net.Http.HttpRequestMessage(Net.Http.HttpMethod.Post, apiUrl)
-                request.Headers.Authorization = New Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey)
-                request.Content = New Net.Http.StringContent(requestBody, System.Text.Encoding.UTF8, "application/json")
+#End Region
 
-                Using response As Net.Http.HttpResponseMessage = Await client.SendAsync(request, Net.Http.HttpCompletionOption.ResponseHeadersRead)
-                    response.EnsureSuccessStatusCode()
-                    Debug.WriteLine($"[HTTP] 校验API响应状态码: {response.StatusCode}")
-                    If response.StatusCode <> Net.HttpStatusCode.OK Then
-                        Return String.Empty
-                    End If
-
-                    If Not checkFunctionTool Then
-                        Return "OK"
-                    End If
-
-                    Using responseStream As IO.Stream = Await response.Content.ReadAsStreamAsync()
-                        Using reader As New IO.StreamReader(responseStream, System.Text.Encoding.UTF8)
-                            Dim buffer(40960) As Char
-                            Dim readCount As Integer
-                            Dim chunkBuilder As New StringBuilder()
-                            Do
-                                readCount = Await reader.ReadAsync(buffer, 0, buffer.Length)
-                                If readCount = 0 Then Exit Do
-                                Dim chunkT As String = New String(buffer, 0, readCount)
-                                chunkT = chunkT.Replace("data:", "")
-                                chunkBuilder.Append(chunkT)
-                                Dim chunk As String = chunkBuilder.ToString()
-                                If chunk.Trim() = "" Then
-                                    Continue Do
-                                End If
-
-                                ' 按行分割处理
-                                Dim lines = chunk.Split({vbCr, vbLf}, StringSplitOptions.RemoveEmptyEntries)
-                                For Each line In lines
-                                    If line = "[DONE]" OrElse line.Trim() = "" Then Continue For
-                                    If Not line.TrimStart().StartsWith("{") Then Continue For
-                                    Try
-                                        Dim jsonObj = Newtonsoft.Json.Linq.JObject.Parse(line)
-                                        Dim delta = jsonObj("choices")?(0)?("delta")
-                                        If delta IsNot Nothing Then
-                                            ' 推理模型：reasoning_content，普通模型：content
-                                            If Not String.IsNullOrEmpty(delta("reasoning_content")?.ToString()) OrElse
-                                           Not String.IsNullOrEmpty(delta("content")?.ToString()) Then
-                                                Return line ' API验证成功
-                                            End If
-                                            If checkFunctionTool Then
-                                                ' function tool相关字段
-                                                If delta("tool_calls") IsNot Nothing OrElse
-                                               delta("function_call") IsNot Nothing OrElse
-                                               delta("tools") IsNot Nothing OrElse
-                                               (jsonObj("capabilities") IsNot Nothing AndAlso jsonObj("capabilities")("tools") IsNot Nothing) Then
-                                                    Return line ' function tool支持
-                                                End If
-                                            End If
-                                        End If
-                                    Catch ex As Exception
-                                        ' 忽略解析错误
-                                    End Try
-                                Next
-                                chunkBuilder.Clear()
-                            Loop
-                        End Using
-                    End Using
-                End Using
-            End Using
-            Return String.Empty
-        Catch ex As Exception
-            Debug.WriteLine($"API验证请求失败: {ex.Message}")
-            Return String.Empty
-        End Try
-    End Function
-
-    Private Sub ModelComboBox_SelectedIndexChanged(sender As Object, e As EventArgs)
-        ' 根据选中的模型更新模型名称选择 ComboBox
-        modelNameComboBox.Items.Clear()
-        Dim selectedModel As ConfigManager.ConfigItem = CType(modelComboBox.SelectedItem, ConfigManager.ConfigItem)
-        For Each ModelNameT In selectedModel.model
-            modelNameComboBox.Items.Add(ModelNameT)
-        Next
-        If modelNameComboBox.Items.Count > 0 Then
-            modelNameComboBox.SelectedIndex = 0
-        End If
-
-        ' 更新 API Key
-        apiKeyTextBox.Text = selectedModel.key
-        apiKeyTextBox.ForeColor = If(String.IsNullOrEmpty(selectedModel.key), Color.Gray, Color.Black)
-    End Sub
-
-    Private Sub AddConfigButton_Click(sender As Object, e As EventArgs)
-        ' 显示新配置控件
-        Me.Size = New Size(450, 500)
-        newModelPlatformTextBox.Visible = True
-        newApiUrlTextBox.Visible = True
-        For Each textBox In newModelNameTextBoxes
-            textBox.Visible = True
-        Next
-        addModelNameButton.Visible = True
-        saveConfigButton.Visible = True
-
-    End Sub
-
-    Private Sub AddModelNameButton_Click(sender As Object, e As EventArgs)
-        AddNewModelNameTextBox(True)
-    End Sub
-
-    Private Sub AddNewModelNameTextBox(display As Boolean)
-        Dim newModelNameTextBox As New TextBox()
-        newModelNameTextBox.Text = "具体模型"
-        newModelNameTextBox.ForeColor = Color.Gray
-        newModelNameTextBox.Location = New Point(10, 290 + newModelNameTextBoxes.Count * 40)
-        newModelNameTextBox.Size = New Size(260, 30)
-        newModelNameTextBox.Visible = display
-        AddHandler newModelNameTextBox.Enter, AddressOf NewModelNameTextBox_Enter
-        AddHandler newModelNameTextBox.Leave, AddressOf NewModelNameTextBox_Leave
-        Me.Controls.Add(newModelNameTextBox)
-        newModelNameTextBoxes.Add(newModelNameTextBox)
-
-        ' 只有第二行及之后的行才添加减号按钮
-        If newModelNameTextBoxes.Count > 1 Then
-            Dim removeButton As New Button()
-            removeButton.Text = "-"
-            removeButton.Location = New Point(280, 290 + (newModelNameTextBoxes.Count - 1) * 40)
-            removeButton.Size = New Size(20, 20)
-            removeButton.Visible = display
-            AddHandler removeButton.Click, Sub(sender As Object, e As EventArgs)
-                                               Me.Controls.Remove(newModelNameTextBox)
-                                               Me.Controls.Remove(removeButton)
-                                               newModelNameTextBoxes.Remove(newModelNameTextBox)
-                                               Me.Refresh()
-                                           End Sub
-            Me.Controls.Add(removeButton)
-        End If
-        Me.Refresh()
-    End Sub
-
-
-    Private Sub SaveConfigButton_Click(sender As Object, e As EventArgs)
-        ' 获取新配置
-        Dim newModelPlatform As String = newModelPlatformTextBox.Text
-        Dim newApiUrl As String = newApiUrlTextBox.Text
-        Dim newModels As New List(Of ConfigItemModel)()
-        For Each textBox In newModelNameTextBoxes
-            If textBox.Text <> "具体模型" AndAlso Not String.IsNullOrWhiteSpace(textBox.Text) Then
-                newModels.Add(New ConfigItemModel() With {.modelName = textBox.Text, .selected = True})
-
-            End If
-        Next
-
-        ' 如果newApiUrl不是以http://或https://开头，则报错异常提示
-        If Not newApiUrl.StartsWith("http://") And Not newApiUrl.StartsWith("https://") Then
-            MessageBox.Show("API URL 必须以 http:// 或 https:// 开头", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-            Return
-        End If
-
-
-
-        ' 检查是否存在相同的 platform
-        Dim existingItem As ConfigManager.ConfigItem = ConfigData.FirstOrDefault(Function(item) item.pltform = newModelPlatform)
-        If existingItem IsNot Nothing Then
-            ' 更新已有的 platform 数据
-            existingItem.url = newApiUrl
-            existingItem.model = newModels
-            existingItem.selected = True
-        Else
-            ' 用户本地新增模型到 ComboBox
-            Dim newItem As New ConfigManager.ConfigItem() With {
-            .pltform = newModelPlatform,
-            .url = newApiUrl,
-            .model = newModels,
-            .selected = True
-        }
-            ConfigData.Add(newItem)
-            modelComboBox.Items.Add(newItem)
-            modelComboBox.SelectedItem = newItem
-        End If
-
-        ' 保存到文件
-        SaveConfig()
-
-        modelNameComboBox.Items.Clear()
-        For Each model In newModels
-            modelNameComboBox.Items.Add(model)
-        Next
-        If modelNameComboBox.Items.Count > 0 Then
-            modelNameComboBox.SelectedIndex = 0
-        End If
-
-
-        newModelPlatformTextBox.Text = "模型平台"
-        newModelPlatformTextBox.ForeColor = Color.Gray
-        newApiUrlTextBox.Text = "API URL"
-        newApiUrlTextBox.ForeColor = Color.Gray
-        For Each textBox In newModelNameTextBoxes
-            textBox.Text = "具体模型"
-            textBox.ForeColor = Color.Gray
-        Next
-
-        Me.Size = New Size(450, 300)
-        newModelPlatformTextBox.Visible = False
-        newApiUrlTextBox.Visible = False
-        For Each textBox In newModelNameTextBoxes
-            textBox.Visible = False
-        Next
-        addModelNameButton.Visible = False
-        saveConfigButton.Visible = False
-    End Sub
-
-    Private Sub NewModelPlatformTextBox_Enter(sender As Object, e As EventArgs)
-        If newModelPlatformTextBox.Text = "模型平台" Then
-            newModelPlatformTextBox.Text = ""
-            newModelPlatformTextBox.ForeColor = Color.Black
-        End If
-    End Sub
-
-    Private Sub NewModelPlatformTextBox_Leave(sender As Object, e As EventArgs)
-        If String.IsNullOrWhiteSpace(newModelPlatformTextBox.Text) Then
-            newModelPlatformTextBox.Text = "模型平台"
-            newModelPlatformTextBox.ForeColor = Color.Gray
-        End If
-    End Sub
-
-    Private Sub NewApiUrlTextBox_Enter(sender As Object, e As EventArgs)
-        If newApiUrlTextBox.Text = "API URL" Then
-            newApiUrlTextBox.Text = ""
-            newApiUrlTextBox.ForeColor = Color.Black
-        End If
-    End Sub
-
-    Private Sub NewApiUrlTextBox_Leave(sender As Object, e As EventArgs)
-        If String.IsNullOrWhiteSpace(newApiUrlTextBox.Text) Then
-            newApiUrlTextBox.Text = "API URL"
-            newApiUrlTextBox.ForeColor = Color.Gray
-        End If
-    End Sub
-    Private Sub NewModelNameTextBox_Enter(sender As Object, e As EventArgs)
-        If CType(sender, TextBox).Text = "具体模型" Then
-            CType(sender, TextBox).Text = ""
-            CType(sender, TextBox).ForeColor = Color.Black
-        End If
-    End Sub
-
-    Private Sub NewModelNameTextBox_Leave(sender As Object, e As EventArgs)
-        If String.IsNullOrWhiteSpace(CType(sender, TextBox).Text) Then
-            CType(sender, TextBox).Text = "具体模型"
-            CType(sender, TextBox).ForeColor = Color.Gray
-        End If
-    End Sub
 End Class
-

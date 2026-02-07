@@ -477,7 +477,7 @@ Public Class MCPConnectionManager
             Dim x = JObject.FromObject(newFormat)
 
             ' 修复字符串中的反斜杠 - 直接用字符串替换处理
-            Dim json = x.ToString(Formatting.Indented)
+            Dim json = x.ToString(Newtonsoft.Json.Formatting.Indented)
 
             ' 处理Command路径中的反斜杠
             For Each server In newFormat.McpServers

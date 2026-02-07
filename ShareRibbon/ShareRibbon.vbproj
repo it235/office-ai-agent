@@ -188,11 +188,38 @@
     </Compile>
     <Compile Include="Config\ChatSettings.vb" />
     <Compile Include="Config\ConfigSettings.vb" />
-    <Compile Include="Config\GlobalStatusBar.vb" />
+    <Compile Include="Config\ProviderType.vb" />
+    <Compile Include="Config\PresetProviders.vb" />
+    <Compile Include="Config\ModelApiClient.vb" />
+    <Compile Include="Config\PromptConfiguration.vb" />
+    <Compile Include="Config\PromptManager.vb" />
+    <Compile Include="Config\AboutForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Config\AutocompleteSettingsForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Config\GlobalStatusStripAll.vb">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Config\GlobalStatusStrip.vb" />
+    <Compile Include="Config\GlobalTips.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Translate\BaseTranslateService.vb" />
+    <Compile Include="Translate\DocumentTranslateService.vb" />
+    <Compile Include="Translate\TranslateActionForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Translate\TranslateDomainTemplate.vb" />
+    <Compile Include="Translate\TranslateGlobalSettingsForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Translate\TranslateSettings.vb" />
+    <Compile Include="Continuation\ContinuationService.vb" />
+    <Compile Include="Loop\RalphLoopMemory.vb" />
+    <Compile Include="Loop\RalphLoopController.vb" />
+    <Compile Include="Loop\RalphAgentController.vb" />
     <Compile Include="Config\WebView2Loader.vb" />
     <Compile Include="Controls\BaseChatControl.Designer.vb">
       <DependentUpon>BaseChatControl.vb</DependentUpon>
@@ -206,13 +233,25 @@
     <Compile Include="Controls\BaseDataCapturePane.vb">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Include="Controls\BaseChat.vb">
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Include="Controls\BaseDeepseekChat.Designer.vb">
       <DependentUpon>BaseDeepseekChat.vb</DependentUpon>
     </Compile>
     <Compile Include="Controls\BaseDeepseekChat.vb">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Include="Controls\BaseDoubaoChat.Designer.vb">
+      <DependentUpon>BaseDoubaoChat.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Controls\BaseDoubaoChat.vb">
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Include="Controls\WebSiteContentConfirmDialog.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Controls\CommandPreviewForm.vb">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Log\SimpleLogger.vb" />
@@ -257,6 +296,22 @@
     <Compile Include="Ribbon\BaseOfficeRibbon.vb">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Include="Controls\Models\SelectionInfo.vb" />
+    <Compile Include="Controls\Models\HistoryMessage.vb" />
+    <Compile Include="Controls\Services\WebViewService.vb" />
+    <Compile Include="Controls\Services\MessageService.vb" />
+    <Compile Include="Controls\Services\HttpStreamService.vb" />
+    <Compile Include="Controls\Services\CodeExecutionService.vb" />
+    <Compile Include="Controls\Services\FileParserService.vb" />
+    <Compile Include="Controls\Services\ChatStateService.vb" />
+    <Compile Include="Controls\Services\UtilsService.vb" />
+    <Compile Include="Controls\Services\HistoryService.vb" />
+    <Compile Include="Controls\Services\McpService.vb" />
+    <Compile Include="Controls\Services\OfficeCompletionService.vb" />
+    <Compile Include="Controls\Services\IntentRecognitionService.vb" />
+    <Compile Include="Controls\Services\ExcelContextService.vb" />
+    <Compile Include="Controls\Services\ExecutionPlanRenderer.vb" />
+    <Compile Include="Controls\Models\ExecutionStep.vb" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Controls\BaseChatControl.resx">
@@ -284,9 +339,6 @@
       <LastGenOutput>Settings.Designer.vb</LastGenOutput>
     </None>
     <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Resources\chat-template.html" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Resources\about.png" />
@@ -332,6 +384,53 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Resources\mcp1.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\css\styles.css" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\js\utils.js" />
+    <None Include="Resources\js\core.js" />
+    <None Include="Resources\js\markdown-renderer.js" />
+    <None Include="Resources\js\chat-manager.js" />
+    <None Include="Resources\js\message-sender.js" />
+    <None Include="Resources\js\code-handler.js" />
+    <None Include="Resources\js\settings-manager.js" />
+    <None Include="Resources\js\mcp-manager.js" />
+    <None Include="Resources\js\revision-manager.js" />
+    <None Include="Resources\js\history-manager.js" />
+    <None Include="Resources\js\intent-preview.js" />
+    <None Include="Resources\js\ralph-loop.js" />
+    <None Include="Resources\js\ralph-agent.js" />
+    <None Include="Resources\js\autocomplete.js" />
+    <None Include="Resources\js\model-switcher.js" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\chat-template-refactored.html" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\doubao_avatar.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\audit.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\help.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\papers.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\translate.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\aiwrite.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\autocomplete.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\promptconfig.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.VisualBasic.targets" />
   <Import Project="..\packages\Microsoft.Web.WebView2.1.0.3240.44\build\Microsoft.Web.WebView2.targets" Condition="Exists('..\packages\Microsoft.Web.WebView2.1.0.3240.44\build\Microsoft.Web.WebView2.targets')" />

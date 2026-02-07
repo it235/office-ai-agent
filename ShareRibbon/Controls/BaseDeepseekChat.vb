@@ -26,29 +26,10 @@ Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 
 Public MustInherit Class BaseDeepseekChat
-    Inherits UserControl
+    Inherits BaseChat
 
-    Protected Overrides Sub WndProc(ByRef m As Message)
-        Const WM_PASTE As Integer = &H302
-        If m.Msg = WM_PASTE Then
-            ' 在此处理粘贴操作，比如：
-            If Clipboard.ContainsText() Then
-                Dim txt As String = Clipboard.GetText()
 
-                'QuestionTextBox.Text &= txt ' 将粘贴内容直接写入当前光标位置
-            End If
-            ' 不把消息传递给基类，从而拦截后续处理  
-            Return
-        End If
-        MyBase.WndProc(m)
-    End Sub
-    ' 添加到类中的新字段
-    Private ReadOnly SessionFilePath As String = Path.Combine(
-    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-    ConfigSettings.OfficeAiAppDataFolder,
-    "deepseek_session.json"
-)
-    Protected Async Function InitializeWebView2() As Task
+Protected Async Function InitializeWebView2() As Task
         Try
             ' 使用固定的用户数据目录而不是临时目录，以保持会话持久化
             Dim userDataFolder As String = Path.Combine(
@@ -64,7 +45,7 @@ Public MustInherit Class BaseDeepseekChat
             Dim options As New CoreWebView2EnvironmentOptions()
             options.AdditionalBrowserArguments = "--no-sandbox"
 
-            ' 创建WebView2环境，使用固定目录保持会话
+' 创建WebView2环境，使用固定目录保持会话
             Dim env = Await CoreWebView2Environment.CreateAsync(Nothing, userDataFolder, options)
 
             ' 初始化WebView2
@@ -72,6 +53,18 @@ Public MustInherit Class BaseDeepseekChat
 
             ' 配置WebView2
             If ChatBrowser.CoreWebView2 IsNot Nothing Then
+' 确保WebView2可以接收焦点
+                ChatBrowser.TabStop = True
+                ChatBrowser.TabIndex = 1
+                ChatBrowser.Visible = True
+                
+                ' 配置WebView2设置以改善焦点行为
+                ChatBrowser.CoreWebView2.Settings.IsScriptEnabled = True
+                ChatBrowser.CoreWebView2.Settings.AreDefaultScriptDialogsEnabled = True
+                ChatBrowser.CoreWebView2.Settings.IsWebMessageEnabled = True
+                ' 启用开发者工具以便调试可能的焦点问题
+                ChatBrowser.CoreWebView2.Settings.AreDevToolsEnabled = True
+                
                 ' 重要：在导航前注册所有事件处理器
                 'AddHandler ChatBrowser.CoreWebView2.NavigationStarting, AddressOf OnNavigationStarting
                 AddHandler ChatBrowser.CoreWebView2.NavigationCompleted, AddressOf OnWebViewNavigationCompleted
@@ -80,10 +73,10 @@ Public MustInherit Class BaseDeepseekChat
                 ' 启用持久化的Cookie管理
                 ChatBrowser.CoreWebView2.CookieManager.DeleteAllCookies() ' 可选，仅在需要清理时使用
 
-                ' 导航到Deepseek网站
-                ChatBrowser.CoreWebView2.Navigate("https://chat.deepseek.com")
+                ' 导航到目标网站
+                ChatBrowser.CoreWebView2.Navigate(ChatUrl)
 
-                SimpleLogger.LogInfo("WebView2初始化完成，开始导航到Deepseek")
+                Debug.WriteLine($"WebView2初始化完成，开始导航到{ChatUrl}")
             Else
                 MessageBox.Show("WebView2初始化失败，CoreWebView2不可用。", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
             End If
@@ -93,29 +86,13 @@ Public MustInherit Class BaseDeepseekChat
         End Try
     End Function
 
-    ' 在OnNavigationStarting方法中添加环境检查
-    Private Async Sub OnNavigationStarting(sender As Object, e As CoreWebView2NavigationStartingEventArgs)
-        Try
-            ' 确保WebView2环境已正确初始化
-            If ChatBrowser Is Nothing OrElse ChatBrowser.CoreWebView2 Is Nothing Then
-                SimpleLogger.LogInfo("WebView2未初始化，无法恢复会话")
-                Return
-            End If
 
-            ' 只在导航到Deepseek时应用会话
-            If e.Uri.StartsWith("https://chat.deepseek.com") Then
-                Await RestoreSessionAsync()
-            End If
-        Catch ex As Exception
-            SimpleLogger.LogInfo($"恢复会话时出错: {ex.Message}")
-        End Try
-    End Sub
 
     ' 在页面加载完成后，注入脚本 - 修复线程问题
     Private Sub OnWebViewNavigationCompleted(sender As Object, e As CoreWebView2NavigationCompletedEventArgs)
         If e.IsSuccess Then
             Try
-                SimpleLogger.LogInfo("导航完成，开始注入脚本")
+                Debug.WriteLine("导航完成，开始注入脚本")
 
                 ' 确保在UI线程上执行所有WebView2操作
                 If ChatBrowser.InvokeRequired Then
@@ -133,13 +110,11 @@ Public MustInherit Class BaseDeepseekChat
                                                           ' 初始化设置和执行按钮
                                                           Await InitializeSettingsSafe()
 
-                                                          ' 注入登录监听器
-                                                          'Await InjectLoginObserverSafe()
 
-                                                          SimpleLogger.LogInfo("所有脚本注入完成")
+                                                          Debug.WriteLine("所有脚本注入完成")
                                                       Catch ex As Exception
-                                                          SimpleLogger.LogInfo($"UI线程脚本注入出错: {ex.Message}")
-                                                          SimpleLogger.LogInfo(ex.StackTrace)
+                                                          Debug.WriteLine($"UI线程脚本注入出错: {ex.Message}")
+                                                          Debug.WriteLine(ex.StackTrace)
                                                       End Try
                                                   End Sub))
                 Else
@@ -161,33 +136,29 @@ Public MustInherit Class BaseDeepseekChat
                                                                            ' 初始化设置和执行按钮
                                                                            Await InitializeSettingsSafe()
 
-                                                                           ' 注入登录监听器
-                                                                           'Await InjectLoginObserverSafe()
-
-                                                                           SimpleLogger.LogInfo("所有脚本注入完成")
+                                                                           Debug.WriteLine("所有脚本注入完成")
                                                                        Catch ex As Exception
-                                                                           SimpleLogger.LogInfo($"脚本注入出错: {ex.Message}")
-                                                                           SimpleLogger.LogInfo(ex.StackTrace)
+                                                                           Debug.WriteLine($"脚本注入出错: {ex.Message}")
+                                                                           Debug.WriteLine(ex.StackTrace)
                                                                        End Try
                                                                    End Sub))
                                  Catch ex As Exception
-                                     SimpleLogger.LogInfo($"任务执行出错: {ex.Message}")
+                                     Debug.WriteLine($"任务执行出错: {ex.Message}")
                                  End Try
                              End Function)
                 End If
             Catch ex As Exception
-                SimpleLogger.LogInfo($"导航完成事件处理中出错: {ex.Message}")
-                SimpleLogger.LogInfo(ex.StackTrace)
+                Debug.WriteLine($"导航完成事件处理中出错: {ex.Message}")
+                Debug.WriteLine(ex.StackTrace)
             End Try
         Else
-            SimpleLogger.LogInfo($"导航失败: {e.WebErrorStatus}")
+            Debug.WriteLine($"导航失败: {e.WebErrorStatus}")
         End If
     End Sub
 
 
 
-    ' 线程安全的ConfigureMarked方法
-    Private Async Function ConfigureMarkedSafe() As Task
+    Protected Overrides Async Function ConfigureMarkedSafe() As Task
         Try
             If ChatBrowser.CoreWebView2 IsNot Nothing Then
                 Dim script = "
@@ -211,17 +182,16 @@ Public MustInherit Class BaseDeepseekChat
             }
         "
                 Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
-                SimpleLogger.LogInfo("ConfigureMarked执行完成")
+                Debug.WriteLine("ConfigureMarked执行完成")
             Else
-                SimpleLogger.LogInfo("ConfigureMarked: CoreWebView2为空")
+                Debug.WriteLine("ConfigureMarked: CoreWebView2为空")
             End If
         Catch ex As Exception
-            SimpleLogger.LogInfo($"ConfigureMarked出错: {ex.Message}")
+            Debug.WriteLine($"ConfigureMarked出错: {ex.Message}")
         End Try
     End Function
 
-    ' 线程安全的InitializeWebView2ScriptAsync方法
-    Private Async Function InitializeWebView2ScriptAsyncSafe() As Task
+    Protected Overrides Async Function InitializeWebView2ScriptAsyncSafe() As Task
         Try
             Dim script As String = "
     // 初始化VSTO接口
@@ -276,27 +246,25 @@ Public MustInherit Class BaseDeepseekChat
 
             If ChatBrowser.CoreWebView2 IsNot Nothing Then
                 Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
-                SimpleLogger.LogInfo("InitializeWebView2ScriptAsync执行完成")
+                Debug.WriteLine("InitializeWebView2ScriptAsync执行完成")
             Else
-                SimpleLogger.LogInfo("InitializeWebView2ScriptAsync: CoreWebView2为空")
+                Debug.WriteLine("InitializeWebView2ScriptAsync: CoreWebView2为空")
             End If
         Catch ex As Exception
-            SimpleLogger.LogInfo($"InitializeWebView2ScriptAsync出错: {ex.Message}")
+            Debug.WriteLine($"InitializeWebView2ScriptAsync出错: {ex.Message}")
         End Try
     End Function
 
-    ' 线程安全的InitializeSettings方法
-    Private Async Function InitializeSettingsSafe() As Task
+    Protected Overrides Async Function InitializeSettingsSafe() As Task
         Try
             Await InjectExecuteButtonsSafe()
-            SimpleLogger.LogInfo("InitializeSettings执行完成")
+            Debug.WriteLine("InitializeSettings执行完成")
         Catch ex As Exception
-            SimpleLogger.LogInfo($"InitializeSettings出错: {ex.Message}")
+            Debug.WriteLine($"InitializeSettings出错: {ex.Message}")
         End Try
     End Function
 
-    ' 线程安全的InjectLoginObserver方法
-    Private Async Function InjectLoginObserverSafe() As Task
+    Protected Overrides Async Function InjectLoginObserverSafe() As Task
         Try
             Dim script = "
             console.log('[VSTO] 开始注入登录观察器');
@@ -369,324 +337,206 @@ Public MustInherit Class BaseDeepseekChat
 
             If ChatBrowser.CoreWebView2 IsNot Nothing Then
                 Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
-                SimpleLogger.LogInfo("InjectLoginObserver执行完成")
+                Debug.WriteLine("InjectLoginObserver执行完成")
             Else
-                SimpleLogger.LogInfo("InjectLoginObserver: CoreWebView2为空")
+                Debug.WriteLine("InjectLoginObserver: CoreWebView2为空")
             End If
         Catch ex As Exception
-            SimpleLogger.LogInfo($"注入登录观察器时出错: {ex.Message}")
+            Debug.WriteLine($"注入登录观察器时出错: {ex.Message}")
         End Try
     End Function
 
-    ' 线程安全的执行按钮注入方法 - 分离按钮创建和代码获取逻辑
-    Private Async Function InjectExecuteButtonsSafe() As Task
+    Protected Overrides Async Function InjectExecuteButtonsSafe() As Task
         Try
             If ChatBrowser.CoreWebView2 Is Nothing Then
-                SimpleLogger.LogInfo("InjectExecuteButtons: CoreWebView2未初始化")
+                Debug.WriteLine("InjectExecuteButtons: CoreWebView2未初始化")
                 Return
             End If
 
             Dim script As String = "
     (function() {
-        console.log('[Execute Buttons] =================== 开始初始化 ===================');
-        
-        // 避免重复初始化
+        console.log('[Execute Buttons] 注入开始（使用自定义可点击元素以避免被页面禁用）');
+
         if (window.__executeButtonsInitialized) {
-            console.log('[Execute Buttons] 已初始化，尝试刷新');
-            if (window.refreshExecuteButtons) {
-                window.refreshExecuteButtons();
-            }
+            console.log('[Execute Buttons] 已初始化，刷新');
+            if (window.refreshExecuteButtons) window.refreshExecuteButtons();
             return;
         }
         window.__executeButtonsInitialized = true;
-        
-        // 使用多种策略查找复制按钮
+
         function findCopyButton(container) {
             if (!container) return null;
-            
-            console.log('[Execute Buttons] 在容器中查找复制按钮');
-            
-            // 策略1: 直接通过文本内容查找
             const allButtons = container.querySelectorAll('[role=""button""]');
-            console.log('[Execute Buttons] 找到按钮数量:', allButtons.length);
-            
             for (let i = 0; i < allButtons.length; i++) {
                 const btn = allButtons[i];
-                const text = btn.textContent || '';
-                console.log(`[Execute Buttons] 按钮 ${i+1} 文本: '${text.trim()}'`);
-                
-                if (text.includes('复制') || text.includes('Copy')) {
-                    console.log('[Execute Buttons] ✓ 找到复制按钮!');
-                    return btn;
-                }
+                const text = (btn.textContent || '').trim();
+                if (text.includes('复制') || text.includes('Copy')) return btn;
             }
-            
-            console.log('[Execute Buttons] ✗ 未找到复制按钮');
             return null;
         }
-        
-        // 动态获取代码内容的函数 - 在点击时调用
+
         function getCurrentCodeContent(codeBlock) {
             try {
-                const preElement = codeBlock.querySelector('pre');
-                if (!preElement) {
-                    console.log('[Execute Buttons] 点击时未找到pre元素');
-                    return { code: '', language: 'unknown' };
-                }
-                
-                // 获取当前完整的代码内容（SSE流式更新后的完整内容）
-                const codeContent = preElement.textContent || '';
-                console.log(`[Execute Buttons] 动态获取代码长度: ${codeContent.length} 字符`);
-                
-                // 动态获取语言信息
+                const pre = codeBlock.querySelector('pre');
+                if (!pre) return { code: '', language: 'unknown' };
+                const codeContent = pre.textContent || '';
                 let language = 'unknown';
-                const allSpans = codeBlock.querySelectorAll('span');
-                
-                for (const span of allSpans) {
-                    const text = span.textContent && span.textContent.trim().toLowerCase();
-                    if (text && /^(vba|javascript|js|excel|python|sql|typescript|html|css|c#|java|php|csharp)$/i.test(text)) {
-                        language = text;
-                        console.log(`[Execute Buttons] 动态获取语言: ${language}`);
-                        break;
+                const spans = codeBlock.querySelectorAll('span');
+                for (const s of spans) {
+                    const t = (s.textContent || '').trim().toLowerCase();
+                    if (t && /^(vba|javascript|js|excel|python|sql|typescript|html|css|c#|java|php|csharp)$/i.test(t)) {
+                        language = t; break;
                     }
                 }
-                
                 return { code: codeContent, language: language };
-            } catch (error) {
-                console.error('[Execute Buttons] 动态获取代码内容时出错:', error);
+            } catch (e) {
+                console.error('[Execute Buttons] 获取代码失败', e);
                 return { code: '', language: 'unknown' };
             }
         }
-        
-        // 处理单个代码块 - 只创建按钮，不获取代码
+
+        // 创建一个不会被页面禁用的可点击元素（使用 div 而不是 button）
+        function createExecuteElement() {
+            const el = document.createElement('div');
+            el.setAttribute('role','button');
+            el.setAttribute('aria-disabled','false');
+            el.className = 'vsto-execute-button ds-text-button';
+            el.tabIndex = 0;
+            el.style.display = 'inline-flex';
+            el.style.alignItems = 'center';
+            el.style.marginRight = '4px';
+            el.style.cursor = 'pointer';
+            el.style.userSelect = 'none';
+            el.innerHTML = '<div class=""ds-button__icon""><div class=""ds-icon"" style=""font-size:16px;width:16px;"">▶</div></div><span class=""code-info-button-text"">执行</span>';
+            return el;
+        }
+
+        function attachClickHandler(executeEl, codeBlock) {
+            const handler = function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('[Execute Buttons] 执行（自定义元素）被点击');
+                const content = getCurrentCodeContent(codeBlock);
+                if (!content.code || !content.code.trim()) {
+                    console.log('[Execute Buttons] 代码为空，跳过');
+                    return;
+                }
+                try {
+                    if (window.vsto && typeof window.vsto.executeCode === 'function') {
+                        window.vsto.executeCode(content.code, content.language, true);
+                        console.log('[Execute Buttons] 通过 vsto 执行请求发送');
+                    } else if (window.chrome && window.chrome.webview && window.chrome.webview.postMessage) {
+                        window.chrome.webview.postMessage({
+                            type: 'executeCode',
+                            code: content.code,
+                            language: content.language,
+                            executecodePreview: true
+                        });
+                        console.log('[Execute Buttons] 通过 chrome.webview 发送执行请求');
+                    } else {
+                        console.error('[Execute Buttons] 无通信接口');
+                    }
+                } catch (err) {
+                    console.error('[Execute Buttons] 发送执行请求失败', err);
+                }
+            };
+            executeEl.addEventListener('click', handler);
+            // 键盘可访问性
+            executeEl.addEventListener('keydown', function(ev) {
+                if (ev.key === 'Enter' || ev.key === ' ') {
+                    ev.preventDefault();
+                    this.click();
+                }
+            });
+        }
+
         function processCodeBlock(codeBlock, index) {
             try {
-                console.log(`[Execute Buttons] ========== 处理代码块 ${index+1} ==========`);
-                
-                if (!codeBlock.classList.contains('md-code-block')) {
-                    console.log('[Execute Buttons] 不是代码块，跳过');
-                    return false;
-                }
-                
-                // 查找复制按钮
-                const copyButton = findCopyButton(codeBlock);
-                if (!copyButton) {
-                    console.log('[Execute Buttons] 未找到复制按钮，跳过此代码块');
-                    return false;
-                }
-                
-                // 获取按钮容器
-                const buttonContainer = copyButton.parentElement;
-                if (!buttonContainer) {
-                    console.log('[Execute Buttons] 找不到按钮容器');
-                    return false;
-                }
-                
-                // 检查是否已添加执行按钮
-                if (buttonContainer.querySelector('.execute-code-button')) {
-                    console.log('[Execute Buttons] 执行按钮已存在，跳过');
-                    return false;
-                }
-                
-                // 验证是否有pre元素（基本检查）
-                const preElement = codeBlock.querySelector('pre');
-                if (!preElement) {
-                    console.log('[Execute Buttons] 未找到pre元素，跳过');
-                    return false;
-                }
-                
-                // 创建执行按钮
-                console.log('[Execute Buttons] 开始创建执行按钮...');
-                
-                const executeButton = copyButton.cloneNode(true);
-                executeButton.classList.add('execute-code-button');
-                
-                // 修改按钮内容
-                executeButton.innerHTML = '';
-                
-                // 创建图标容器
-                const iconDiv = document.createElement('div');
-                iconDiv.className = 'ds-button__icon';
-                
-                const icon = document.createElement('div');
-                icon.className = 'ds-icon';
-                icon.style.fontSize = '16px';
-                icon.style.width = '16px';
-                icon.innerHTML = '▶'; // 播放图标
-                
-                iconDiv.appendChild(icon);
-                executeButton.appendChild(iconDiv);
-                
-                // 创建文本
-                const textSpan = document.createElement('span');
-                textSpan.className = 'code-info-button-text';
-                textSpan.textContent = '执行';
-                executeButton.appendChild(textSpan);
-                
-                console.log('[Execute Buttons] ✓ 执行按钮创建完成');
-                
-                // 关键改进：添加点击事件 - 动态获取代码内容
-                executeButton.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    
-                    console.log('[Execute Buttons] =================== 执行按钮被点击 ===================');
-                    
-                    // 在点击时动态获取当前完整的代码内容
-                    const currentContent = getCurrentCodeContent(codeBlock);
-                    
-                    if (!currentContent.code.trim()) {
-                        console.log('[Execute Buttons] ✗ 获取到的代码内容为空');
-                        return;
-                    }
-                    
-                    console.log('[Execute Buttons] 当前代码长度:', currentContent.code.length);
-                    console.log('[Execute Buttons] 当前语言:', currentContent.language);
-                    console.log('[Execute Buttons] 代码预览:', currentContent.code.substring(0, 200) + '...');
-                    
-                    try {
-                        // 发送到VB应用
-                        if (window.vsto && typeof window.vsto.executeCode === 'function') {
-                            window.vsto.executeCode(currentContent.code, currentContent.language, true);
-                            console.log('[Execute Buttons] ✓ 通过vsto接口发送执行请求');
-                        } else if (window.chrome && window.chrome.webview && window.chrome.webview.postMessage) {
-                            window.chrome.webview.postMessage({
-                                type: 'executeCode',
-                                code: currentContent.code,
-                                language: currentContent.language,
-                                executecodePreview: true
-                            });
-                            console.log('[Execute Buttons] ✓ 通过chrome.webview发送执行请求');
-                        } else {
-                            console.error('[Execute Buttons] ✗ 通信接口不可用');
-                            console.log('[Execute Buttons] vsto可用:', !!window.vsto);
-                            console.log('[Execute Buttons] chrome.webview可用:', !!(window.chrome && window.chrome.webview));
-                        }
-                    } catch (error) {
-                        console.error('[Execute Buttons] ✗ 发送执行请求失败:', error);
-                    }
-                });
-                
-                // 插入执行按钮到DOM
-                try {
-                    buttonContainer.insertBefore(executeButton, copyButton);
-                    console.log('[Execute Buttons] ✓ 成功插入执行按钮到DOM');
-                    
-                    // 验证按钮是否真的添加了
-                    const verification = buttonContainer.querySelector('.execute-code-button');
-                    if (verification) {
-                        console.log('[Execute Buttons] ✓ 验证：执行按钮存在于DOM中');
-                        return true;
-                    } else {
-                        console.log('[Execute Buttons] ✗ 验证失败：执行按钮未在DOM中找到');
-                        return false;
-                    }
-                } catch (e) {
-                    console.error('[Execute Buttons] ✗ 插入DOM失败:', e);
-                    return false;
-                }
-                
-            } catch (error) {
-                console.error(`[Execute Buttons] ✗ 处理代码块 ${index+1} 时出错:`, error);
+                if (!codeBlock.classList.contains('md-code-block')) return false;
+                const copyBtn = findCopyButton(codeBlock);
+                if (!copyBtn) return false;
+                const container = copyBtn.parentElement;
+                if (!container) return false;
+                if (container.querySelector('.vsto-execute-button')) return false;
+                const pre = codeBlock.querySelector('pre');
+                if (!pre) return false;
+
+                console.log('[Execute Buttons] 创建自定义执行元素');
+                const execEl = createExecuteElement();
+
+                // 将自定义元素插入到 copyBtn 之前
+                container.insertBefore(execEl, copyBtn);
+
+                // 挂载事件
+                attachClickHandler(execEl, codeBlock);
+
+                // 防护：确保页面不会把它标记为禁用（定期清理 + 观察）
+                execEl.style.pointerEvents = 'auto';
+                execEl.removeAttribute('disabled');
+                execEl.setAttribute('aria-disabled','false');
+
+                console.log('[Execute Buttons] 自定义执行元素插入完成');
+                return true;
+            } catch (ex) {
+                console.error('[Execute Buttons] 处理代码块失败', ex);
                 return false;
             }
         }
-        
-        // 扫描并处理所有代码块
+
         function addExecuteButtons() {
-            console.log('[Execute Buttons] ========================================');
-            console.log('[Execute Buttons] 开始扫描页面上的代码块');
-            
             const codeBlocks = document.querySelectorAll('.md-code-block');
-            console.log(`[Execute Buttons] 在页面上找到 ${codeBlocks.length} 个代码块`);
-            
-            if (codeBlocks.length === 0) {
-                console.log('[Execute Buttons] 页面上没有找到任何代码块');
-                return;
-            }
-            
-            let processedCount = 0;
-            codeBlocks.forEach((block, index) => {
-                if (processCodeBlock(block, index)) {
-                    processedCount++;
-                }
-            });
-            
-            console.log(`[Execute Buttons] 扫描完成！成功处理 ${processedCount}/${codeBlocks.length} 个代码块`);
-            console.log('[Execute Buttons] ========================================');
+            if (!codeBlocks || codeBlocks.length === 0) return;
+            let count = 0;
+            codeBlocks.forEach((b,i) => { if (processCodeBlock(b,i)) count++; });
+            console.log('[Execute Buttons] 处理完成: ' + count + '/' + codeBlocks.length);
         }
-        
-        // 设置全局刷新函数
+
+        // 定期修复：移除页面可能添加的 disabled/禁用类
+        function keepAlive() {
+            document.querySelectorAll('.vsto-execute-button').forEach(b => {
+                try {
+                    b.removeAttribute('disabled');
+                    b.setAttribute('aria-disabled','false');
+                    b.classList.remove('ds-atom-button--disabled', 'ds-text-button--disabled', 'execute-code-button');
+                    b.style.pointerEvents = 'auto';
+                    b.style.opacity = ''; // 如果页面设置了半透明，也恢复
+                } catch(e) {}
+            });
+        }
+
+        // 观察父容器，若页面替换、修改节点则重新注入
+        const observer = new MutationObserver(function(mutations) {
+            let shouldRun = false;
+            for (const m of mutations) {
+                if (m.addedNodes && m.addedNodes.length > 0) {
+                    shouldRun = true; break;
+                }
+                if (m.type === 'attributes' && (m.attributeName === 'class' || m.attributeName === 'disabled' || m.attributeName === 'aria-disabled')) {
+                    shouldRun = true; break;
+                }
+            }
+            if (shouldRun) {
+                setTimeout(addExecuteButtons, 120);
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class','disabled','aria-disabled'] });
+
+        // 初始化与周期修复
+        setTimeout(addExecuteButtons, 120);
+        [500,1000,2000,3000,5000].forEach((d,i) => setTimeout(addExecuteButtons, d));
+        setInterval(keepAlive, 1000);
+
+        // 提供外部手动刷新
         window.refreshExecuteButtons = addExecuteButtons;
-        
-        // DOM观察器 - 监听新代码块的添加
-        function setupObserver() {
-            const observer = new MutationObserver((mutations) => {
-                let shouldProcess = false;
-                
-                for (const mutation of mutations) {
-                    if (mutation.addedNodes.length > 0) {
-                        for (const node of mutation.addedNodes) {
-                            if (node.nodeType === 1) {
-                                if ((node.classList && node.classList.contains('md-code-block')) ||
-                                    (node.querySelector && node.querySelector('.md-code-block'))) {
-                                    shouldProcess = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    if (shouldProcess) break;
-                }
-                
-                if (shouldProcess) {
-                    console.log('[Execute Buttons] DOM变化检测到新代码块');
-                    setTimeout(addExecuteButtons, 200);
-                }
-            });
-            
-            observer.observe(document.body, {
-                childList: true,
-                subtree: true
-            });
-            
-            console.log('[Execute Buttons] ✓ DOM观察器已激活');
-        }
-        
-        // 初始化
-        console.log('[Execute Buttons] 开始初始化流程');
-        
-        // 立即尝试
-        setTimeout(addExecuteButtons, 100);
-        
-        // 设置观察器
-        setupObserver();
-        
-        // 多次检查 - 确保捕获所有代码块
-        [500, 1000, 2000, 3000, 5000].forEach((delay, index) => {
-            setTimeout(() => {
-                console.log(`[Execute Buttons] 第${index+2}次检查 - ${delay}ms`);
-                addExecuteButtons();
-            }, delay);
-        });
-        
-        // 手动刷新快捷键
-        document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.shiftKey && e.key === 'E') {
-                console.log('[Execute Buttons] 手动刷新 (Ctrl+Shift+E)');
-                e.preventDefault();
-                addExecuteButtons();
-            }
-        });
-        
-        console.log('[Execute Buttons] =================== 初始化完成 ===================');
+
+        console.log('[Execute Buttons] 注入完成（自定义元素策略）');
     })();
     "
 
             Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
-            SimpleLogger.LogInfo("执行按钮注入脚本已执行")
+            Debug.WriteLine("执行按钮注入脚本已执行（自定义元素版本）")
         Catch ex As Exception
-            SimpleLogger.LogInfo($"注入执行按钮脚本时出错: {ex.Message}")
+            Debug.WriteLine($"注入执行按钮脚本时出错: {ex.Message}")
         End Try
     End Function
 
@@ -714,10 +564,10 @@ Public MustInherit Class BaseDeepseekChat
 
                 ' 保存到文件
                 File.WriteAllText(SessionFilePath, sessionInfo.ToString())
-                SimpleLogger.LogInfo("已保存Deepseek会话信息")
+                Debug.WriteLine("已保存Deepseek会话信息")
             End If
         Catch ex As Exception
-            SimpleLogger.LogInfo($"保存会话信息时出错: {ex.Message}")
+            Debug.WriteLine($"保存会话信息时出错: {ex.Message}")
         End Try
     End Function
 
@@ -746,12 +596,12 @@ Public MustInherit Class BaseDeepseekChat
                                                                                      cookie.IsSecure = True
                                                                                      cookieManager.AddOrUpdateCookie(cookie)
                                                                                  Catch cookieEx As Exception
-                                                                                     SimpleLogger.LogInfo($"添加Cookie '{parts(0)}'时出错: {cookieEx.Message}")
+                                                                                     Debug.WriteLine($"添加Cookie '{parts(0)}'时出错: {cookieEx.Message}")
                                                                                  End Try
                                                                              End If
                                                                          Next
                                                                      Catch ex As Exception
-                                                                         SimpleLogger.LogInfo($"在UI线程恢复Cookies时出错: {ex.Message}")
+                                                                         Debug.WriteLine($"在UI线程恢复Cookies时出错: {ex.Message}")
                                                                      End Try
                                                                  End Sub))
                                End Sub)
@@ -772,7 +622,7 @@ Public MustInherit Class BaseDeepseekChat
                             cookie.IsSecure = True
                             cookieManager.AddOrUpdateCookie(cookie)
                         Catch cookieEx As Exception
-                            SimpleLogger.LogInfo($"添加Cookie '{parts(0)}'时出错: {cookieEx.Message}")
+                            Debug.WriteLine($"添加Cookie '{parts(0)}'时出错: {cookieEx.Message}")
                         End Try
                     End If
                 Next
@@ -781,7 +631,7 @@ Public MustInherit Class BaseDeepseekChat
             ' 短暂延迟确保Cookie操作完成
             Await Task.Delay(100)
         Catch ex As Exception
-            SimpleLogger.LogInfo($"恢复Cookies时出错: {ex.Message}")
+            Debug.WriteLine($"恢复Cookies时出错: {ex.Message}")
         End Try
     End Function
 
@@ -862,7 +712,7 @@ Public MustInherit Class BaseDeepseekChat
                             result = result.Substring(1, result.Length - 2)
                         End If
                     Catch ex As Exception
-                        SimpleLogger.LogInfo("清理令牌格式时出错: " & ex.Message)
+                        Debug.WriteLine("清理令牌格式时出错: " & ex.Message)
                     End Try
                 End If
 
@@ -876,7 +726,7 @@ Public MustInherit Class BaseDeepseekChat
 
             Return String.Empty
         Catch ex As Exception
-            SimpleLogger.LogInfo($"提取授权令牌时出错: {ex.Message}")
+            Debug.WriteLine($"提取授权令牌时出错: {ex.Message}")
             Return String.Empty
         End Try
     End Function
@@ -918,7 +768,7 @@ Public MustInherit Class BaseDeepseekChat
 
                                            taskCompletionSource.SetResult(resultCookies)
                                        Catch ex As Exception
-                                           SimpleLogger.LogInfo($"获取Cookies时出错: {ex.Message}")
+                                           Debug.WriteLine($"获取Cookies时出错: {ex.Message}")
                                            taskCompletionSource.SetResult("")
                                        End Try
                                    End Sub)
@@ -949,7 +799,7 @@ Public MustInherit Class BaseDeepseekChat
 
             Return String.Empty
         Catch ex As Exception
-            SimpleLogger.LogInfo($"获取Cookies时出错: {ex.Message}")
+            Debug.WriteLine($"获取Cookies时出错: {ex.Message}")
             Return String.Empty
         End Try
     End Function
@@ -1007,7 +857,7 @@ Public MustInherit Class BaseDeepseekChat
                                                               Dim task = ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
                                                               task.Wait() ' 同步等待完成
                                                           Catch ex As Exception
-                                                              SimpleLogger.LogInfo($"执行脚本时出错: {ex.Message}")
+                                                              Debug.WriteLine($"执行脚本时出错: {ex.Message}")
                                                           End Try
                                                       End Sub)
                                End Sub)
@@ -1015,10 +865,15 @@ Public MustInherit Class BaseDeepseekChat
                 Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
             End If
         Catch ex As Exception
-            SimpleLogger.LogInfo($"注入授权令牌时出错: {ex.Message}")
+            Debug.WriteLine($"注入授权令牌时出错: {ex.Message}")
         End Try
     End Function
 
+    ' 添加到类中的新字段
+    Private ReadOnly SessionFilePath As String = Path.Combine(
+    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+    ConfigSettings.OfficeAiAppDataFolder,
+    "deepseek_session.json")
     ' 更高级的会话恢复方法 - 增加错误处理和调试信息
     Private Async Function RestoreSessionAsync() As Task
         Try
@@ -1030,11 +885,11 @@ Public MustInherit Class BaseDeepseekChat
                 Dim timestamp As DateTime
                 If DateTime.TryParse(sessionInfo("timestamp")?.ToString(), timestamp) Then
                     If (DateTime.Now - timestamp).TotalDays > 7 Then
-                        SimpleLogger.LogInfo("会话已过期，需要重新登录")
+                        Debug.WriteLine("会话已过期，需要重新登录")
                         Return
                     End If
                 Else
-                    SimpleLogger.LogInfo("无效的会话时间戳")
+                    Debug.WriteLine("无效的会话时间戳")
                     Return
                 End If
 
@@ -1042,22 +897,22 @@ Public MustInherit Class BaseDeepseekChat
                 If sessionInfo.ContainsKey("cookies") AndAlso
                Not String.IsNullOrEmpty(sessionInfo("cookies")?.ToString()) Then
                     Await RestoreCookiesAsync(sessionInfo("cookies").ToString())
-                    SimpleLogger.LogInfo("已恢复Cookies")
+                    Debug.WriteLine("已恢复Cookies")
                 End If
 
                 ' 注入授权令牌
                 If sessionInfo.ContainsKey("authToken") AndAlso
                Not String.IsNullOrEmpty(sessionInfo("authToken")?.ToString()) Then
                     Await InjectAuthTokenAsync(sessionInfo("authToken").ToString())
-                    SimpleLogger.LogInfo("已注入授权令牌")
+                    Debug.WriteLine("已注入授权令牌")
                 End If
 
-                SimpleLogger.LogInfo("已恢复Deepseek会话信息")
+                Debug.WriteLine("已恢复Deepseek会话信息")
             Else
-                SimpleLogger.LogInfo("未找到会话文件，需要重新登录")
+                Debug.WriteLine("未找到会话文件，需要重新登录")
             End If
         Catch ex As Exception
-            SimpleLogger.LogInfo($"恢复会话信息时出错: {ex.Message}")
+            Debug.WriteLine($"恢复会话信息时出错: {ex.Message}")
         End Try
     End Function
 
@@ -1089,6 +944,9 @@ Public MustInherit Class BaseDeepseekChat
         End If
     End Function
 
+    Public Overrides ReadOnly Property ChatUrl As String = "https://chat.deepseek.com"
+    Public Overrides ReadOnly Property SessionFileName As String = "deepseek_session.json"
+
     ' 存储聊天HTML的文件路径
     Protected ReadOnly ChatHtmlFilePath As String = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
@@ -1097,72 +955,11 @@ Public MustInherit Class BaseDeepseekChat
     )
 
 
-    ' 扩展WebView2_WebMessageReceived方法，处理登录状态变化
-    Protected Sub WebView2_WebMessageReceived(sender As Object, e As CoreWebView2WebMessageReceivedEventArgs)
-        Try
-            Dim jsonDoc As JObject = JObject.Parse(e.WebMessageAsJson)
-            Dim messageType As String = jsonDoc("type").ToString()
-
-            Select Case messageType
-                Case "executeCode"
-                    HandleExecuteCode(jsonDoc)
-                Case Else
-                    SimpleLogger.LogInfo($"未知消息类型: {messageType}")
-            End Select
-        Catch ex As Exception
-            SimpleLogger.LogInfo($"处理消息出错: {ex.Message}")
-        End Try
-    End Sub
-
-    Protected Overridable Sub HandleExecuteCode(jsonDoc As JObject)
-        Dim code As String = jsonDoc("code").ToString()
-        Dim preview As Boolean = Boolean.Parse(jsonDoc("executecodePreview"))
-        Dim language As String = jsonDoc("language").ToString()
-        ExecuteCode(code, language, preview)
-    End Sub
 
 
-    Protected MustOverride Function GetCurrentWorkingDirectory() As String
-    Protected MustOverride Function AppendCurrentSelectedContent(message As String) As String
-
-    Protected MustOverride Function GetApplication() As ApplicationInfo
-    Protected MustOverride Function GetVBProject() As VBProject
-    Protected MustOverride Function RunCodePreview(vbaCode As String, preview As Boolean)
-    Protected MustOverride Function RunCode(vbaCode As String)
-
-    Protected MustOverride Sub SendChatMessage(message As String)
-    Protected MustOverride Sub GetSelectionContent(target As Object)
-
-
-    ' 执行代码的方法
-    Private Sub ExecuteCode(code As String, language As String, preview As Boolean)
-        ' 根据语言类型执行不同的操作
-        Select Case language.ToLower()
-            Case "vba", "vb", "vbscript", "language-vba", "language-vbscript", "language-vba hljs language-vbscript", "vba hljs language-vbscript"
-                ' 执行 VBA 代码
-                ExecuteVBACode(code, preview)
-            Case "js", "javascript", "javascript hljs", "jscript", "language-js", "language-javascript"
-                ' 执行 JavaScript 代码
-                ExecuteJavaScript(code, preview)
-            Case "excel", "formula", "function", "language-excel"
-                ' 执行 Excel 函数/公式
-                ExecuteExcelFormula(code, preview)
-                'Case "sql", "language-sql"
-                '    ' 执行 SQL 查询
-                '    ExecuteSqlQuery(code, preview)
-                'Case "powerquery", "m", "language-powerquery", "language-m"
-                '    ' 执行 PowerQuery/M 语言
-                '    ExecutePowerQuery(code, preview)
-                'Case "python", "py", "language-python"
-                '    ' 执行 Python 代码
-                '    ExecutePython(code, preview)
-            Case Else
-                GlobalStatusStrip.ShowWarning("不支持的语言类型: " & language)
-        End Select
-    End Sub
 
     ' 执行JavaScript代码 - 专注于操作Office/WPS对象模型，支持Office JS API风格代码
-    Protected Function ExecuteJavaScript(jsCode As String, preview As Boolean) As Boolean
+    Protected Overrides Function ExecuteJavaScript(jsCode As String, preview As Boolean) As Boolean
         Try
             ' 获取Office应用对象
             Dim appObject As Object = GetOfficeApplicationObject()
@@ -1324,106 +1121,6 @@ Public MustInherit Class BaseDeepseekChat
     ' 抽象方法 - 获取Office应用程序对象
     Protected MustOverride Function GetOfficeApplicationObject() As Object
 
-    ' 执行Excel公式或函数 - 基类通用实现
-    Protected Function ExecuteExcelFormula(formulaCode As String, preview As Boolean) As Boolean
-        Try
-            ' 获取应用程序信息
-            Dim appInfo As ApplicationInfo = GetApplication()
-
-            ' 去除可能的等号前缀
-            If formulaCode.StartsWith("=") Then
-                formulaCode = formulaCode.Substring(1)
-            End If
-
-            ' 根据应用类型处理
-            If appInfo.Type = OfficeApplicationType.Excel Then
-                ' 对于Excel，使用Evaluate方法
-                Dim result As Boolean = EvaluateFormula(formulaCode, preview)
-                GlobalStatusStrip.ShowInfo("公式执行结果: " & result.ToString())
-                Return True
-            Else
-                ' 其他应用不支持直接执行Excel公式
-                GlobalStatusStrip.ShowWarning("Excel公式执行仅支持Excel环境")
-                Return False
-            End If
-        Catch ex As Exception
-            MessageBox.Show("执行Excel公式时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-            Return False
-        End Try
-    End Function
-
-    ' 虚方法 - 评估Excel公式（只有Excel子类会实现）
-    Protected Overridable Function EvaluateFormula(formula As String, preview As Boolean) As Boolean
-        ' 默认实现返回Nothing
-        Return True
-    End Function
-
-    ' 执行前端传来的 VBA 代码片段
-    Protected Function ExecuteVBACode(vbaCode As String, preview As Boolean)
-
-        If preview Then
-            ' 返回是否需要执行，accept-True，reject-False
-            If Not RunCodePreview(vbaCode, preview) Then
-                Return True
-            End If
-            ' 如果预览模式，直接返回
-        End If
-
-        ' 获取 VBA 项目
-        Dim vbProj As VBProject = GetVBProject()
-
-        ' 添加空值检查
-        If vbProj Is Nothing Then
-            Return False
-        End If
-
-        Dim vbComp As VBComponent = Nothing
-        Dim tempModuleName As String = "TempMod" & DateTime.Now.Ticks.ToString().Substring(0, 8)
-
-        Try
-            ' 创建临时模块
-            vbComp = vbProj.VBComponents.Add(vbext_ComponentType.vbext_ct_StdModule)
-            vbComp.Name = tempModuleName
-
-            ' 检查代码是否已包含 Sub/Function 声明
-            If ContainsProcedureDeclaration(vbaCode) Then
-                ' 代码已包含过程声明，直接添加
-                vbComp.CodeModule.AddFromString(vbaCode)
-
-                ' 查找第一个过程名并执行
-                Dim procName As String = FindFirstProcedureName(vbComp)
-                If Not String.IsNullOrEmpty(procName) Then
-                    RunCode(tempModuleName & "." & procName)
-                Else
-                    'MessageBox.Show("无法在代码中找到可执行的过程")
-                    GlobalStatusStrip.ShowWarning("无法在代码中找到可执行的过程")
-                End If
-            Else
-                ' 代码不包含过程声明，将其包装在 Auto_Run 过程中
-                Dim wrappedCode As String = "Sub Auto_Run()" & vbNewLine &
-                                           vbaCode & vbNewLine &
-                                           "End Sub"
-                vbComp.CodeModule.AddFromString(wrappedCode)
-
-                ' 执行 Auto_Run 过程
-                RunCode(tempModuleName & ".Auto_Run")
-
-            End If
-
-        Catch ex As Exception
-            MessageBox.Show("执行 VBA 代码时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-        Finally
-            ' 无论成功还是失败，都删除临时模块
-            Try
-                If vbProj IsNot Nothing AndAlso vbComp IsNot Nothing Then
-                    vbProj.VBComponents.Remove(vbComp)
-                End If
-            Catch
-                ' 忽略清理错误
-            End Try
-        End Try
-    End Function
-
 
     ' 检查代码是否包含过程声明
     Public Function ContainsProcedureDeclaration(code As String) As Boolean
@@ -1508,4 +1205,7 @@ Public MustInherit Class BaseDeepseekChat
                         MessageBoxIcon.Warning)
     End Sub
 
+    Protected Overrides Function GetWebView2DataFolderName() As String
+        Return "DeepseekChatWebView2Data"
+    End Function
 End Class

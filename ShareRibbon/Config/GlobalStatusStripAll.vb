@@ -1,10 +1,6 @@
-Imports System.Windows.Forms
+ï»¿Imports System.Windows.Forms
 Imports System.Drawing
 Imports System.Timers
-Imports System.Runtime.InteropServices
-Imports ExcelDna.Integration
-Imports System.Diagnostics
-Imports Timer = System.Windows.Forms.Timer
 
 Public Module GlobalStatusStripAll
     Private WithEvents StatusTimer As New System.Timers.Timer()
@@ -13,72 +9,72 @@ Public Module GlobalStatusStripAll
     Private notificationForm As NotificationForm = Nothing
 
     Sub New()
-        StatusTimer.Interval = 5000 ' ÉèÖÃÏÔÊ¾ÌáÊ¾Ê±¼äÎª5Ãë
+        StatusTimer.Interval = 5000 ' è®¾ç½®æ˜¾ç¤ºæç¤ºæ—¶é—´ä¸º5ç§’
         AddHandler StatusTimer.Elapsed, AddressOf StatusTimer_Elapsed
     End Sub
 
     Public Sub InitializeApplication(application As Object)
         _application = application
-        Debug.WriteLine("GlobalStatusStripÒÑ³õÊ¼»¯£¬Ó¦ÓÃ³ÌĞòÀàĞÍ: " & application.GetType().FullName)
+        Debug.WriteLine("GlobalStatusStripå·²åˆå§‹åŒ–ï¼Œåº”ç”¨ç¨‹åºç±»å‹: " & application.GetType().FullName)
     End Sub
 
     Public Sub ShowWarningStatus(message As String)
-        ShowWarning(message) ' ¼ò»¯´úÂë£¬Ê¹ÓÃÍ¬Ò»¸ö·½·¨
+        ShowWarning(message) ' ç®€åŒ–ä»£ç ï¼Œä½¿ç”¨åŒä¸€ä¸ªæ–¹æ³•
     End Sub
 
     Public Sub ShowWarning(message As String)
         Try
-            Debug.WriteLine("ÏÔÊ¾¾¯¸æÍ¨Öª: " & message)
+            Debug.WriteLine("æ˜¾ç¤ºè­¦å‘Šé€šçŸ¥: " & message)
 
-            ' ·½·¨1: Ö±½ÓÊ¹ÓÃÓ¦ÓÃ³ÌĞòµÄ×´Ì¬À¸
+            ' æ–¹æ³•1: ç›´æ¥ä½¿ç”¨åº”ç”¨ç¨‹åºçš„çŠ¶æ€æ 
             If _application IsNot Nothing Then
                 Try
-                    ' Ê¹ÓÃ¶¯Ì¬ÀàĞÍ£¬±ÜÃâ·´Éä
+                    ' ä½¿ç”¨åŠ¨æ€ç±»å‹ï¼Œé¿å…åå°„
                     Dim app = TryCast(_application, Object)
                     app.StatusBar = "AI: " & message
 
-                    ' Æô¶¯¶¨Ê±Æ÷£¬5ÃëºóÇå³ı×´Ì¬À¸
+                    ' å¯åŠ¨å®šæ—¶å™¨ï¼Œ5ç§’åæ¸…é™¤çŠ¶æ€æ 
                     _messagePending = True
-                    StatusTimer.Stop() ' È·±£ÏÈÍ£Ö¹Ö®Ç°µÄ¼ÆÊ±Æ÷
+                    StatusTimer.Stop() ' ç¡®ä¿å…ˆåœæ­¢ä¹‹å‰çš„è®¡æ—¶å™¨
                     StatusTimer.Start()
 
-                    Debug.WriteLine("×´Ì¬À¸ÏûÏ¢ÉèÖÃ³É¹¦")
+                    Debug.WriteLine("çŠ¶æ€æ æ¶ˆæ¯è®¾ç½®æˆåŠŸ")
                 Catch ex As Exception
-                    Debug.WriteLine($"ÉèÖÃ×´Ì¬À¸Ê§°Ü: {ex.Message}")
+                    Debug.WriteLine($"è®¾ç½®çŠ¶æ€æ å¤±è´¥: {ex.Message}")
                 End Try
             End If
 
-            ' ·½·¨2: ×ÜÊÇÏÔÊ¾Ò»¸öÆ¯ÁÁµÄÍ¨Öª´°¿Ú
+            ' æ–¹æ³•2: æ€»æ˜¯æ˜¾ç¤ºä¸€ä¸ªæ¼‚äº®çš„é€šçŸ¥çª—å£
             ShowNotificationForm(message)
 
-            ' ±¸ÓÃ·½°¸£ºÊä³öµ½µ÷ÊÔ
-            Debug.WriteLine("AIÌáÊ¾: " & message)
+            ' å¤‡ç”¨æ–¹æ¡ˆï¼šè¾“å‡ºåˆ°è°ƒè¯•
+            Debug.WriteLine("AIæç¤º: " & message)
 
         Catch ex As Exception
-            Debug.WriteLine("ÏÔÊ¾Í¨ÖªÊ§°Ü: " & ex.Message)
+            Debug.WriteLine("æ˜¾ç¤ºé€šçŸ¥å¤±è´¥: " & ex.Message)
         End Try
     End Sub
 
-    ' ÏÔÊ¾×Ô¶¨ÒåÍ¨Öª´°¿Ú
+    ' æ˜¾ç¤ºè‡ªå®šä¹‰é€šçŸ¥çª—å£
     Private Sub ShowNotificationForm(message As String)
         Try
-            ' ´´½¨²¢ÏÔÊ¾Í¨Öª´°¿Ú
+            ' åˆ›å»ºå¹¶æ˜¾ç¤ºé€šçŸ¥çª—å£
             Dim thread As New System.Threading.Thread(
                 Sub()
                     Try
-                        ' ´´½¨Í¨Öª´°Ìå
+                        ' åˆ›å»ºé€šçŸ¥çª—ä½“
                         Dim form As New NotificationForm(message)
-                        form.ShowDialog() ' Ê¹ÓÃShowDialogÒÔ±£³ÖÏß³ÌÔËĞĞÖ±µ½´°Ìå¹Ø±Õ
+                        form.ShowDialog() ' ä½¿ç”¨ShowDialogä»¥ä¿æŒçº¿ç¨‹è¿è¡Œç›´åˆ°çª—ä½“å…³é—­
                     Catch ex As Exception
-                        Debug.WriteLine($"ÏÔÊ¾Í¨Öª´°¿ÚÊ§°Ü: {ex.Message}")
+                        Debug.WriteLine($"æ˜¾ç¤ºé€šçŸ¥çª—å£å¤±è´¥: {ex.Message}")
                     End Try
                 End Sub)
 
             thread.SetApartmentState(System.Threading.ApartmentState.STA)
-            thread.IsBackground = True ' ÉèÖÃÎªºóÌ¨Ïß³Ì£¬ÕâÑù²»»á×èÖ¹Ó¦ÓÃ³ÌĞòÍË³ö
+            thread.IsBackground = True ' è®¾ç½®ä¸ºåå°çº¿ç¨‹ï¼Œè¿™æ ·ä¸ä¼šé˜»æ­¢åº”ç”¨ç¨‹åºé€€å‡º
             thread.Start()
         Catch ex As Exception
-            Debug.WriteLine($"´´½¨Í¨ÖªÏß³ÌÊ§°Ü: {ex.Message}")
+            Debug.WriteLine($"åˆ›å»ºé€šçŸ¥çº¿ç¨‹å¤±è´¥: {ex.Message}")
         End Try
     End Sub
 
@@ -91,33 +87,33 @@ Public Module GlobalStatusStripAll
                 Return
             End If
 
-            Debug.WriteLine("¼ÆÊ±Æ÷´¥·¢£¬×¼±¸Çå³ı×´Ì¬À¸")
+            Debug.WriteLine("è®¡æ—¶å™¨è§¦å‘ï¼Œå‡†å¤‡æ¸…é™¤çŠ¶æ€æ ")
 
             Try
-                ' Çå³ı×´Ì¬À¸µÄ¼òµ¥·½·¨
+                ' æ¸…é™¤çŠ¶æ€æ çš„ç®€å•æ–¹æ³•
                 Dim app = TryCast(_application, Object)
                 app.StatusBar = False
-                Debug.WriteLine("×´Ì¬À¸ÒÑÇå³ı")
+                Debug.WriteLine("çŠ¶æ€æ å·²æ¸…é™¤")
             Catch ex As Exception
-                Debug.WriteLine($"Çå³ı×´Ì¬À¸Ê§°Ü: {ex.Message}")
+                Debug.WriteLine($"æ¸…é™¤çŠ¶æ€æ å¤±è´¥: {ex.Message}")
             End Try
 
             _messagePending = False
         Catch ex As Exception
-            Debug.WriteLine("¶¨Ê±Æ÷ÊÂ¼ş´¦ÀíÊ§°Ü: " & ex.Message)
+            Debug.WriteLine("å®šæ—¶å™¨äº‹ä»¶å¤„ç†å¤±è´¥: " & ex.Message)
             _messagePending = False
         End Try
     End Sub
 End Module
 
-' ×Ô¶¨ÒåÍ¨Öª´°Ìå
+' è‡ªå®šä¹‰é€šçŸ¥çª—ä½“
 Public Class NotificationForm : Inherits Form
     Private WithEvents closeTimer As New System.Windows.Forms.Timer()
     Private fadeTimer As New System.Windows.Forms.Timer()
     Private _opacity As Double = 1.0
 
     Public Sub New(message As String)
-        ' ÉèÖÃ´°ÌåÊôĞÔ
+        ' è®¾ç½®çª—ä½“å±æ€§
         Me.FormBorderStyle = FormBorderStyle.None
         Me.StartPosition = FormStartPosition.Manual
         Me.ShowInTaskbar = False
@@ -126,7 +122,7 @@ Public Class NotificationForm : Inherits Form
         Me.BackColor = Color.FromArgb(50, 50, 50)
         Me.Opacity = 0.9
 
-        ' Ô²½ÇĞ§¹û
+        ' åœ†è§’æ•ˆæœ
         Dim path As New Drawing2D.GraphicsPath()
         path.AddArc(0, 0, 20, 20, 180, 90)
         path.AddArc(Me.Width - 20, 0, 20, 20, 270, 90)
@@ -134,7 +130,7 @@ Public Class NotificationForm : Inherits Form
         path.AddArc(0, Me.Height - 20, 20, 20, 90, 90)
         Me.Region = New Region(path)
 
-        ' Ìí¼ÓÏûÏ¢±êÇ©
+        ' æ·»åŠ æ¶ˆæ¯æ ‡ç­¾
         Dim lblMessage As New Label()
         lblMessage.Text = message
         lblMessage.ForeColor = Color.White
@@ -145,23 +141,23 @@ Public Class NotificationForm : Inherits Form
         lblMessage.TextAlign = ContentAlignment.MiddleCenter
         Me.Controls.Add(lblMessage)
 
-        ' ÉèÖÃ´°ÌåÎ»ÖÃ - ÓÒÏÂ½Ç
+        ' è®¾ç½®çª—ä½“ä½ç½® - å³ä¸‹è§’
         Dim screenWidth As Integer = Screen.PrimaryScreen.WorkingArea.Width
         Dim screenHeight As Integer = Screen.PrimaryScreen.WorkingArea.Height
         Me.Location = New Point(screenWidth - Me.Width - 20, screenHeight - Me.Height - 20)
 
-        ' ÉèÖÃ×Ô¶¯¹Ø±Õ¶¨Ê±Æ÷
-        closeTimer.Interval = 3000 ' 3Ãëºó¿ªÊ¼½¥Òş
+        ' è®¾ç½®è‡ªåŠ¨å…³é—­å®šæ—¶å™¨
+        closeTimer.Interval = 3000 ' 3ç§’åå¼€å§‹æ¸éš
         closeTimer.Start()
 
-        ' ÉèÖÃ½¥ÒşĞ§¹û¶¨Ê±Æ÷
-        fadeTimer.Interval = 50 ' Ã¿50ºÁÃë¸üĞÂÒ»´ÎÍ¸Ã÷¶È
+        ' è®¾ç½®æ¸éšæ•ˆæœå®šæ—¶å™¨
+        fadeTimer.Interval = 50 ' æ¯50æ¯«ç§’æ›´æ–°ä¸€æ¬¡é€æ˜åº¦
         AddHandler fadeTimer.Tick, AddressOf FadeTimer_Tick
     End Sub
 
     Private Sub CloseTimer_Tick(sender As Object, e As EventArgs) Handles closeTimer.Tick
         closeTimer.Stop()
-        fadeTimer.Start() ' ¿ªÊ¼½¥ÒşĞ§¹û
+        fadeTimer.Start() ' å¼€å§‹æ¸éšæ•ˆæœ
     End Sub
 
     Private Sub FadeTimer_Tick(sender As Object, e As EventArgs)
@@ -177,7 +173,7 @@ Public Class NotificationForm : Inherits Form
     Protected Overrides Sub OnPaint(e As PaintEventArgs)
         MyBase.OnPaint(e)
 
-        ' »æÖÆ±ß¿ò
+        ' ç»˜åˆ¶è¾¹æ¡†
         Using g As Graphics = e.Graphics
             g.SmoothingMode = Drawing2D.SmoothingMode.AntiAlias
             Using pen As New Pen(Color.FromArgb(100, 100, 100), 1)

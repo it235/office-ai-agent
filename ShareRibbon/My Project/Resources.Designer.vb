@@ -83,6 +83,59 @@ Namespace My.Resources
         '''<summary>
         '''  查找 System.Drawing.Bitmap 类型的本地化资源。
         '''</summary>
+        Public ReadOnly Property aiwrite() As System.Drawing.Bitmap
+            Get
+                Dim obj As Object = ResourceManager.GetObject("aiwrite", resourceCulture)
+                Return CType(obj,System.Drawing.Bitmap)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找 System.Drawing.Bitmap 类型的本地化资源。
+        '''</summary>
+        Public ReadOnly Property audit() As System.Drawing.Bitmap
+            Get
+                Dim obj As Object = ResourceManager.GetObject("audit", resourceCulture)
+                Return CType(obj,System.Drawing.Bitmap)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找类似 /**
+        ''' * autocomplete.js - 智能输入框自动补全模块
+        ''' * 实现类似Cursor/Qoder的Tab键补全功能
+        ''' */
+        '''
+        '''// ========== 状态管理 ==========
+        '''window.autocompleteState = {
+        '''    enabled: true,                  // 是否启用自动补全
+        '''    delayMs: 800,                   // 防抖延迟（毫秒）
+        '''    debounceTimer: null,            // 防抖定时器
+        '''    currentCompletions: [],         // 当前补全候选列表
+        '''    selectedIndex: 0,               // 当前选中的候选索引
+        '''    isDropdownVisible: false,       // 下拉列表是否可见
+        '''    lastInputText: &apos;&apos;,              // 上次输入的文本
+        '''    pendingRequest: null,           [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property autocomplete() As String
+            Get
+                Return ResourceManager.GetString("autocomplete", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找 System.Drawing.Bitmap 类型的本地化资源。
+        '''</summary>
+        Public ReadOnly Property autocomplete1() As System.Drawing.Bitmap
+            Get
+                Dim obj As Object = ResourceManager.GetObject("autocomplete1", resourceCulture)
+                Return CType(obj,System.Drawing.Bitmap)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找 System.Drawing.Bitmap 类型的本地化资源。
+        '''</summary>
         Public ReadOnly Property chat() As System.Drawing.Bitmap
             Get
                 Dim obj As Object = ResourceManager.GetObject("chat", resourceCulture)
@@ -91,25 +144,44 @@ Namespace My.Resources
         End Property
         
         '''<summary>
-        '''  查找类似 &lt;!DOCTYPE html&gt;
-        '''&lt;html&gt;
-        '''&lt;head&gt;
-        '''    &lt;meta charset=&quot;GBK&quot;&gt;
-        '''    &lt;title&gt;Excel Ai Chat Content&lt;/title&gt;
-        '''&lt;!-- 先加载核心库 --&gt;
-        '''&lt;script src=&quot;https://officeai.local/js/highlight.min.js&quot;&gt;&lt;/script&gt;
-        '''&lt;link rel=&quot;stylesheet&quot; href=&quot;https://officeai.local/css/github.min.css&quot;&gt;
-        '''&lt;script src=&quot;https://officeai.local/js/marked.min.js&quot;&gt;&lt;/script&gt;
-        '''&lt;script src=&quot;https://officeai.local/js/vbscript.min.js&quot;&gt;&lt;/script&gt;
+        '''  查找类似 /**
+        ''' * chat-manager.js - Chat Section Management
+        ''' * Functions for creating and managing chat message sections
+        ''' */
         '''
-        '''    &lt;script&gt;
-        '''        hljs.registerAliases(&apos;vba&apos;, { languageName: &apos;vbscript&apos; });
-        '''        hljs.highlightAll();
-        '''    &lt;/ [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''// Create chat section with sender info and content area
+        '''window.createChatSection = function (sender, timestamp, uuid) {
+        '''    console.log(&apos;[createChatSection] 被调用, sender=&apos; + sender + &apos;, uuid=&apos; + uuid);
+        '''    
+        '''    // Create chat container
+        '''    const chatContainer = document.createElement(&apos;div&apos;);
+        '''    chatContainer.className = &apos;chat-container&apos;;
+        '''    chatContainer.id = &apos;chat-&apos; + uuid;
+        '''
+        '''   [字符串的其余部分被截断]&quot;; 的本地化字符串。
         '''</summary>
-        Public ReadOnly Property chat_template() As String
+        Public ReadOnly Property chat_manager() As String
             Get
-                Return ResourceManager.GetString("chat_template", resourceCulture)
+                Return ResourceManager.GetString("chat_manager", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找类似 &lt;!DOCTYPE html&gt;
+        '''&lt;html lang=&quot;zh-CN&quot;&gt;
+        '''&lt;head&gt;
+        '''    &lt;meta charset=&quot;UTF-8&quot;&gt;
+        '''    &lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1.0&quot;&gt;
+        '''    &lt;title&gt;AI Chat&lt;/title&gt;
+        '''    &lt;!-- Third-party libraries - using virtual host officeai.local --&gt;
+        '''    &lt;script src=&quot;https://officeai.local/js/marked.min.js&quot;&gt;&lt;/script&gt;
+        '''    &lt;script src=&quot;https://officeai.local/js/highlight.min.js&quot;&gt;&lt;/script&gt;
+        '''    &lt;script src=&quot;https://officeai.local/js/vbscript.min.js&quot;&gt;&lt;/script&gt;
+        '''    &lt;link rel=&quot;stylesheet&quot; href=&quot;https://officeai. [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property chat_template_refactored() As String
+            Get
+                Return ResourceManager.GetString("chat_template_refactored", resourceCulture)
             End Get
         End Property
         
@@ -124,11 +196,72 @@ Namespace My.Resources
         End Property
         
         '''<summary>
+        '''  查找类似 /**
+        ''' * code-handler.js - Code Block Handling
+        ''' * Functions for copying, executing, and editing code blocks
+        ''' */
+        '''
+        '''/**
+        ''' * 隐藏指定消息中代码块的编辑和执行按钮（校对/排版模式使用）
+        ''' * @param {string} uuid - 消息的UUID
+        ''' */
+        '''function hideCodeActionButtons(uuid) {
+        '''    const messageContainer = document.getElementById(&apos;content-&apos; + uuid);
+        '''    if (!messageContainer) return;
+        '''    
+        '''    // 隐藏所有编辑和执行按钮，只保留复制按钮
+        '''    const editButtons = messageContainer.querySelectorAll(&apos;.edit-button&apos;);
+        '''    const executeButtons = messageContainer.querySelector [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property code_handler() As String
+            Get
+                Return ResourceManager.GetString("code_handler", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找类似 /**
+        ''' * core.js - Core initialization for OfficeAI Chat
+        ''' * Marked.js configuration and renderer setup
+        ''' */
+        '''
+        '''// Configure marked.js
+        '''marked.setOptions({
+        '''    highlight: function (code, lang) {
+        '''        if (lang &amp;&amp; hljs.getLanguage(lang)) {
+        '''            return hljs.highlight(code, { language: lang }).value;
+        '''        }
+        '''        return hljs.highlightAuto(code).value;
+        '''    },
+        '''    breaks: true,
+        '''    gfm: true
+        '''});
+        '''
+        '''// Extend marked renderer for code blocks with action buttons
+        '''const renderer = new marked.Re [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property core() As String
+            Get
+                Return ResourceManager.GetString("core", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
         '''  查找 System.Drawing.Bitmap 类型的本地化资源。
         '''</summary>
         Public ReadOnly Property deepseek() As System.Drawing.Bitmap
             Get
                 Dim obj As Object = ResourceManager.GetObject("deepseek", resourceCulture)
+                Return CType(obj,System.Drawing.Bitmap)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找 System.Drawing.Bitmap 类型的本地化资源。
+        '''</summary>
+        Public ReadOnly Property doubao_avatar() As System.Drawing.Bitmap
+            Get
+                Dim obj As Object = ResourceManager.GetObject("doubao_avatar", resourceCulture)
                 Return CType(obj,System.Drawing.Bitmap)
             End Get
         End Property
@@ -148,6 +281,16 @@ Namespace My.Resources
         Public ReadOnly Property github_min() As String
             Get
                 Return ResourceManager.GetString("github_min", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找 System.Drawing.Bitmap 类型的本地化资源。
+        '''</summary>
+        Public ReadOnly Property help() As System.Drawing.Bitmap
+            Get
+                Dim obj As Object = ResourceManager.GetObject("help", resourceCulture)
+                Return CType(obj,System.Drawing.Bitmap)
             End Get
         End Property
         
@@ -172,12 +315,88 @@ Namespace My.Resources
         End Property
         
         '''<summary>
+        '''  查找类似 /**
+        ''' * history-manager.js - History Sidebar and File Management
+        ''' * Handles chat history display and navigation
+        ''' */
+        '''
+        '''window.historyManager = {
+        '''    isOpen: false,
+        '''
+        '''    // Initialize history functionality
+        '''    init: function () {
+        '''        const toggleBtn = document.getElementById(&apos;history-toggle-btn&apos;);
+        '''        const sidebar = document.getElementById(&apos;history-sidebar&apos;);
+        '''        const overlay = document.getElementById(&apos;sidebar-overlay&apos;);
+        '''        const closeBtn = document.getElementById(&apos;close-sidebar- [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property history_manager() As String
+            Get
+                Return ResourceManager.GetString("history_manager", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找类似 /**
+        ''' * intent-preview.js - 意图预览组件
+        ''' * 显示&quot;我理解您想要...&quot;的预览卡片，用户确认后再发送
+        ''' */
+        '''
+        '''// 意图预览状态
+        '''window.intentPreviewState = {
+        '''    active: false,
+        '''    currentIntent: null,
+        '''    pendingMessage: null,
+        '''    autoConfirm: false  // Agent模式下自动确认
+        '''};
+        '''
+        '''// 图标映射
+        '''const stepIcons = {
+        '''    &apos;search&apos;: &apos;🔍&apos;,
+        '''    &apos;data&apos;: &apos;📊&apos;,
+        '''    &apos;formula&apos;: &apos;🧮&apos;,
+        '''    &apos;chart&apos;: &apos;📈&apos;,
+        '''    &apos;format&apos;: &apos;🎨&apos;,
+        '''    &apos;clean&apos;: &apos;🧹&apos;,
+        '''    &apos;default&apos;: &apos;⚡&apos;
+        '''};
+        '''
+        '''/**
+        ''' * 显示意图预览卡片
+        ''' * @param {Object} intentData - 意图数据 { description, plan, originalInput, autoC [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property intent_preview() As String
+            Get
+                Return ResourceManager.GetString("intent_preview", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
         '''  查找 System.Drawing.Bitmap 类型的本地化资源。
         '''</summary>
         Public ReadOnly Property magic() As System.Drawing.Bitmap
             Get
                 Dim obj As Object = ResourceManager.GetObject("magic", resourceCulture)
                 Return CType(obj,System.Drawing.Bitmap)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找类似 /**
+        ''' * markdown-renderer.js - Markdown Stream Renderer
+        ''' * Handles incremental markdown rendering for streaming responses
+        ''' */
+        '''
+        '''class MarkdownStreamRenderer {
+        '''    constructor(element) {
+        '''        console.log(&apos;[MarkdownStreamRenderer] 构造函数, element=&apos;, element);
+        '''        this.output = element instanceof HTMLElement ? element : document.getElementById(element);
+        '''        this.fullContent = &apos;&apos;;
+        '''        console.log(&apos;[MarkdownStreamRenderer] output元素:&apos;, this.output ? &apos;OK (id=&apos; + (this.output.id || &apos;no-id&apos;) + &apos; [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property markdown_renderer() As String
+            Get
+                Return ResourceManager.GetString("markdown_renderer", resourceCulture)
             End Get
         End Property
         
@@ -196,6 +415,33 @@ Namespace My.Resources
         End Property
         
         '''<summary>
+        '''  查找类似 /**
+        ''' * mcp-manager.js - MCP Connection Management
+        ''' * Handles MCP (Model Context Protocol) connection display and configuration
+        ''' */
+        '''
+        '''// MCP state variables
+        '''let mcpConnections = [];
+        '''let enabledMcpList = [];
+        '''let mcpSupported = false;
+        '''
+        '''// Toggle MCP dialog visibility
+        '''function toggleMcpDialog() {
+        '''    requestMcpConnections();
+        '''    document.getElementById(&apos;mcp-dialog&apos;).style.display = &apos;block&apos;;
+        '''    document.getElementById(&apos;mcp-overlay&apos;).style.display = &apos;block&apos;;
+        '''}
+        '''
+        '''// Close MCP dialog
+        '''function close [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property mcp_manager() As String
+            Get
+                Return ResourceManager.GetString("mcp_manager", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
         '''  查找 System.Drawing.Bitmap 类型的本地化资源。
         '''</summary>
         Public ReadOnly Property mcp1() As System.Drawing.Bitmap
@@ -206,12 +452,248 @@ Namespace My.Resources
         End Property
         
         '''<summary>
+        '''  查找类似 /**
+        ''' * message-sender.js - Message Sending Logic
+        ''' * Handles sending messages to backend and managing input UI
+        ''' */
+        '''
+        '''// Send message payload to server (VB backend)
+        '''function sendMessageToServer(messagePayload) {
+        '''    if (window.chrome &amp;&amp; window.chrome.webview) {
+        '''        window.chrome.webview.postMessage(messagePayload);
+        '''    } else if (window.vsto) {
+        '''        if (typeof window.vsto.sendMessage === &apos;function&apos;) {
+        '''            if (messagePayload.type === &apos;sendMessage&apos; &amp;&amp; typeof messagePayload.value === &apos;ob [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property message_sender() As String
+            Get
+                Return ResourceManager.GetString("message_sender", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找类似 /**
+        ''' * model-switcher.js - Model Switching Management
+        ''' * Handles model display and switching functionality
+        ''' */
+        '''
+        '''/**
+        ''' * Open model configuration dialog
+        ''' * Sends message to VB.NET to open ConfigApiForm
+        ''' */
+        '''function openModelConfig() {
+        '''    if (window.chrome &amp;&amp; window.chrome.webview) {
+        '''        window.chrome.webview.postMessage({
+        '''            type: &apos;openApiConfigForm&apos;
+        '''        });
+        '''    } else if (window.vsto) {
+        '''        window.vsto.openApiConfigForm();
+        '''    } else {
+        '''        alert(&apos;Unable to open conf [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property model_switcher() As String
+            Get
+                Return ResourceManager.GetString("model_switcher", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找 System.Drawing.Bitmap 类型的本地化资源。
+        '''</summary>
+        Public ReadOnly Property papers() As System.Drawing.Bitmap
+            Get
+                Dim obj As Object = ResourceManager.GetObject("papers", resourceCulture)
+                Return CType(obj,System.Drawing.Bitmap)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找 System.Drawing.Bitmap 类型的本地化资源。
+        '''</summary>
+        Public ReadOnly Property promptconfig() As System.Drawing.Bitmap
+            Get
+                Dim obj As Object = ResourceManager.GetObject("promptconfig", resourceCulture)
+                Return CType(obj,System.Drawing.Bitmap)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找类似 /**
+        ''' * ralph-agent.js - Ralph Agent 前端控制
+        ''' * 类似Cursor的自动化Agent，嵌入聊天流，自动执行步骤
+        ''' */
+        '''
+        '''// Agent 状态
+        '''window.ralphAgentState = {
+        '''    active: false,
+        '''    session: null,
+        '''    locked: false  // 锁定聊天输入
+        '''};
+        '''
+        '''/**
+        ''' * 锁定聊天输入（Agent执行期间）
+        ''' */
+        '''function lockChatInput() {
+        '''    window.ralphAgentState.locked = true;
+        '''    const smartInput = document.getElementById(&apos;smart-input&apos;);
+        '''    const sendBtn = document.getElementById(&apos;send-button&apos;);
+        '''    const chatInput = document.getElementById(&apos;chat-input&apos;);
+        '''    
+        '''    if (smartI [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property ralph_agent() As String
+            Get
+                Return ResourceManager.GetString("ralph_agent", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找类似 /**
+        ''' * ralph-loop.js - Ralph Loop 前端控制
+        ''' * 管理循环任务的UI展示和用户交互
+        ''' */
+        '''
+        '''// Ralph Loop 状态
+        '''window.ralphLoopState = {
+        '''    active: false,
+        '''    currentSession: null
+        '''};
+        '''
+        '''/**
+        ''' * 显示循环任务输入对话框
+        ''' */
+        '''function showLoopInputDialog() {
+        '''    try {
+        '''        // 如果已有对话框，先移除
+        '''        hideLoopInputDialog();
+        '''        
+        '''        const dialog = document.createElement(&apos;div&apos;);
+        '''        dialog.id = &apos;ralph-loop-dialog&apos;;
+        '''        dialog.className = &apos;ralph-loop-dialog&apos;;
+        '''        dialog.innerHTML = `
+        '''            &lt;div class=&quot;loop-dial [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property ralph_loop() As String
+            Get
+                Return ResourceManager.GetString("ralph_loop", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找类似 /**
+        ''' * revision-manager.js - Revision Display and Application
+        ''' * Handles document formatting preview and revision suggestions
+        ''' */
+        '''
+        '''(function () {
+        '''    if (!window._oa) window._oa = {};
+        '''    window._oa._comparisonCache = window._oa._comparisonCache || {};
+        '''
+        '''    // Format preview (simplified: using paraIndex and formatting object)
+        '''    window.showComparison = function (uuid, originalText, aiPreviewOrPlan) {
+        '''        console.log(aiPreviewOrPlan);
+        '''        try {
+        '''            const container = document.get [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property revision_manager() As String
+            Get
+                Return ResourceManager.GetString("revision_manager", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
         '''  查找 System.Drawing.Bitmap 类型的本地化资源。
         '''</summary>
         Public ReadOnly Property send32() As System.Drawing.Bitmap
             Get
                 Dim obj As Object = ResourceManager.GetObject("send32", resourceCulture)
                 Return CType(obj,System.Drawing.Bitmap)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找类似 /**
+        ''' * settings-manager.js - Settings Dialog Management
+        ''' * Handles settings dialog display, save, and cancel operations
+        ''' */
+        '''
+        '''// Open settings dialog
+        '''function settingsButton() {
+        '''    document.getElementById(&apos;settings-overlay&apos;).style.display = &apos;block&apos;;
+        '''    document.getElementById(&apos;settings-dialog&apos;).style.display = &apos;block&apos;;
+        '''}
+        '''
+        '''// Cancel settings dialog
+        '''function settingsCancel() {
+        '''    document.getElementById(&apos;settings-overlay&apos;).style.display = &apos;none&apos;;
+        '''    document.getElementById(&apos;settings-dialog&apos;). [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property settings_manager() As String
+            Get
+                Return ResourceManager.GetString("settings_manager", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找类似 /* ShareRibbon/Resources/css/styles.css */
+        '''/* Office AI Chat 样式表 - 从 chat-template.html 提取 */
+        '''
+        '''/* ====== 基础样式 ====== */
+        '''body {
+        '''    font-family: -apple-system, BlinkMacSystemFont, &apos;Segoe UI&apos;, Roboto, Oxygen, Ubuntu, Cantarell, &apos;Open Sans&apos;, &apos;Helvetica Neue&apos;, sans-serif;
+        '''    line-height: 1.5;
+        '''    color: #333;
+        '''    max-width: 800px;
+        '''    margin: 0 auto;
+        '''    padding: 20px;
+        '''    background-color: #f9f9f9;
+        '''    padding-bottom: 160px;
+        '''}
+        '''
+        '''#chat-output {
+        '''    padding: 20px;
+        '''    background-color: white;
+        '''  [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property styles() As String
+            Get
+                Return ResourceManager.GetString("styles", resourceCulture)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找 System.Drawing.Bitmap 类型的本地化资源。
+        '''</summary>
+        Public ReadOnly Property translate() As System.Drawing.Bitmap
+            Get
+                Dim obj As Object = ResourceManager.GetObject("translate", resourceCulture)
+                Return CType(obj,System.Drawing.Bitmap)
+            End Get
+        End Property
+        
+        '''<summary>
+        '''  查找类似 /**
+        ''' * utils.js - Utility functions for OfficeAI Chat
+        ''' * Common helper functions used across the application
+        ''' */
+        '''
+        '''// Generate UUID v4
+        '''function generateUUID() {
+        '''    return &apos;xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx&apos;.replace(/[xy]/g, function (c) {
+        '''        const r = Math.random() * 16 | 0;
+        '''        const v = c === &apos;x&apos; ? r : (r &amp; 0x3 | 0x8);
+        '''        return v.toString(16);
+        '''    });
+        '''}
+        '''
+        '''// Format date time to string
+        '''function formatDateTime(date) {
+        '''    const year = date.getFullYear();
+        '''    const month = S [字符串的其余部分被截断]&quot;; 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property utils() As String
+            Get
+                Return ResourceManager.GetString("utils", resourceCulture)
             End Get
         End Property
         

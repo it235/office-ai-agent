@@ -9,6 +9,7 @@ Public Class ThisAddIn
 
     Public Shared chatTaskPane As Microsoft.Office.Tools.CustomTaskPane
     Public Shared chatControl As ChatControl
+    Private translateService As WordTranslateService
 
     Private captureTaskPane As Microsoft.Office.Tools.CustomTaskPane
     Public Shared dataCapturePane As WebDataCapturePane
@@ -16,6 +17,11 @@ Public Class ThisAddIn
     ' 在类中添加以下变量
     Private _deepseekControl As DeepseekControl
     Private _deepseekTaskPane As Microsoft.Office.Tools.CustomTaskPane
+    Private _doubaoControl As DoubaoChat
+    Private _doubaoTaskPane As Microsoft.Office.Tools.CustomTaskPane
+    
+    ' Word补全管理器
+    Private _completionManager As WordCompletionManager
 
     Private Sub WordAi_Startup() Handles Me.Startup
 
@@ -35,6 +41,39 @@ Public Class ThisAddIn
         widthTimer1 = New Timer()
         AddHandler widthTimer1.Tick, AddressOf WidthTimer1_Tick
         widthTimer1.Interval = 100 ' 设置延迟时间，单位为毫秒
+
+        translateService = New WordTranslateService()
+        
+        ' 预加载聊天设置（确保补全配置在CompletionManager初始化前已加载）
+        Dim chatSettings As New ChatSettings(New ApplicationInfo("Word", OfficeApplicationType.Word))
+        
+        ' 初始化Word补全管理器
+        InitializeCompletionManager()
+
+    End Sub
+    
+    ''' <summary>
+    ''' 初始化Word补全管理器
+    ''' </summary>
+    Private Sub InitializeCompletionManager()
+        Try
+            _completionManager = WordCompletionManager.Instance
+            _completionManager.Initialize(Me.Application)
+            ' 根据设置启用/禁用补全
+            _completionManager.Enabled = ChatSettings.EnableAutocomplete
+            Debug.WriteLine("Word补全管理器已初始化")
+        Catch ex As Exception
+            Debug.WriteLine($"初始化Word补全管理器失败: {ex.Message}")
+        End Try
+    End Sub
+    
+    ''' <summary>
+    ''' 启用/禁用Word补全功能
+    ''' </summary>
+    Public Sub SetCompletionEnabled(enabled As Boolean)
+        If _completionManager IsNot Nothing Then
+            _completionManager.Enabled = enabled
+        End If
     End Sub
 
 
@@ -51,15 +90,13 @@ Public Class ThisAddIn
     End Sub
 
 
+    ' 为新工作簿创建任务窗格
     Private Sub CreateChatTaskPane()
         Try
-            ' 为新工作簿创建任务窗格
             chatControl = New ChatControl()
             chatTaskPane = Me.CustomTaskPanes.Add(chatControl, "Word AI智能助手")
-            chatTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
-            chatTaskPane.Width = 420
-            AddHandler chatTaskPane.VisibleChanged, AddressOf ChatTaskPane_VisibleChanged
-            chatTaskPane.Visible = False
+                chatTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
+                chatTaskPane.Width = 420
 
         Catch ex As Exception
             MessageBox.Show($"初始化新建工作簿任务窗格失败: {ex.Message}")
@@ -120,6 +157,21 @@ Public Class ThisAddIn
         End Try
     End Sub
 
+    Private Async Function CreateDoubaoTaskPane() As Task
+        Try
+            If _doubaoControl Is Nothing Then
+                ' 为新工作簿创建任务窗格
+                _doubaoControl = New DoubaoChat()
+                Await _doubaoControl.InitializeAsync()
+                _doubaoTaskPane = Me.CustomTaskPanes.Add(_doubaoControl, "Doubao AI智能助手")
+                _doubaoTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
+                _doubaoTaskPane.Width = 420
+            End If
+        Catch ex As Exception
+            MessageBox.Show($"初始化Doubao任务窗格失败: {ex.Message}")
+        End Try
+    End Function
+
     Private Sub WidthTimer_Tick(sender As Object, e As EventArgs)
         widthTimer.Stop()
         If IsWpsActive() AndAlso chatTaskPane IsNot Nothing Then
@@ -156,5 +208,10 @@ Public Class ThisAddIn
     Public Async Sub ShowDeepseekTaskPane()
         CreateDeepseekTaskPane()
         _deepseekTaskPane.Visible = True
+    End Sub
+
+    Public Async Sub ShowDoubaoTaskPane()
+        Await CreateDoubaoTaskPane()
+        _doubaoTaskPane.Visible = True
     End Sub
 End Class

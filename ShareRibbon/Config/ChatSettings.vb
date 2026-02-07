@@ -22,9 +22,16 @@ Public Class ChatSettings
     Public Shared Property settingsScrollChecked As Boolean = True
     Public Shared Property chatMode As String = "chat"
 
+    ' 自动补全设置
+    Public Shared Property EnableAutocomplete As Boolean = False     ' 是否启用自动补全（默认关闭）
+    Public Shared Property AutocompleteDelayMs As Integer = 800      ' 防抖延迟（毫秒）
+    Public Shared Property AutocompleteShortcut As String = "Ctrl+."  ' 接受补全的快捷键（默认Ctrl+.）
+
     ' 修改方法签名，参数类型改为 Double 和 Integer
     Public Sub SaveSettings(topicRandomness As Double, contextLimit As Integer,
-                          selectedCell As Boolean, settingsScroll As Boolean, executecodePreview As Boolean, chatMode As String)
+                          selectedCell As Boolean, settingsScroll As Boolean, executecodePreview As Boolean, chatMode As String,
+                          Optional enableAutocomplete As Boolean = False, Optional autocompleteDelayMs As Integer = 800,
+                          Optional autocompleteShortcut As String = "Ctrl+.")
         Try
             ' 创建设置对象
             Dim settings As New Dictionary(Of String, Object) From {
@@ -33,7 +40,10 @@ Public Class ChatSettings
                 {"selectedCellChecked", selectedCell},
                 {"settingsScrollChecked", settingsScroll},
                 {"executecodePreviewChecked", executecodePreview},
-                {"chatMode", chatMode}
+                {"chatMode", chatMode},
+                {"enableAutocomplete", enableAutocomplete},
+                {"autocompleteDelayMs", autocompleteDelayMs},
+                {"autocompleteShortcut", autocompleteShortcut}
             }
 
             ' 将设置保存到JSON文件
@@ -52,6 +62,9 @@ Public Class ChatSettings
             ChatSettings.settingsScrollChecked = settingsScroll
             ChatSettings.executecodePreviewChecked = executecodePreview
             ChatSettings.chatMode = chatMode
+            ChatSettings.EnableAutocomplete = enableAutocomplete
+            ChatSettings.AutocompleteDelayMs = autocompleteDelayMs
+            ChatSettings.AutocompleteShortcut = autocompleteShortcut
 
         Catch ex As Exception
             Debug.WriteLine($"保存设置失败: {ex.Message}")
@@ -86,6 +99,15 @@ Public Class ChatSettings
                 End If
                 If settings.ContainsKey("chatMode") Then
                     chatMode = Convert.ToString(settings("chatMode"))
+                End If
+                If settings.ContainsKey("enableAutocomplete") Then
+                    EnableAutocomplete = CBool(settings("enableAutocomplete"))
+                End If
+                If settings.ContainsKey("autocompleteDelayMs") Then
+                    AutocompleteDelayMs = Convert.ToInt32(settings("autocompleteDelayMs"))
+                End If
+                If settings.ContainsKey("autocompleteShortcut") Then
+                    AutocompleteShortcut = Convert.ToString(settings("autocompleteShortcut"))
                 End If
                 ' 加载MCP列表
 
@@ -130,6 +152,6 @@ Public Class ChatSettings
         settingsObj("enableMcpList") = JArray.FromObject(enabledList)
 
         ' 保存设置
-        File.WriteAllText(settingsPath, settingsObj.ToString(Formatting.Indented))
+        File.WriteAllText(settingsPath, settingsObj.ToString(Newtonsoft.Json.Formatting.Indented))
     End Sub
 End Class

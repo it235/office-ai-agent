@@ -48,7 +48,10 @@ Partial Class Ribbon1
         ' 设置特定的图标
         Me.ConfigApiButton.Image = ShareRibbon.SharedResources.AiApiConfig
         Me.DataAnalysisButton.Image = ShareRibbon.SharedResources.Magic
-        Me.PromptConfigButton.Image = ShareRibbon.SharedResources.Send32
+        ' 提示词配置
+        Me.PromptConfigButton.Image = ShareRibbon.SharedResources.promptconfig
+        ' 自动补全
+        Me.AutocompleteSettingsButton.Image = ShareRibbon.SharedResources.autocomplete
         Me.ChatButton.Image = ShareRibbon.SharedResources.Chat
         Me.AboutButton.Image = ShareRibbon.SharedResources.About
         Me.ClearCacheButton.Image = ShareRibbon.SharedResources.Clear
@@ -62,11 +65,18 @@ Partial Class Ribbon1
         Me.RibbonType = "Microsoft.Excel.Workbook"
 
         Me.DeepseekButton.Image = ShareRibbon.SharedResources.Deepseek
+        Me.DoubaoButton.Image = ShareRibbon.SharedResources.Doubao
         Me.MCPButton.Image = ShareRibbon.SharedResources.Mcp1
         Me.WebCaptureButton.Image = ShareRibbon.SharedResources.Send32
         Me.SpotlightButton.Image = ShareRibbon.SharedResources.Wait
         Me.BatchDataGenButton.Visible = False
         Me.WebCaptureButton.Visible = False
+        Me.ProofreadButton.Visible = False
+        Me.ReformatButton.Visible = False
+        Me.ContinuationButton.Visible = False
+        Me.TemplateFormatButton.Visible = False
+        Me.TranslateButton.Image = ShareRibbon.SharedResources.Translate
+        Me.StudyButton.Image = ShareRibbon.SharedResources.Help
     End Sub
 
 End Class

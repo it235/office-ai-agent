@@ -58,12 +58,12 @@ Public Class Ribbon1
 
     Protected Overrides Async Sub DataAnalysisButton_Click(sender As Object, e As RibbonControlEventArgs)
         If String.IsNullOrWhiteSpace(ConfigSettings.ApiKey) Then
-            MsgBox("请输入ApiKey！")
+            GlobalStatusStripAll.ShowWarning("请输入ApiKey！")
             Return
         End If
 
         If String.IsNullOrWhiteSpace(ConfigSettings.ApiUrl) Then
-            MsgBox("请选择大模型！")
+            GlobalStatusStripAll.ShowWarning("请选择大模型！")
             Return
         End If
 
@@ -125,10 +125,10 @@ Public Class Ribbon1
                     WriteResponseToSheet(response)
                 End If
             Else
-                MsgBox("选中的单元格无文本内容！")
+                GlobalStatusStripAll.ShowWarning("选中的单元格无文本内容！")
             End If
         Else
-            MsgBox("请选择一个单元格区域！")
+            GlobalStatusStripAll.ShowWarning("请选择一个单元格区域！")
 
         End If
 
@@ -201,6 +201,11 @@ Public Class Ribbon1
         Globals.ThisAddIn.ShowDeepseekTaskPane()
     End Sub
 
+    ' Doubao按钮点击事件实现
+    Protected Overrides Sub DoubaoButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Globals.ThisAddIn.ShowDoubaoTaskPane()
+    End Sub
+
     ' 批量数据生成按钮点击事件实现
     Protected Overrides Sub BatchDataGenButton_Click(sender As Object, e As RibbonControlEventArgs)
         ' 创建并显示批量数据生成配置表单
@@ -225,4 +230,77 @@ Public Class Ribbon1
         End If
     End Sub
 
+    Protected Overrides Sub ProofreadButton_Click(sender As Object, e As RibbonControlEventArgs)
+        MessageBox.Show("Excel校对功能正在开发中...", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
+    End Sub
+
+    Protected Overrides Sub ReformatButton_Click(sender As Object, e As RibbonControlEventArgs)
+        MessageBox.Show("Excel排版功能正在开发中...", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
+    End Sub
+
+    ' 一键翻译功能 - Excel实现（翻译选中单元格内容）
+    Protected Overrides Async Sub TranslateButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Try
+            Dim excelApp = Globals.ThisAddIn.Application
+            Dim selection As Excel.Range = TryCast(excelApp.Selection, Excel.Range)
+
+            If selection Is Nothing OrElse selection.Cells.Count = 0 Then
+                MessageBox.Show("请先选择要翻译的单元格区域。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                Return
+            End If
+
+            ' 显示翻译操作对话框
+            Dim actionForm As New ShareRibbon.TranslateActionForm(True, "Excel")
+            If actionForm.ShowDialog() <> DialogResult.OK Then
+                Return
+            End If
+
+            ' 收集单元格内容
+            Dim cellTexts As New List(Of String)()
+            Dim cellRanges As New List(Of Excel.Range)()
+
+            For Each cell As Excel.Range In selection.Cells
+                If cell.Value IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(cell.Value.ToString()) Then
+                    cellTexts.Add(cell.Value.ToString())
+                    cellRanges.Add(cell)
+                End If
+            Next
+
+            If cellTexts.Count = 0 Then
+                MessageBox.Show("选中的单元格没有文本内容。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                Return
+            End If
+
+            ' 更新设置
+            Dim settings = ShareRibbon.TranslateSettings.Load()
+            settings.SourceLanguage = actionForm.SourceLanguage
+            settings.TargetLanguage = actionForm.TargetLanguage
+            settings.CurrentDomain = actionForm.SelectedDomain
+            settings.OutputMode = actionForm.OutputMode
+            settings.Save()
+
+            ShareRibbon.GlobalStatusStripAll.ShowWarning($"正在翻译 {cellTexts.Count} 个单元格...")
+
+            ' 使用Excel文档翻译服务翻译
+            Dim translateService As New ExcelDocumentTranslateService()
+            Dim results = Await translateService.TranslateCellsAsync(cellTexts, cellRanges, settings)
+
+            ShareRibbon.GlobalStatusStripAll.ShowWarning($"翻译完成，共处理 {cellTexts.Count} 个单元格")
+
+        Catch ex As Exception
+            MessageBox.Show("翻译过程出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub
+
+    ' AI续写功能 - Excel暂不支持（续写主要用于文档类型）
+    Protected Overrides Sub ContinuationButton_Click(sender As Object, e As RibbonControlEventArgs)
+        MessageBox.Show("AI续写功能主要用于Word和PowerPoint文档，Excel暂不支持此功能。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
+    End Sub
+
+
+
+    ' 模板排版功能 - Excel暂不支持
+    Protected Overrides Sub TemplateFormatButton_Click(sender As Object, e As RibbonControlEventArgs)
+        MessageBox.Show("模板排版功能主要用于Word和PowerPoint文档，Excel暂不支持此功能。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
+    End Sub
 End Class

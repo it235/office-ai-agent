@@ -58,3 +58,6 @@ OfficeAgent/Release
 
 /Debug/
 /Release/
+
+# 不提交 docs 目录
+docs/
