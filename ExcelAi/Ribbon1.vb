@@ -1,4 +1,4 @@
-﻿' WordAi\Ribbon1.vb
+' WordAi\Ribbon1.vb
 Imports System.Diagnostics
 Imports System.Text.RegularExpressions
 Imports System.Windows.Forms
@@ -76,7 +76,7 @@ Public Class Ribbon1
             Dim cellList As New List(Of String)
 
             ' 按列遍历，每列用局部变量记录连续空行数
-            For col As Integer = selection.Column To selection.Column + selection.Columns.Count
+            For col As Integer = selection.Column To selection.Column + selection.Columns.Count - 1
                 Dim emptyCount As Integer = 0
                 For row As Integer = selection.Row To selection.Row + selection.Rows.Count - 1
                     Dim cell As Excel.Range = selection.Worksheet.Cells(row, col)
