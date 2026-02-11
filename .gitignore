@@ -58,3 +58,11 @@ OfficeAgent/Release
 
 /Debug/
 /Release/
+
+# 不提交 docs 目录
+docs/
+
+# 不提交 IDE/CI 配置目录
+.github/
+.qoder/
+.vscode/

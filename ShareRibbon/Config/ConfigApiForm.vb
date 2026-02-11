@@ -1,4 +1,4 @@
-﻿Imports System.Diagnostics
+Imports System.Diagnostics
 Imports System.Drawing
 Imports System.IO
 Imports System.Net
@@ -481,6 +481,13 @@ Public Class ConfigApiForm
         cloudRefreshModelsButton.Text = "刷新中..."
         Cursor = Cursors.WaitCursor
 
+        ' 将用户输入同步到配置对象，防止刷新过程中丢失
+        If Not currentCloudConfig.isPreset Then
+            currentCloudConfig.pltform = cloudPlatformTextBox.Text
+            currentCloudConfig.url = cloudUrlTextBox.Text
+        End If
+        currentCloudConfig.key = apiKey
+
         Try
             Dim models = Await ModelApiClient.GetModelsAsync(apiUrl, apiKey)
             If models.Count > 0 Then
@@ -495,8 +502,8 @@ Public Class ConfigApiForm
                     End If
                 Next
 
-                ' 刷新UI
-                CloudProviderListBox_SelectedIndexChanged(Nothing, Nothing)
+                ' 仅刷新模型列表，保持用户输入不变
+                RefreshCloudModelList()
                 MessageBox.Show($"已获取 {models.Count} 个模型", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Else
                 MessageBox.Show("未获取到模型列表，请检查API Key是否正确", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning)
@@ -569,6 +576,13 @@ Public Class ConfigApiForm
         cloudSaveButton.Enabled = False
         cloudSaveButton.Text = "验证中..."
         Cursor = Cursors.WaitCursor
+
+        ' 将用户输入同步到配置对象，防止异步验证期间UI事件覆盖输入
+        If Not currentCloudConfig.isPreset Then
+            currentCloudConfig.pltform = platformName
+            currentCloudConfig.url = apiUrl
+        End If
+        currentCloudConfig.key = apiKey
 
         Try
             ' 验证API
@@ -716,6 +730,13 @@ Public Class ConfigApiForm
         localRefreshModelsButton.Text = "刷新中..."
         Cursor = Cursors.WaitCursor
 
+        ' 将用户输入同步到配置对象，防止刷新过程中丢失
+        currentLocalConfig.pltform = localPlatformTextBox.Text
+        currentLocalConfig.url = apiUrl
+        If Not String.IsNullOrEmpty(localApiKeyTextBox.Text) Then
+            currentLocalConfig.key = localApiKeyTextBox.Text
+        End If
+
         Try
             Dim models = Await ModelApiClient.GetModelsAsync(apiUrl, apiKey)
             If models.Count > 0 Then
@@ -729,8 +750,8 @@ Public Class ConfigApiForm
                     })
                 Next
 
-                ' 刷新UI
-                LocalProviderListBox_SelectedIndexChanged(Nothing, Nothing)
+                ' 仅刷新模型列表，保持用户输入不变
+                RefreshLocalModelList()
                 MessageBox.Show($"已获取 {models.Count} 个模型", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Else
                 MessageBox.Show("未获取到模型列表，请确保本地服务已启动", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning)
@@ -785,6 +806,11 @@ Public Class ConfigApiForm
         localSaveButton.Enabled = False
         localSaveButton.Text = "验证中..."
         Cursor = Cursors.WaitCursor
+
+        ' 将用户输入同步到配置对象，防止异步验证期间UI事件覆盖输入
+        currentLocalConfig.pltform = platformName
+        currentLocalConfig.url = apiUrl
+        currentLocalConfig.key = apiKey
 
         Try
             ' 本地模型验证 - 尝试连接
@@ -859,6 +885,28 @@ Public Class ConfigApiForm
 #End Region
 
 #Region "通用方法"
+
+    ''' <summary>
+    ''' 仅刷新云端模型CheckedListBox，不影响其他输入控件
+    ''' </summary>
+    Private Sub RefreshCloudModelList()
+        cloudModelCheckedListBox.Items.Clear()
+        If currentCloudConfig Is Nothing Then Return
+        For Each model In currentCloudConfig.model
+            cloudModelCheckedListBox.Items.Add(model, model.selected)
+        Next
+    End Sub
+
+    ''' <summary>
+    ''' 仅刷新本地模型CheckedListBox，不影响其他输入控件
+    ''' </summary>
+    Private Sub RefreshLocalModelList()
+        localModelCheckedListBox.Items.Clear()
+        If currentLocalConfig Is Nothing Then Return
+        For Each model In currentLocalConfig.model
+            localModelCheckedListBox.Items.Add(model, model.selected)
+        Next
+    End Sub
 
     ''' <summary>
     ''' 验证API连接
