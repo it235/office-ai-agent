@@ -1,4 +1,4 @@
-﻿Imports System.Diagnostics
+Imports System.Diagnostics
 Imports System.IO
 Imports System.Net.Http
 Imports System.Threading
@@ -714,6 +714,7 @@ Public Class WebDataCapturePane
                                                           selection.TypeText(vbCrLf & vbCrLf)
 
                                                           Debug.WriteLine("图片插入成功")
+                                                          imageCount += 1
                                                       Catch shapeEx As Exception
                                                           Debug.WriteLine($"设置图片属性失败: {shapeEx.Message}")
                                                       End Try

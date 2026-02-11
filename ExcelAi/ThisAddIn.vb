@@ -1,4 +1,4 @@
-﻿Imports System.Diagnostics
+Imports System.Diagnostics
 Imports System.IO
 Imports System.Runtime.InteropServices
 Imports System.Threading.Tasks
@@ -98,10 +98,11 @@ Public Class ThisAddIn
                 ' 检查是否所有工作簿都是新建的空白工作簿
                 For i As Integer = 1 To Application.Workbooks.Count
                     Dim wb As Workbook = Application.Workbooks(i)
-                    ' 如果工作簿不是默认名称(如Book1)或已保存过，则视为有效工作簿
-                    If Not (wb.Name.StartsWith("Book") OrElse wb.Name.StartsWith("工作簿")) OrElse
-                   Not String.IsNullOrEmpty(wb.Path) OrElse
-                   wb.Saved = False Then
+                    ' 只有同时满足：默认名称、未保存到磁盘、无修改内容，才视为临时空白工作簿
+                    Dim isDefaultName = wb.Name.StartsWith("Book") OrElse wb.Name.StartsWith("工作簿")
+                    Dim isUnsaved = String.IsNullOrEmpty(wb.Path)
+                    Dim isUnmodified = wb.Saved
+                    If Not (isDefaultName AndAlso isUnsaved AndAlso isUnmodified) Then
                         hasRealWorkbook = True
                         Debug.WriteLine($"找到有效工作簿: {wb.Name}")
                         Exit For
@@ -446,6 +447,7 @@ Public Class ThisAddIn
 
     Public Async Sub ShowChatTaskPane()
         CreateChatTaskPane()
+        If chatTaskPane Is Nothing Then Return
         chatTaskPane.Visible = True
         If loadChatHtml Then
             loadChatHtml = False
@@ -456,11 +458,13 @@ Public Class ThisAddIn
     Public Async Sub ShowDeepseekTaskPane()
         Debug.WriteLine($"Deepseek点击事件")
         CreateDeepseekTaskPane()
+        If _deepseekTaskPane Is Nothing Then Return
         _deepseekTaskPane.Visible = True
     End Sub
 
     Public Async Sub ShowDoubaoTaskPane()
-        CreateDoubaoTaskPane()
+        Await CreateDoubaoTaskPane()
+        If _doubaoTaskPane Is Nothing Then Return
         _doubaoTaskPane.Visible = True
     End Sub
 End Class
