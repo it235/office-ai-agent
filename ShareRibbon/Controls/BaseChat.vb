@@ -1,4 +1,4 @@
-﻿Imports System.Diagnostics
+Imports System.Diagnostics
 Imports System.Drawing
 Imports System.IO
 Imports System.Linq
@@ -87,11 +87,12 @@ Public MustInherit Class BaseChat
             Dim options As New CoreWebView2EnvironmentOptions()
             options.AdditionalBrowserArguments = "--no-sandbox"
 
-            ' 创建WebView2环境，使用固定目录保持会话
-            Dim env = Await CoreWebView2Environment.CreateAsync(Nothing, userDataFolder, options)
-
-            ' 初始化WebView2
-            Await ChatBrowser.EnsureCoreWebView2Async(env)
+            ' 仅在WebView2尚未初始化时，使用自定义环境初始化
+            ' 避免与控件自动初始化产生CoreWebView2Environment冲突
+            If ChatBrowser.CoreWebView2 Is Nothing Then
+                Dim env = Await CoreWebView2Environment.CreateAsync(Nothing, userDataFolder, options)
+                Await ChatBrowser.EnsureCoreWebView2Async(env)
+            End If
 
             ' 配置WebView2
             If ChatBrowser.CoreWebView2 IsNot Nothing Then

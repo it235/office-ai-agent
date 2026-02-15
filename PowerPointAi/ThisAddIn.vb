@@ -1,4 +1,4 @@
-﻿Imports System.Diagnostics
+Imports System.Diagnostics
 Imports System.IO
 Imports System.Runtime.InteropServices
 Imports System.Threading.Tasks
@@ -183,6 +183,7 @@ Public Class ThisAddIn
 
     Public Async Sub ShowChatTaskPane()
         CreateChatTaskPane()
+        If chatTaskPane Is Nothing Then Return
         chatTaskPane.Visible = True
         If loadChatHtml Then
             loadChatHtml = False
@@ -192,11 +193,13 @@ Public Class ThisAddIn
 
     Public Async Sub ShowDeepseekTaskPane()
         CreateDeepseekTaskPane()
+        If _deepseekTaskPane Is Nothing Then Return
         _deepseekTaskPane.Visible = True
     End Sub
 
     Public Async Sub ShowDoubaoTaskPane()
         Await CreateDoubaoTaskPane()
+        If _doubaoTaskPane Is Nothing Then Return
         _doubaoTaskPane.Visible = True
     End Sub
 End Class

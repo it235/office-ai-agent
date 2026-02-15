@@ -404,10 +404,10 @@ Public Class ConfigApiForm
         If cloudProviderListBox.SelectedItem Is Nothing Then Return
 
         currentCloudConfig = CType(cloudProviderListBox.SelectedItem, ConfigItem)
-        
+
         ' 根据是否为预置配置切换显示模式
         Dim isPreset = currentCloudConfig.isPreset
-        
+
         ' 平台名称：预置用Label，自定义用TextBox
         cloudPlatformLabel.Visible = isPreset
         cloudPlatformTextBox.Visible = Not isPreset
@@ -416,7 +416,7 @@ Public Class ConfigApiForm
         Else
             cloudPlatformTextBox.Text = currentCloudConfig.pltform
         End If
-        
+
         ' API URL：预置用Label，自定义用TextBox
         cloudUrlLabel.Visible = isPreset
         cloudUrlTextBox.Visible = Not isPreset
@@ -425,7 +425,7 @@ Public Class ConfigApiForm
         Else
             cloudUrlTextBox.Text = currentCloudConfig.url
         End If
-        
+
         cloudApiKeyTextBox.Text = If(String.IsNullOrEmpty(currentCloudConfig.key), "", currentCloudConfig.key)
         cloudTranslateCheckBox.Checked = currentCloudConfig.translateSelected
 
@@ -481,6 +481,13 @@ Public Class ConfigApiForm
         cloudRefreshModelsButton.Text = "刷新中..."
         Cursor = Cursors.WaitCursor
 
+        ' 将用户输入同步到配置对象，防止刷新过程中丢失
+        If Not currentCloudConfig.isPreset Then
+            currentCloudConfig.pltform = cloudPlatformTextBox.Text
+            currentCloudConfig.url = cloudUrlTextBox.Text
+        End If
+        currentCloudConfig.key = apiKey
+
         Try
             Dim models = Await ModelApiClient.GetModelsAsync(apiUrl, apiKey)
             If models.Count > 0 Then
@@ -495,27 +502,8 @@ Public Class ConfigApiForm
                     End If
                 Next
 
-                ' 保存用户当前输入的值（防止被覆盖）
-                Dim savedApiKey = cloudApiKeyTextBox.Text
-                Dim savedUrl = cloudUrlTextBox.Text
-                Dim savedPlatform = cloudPlatformTextBox.Text
-                Dim savedTranslate = cloudTranslateCheckBox.Checked
-                
-                ' 刷新UI（仅更新模型列表）
-                cloudModelCheckedListBox.Items.Clear()
-                For Each model In currentCloudConfig.model
-                    Dim displayText = If(String.IsNullOrEmpty(model.displayName), model.modelName, model.displayName)
-                    cloudModelCheckedListBox.Items.Add(model, model.selected)
-                Next
-                
-                ' 恢复用户输入的值
-                cloudApiKeyTextBox.Text = savedApiKey
-                If Not currentCloudConfig.isPreset Then
-                    cloudUrlTextBox.Text = savedUrl
-                    cloudPlatformTextBox.Text = savedPlatform
-                End If
-                cloudTranslateCheckBox.Checked = savedTranslate
-                
+                ' 仅刷新模型列表，保持用户输入不变
+                RefreshCloudModelList()
                 MessageBox.Show($"已获取 {models.Count} 个模型", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Else
                 MessageBox.Show("未获取到模型列表，请检查API Key是否正确", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning)
@@ -552,12 +540,12 @@ Public Class ConfigApiForm
         Else
             platformName = cloudPlatformTextBox.Text
             apiUrl = cloudUrlTextBox.Text
-            
+
             If String.IsNullOrEmpty(platformName) Then
                 MessageBox.Show("请输入服务名称", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning)
                 Return
             End If
-            
+
             If String.IsNullOrEmpty(apiUrl) OrElse Not (apiUrl.StartsWith("http://") OrElse apiUrl.StartsWith("https://")) Then
                 MessageBox.Show("请输入有效的API端点 (以http://或https://开头)", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning)
                 Return
@@ -588,6 +576,13 @@ Public Class ConfigApiForm
         cloudSaveButton.Enabled = False
         cloudSaveButton.Text = "验证中..."
         Cursor = Cursors.WaitCursor
+
+        ' 将用户输入同步到配置对象，防止异步验证期间UI事件覆盖输入
+        If Not currentCloudConfig.isPreset Then
+            currentCloudConfig.pltform = platformName
+            currentCloudConfig.url = apiUrl
+        End If
+        currentCloudConfig.key = apiKey
 
         Try
             ' 验证API
@@ -682,7 +677,7 @@ Public Class ConfigApiForm
         If localProviderListBox.SelectedItem Is Nothing Then Return
 
         currentLocalConfig = CType(localProviderListBox.SelectedItem, ConfigItem)
-        
+
         ' 更新配置面板
         localPlatformTextBox.Text = currentLocalConfig.pltform
         localUrlTextBox.Text = currentLocalConfig.url
@@ -735,15 +730,16 @@ Public Class ConfigApiForm
         localRefreshModelsButton.Text = "刷新中..."
         Cursor = Cursors.WaitCursor
 
+        ' 将用户输入同步到配置对象，防止刷新过程中丢失
+        currentLocalConfig.pltform = localPlatformTextBox.Text
+        currentLocalConfig.url = apiUrl
+        If Not String.IsNullOrEmpty(localApiKeyTextBox.Text) Then
+            currentLocalConfig.key = localApiKeyTextBox.Text
+        End If
+
         Try
             Dim models = Await ModelApiClient.GetModelsAsync(apiUrl, apiKey)
             If models.Count > 0 Then
-                ' 保存用户当前输入的值（防止被覆盖）
-                Dim savedApiKey = localApiKeyTextBox.Text
-                Dim savedUrl = localUrlTextBox.Text
-                Dim savedPlatform = localPlatformTextBox.Text
-                Dim savedTranslate = localTranslateCheckBox.Checked
-                
                 ' 清空并重新加载模型列表
                 currentLocalConfig.model.Clear()
                 For Each modelName In models
@@ -754,19 +750,8 @@ Public Class ConfigApiForm
                     })
                 Next
 
-                ' 仅刷新模型列表UI
-                localModelCheckedListBox.Items.Clear()
-                For Each model In currentLocalConfig.model
-                    Dim displayText = If(String.IsNullOrEmpty(model.displayName), model.modelName, model.displayName)
-                    localModelCheckedListBox.Items.Add(model, model.selected)
-                Next
-                
-                ' 恢复用户输入的值
-                localApiKeyTextBox.Text = savedApiKey
-                localUrlTextBox.Text = savedUrl
-                localPlatformTextBox.Text = savedPlatform
-                localTranslateCheckBox.Checked = savedTranslate
-                
+                ' 仅刷新模型列表，保持用户输入不变
+                RefreshLocalModelList()
                 MessageBox.Show($"已获取 {models.Count} 个模型", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Else
                 MessageBox.Show("未获取到模型列表，请确保本地服务已启动", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning)
@@ -821,6 +806,11 @@ Public Class ConfigApiForm
         localSaveButton.Enabled = False
         localSaveButton.Text = "验证中..."
         Cursor = Cursors.WaitCursor
+
+        ' 将用户输入同步到配置对象，防止异步验证期间UI事件覆盖输入
+        currentLocalConfig.pltform = platformName
+        currentLocalConfig.url = apiUrl
+        currentLocalConfig.key = apiKey
 
         Try
             ' 本地模型验证 - 尝试连接
@@ -895,6 +885,28 @@ Public Class ConfigApiForm
 #End Region
 
 #Region "通用方法"
+
+    ''' <summary>
+    ''' 仅刷新云端模型CheckedListBox，不影响其他输入控件
+    ''' </summary>
+    Private Sub RefreshCloudModelList()
+        cloudModelCheckedListBox.Items.Clear()
+        If currentCloudConfig Is Nothing Then Return
+        For Each model In currentCloudConfig.model
+            cloudModelCheckedListBox.Items.Add(model, model.selected)
+        Next
+    End Sub
+
+    ''' <summary>
+    ''' 仅刷新本地模型CheckedListBox，不影响其他输入控件
+    ''' </summary>
+    Private Sub RefreshLocalModelList()
+        localModelCheckedListBox.Items.Clear()
+        If currentLocalConfig Is Nothing Then Return
+        For Each model In currentLocalConfig.model
+            localModelCheckedListBox.Items.Add(model, model.selected)
+        Next
+    End Sub
 
     ''' <summary>
     ''' 验证API连接
