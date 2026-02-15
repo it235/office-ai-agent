@@ -63,9 +63,8 @@ Public Class ChatControl
     ''' 处理模板预览请求（Word 特定实现）
     ''' </summary>
     Protected Overrides Sub HandlePreviewTemplateInWord(jsonDoc As Newtonsoft.Json.Linq.JObject)
-        Try
-            Dim templateId As String = jsonDoc("templateId")?.ToString()
-            If String.IsNullOrEmpty(templateId) Then
+        Dim templateId As String = jsonDoc("templateId")?.ToString()
+        If String.IsNullOrEmpty(templateId) Then
                 GlobalStatusStrip.ShowWarning("模板ID不能为空")
                 Return
             End If
@@ -82,50 +81,46 @@ Public Class ChatControl
                     GlobalStatusStrip.ShowWarning("原始模板文件已丢失，请重新上传")
                     Return
                 End If
-                Dim wordApp = Globals.ThisAddIn.Application
-                wordApp.Documents.Open(mapping.SourceFilePath, ReadOnly:=True)
-                GlobalStatusStrip.ShowInfo($"已打开模板文档预览: {mapping.Name}")
+
+                ' 直接用系统默认方式打开文档（新Word实例）
+                Try
+                    Process.Start(mapping.SourceFilePath)
+                    GlobalStatusStrip.ShowInfo($"已打开模板文档预览: {mapping.Name}")
+                Catch ex As Exception
+                    GlobalStatusStrip.ShowWarning($"打开文档失败: {ex.Message}")
+                End Try
                 Return
             End If
 
-            ' 常规模板预览
+            ' 常规模板预览：先保存为临时文件，然后用系统默认方式打开
             Dim template As ReformatTemplate = ReformatTemplateManager.Instance.GetTemplateById(templateId)
             If template Is Nothing Then
                 GlobalStatusStrip.ShowWarning($"找不到ID为 {templateId} 的模板")
                 Return
             End If
 
-            Dim wordApp2 = Globals.ThisAddIn.Application
+            Try
+                ' 创建临时文件
+                Dim tempPath = IO.Path.Combine(IO.Path.GetTempPath(), $"模板预览_{template.Name}_{DateTime.Now:yyyyMMddHHmmss}.docx")
 
-            ' 检查是否已存在预览文档（通过内容标记识别）
-            Dim existingDoc As Microsoft.Office.Interop.Word.Document = Nothing
-            For Each d As Microsoft.Office.Interop.Word.Document In wordApp2.Documents
-                Try
-                    If d.Content.Text.Contains("【模板预览】") Then
-                        existingDoc = d
-                        Exit For
-                    End If
-                Catch
-                End Try
-            Next
+                ' 使用当前Word实例创建临时文档
+                Dim currentApp = Globals.ThisAddIn.Application
+                Dim tempDoc = currentApp.Documents.Add()
 
-            Dim doc As Microsoft.Office.Interop.Word.Document
-            If existingDoc IsNot Nothing Then
-                doc = existingDoc
-                doc.Content.Delete()
-            Else
-                doc = wordApp2.Documents.Add()
-            End If
+                ApplyTemplateToDocument(tempDoc, template)
 
-            ApplyTemplateToDocument(doc, template)
-            doc.Activate()
+                ' 保存并关闭临时文档
+                tempDoc.SaveAs2(tempPath)
+                tempDoc.Close(SaveChanges:=False)
 
-            GlobalStatusStrip.ShowInfo($"已预览模板: {template.Name}")
+                ' 用系统默认方式打开（新Word实例）
+                Process.Start(tempPath)
 
-        Catch ex As Exception
-            GlobalStatusStrip.ShowWarning($"预览模板失败: {ex.Message}")
-            Debug.WriteLine($"HandlePreviewTemplateInWord 错误: {ex.Message}")
-        End Try
+                GlobalStatusStrip.ShowInfo($"已打开模板预览: {template.Name}")
+            Catch ex As Exception
+                GlobalStatusStrip.ShowWarning($"预览模板失败: {ex.Message}")
+                Debug.WriteLine($"HandlePreviewTemplateInWord 错误: {ex.Message}")
+            End Try
     End Sub
 
     ''' <summary>

@@ -34,11 +34,10 @@ Partial Class BaseOfficeRibbon
         Me.DeepseekButton = Me.Factory.CreateRibbonButton()
         Me.DoubaoButton = Me.Factory.CreateRibbonButton()
 
-        ' Group 2: 大模型配置 - 配置API/提示词/自动补全
+        ' Group 2: 大模型配置 - 配置API/提示词
         Me.GroupConfig = Me.Factory.CreateRibbonGroup
         Me.ConfigApiButton = Me.Factory.CreateRibbonButton
         Me.PromptConfigButton = Me.Factory.CreateRibbonButton
-        Me.AutocompleteSettingsButton = Me.Factory.CreateRibbonButton
 
         ' Group 3: AI对话 - Chat AI/AI翻译
         Me.GroupChat = Me.Factory.CreateRibbonGroup
@@ -117,7 +116,6 @@ Partial Class BaseOfficeRibbon
         ' ========== Group 2: 大模型配置 ==========
         Me.GroupConfig.Items.Add(Me.ConfigApiButton)
         Me.GroupConfig.Items.Add(Me.PromptConfigButton)
-        Me.GroupConfig.Items.Add(Me.AutocompleteSettingsButton)
         Me.GroupConfig.Label = "大模型配置"
         Me.GroupConfig.Name = "GroupConfig"
 
@@ -134,13 +132,6 @@ Partial Class BaseOfficeRibbon
         Me.PromptConfigButton.ShowImage = True
         Me.PromptConfigButton.ScreenTip = "配置提示词"
         Me.PromptConfigButton.SuperTip = "管理和配置AI对话的系统提示词"
-
-        Me.AutocompleteSettingsButton.Label = "自动补全"
-        Me.AutocompleteSettingsButton.Name = "AutocompleteSettingsButton"
-        Me.AutocompleteSettingsButton.ControlSize = Microsoft.Office.Core.RibbonControlSize.RibbonControlSizeLarge
-        Me.AutocompleteSettingsButton.ShowImage = True
-        Me.AutocompleteSettingsButton.ScreenTip = "配置AI自动补全"
-        Me.AutocompleteSettingsButton.SuperTip = "设置自动补全开关、快捷键和触发延迟"
 
         ' ========== Group 3: AI对话 ==========
         Me.GroupChat.Items.Add(Me.ChatButton)
@@ -300,7 +291,6 @@ Partial Class BaseOfficeRibbon
     Protected WithEvents GroupConfig As Microsoft.Office.Tools.Ribbon.RibbonGroup
     Protected WithEvents ConfigApiButton As Microsoft.Office.Tools.Ribbon.RibbonButton
     Protected WithEvents PromptConfigButton As Microsoft.Office.Tools.Ribbon.RibbonButton
-    Protected WithEvents AutocompleteSettingsButton As Microsoft.Office.Tools.Ribbon.RibbonButton
 
     ' Group 3: AI对话
     Protected WithEvents GroupChat As Microsoft.Office.Tools.Ribbon.RibbonGroup

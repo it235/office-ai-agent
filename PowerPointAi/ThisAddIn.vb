@@ -47,23 +47,16 @@ Public Class ThisAddIn
         ' 预加载聊天设置（确保补全配置在CompletionManager初始化前已加载）
         Dim chatSettings As New ChatSettings(New ApplicationInfo("PowerPoint", OfficeApplicationType.PowerPoint))
         
-        ' 初始化PPT补全管理器
-        InitializeCompletionManager()
+        ' 初始化PPT补全管理器（已禁用 - 观察期）
+        ' InitializeCompletionManager()
     End Sub
     
     ''' <summary>
-    ''' 初始化PPT补全管理器
+    ''' 初始化PPT补全管理器（已禁用 - 观察期）
     ''' </summary>
     Private Sub InitializeCompletionManager()
-        Try
-            _completionManager = PowerPointCompletionManager.Instance
-            _completionManager.Initialize(Me.Application)
-            ' 根据设置启用/禁用补全
-            _completionManager.Enabled = ChatSettings.EnableAutocomplete
-            Debug.WriteLine("PPT补全管理器已初始化")
-        Catch ex As Exception
-            Debug.WriteLine($"初始化PPT补全管理器失败: {ex.Message}")
-        End Try
+        ' 补全功能已禁用，跳过初始化
+        Debug.WriteLine("[PowerPoint] 补全管理器已跳过初始化（观察期）")
     End Sub
     
     ''' <summary>
@@ -73,6 +66,20 @@ Public Class ThisAddIn
         If _completionManager IsNot Nothing Then
             _completionManager.Enabled = enabled
         End If
+    End Sub
+
+    ''' <summary>
+    ''' 自动补全设置保存事件处理
+    ''' </summary>
+    Private Sub OnAutocompleteSettingsSaved(sender As Object, e As AutocompleteSettingsSavedEventArgs)
+        Try
+            If _completionManager IsNot Nothing Then
+                _completionManager.Enabled = e.EnableAutocomplete
+                Debug.WriteLine($"[PowerPoint] 补全设置已同步: Enabled={e.EnableAutocomplete}")
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"[PowerPoint] 同步补全设置失败: {ex.Message}")
+        End Try
     End Sub
 
     Private Sub CreateDeepseekTaskPane()
@@ -177,6 +184,8 @@ Public Class ThisAddIn
     Private Sub AiHelper_Shutdown() Handles Me.Shutdown
         ' 清理资源
         'RemoveHandler Globals.ThisAddIn.Application.WorkbookActivate, AddressOf Me.Application_WorkbookActivate
+
+        ' 补全功能已禁用，无需取消订阅
     End Sub
 
     Dim loadChatHtml As Boolean = True

@@ -2,10 +2,32 @@ Imports System.Drawing
 Imports System.Windows.Forms
 
 ''' <summary>
+''' 自动补全设置保存后触发的事件参数
+''' </summary>
+Public Class AutocompleteSettingsSavedEventArgs
+    Inherits EventArgs
+
+    Public Property EnableAutocomplete As Boolean
+    Public Property AutocompleteDelayMs As Integer
+    Public Property AutocompleteShortcut As String
+
+    Public Sub New(enableAutocomplete As Boolean, delayMs As Integer, shortcut As String)
+        Me.EnableAutocomplete = enableAutocomplete
+        Me.AutocompleteDelayMs = delayMs
+        Me.AutocompleteShortcut = shortcut
+    End Sub
+End Class
+
+''' <summary>
 ''' 自动补全设置对话框
 ''' </summary>
 Public Class AutocompleteSettingsForm
     Inherits Form
+
+    ''' <summary>
+    ''' 设置保存后触发的事件，各宿主应用可订阅此事件来同步状态
+    ''' </summary>
+    Public Shared Event SettingsSaved As EventHandler(Of AutocompleteSettingsSavedEventArgs)
 
     Private chkEnable As CheckBox
     Private lblShortcut As Label
@@ -177,10 +199,16 @@ Public Class AutocompleteSettingsForm
             ChatSettings.AutocompleteDelayMs = CInt(numDelay.Value)
             ChatSettings.AutocompleteShortcut = If(cmbShortcut.SelectedItem IsNot Nothing,
                                                    cmbShortcut.SelectedItem.ToString(),
-                                                   "Ctrl+Enter")
+                                                   "Ctrl+.")
 
             ' 保存到文件（调用现有的保存方法）
             SaveAutocompleteSettings()
+
+            ' 触发设置保存事件，通知各宿主应用同步状态
+            RaiseEvent SettingsSaved(Me, New AutocompleteSettingsSavedEventArgs(
+                ChatSettings.EnableAutocomplete,
+                ChatSettings.AutocompleteDelayMs,
+                ChatSettings.AutocompleteShortcut))
 
             Me.DialogResult = DialogResult.OK
             Me.Close()
@@ -226,8 +254,11 @@ Public Class AutocompleteSettingsForm
     ''' 获取设置文件路径
     ''' </summary>
     Private Function GetSettingsFilePath() As String
-        Dim documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
-        Return IO.Path.Combine(documentsPath, "OfficeAi", "chat_settings.json")
+        Dim fileName As String = "office_ai_chat_settings.json"
+        Return IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            ConfigSettings.OfficeAiAppDataFolder,
+            fileName)
     End Function
 
 End Class

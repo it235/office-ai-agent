@@ -55,10 +55,10 @@
                 <span id="resource-mode-title">选择排版资源</span>
             </div>
             <div class="template-mode-actions">
-                <button class="template-action-btn small-btn" onclick="createNewTemplate()" id="btn-new-template" title="新建排版模板">
+                <!-- <button class="template-action-btn small-btn" onclick="createNewTemplate()" id="btn-new-template" title="新建排版模板">
                     <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
                     新建
-                </button>
+                </button> -->
                 <button class="template-action-btn small-btn" onclick="saveCurrentDocumentAsTemplate()" id="btn-save-resource" title="保存左侧文档内容为排版模板">
                     <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
                     保存
@@ -79,11 +79,11 @@
         <div class="resource-type-tabs">
             <button class="resource-tab active" data-type="template" onclick="switchResourceTab('template')">
                 <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
-                排版模板
+                根据模板排版
             </button>
             <button class="resource-tab" data-type="styleguide" onclick="switchResourceTab('styleguide')">
                 <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z"/></svg>
-                排版规范
+                根据规范排版
             </button>
         </div>
         
@@ -106,8 +106,8 @@
                 <!-- 预览内容将在此处动态生成 -->
             </div>
             <div class="template-preview-footer">
-                <button id="preview-template-in-word-btn" class="template-preview-btn secondary" onclick="previewTemplateInWord()">在Word中预览</button>
-                <button id="use-template-from-preview-btn" class="template-preview-btn primary" onclick="useTemplateFromPreview()">使用此模板</button>
+                <button id="preview-template-in-word-btn" class="template-preview-btn secondary">在Word中预览</button>
+                <button id="use-template-from-preview-btn" class="template-preview-btn primary">使用此模板</button>
             </div>
         </div>
     </div>

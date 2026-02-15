@@ -211,9 +211,7 @@
     <Compile Include="Config\AboutForm.vb">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="Config\AutocompleteSettingsForm.vb">
-      <SubType>Form</SubType>
-    </Compile>
+    <Compile Include="Config\AutocompleteSettingsForm.vb" />
     <Compile Include="Config\GlobalStatusStripAll.vb">
       <SubType>Form</SubType>
     </Compile>

@@ -1,4 +1,4 @@
-Imports System.Diagnostics
+﻿Imports System.Diagnostics
 Imports System.IO
 Imports System.Runtime.InteropServices
 Imports System.Threading.Tasks
@@ -51,24 +51,17 @@ Public Class ThisAddIn
         ' 预加载聊天设置（确保补全配置在CompletionManager初始化前已加载）
         Dim chatSettings As New ChatSettings(New ApplicationInfo("Word", OfficeApplicationType.Word))
         
-        ' 初始化Word补全管理器
-        InitializeCompletionManager()
+        ' 初始化Word补全管理器（已禁用 - 观察期）
+        ' InitializeCompletionManager()
 
     End Sub
     
     ''' <summary>
-    ''' 初始化Word补全管理器
+    ''' 初始化Word补全管理器（已禁用 - 观察期）
     ''' </summary>
     Private Sub InitializeCompletionManager()
-        Try
-            _completionManager = WordCompletionManager.Instance
-            _completionManager.Initialize(Me.Application)
-            ' 根据设置启用/禁用补全
-            _completionManager.Enabled = ChatSettings.EnableAutocomplete
-            Debug.WriteLine("Word补全管理器已初始化")
-        Catch ex As Exception
-            Debug.WriteLine($"初始化Word补全管理器失败: {ex.Message}")
-        End Try
+        ' 补全功能已禁用，跳过初始化
+        Debug.WriteLine("[Word] 补全管理器已跳过初始化（观察期）")
     End Sub
     
     ''' <summary>
@@ -78,6 +71,20 @@ Public Class ThisAddIn
         If _completionManager IsNot Nothing Then
             _completionManager.Enabled = enabled
         End If
+    End Sub
+
+    ''' <summary>
+    ''' 自动补全设置保存事件处理
+    ''' </summary>
+    Private Sub OnAutocompleteSettingsSaved(sender As Object, e As AutocompleteSettingsSavedEventArgs)
+        Try
+            If _completionManager IsNot Nothing Then
+                _completionManager.Enabled = e.EnableAutocomplete
+                Debug.WriteLine($"[Word] 补全设置已同步: Enabled={e.EnableAutocomplete}")
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"[Word] 同步补全设置失败: {ex.Message}")
+        End Try
     End Sub
 
 
@@ -91,6 +98,7 @@ Public Class ThisAddIn
 
 
     Private Sub ThisAddIn_Shutdown() Handles Me.Shutdown
+        ' 补全功能已禁用，无需取消订阅
     End Sub
 
 

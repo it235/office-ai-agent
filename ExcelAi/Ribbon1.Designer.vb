@@ -50,8 +50,8 @@ Partial Class Ribbon1
         Me.DataAnalysisButton.Image = ShareRibbon.SharedResources.Magic
         ' 提示词配置
         Me.PromptConfigButton.Image = ShareRibbon.SharedResources.promptconfig
-        ' 自动补全
-        Me.AutocompleteSettingsButton.Image = ShareRibbon.SharedResources.autocomplete
+        ' 自动补全（已禁用）
+        ' Me.AutocompleteSettingsButton.Image = ShareRibbon.SharedResources.autocomplete
         Me.ChatButton.Image = ShareRibbon.SharedResources.Chat
         Me.AboutButton.Image = ShareRibbon.SharedResources.About
         Me.ClearCacheButton.Image = ShareRibbon.SharedResources.Clear

@@ -3436,7 +3436,7 @@ input:checked + .mcp-toggle-slider:before {
     gap: 12px;
     padding-bottom: 10px;
     min-width: min-content;
-    flex-wrap: wrap;
+    /* flex-wrap: wrap; */
 }
 
 /* 模板卡片 */

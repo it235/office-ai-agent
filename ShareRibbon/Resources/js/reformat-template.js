@@ -318,9 +318,6 @@ function createStyleGuideCard(guide) {
     // 管理模式按钮
     const manageBtnsHtml = isManageMode ? `
         <div class="template-manage-btns">
-            ${!guide.IsPreset ? `<button class="template-manage-btn edit-btn" onclick="editStyleGuide('${guide.Id}')" title="编辑">
-                <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-            </button>` : ''}
             <button class="template-manage-btn copy-btn" onclick="duplicateStyleGuide('${guide.Id}')" title="复制">
                 <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
             </button>
@@ -793,12 +790,6 @@ function createTemplateCard(template) {
         } else {
             manageBtnsHtml = `
                 <div class="template-manage-btns">
-                    <button class="template-manage-btn edit-btn" onclick="editTemplate('${template.Id}')" title="编辑">
-                        <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-                    </button>
-                    <button class="template-manage-btn copy-btn" onclick="duplicateTemplate('${template.Id}')" title="复制">
-                        <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
-                    </button>
                     <button class="template-manage-btn delete-btn" onclick="deleteTemplate('${template.Id}')" title="删除" ${template.IsPreset ? 'disabled' : ''}>
                         <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                     </button>
