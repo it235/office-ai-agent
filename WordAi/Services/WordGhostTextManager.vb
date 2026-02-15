@@ -11,6 +11,7 @@ Public Class WordGhostTextManager
     Private _wordApp As Application
     Private _ghostRange As Range  ' 跟踪灰色文本的 Range
     Private _originalCursorPos As Integer  ' 记录原始光标位置
+    Private _ghostTextContent As String = ""  ' 记录ghost text原始内容（用于安全删除）
     Private _uiSyncContext As SynchronizationContext  ' UI线程同步上下文
     
     ' 灰色颜色值
@@ -81,6 +82,7 @@ Public Class WordGhostTextManager
             
             ' 插入文本
             _ghostRange.Text = suggestion
+            _ghostTextContent = suggestion
             
             ' 设置灰色字体
             _ghostRange.Font.Color = CType(GHOST_TEXT_COLOR, WdColor)
@@ -131,7 +133,7 @@ Public Class WordGhostTextManager
     End Sub
     
     ''' <summary>
-    ''' 清除灰色文本
+    ''' 清除灰色文本（异步Post到UI线程）
     ''' </summary>
     Public Sub ClearGhostText()
         If _uiSyncContext IsNot Nothing Then
@@ -140,21 +142,52 @@ Public Class WordGhostTextManager
             ClearGhostTextInternal()
         End If
     End Sub
+
+    ''' <summary>
+    ''' 同步清除灰色文本（调用方已在UI线程时使用，避免Post延迟导致的竞态）
+    ''' </summary>
+    Public Sub ClearGhostTextDirect()
+        ClearGhostTextInternal()
+    End Sub
     
     Private Sub ClearGhostTextInternal()
         Try
             If _ghostRange Is Nothing Then Return
             
-            ' 删除灰色文本
+            ' 安全删除：ghost range 可能因用户在起始位置输入而扩张
+            ' 只删除末尾的 ghost text 部分，不删除用户新输入的内容
+            If Not String.IsNullOrEmpty(_ghostTextContent) Then
+                Dim rangeText As String = Nothing
+                Try
+                    rangeText = _ghostRange.Text
+                Catch
+                End Try
+
+                If rangeText IsNot Nothing AndAlso rangeText.Length > _ghostTextContent.Length Then
+                    ' Range 扩张了（用户在 ghost 起始位置输入了文字）
+                    ' 仅删除末尾的 ghost text 部分
+                    Dim ghostLen = _ghostTextContent.Length
+                    Dim safeStart = _ghostRange.End - ghostLen
+                    If safeStart >= _ghostRange.Start Then
+                        Dim safeRange = _wordApp.ActiveDocument.Range(safeStart, _ghostRange.End)
+                        safeRange.Delete()
+                        Debug.WriteLine($"[GhostText] 安全清除（跳过 {rangeText.Length - ghostLen} 个用户字符）")
+                        _ghostTextContent = ""
+                        _ghostRange = Nothing
+                        Return
+                    End If
+                End If
+            End If
+
+            ' 常规删除
             _ghostRange.Delete()
-            
             Debug.WriteLine($"[GhostText] 已清除补全")
             
         Catch ex As Exception
-            ' Range 可能已失效，忽略错误
             Debug.WriteLine($"[GhostText] ClearGhostText 出错: {ex.Message}")
         Finally
             _ghostRange = Nothing
+            _ghostTextContent = ""
         End Try
     End Sub
     

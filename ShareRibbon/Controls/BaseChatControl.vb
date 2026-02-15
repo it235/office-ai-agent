@@ -174,8 +174,16 @@ Public MustInherit Class BaseChatControl
 
                 Dim htmlContent As String = My.Resources.chat_template_refactored
                 ChatBrowser.CoreWebView2.NavigateToString(htmlContent)
-                ConfigureMarked()
+                
+                ' 等待页面加载完成后设置应用名称
                 AddHandler ChatBrowser.CoreWebView2.NavigationCompleted, AddressOf OnWebViewNavigationCompleted
+                
+                ' 配置 Markdown 解析器
+                ConfigureMarked()
+                
+                ' 设置应用名称的延迟调用
+                Await Task.Delay(500) ' 等待一点时间确保页面加载
+                Await SetCurrentOfficeAppName()
 
             Else
                 MessageBox.Show("WebView2 初始化失败，CoreWebView2 不可用。", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
@@ -184,6 +192,31 @@ Public MustInherit Class BaseChatControl
             Dim errorMessage As String = $"初始化失败: {ex.Message}{Environment.NewLine}类型: {ex.GetType().Name}{Environment.NewLine}堆栈:{ex.StackTrace}"
             MessageBox.Show(errorMessage, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
+    End Function
+
+    ''' <summary>
+    ''' 设置当前 Office 应用名称
+    ''' </summary>
+    Private Async Function SetCurrentOfficeAppName() As Task
+        Try
+            ' 获取当前应用名称
+            Dim appName As String = GetOfficeApplicationName()
+            
+            ' 向网页注入应用名称
+            Dim script As String = $"window.currentOfficeAppName = '{appName}';"
+            Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(script)
+            
+        Catch ex As Exception
+            Debug.WriteLine($"设置应用名称失败: {ex.Message}")
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 获取当前 Office 应用程序名称
+    ''' </summary>
+    Protected Overridable Function GetOfficeApplicationName() As String
+        ' 默认返回 "当前应用"，子类应重写此方法
+        Return "当前应用"
     End Function
     Private Async Sub InjectScript(scriptContent As String)
         If ChatBrowser.CoreWebView2 IsNot Nothing Then
@@ -426,6 +459,60 @@ Public MustInherit Class BaseChatControl
                     HandleOpenApiConfigForm()
                 Case "getCurrentModel"
                     HandleGetCurrentModel()
+
+                ' 排版模板功能消息处理
+                Case "getReformatTemplates"
+                    HandleGetReformatTemplates()
+                Case "useReformatTemplate"
+                    HandleUseReformatTemplate(jsonDoc)
+                Case "previewTemplateInWord"
+                    HandlePreviewTemplateInWord(jsonDoc)
+                Case "saveCurrentDocumentAsTemplate"
+                    HandleSaveCurrentDocumentAsTemplate()
+                Case "importTemplate"
+                    HandleImportTemplate()
+                Case "exportTemplate"
+                    HandleExportTemplate(jsonDoc)
+                Case "duplicateTemplate"
+                    HandleDuplicateTemplate(jsonDoc)
+                Case "deleteTemplate"
+                    HandleDeleteTemplate(jsonDoc)
+                Case "openTemplateEditor"
+                    HandleOpenTemplateEditor(jsonDoc)
+
+                ' 排版规范功能消息处理
+                Case "getStyleGuides"
+                    HandleGetStyleGuides()
+                Case "useStyleGuide"
+                    HandleUseStyleGuide(jsonDoc)
+                Case "uploadStyleGuideDocument"
+                    HandleUploadStyleGuideDocument()
+                Case "deleteStyleGuide"
+                    HandleDeleteStyleGuide(jsonDoc)
+                Case "updateStyleGuide"
+                    HandleUpdateStyleGuide(jsonDoc)
+                Case "duplicateStyleGuide"
+                    HandleDuplicateStyleGuide(jsonDoc)
+                Case "exportStyleGuide"
+                    HandleExportStyleGuide(jsonDoc)
+                Case "uploadTemplateDocumentForAiAnalysis"
+                    HandleUploadTemplateDocumentForAiAnalysis()
+
+                ' 语义排版功能消息处理
+                Case "uploadDocxTemplate"
+                    HandleUploadDocxTemplate()
+                Case "deleteDocxMapping"
+                    HandleDeleteDocxMapping(jsonDoc)
+                Case "undoReformat"
+                    HandleUndoReformat()
+
+                ' AI模板编辑器功能消息处理（Plan A: 在普通聊天中创建模板）
+                Case "startAiTemplateChat"
+                    HandleStartAiTemplateChat(jsonDoc)
+                Case "saveAiTemplate"
+                    HandleSaveAiTemplate(jsonDoc)
+                Case "previewAiTemplate"
+                    HandlePreviewAiTemplate(jsonDoc)
 
                 Case Else
                     Debug.WriteLine($"未知消息类型: {messageType}")
@@ -721,14 +808,14 @@ Public MustInherit Class BaseChatControl
 
             Dim selectedModel = cfg.model.FirstOrDefault(Function(m) m.selected)
             If selectedModel Is Nothing Then selectedModel = cfg.model(0)
-            
+
             Dim modelName = selectedModel.modelName
             Dim apiUrl = cfg.url
             Dim apiKey = cfg.key
-            
+
             ' 检查是否支持FIM模式
             Dim useFimMode = selectedModel.fimSupported AndAlso Not String.IsNullOrEmpty(selectedModel.fimUrl)
-            
+
             If useFimMode Then
                 ' 使用FIM API
                 completions = Await RequestCompletionsWithFIM(inputText, contextSnapshot, selectedModel, apiKey)
@@ -747,13 +834,13 @@ Public MustInherit Class BaseChatControl
     ''' <summary>
     ''' 使用FIM (Fill-In-the-Middle) API获取补全
     ''' </summary>
-    Private Async Function RequestCompletionsWithFIM(inputText As String, contextSnapshot As JObject, 
+    Private Async Function RequestCompletionsWithFIM(inputText As String, contextSnapshot As JObject,
                                                       model As ConfigManager.ConfigItemModel, apiKey As String) As Task(Of List(Of String))
         Dim completions As New List(Of String)()
-        
+
         Try
             Dim fimUrl = model.fimUrl
-            
+
             ' 构建FIM请求
             Dim requestObj As New JObject()
             requestObj("model") = model.modelName
@@ -762,19 +849,19 @@ Public MustInherit Class BaseChatControl
             requestObj("max_tokens") = 50
             requestObj("temperature") = 0.3
             requestObj("stream") = False
-            
+
             Dim requestBody = requestObj.ToString(Newtonsoft.Json.Formatting.None)
-            
+
             Using client As New Net.Http.HttpClient()
                 client.Timeout = TimeSpan.FromSeconds(10)
                 client.DefaultRequestHeaders.Add("Authorization", "Bearer " & apiKey)
                 Dim content As New Net.Http.StringContent(requestBody, System.Text.Encoding.UTF8, "application/json")
                 Dim response = Await client.PostAsync(fimUrl, content)
                 response.EnsureSuccessStatusCode()
-                
+
                 Dim responseBody = Await response.Content.ReadAsStringAsync()
                 Dim jObj = JObject.Parse(responseBody)
-                
+
                 ' FIM API返回格式: {"choices": [{"text": "补全内容"}]}
                 Dim text = jObj("choices")?(0)?("text")?.ToString()
                 If Not String.IsNullOrWhiteSpace(text) Then
@@ -785,11 +872,11 @@ Public MustInherit Class BaseChatControl
                     End If
                 End If
             End Using
-            
+
         Catch ex As Exception
             Debug.WriteLine($"RequestCompletionsWithFIM 出错: {ex.Message}")
         End Try
-        
+
         Return completions
     End Function
 
@@ -797,10 +884,10 @@ Public MustInherit Class BaseChatControl
     ''' 使用Chat Completion API获取补全
     ''' </summary>
     Private Async Function RequestCompletionsWithChat(inputText As String, contextSnapshot As JObject,
-                                                       cfg As ConfigManager.ConfigItem, model As ConfigManager.ConfigItemModel, 
+                                                       cfg As ConfigManager.ConfigItem, model As ConfigManager.ConfigItemModel,
                                                        apiKey As String) As Task(Of List(Of String))
         Dim completions As New List(Of String)()
-        
+
         Try
             Dim apiUrl = cfg.url
             Dim modelName = model.modelName
@@ -819,7 +906,7 @@ Public MustInherit Class BaseChatControl
             If Not String.IsNullOrWhiteSpace(selectionText) Then
                 userContent.AppendLine($"选中内容: ""{selectionText.Substring(0, Math.Min(200, selectionText.Length))}""")
             End If
-            
+
             ' 添加额外上下文信息
             If contextSnapshot("sheetName") IsNot Nothing Then
                 userContent.AppendLine($"当前工作表: {contextSnapshot("sheetName")}")
@@ -827,7 +914,7 @@ Public MustInherit Class BaseChatControl
             If contextSnapshot("slideIndex") IsNot Nothing Then
                 userContent.AppendLine($"当前幻灯片: 第{contextSnapshot("slideIndex")}页")
             End If
-            
+
             userContent.AppendLine()
             userContent.AppendLine("请给出补全建议（JSON格式）。")
 
@@ -853,7 +940,7 @@ Public MustInherit Class BaseChatControl
                 response.EnsureSuccessStatusCode()
 
                 Dim responseBody = Await response.Content.ReadAsStringAsync()
-                
+
                 ' 解析API响应
                 Dim jObj As JObject = Nothing
                 Try
@@ -1232,8 +1319,8 @@ Public MustInherit Class BaseChatControl
     ''' <summary>
     ''' 异步解析文件并发送消息
     ''' </summary>
-    Private Sub HandleSendMessageWithFilesAsync(question As String, originalQuestion As String, 
-                                                 filePaths As List(Of String), 
+    Private Sub HandleSendMessageWithFilesAsync(question As String, originalQuestion As String,
+                                                 filePaths As List(Of String),
                                                  selectedContents As List(Of SendMessageReferenceContentItem),
                                                  messageValue As JToken)
         ' 显示进度提示
@@ -1241,19 +1328,19 @@ Public MustInherit Class BaseChatControl
         ExecuteJavaScriptAsyncJS("showFileParsingProgress(true)")
 
         Task.Run(Sub()
-            Try
-                Dim fileContentBuilder As New StringBuilder()
-                Dim parsedFiles As New List(Of FileContentResult)()
-                Dim totalFiles = filePaths.Count
-                Dim processedFiles = 0
+                     Try
+                         Dim fileContentBuilder As New StringBuilder()
+                         Dim parsedFiles As New List(Of FileContentResult)()
+                         Dim totalFiles = filePaths.Count
+                         Dim processedFiles = 0
 
-                fileContentBuilder.AppendLine(vbCrLf & "--- 以下是用户引用的其他文件内容 ---")
+                         fileContentBuilder.AppendLine(vbCrLf & "--- 以下是用户引用的其他文件内容 ---")
 
-                ' 获取当前工作目录（需要在主线程调用）
-                Dim currentWorkingDir As String = ""
-                Me.Invoke(Sub()
-                    currentWorkingDir = GetCurrentWorkingDirectory()
-                End Sub)
+                         ' 获取当前工作目录（需要在主线程调用）
+                         Dim currentWorkingDir As String = ""
+                         Me.Invoke(Sub()
+                                       currentWorkingDir = GetCurrentWorkingDirectory()
+                                   End Sub)
 
                          For Each filePath As String In filePaths
                              Try
@@ -1347,8 +1434,8 @@ Public MustInherit Class BaseChatControl
                                        ' 重置发送按钮状态
                                        ExecuteJavaScriptAsyncJS("changeSendButton()")
                                    End Sub)
-            End Try
-        End Sub)
+                     End Try
+                 End Sub)
     End Sub
 
     ''' <summary>
@@ -1367,7 +1454,7 @@ Public MustInherit Class BaseChatControl
                                        selectedContents As List(Of SendMessageReferenceContentItem),
                                        messageValue As JToken,
                                        fileContent As String)
-        
+
         ' 构建最终发送给 LLM 的消息
         Dim finalMessageToLLM As String = question
 
@@ -1394,99 +1481,99 @@ Public MustInherit Class BaseChatControl
 
             ' 普通消息模式：先检查是否为追问，再决定是否进行意图识别
             Task.Run(Async Function()
-                Try
-                    ' 检查是否有引用内容（文件或选中内容）
-                    Dim hasReferences As Boolean = (filePaths IsNot Nothing AndAlso filePaths.Count > 0) OrElse
+                         Try
+                             ' 检查是否有引用内容（文件或选中内容）
+                             Dim hasReferences As Boolean = (filePaths IsNot Nothing AndAlso filePaths.Count > 0) OrElse
                                                     (selectedContents IsNot Nothing AndAlso selectedContents.Count > 0)
 
-                    ' 检查是否有历史对话记录，如果有则判断新问题是否为追问
-                    Dim isFollowUp As Boolean = False
-                    If systemHistoryMessageData.Count >= 2 AndAlso Not String.IsNullOrWhiteSpace(originalQuestion) Then
-                        ' 有历史记录，检查新问题是否与之前对话相关
-                        isFollowUp = Await IntentService.IsFollowUpQuestionAsync(originalQuestion, systemHistoryMessageData)
-                        Debug.WriteLine($"追问检查结果: isFollowUp={isFollowUp}")
-                    End If
+                             ' 检查是否有历史对话记录，如果有则判断新问题是否为追问
+                             Dim isFollowUp As Boolean = False
+                             If systemHistoryMessageData.Count >= 2 AndAlso Not String.IsNullOrWhiteSpace(originalQuestion) Then
+                                 ' 有历史记录，检查新问题是否与之前对话相关
+                                 isFollowUp = Await IntentService.IsFollowUpQuestionAsync(originalQuestion, systemHistoryMessageData)
+                                 Debug.WriteLine($"追问检查结果: isFollowUp={isFollowUp}")
+                             End If
 
-                    ' 如果是追问（与之前对话相关），直接发送给大模型，不弹出意图确认框
-                    If isFollowUp Then
-                        Debug.WriteLine($"检测到追问，直接发送给大模型处理")
-                        SendChatMessage(finalMessageToLLM)
-                        Return
-                    End If
+                             ' 如果是追问（与之前对话相关），直接发送给大模型，不弹出意图确认框
+                             If isFollowUp Then
+                                 Debug.WriteLine($"检测到追问，直接发送给大模型处理")
+                                 SendChatMessage(finalMessageToLLM)
+                                 Return
+                             End If
 
-                    ' 不是追问，进行意图识别
-                    ' 获取上下文快照
-                    Dim contextSnapshot = GetContextSnapshot()
+                             ' 不是追问，进行意图识别
+                             ' 获取上下文快照
+                             Dim contextSnapshot = GetContextSnapshot()
 
-                    ' 使用异步方法进行意图识别（调用大模型）
-                    CurrentIntentResult = Await IntentService.IdentifyIntentAsync(originalQuestion, contextSnapshot)
-                    CurrentIntentResult.OriginalInput = originalQuestion
+                             ' 使用异步方法进行意图识别（调用大模型）
+                             CurrentIntentResult = Await IntentService.IdentifyIntentAsync(originalQuestion, contextSnapshot)
+                             CurrentIntentResult.OriginalInput = originalQuestion
 
-                    ' 如果LLM没有生成描述，使用默认生成
-                    If String.IsNullOrEmpty(CurrentIntentResult.UserFriendlyDescription) Then
-                        IntentService.GenerateUserFriendlyDescription(CurrentIntentResult)
-                    End If
-                    IntentService.BuildExecutionPlanPreview(CurrentIntentResult)
+                             ' 如果LLM没有生成描述，使用默认生成
+                             If String.IsNullOrEmpty(CurrentIntentResult.UserFriendlyDescription) Then
+                                 IntentService.GenerateUserFriendlyDescription(CurrentIntentResult)
+                             End If
+                             IntentService.BuildExecutionPlanPreview(CurrentIntentResult)
 
-                    ' 决定是否需要询问用户确认
-                    Dim needConfirmation As Boolean = False
-                    Dim autoConfirmCountdown As Boolean = False  ' Agent模式下倒计时后自动确认
+                             ' 决定是否需要询问用户确认
+                             Dim needConfirmation As Boolean = False
+                             Dim autoConfirmCountdown As Boolean = False  ' Agent模式下倒计时后自动确认
 
-                    ' 情况1：用户只引用了内容但没有输入问题
-                    If hasReferences AndAlso String.IsNullOrWhiteSpace(originalQuestion) Then
-                        CurrentIntentResult.UserFriendlyDescription = "您引用了内容，请问您想要做什么？"
-                        needConfirmation = True
-                    ' 情况2：置信度太低（<0.4），让大模型来询问用户澄清
-                    ElseIf CurrentIntentResult.Confidence < 0.4 Then
-                        ' 不弹出意图预览卡片，直接发送给大模型，由大模型来询问用户
-                        needConfirmation = False
-                    ' 情况3：Agent模式下也需要确认，但会倒计时自动执行
-                    ElseIf currentChatMode = "agent" Then
-                        needConfirmation = True
-                        autoConfirmCountdown = True  ' Agent模式：倒计时后自动确认
-                    ' 情况4：普通模式下，置信度较高时也需要确认（仅第一次对话）
-                    ElseIf CurrentIntentResult.Confidence >= 0.4 AndAlso systemHistoryMessageData.Count < 2 Then
-                        needConfirmation = True
-                        autoConfirmCountdown = False  ' Chat模式：不自动确认
-                    Else
-                        needConfirmation = False ' 有历史记录时默认不弹出确认框
-                    End If
+                             ' 情况1：用户只引用了内容但没有输入问题
+                             If hasReferences AndAlso String.IsNullOrWhiteSpace(originalQuestion) Then
+                                 CurrentIntentResult.UserFriendlyDescription = "您引用了内容，请问您想要做什么？"
+                                 needConfirmation = True
+                                 ' 情况2：置信度太低（<0.4），让大模型来询问用户澄清
+                             ElseIf CurrentIntentResult.Confidence < 0.4 Then
+                                 ' 不弹出意图预览卡片，直接发送给大模型，由大模型来询问用户
+                                 needConfirmation = False
+                                 ' 情况3：Agent模式下也需要确认，但会倒计时自动执行
+                             ElseIf currentChatMode = "agent" Then
+                                 needConfirmation = True
+                                 autoConfirmCountdown = True  ' Agent模式：倒计时后自动确认
+                                 ' 情况4：普通模式下，置信度较高时也需要确认（仅第一次对话）
+                             ElseIf CurrentIntentResult.Confidence >= 0.4 AndAlso systemHistoryMessageData.Count < 2 Then
+                                 needConfirmation = True
+                                 autoConfirmCountdown = False  ' Chat模式：不自动确认
+                             Else
+                                 needConfirmation = False ' 有历史记录时默认不弹出确认框
+                             End If
 
-                    If needConfirmation Then
-                        ' 需要用户确认，保存待发送的消息
-                        _pendingIntentMessage = finalMessageToLLM
-                        _pendingIntentResult = CurrentIntentResult
-                        _pendingFilePaths = filePaths
+                             If needConfirmation Then
+                                 ' 需要用户确认，保存待发送的消息
+                                 _pendingIntentMessage = finalMessageToLLM
+                                 _pendingIntentResult = CurrentIntentResult
+                                 _pendingFilePaths = filePaths
 
-                        ' 构建意图预览数据并发送给前端
-                        Dim clarification = IntentService.GenerateIntentClarification(originalQuestion, contextSnapshot)
-                        
-                        ' 使用LLM生成的描述
-                        If Not String.IsNullOrEmpty(CurrentIntentResult.UserFriendlyDescription) Then
-                            clarification.Description = CurrentIntentResult.UserFriendlyDescription
-                        End If
-                        
-                        Dim previewJson = IntentService.IntentClarificationToJson(clarification)
-                        
-                        ' 添加倒计时相关参数
-                        previewJson("autoConfirm") = autoConfirmCountdown
-                        previewJson("countdownSeconds") = If(autoConfirmCountdown, 5, 10)  ' Agent模式5秒，Chat模式10秒
-                        
-                        ' 通知前端显示意图预览卡片（带倒计时）
-                        ExecuteJavaScriptAsyncJS($"showIntentPreview({previewJson.ToString(Formatting.None)})")
-                        Debug.WriteLine($"显示意图预览（需确认）: {CurrentIntentResult.UserFriendlyDescription}, 自动确认: {autoConfirmCountdown}")
-                    Else
-                        ' 不需要确认，直接发送
-                        Debug.WriteLine($"直接发送消息（置信度:{CurrentIntentResult.Confidence:F2}）")
-                        SendChatMessageWithIntent(finalMessageToLLM, CurrentIntentResult)
-                    End If
+                                 ' 构建意图预览数据并发送给前端
+                                 Dim clarification = IntentService.GenerateIntentClarification(originalQuestion, contextSnapshot)
 
-                Catch ex As Exception
-                    Debug.WriteLine($"意图识别失败，直接发送: {ex.Message}")
-                    ' 回退到直接发送模式
-                    SendChatMessage(finalMessageToLLM)
-                End Try
-            End Function)
+                                 ' 使用LLM生成的描述
+                                 If Not String.IsNullOrEmpty(CurrentIntentResult.UserFriendlyDescription) Then
+                                     clarification.Description = CurrentIntentResult.UserFriendlyDescription
+                                 End If
+
+                                 Dim previewJson = IntentService.IntentClarificationToJson(clarification)
+
+                                 ' 添加倒计时相关参数
+                                 previewJson("autoConfirm") = autoConfirmCountdown
+                                 previewJson("countdownSeconds") = If(autoConfirmCountdown, 5, 10)  ' Agent模式5秒，Chat模式10秒
+
+                                 ' 通知前端显示意图预览卡片（带倒计时）
+                                 ExecuteJavaScriptAsyncJS($"showIntentPreview({previewJson.ToString(Formatting.None)})")
+                                 Debug.WriteLine($"显示意图预览（需确认）: {CurrentIntentResult.UserFriendlyDescription}, 自动确认: {autoConfirmCountdown}")
+                             Else
+                                 ' 不需要确认，直接发送
+                                 Debug.WriteLine($"直接发送消息（置信度:{CurrentIntentResult.Confidence:F2}）")
+                                 SendChatMessageWithIntent(finalMessageToLLM, CurrentIntentResult)
+                             End If
+
+                         Catch ex As Exception
+                             Debug.WriteLine($"意图识别失败，直接发送: {ex.Message}")
+                             ' 回退到直接发送模式
+                             SendChatMessage(finalMessageToLLM)
+                         End Try
+                     End Function)
         End If
     End Sub
 
@@ -1570,35 +1657,35 @@ Public MustInherit Class BaseChatControl
     Public Async Function StartRalphLoop(userGoal As String) As Task
         Try
             Debug.WriteLine($"[RalphLoop] 启动循环，目标: {userGoal}")
-            
+
             ' 获取应用类型
             Dim appType = GetApplicationType()
-            
+
             ' 创建新的循环会话
             Dim loopSession = Await _ralphLoopController.StartNewLoop(userGoal, appType)
-            
+
             ' 显示规划中状态
             Dim loopDataJson = $"{{""goal"":""{EscapeJavaScriptString(userGoal)}"",""steps"":[],""status"":""planning""}}"
             ExecuteJavaScriptAsyncJS($"showLoopPlanCard({loopDataJson})")
-            
+
             GlobalStatusStrip.ShowInfo("正在规划任务...")
-            
+
             ' 调用AI进行任务规划
             Dim planningPrompt = _ralphLoopController.GetPlanningPrompt(userGoal)
-            
+
             ' 发送规划请求（使用特殊模式标记）
             _isRalphLoopPlanning = True
             Await Send(planningPrompt, "", False, "")
-            
+
         Catch ex As Exception
             Debug.WriteLine($"[RalphLoop] 启动失败: {ex.Message}")
             GlobalStatusStrip.ShowWarning($"启动循环失败: {ex.Message}")
         End Try
     End Function
-    
+
     ' Ralph Loop 规划模式标记
     Private _isRalphLoopPlanning As Boolean = False
-    
+
     ''' <summary>
     ''' 处理前端startLoop消息
     ''' </summary>
@@ -1612,14 +1699,14 @@ Public MustInherit Class BaseChatControl
             Debug.WriteLine($"HandleStartLoop 出错: {ex.Message}")
         End Try
     End Sub
-    
+
     ''' <summary>
     ''' 处理继续执行循环
     ''' </summary>
     Protected Async Sub HandleContinueLoop()
         Try
             Debug.WriteLine("[RalphLoop] 用户点击继续执行")
-            
+
             Dim nextStep = _ralphLoopController.ExecuteNextStep()
             If nextStep Is Nothing Then
                 Debug.WriteLine("[RalphLoop] 没有更多步骤")
@@ -1627,44 +1714,44 @@ Public MustInherit Class BaseChatControl
                 GlobalStatusStrip.ShowInfo("所有步骤已完成")
                 Return
             End If
-            
+
             ' 更新UI显示当前步骤
             ExecuteJavaScriptAsyncJS($"updateLoopStep({nextStep.StepNumber - 1}, 'running')")
             ExecuteJavaScriptAsyncJS("updateLoopStatus('running')")
             GlobalStatusStrip.ShowInfo($"正在执行步骤 {nextStep.StepNumber}: {nextStep.Description}")
-            
+
             ' 执行当前步骤
             _currentRalphLoopStep = nextStep
             Await Send(nextStep.Description, "", True, "")
-            
+
         Catch ex As Exception
             Debug.WriteLine($"HandleContinueLoop 出错: {ex.Message}")
             GlobalStatusStrip.ShowWarning($"执行步骤失败: {ex.Message}")
         End Try
     End Sub
-    
+
     ' 当前执行的步骤
     Private _currentRalphLoopStep As RalphLoopStep = Nothing
-    
+
     ''' <summary>
     ''' 处理取消循环
     ''' </summary>
     Protected Sub HandleCancelLoop()
         Try
             Debug.WriteLine("[RalphLoop] 用户取消循环")
-            
+
             _ralphLoopController.ClearAndEndLoop()
             _isRalphLoopPlanning = False
             _currentRalphLoopStep = Nothing
-            
+
             ExecuteJavaScriptAsyncJS("hideLoopPlanCard()")
             GlobalStatusStrip.ShowInfo("已取消循环任务")
-            
+
         Catch ex As Exception
             Debug.WriteLine($"HandleCancelLoop 出错: {ex.Message}")
         End Try
     End Sub
-    
+
     ''' <summary>
     ''' 在流完成后检查是否需要处理Ralph Loop
     ''' </summary>
@@ -1673,7 +1760,7 @@ Public MustInherit Class BaseChatControl
             ' 检查是否在规划模式
             If _isRalphLoopPlanning Then
                 _isRalphLoopPlanning = False
-                
+
                 ' 解析规划结果
                 If _ralphLoopController.ParsePlanningResult(responseContent) Then
                     Dim loopSession = _ralphLoopController.GetActiveLoop()
@@ -1690,16 +1777,16 @@ Public MustInherit Class BaseChatControl
                 End If
                 Return
             End If
-            
+
             ' 检查是否在执行步骤
             If _currentRalphLoopStep IsNot Nothing Then
                 Dim stepNum = _currentRalphLoopStep.StepNumber
                 _ralphLoopController.CompleteCurrentStep(responseContent, True)
                 _currentRalphLoopStep = Nothing
-                
+
                 ' 更新UI
                 ExecuteJavaScriptAsyncJS($"updateLoopStep({stepNum - 1}, 'completed')")
-                
+
                 ' 检查是否还有更多步骤
                 Dim loopSession = _ralphLoopController.GetActiveLoop()
                 If loopSession IsNot Nothing Then
@@ -1712,12 +1799,12 @@ Public MustInherit Class BaseChatControl
                     End If
                 End If
             End If
-            
+
         Catch ex As Exception
             Debug.WriteLine($"CheckRalphLoopCompletion 出错: {ex.Message}")
         End Try
     End Sub
-    
+
     ''' <summary>
     ''' 构建步骤JSON
     ''' </summary>
@@ -1733,7 +1820,7 @@ Public MustInherit Class BaseChatControl
         sb.Append("]")
         Return sb.ToString()
     End Function
-    
+
     ''' <summary>
     ''' 获取应用类型（子类重写）
     ''' </summary>
@@ -1751,34 +1838,34 @@ Public MustInherit Class BaseChatControl
     Protected Sub InitializeAgentController()
         If _ralphAgentController Is Nothing Then
             _ralphAgentController = New RalphAgentController()
-            
+
             ' 设置回调
             _ralphAgentController.OnStatusChanged = Sub(status)
-                ExecuteJavaScriptAsyncJS($"updateAgentStatus('{_ralphAgentController.GetCurrentSession()?.Id}', 'running', '{EscapeJavaScriptString(status)}')")
-            End Sub
-            
+                                                        ExecuteJavaScriptAsyncJS($"updateAgentStatus('{_ralphAgentController.GetCurrentSession()?.Id}', 'running', '{EscapeJavaScriptString(status)}')")
+                                                    End Sub
+
             _ralphAgentController.OnStepStarted = Sub(stepIndex, desc)
-                ExecuteJavaScriptAsyncJS($"updateAgentStep('{_ralphAgentController.GetCurrentSession()?.Id}', {stepIndex}, 'running', '')")
-            End Sub
-            
+                                                      ExecuteJavaScriptAsyncJS($"updateAgentStep('{_ralphAgentController.GetCurrentSession()?.Id}', {stepIndex}, 'running', '')")
+                                                  End Sub
+
             _ralphAgentController.OnStepCompleted = Sub(stepIndex, success, msg)
-                Dim status = If(success, "completed", "failed")
-                ExecuteJavaScriptAsyncJS($"updateAgentStep('{_ralphAgentController.GetCurrentSession()?.Id}', {stepIndex}, '{status}', '{EscapeJavaScriptString(msg)}')")
-            End Sub
-            
+                                                        Dim status = If(success, "completed", "failed")
+                                                        ExecuteJavaScriptAsyncJS($"updateAgentStep('{_ralphAgentController.GetCurrentSession()?.Id}', {stepIndex}, '{status}', '{EscapeJavaScriptString(msg)}')")
+                                                    End Sub
+
             _ralphAgentController.OnAgentCompleted = Sub(success)
-                ExecuteJavaScriptAsyncJS($"completeAgent('{_ralphAgentController.GetCurrentSession()?.Id}', {success.ToString().ToLower()}, '')")
-            End Sub
-            
+                                                         ExecuteJavaScriptAsyncJS($"completeAgent('{_ralphAgentController.GetCurrentSession()?.Id}', {success.ToString().ToLower()}, '')")
+                                                     End Sub
+
             ' 设置AI请求委托
             _ralphAgentController.SendAIRequest = Async Function(prompt, sysPrompt)
-                Return Await SendAndGetResponse(prompt, sysPrompt)
-            End Function
-            
+                                                      Return Await SendAndGetResponse(prompt, sysPrompt)
+                                                  End Function
+
             ' 设置代码执行委托
             _ralphAgentController.ExecuteCode = Sub(code, lang, preview)
-                _codeExecutionService?.ExecuteCode(code, lang, preview)
-            End Sub
+                                                    _codeExecutionService?.ExecuteCode(code, lang, preview)
+                                                End Sub
         End If
     End Sub
 
@@ -1792,21 +1879,21 @@ Public MustInherit Class BaseChatControl
                 GlobalStatusStrip.ShowWarning("请输入任务描述")
                 Return
             End If
-            
+
             Debug.WriteLine($"[RalphAgent] 启动Agent，需求: {request}")
-            
+
             ' 初始化控制器
             InitializeAgentController()
-            
+
             ' 获取当前Office内容
             Dim appType = GetApplicationType()
             Dim currentContent = GetCurrentOfficeContent()
-            
+
             GlobalStatusStrip.ShowInfo("正在分析您的需求...")
-            
+
             ' 启动Agent规划
             Dim success = Await _ralphAgentController.StartAgent(request, appType, currentContent)
-            
+
             If success Then
                 ' 显示规划卡片
                 Dim session = _ralphAgentController.GetCurrentSession()
@@ -1816,7 +1903,7 @@ Public MustInherit Class BaseChatControl
             Else
                 GlobalStatusStrip.ShowWarning("无法分析您的需求，请重试")
             End If
-            
+
         Catch ex As Exception
             Debug.WriteLine($"HandleStartAgent 出错: {ex.Message}")
             GlobalStatusStrip.ShowWarning($"启动Agent失败: {ex.Message}")
@@ -1836,11 +1923,11 @@ Public MustInherit Class BaseChatControl
                 stepsJson.Append($"{{""description"":""{EscapeJavaScriptString(s.Description)}"",""detail"":""{EscapeJavaScriptString(s.Detail)}"",""status"":""pending""}}")
             Next
             stepsJson.Append("]")
-            
+
             Dim planJson = $"{{""sessionId"":""{session.Id}"",""understanding"":""{EscapeJavaScriptString(session.Understanding)}"",""steps"":{stepsJson.ToString()},""summary"":""{EscapeJavaScriptString(session.Summary)}""}}"
-            
+
             ExecuteJavaScriptAsyncJS($"showAgentPlanCard({planJson})")
-            
+
         Catch ex As Exception
             Debug.WriteLine($"ShowAgentPlanCard 出错: {ex.Message}")
         End Try
@@ -1852,11 +1939,11 @@ Public MustInherit Class BaseChatControl
     Protected Async Sub HandleStartAgentExecution(jsonDoc As JObject)
         Try
             Debug.WriteLine("[RalphAgent] 用户确认执行")
-            
+
             If _ralphAgentController IsNot Nothing Then
                 Await _ralphAgentController.StartExecution()
             End If
-            
+
         Catch ex As Exception
             Debug.WriteLine($"HandleStartAgentExecution 出错: {ex.Message}")
             GlobalStatusStrip.ShowWarning($"执行失败: {ex.Message}")
@@ -1869,13 +1956,13 @@ Public MustInherit Class BaseChatControl
     Protected Sub HandleAbortAgent()
         Try
             Debug.WriteLine("[RalphAgent] 用户终止Agent")
-            
+
             If _ralphAgentController IsNot Nothing Then
                 _ralphAgentController.AbortAgent()
             End If
-            
+
             GlobalStatusStrip.ShowInfo("已终止Agent")
-            
+
         Catch ex As Exception
             Debug.WriteLine($"HandleAbortAgent 出错: {ex.Message}")
         End Try
@@ -1906,15 +1993,15 @@ Public MustInherit Class BaseChatControl
             Dim responseBuilder As New StringBuilder()
             Dim completed As Boolean = False
             Dim uuid = Guid.NewGuid().ToString()
-            
+
             ' 创建临时的响应收集器
             _agentResponseBuffer = New StringBuilder()
             _agentResponseUuid = uuid
             _agentResponseCompleted = False
-            
+
             ' 发送请求
             Await Send(prompt, systemPrompt, False, "agent_planning")
-            
+
             ' 等待响应完成（最多60秒）
             Dim timeout = 60000
             Dim waited = 0
@@ -1922,18 +2009,18 @@ Public MustInherit Class BaseChatControl
                 Await Task.Delay(100)
                 waited += 100
             End While
-            
+
             Dim result = _agentResponseBuffer.ToString()
             _agentResponseBuffer = Nothing
             _agentResponseUuid = Nothing
-            
+
             Return result
         Catch ex As Exception
             Debug.WriteLine($"SendAndGetResponse 出错: {ex.Message}")
             Return ""
         End Try
     End Function
-    
+
     ' Agent响应收集
     Private _agentResponseBuffer As StringBuilder
     Private _agentResponseUuid As String
@@ -2034,16 +2121,655 @@ Public MustInherit Class BaseChatControl
         End Try
     End Sub
 
+#Region "排版模板功能消息处理"
+
+    ''' <summary>
+    ''' 获取排版模板列表（含docx解析出的语义映射卡片）
+    ''' </summary>
+    Protected Sub HandleGetReformatTemplates()
+        Try
+            Dim templates = ReformatTemplateManager.Instance.Templates
+            ' 将常规模板和docx映射合并为统一JSON数组
+            Dim allItems As New List(Of Object)()
+            For Each t In templates
+                allItems.Add(t)
+            Next
+
+            ' 追加docx解析的SemanticStyleMapping为虚拟卡片
+            For Each m In SemanticMappingManager.Instance.Mappings
+                If m.SourceType = SemanticMappingSourceType.FromDocxTemplate Then
+                    allItems.Add(New With {
+                        .Id = "docx_" & m.Id,
+                        .Name = m.Name,
+                        .Description = $"从Word文档提取，共{m.SemanticTags.Count}个语义标签",
+                        .Category = "文档提取",
+                        .IsPreset = False,
+                        .IsDocxMapping = True,
+                        .MappingId = m.Id,
+                        .SemanticTags = m.SemanticTags,
+                        .CreatedAt = m.CreatedAt
+                    })
+                End If
+            Next
+
+            Dim json = JsonConvert.SerializeObject(allItems, Formatting.None)
+            ExecuteJavaScriptAsyncJS($"loadReformatTemplateList({json});")
+        Catch ex As Exception
+            Debug.WriteLine($"HandleGetReformatTemplates 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 刷新排版模板列表（Public，供外部调用）
+    ''' </summary>
+    Public Sub RefreshReformatTemplates()
+        HandleGetReformatTemplates()
+    End Sub
+
+    ''' <summary>
+    ''' 使用排版模板（含docx映射识别）
+    ''' </summary>
+    Protected Overridable Sub HandleUseReformatTemplate(jsonDoc As JObject)
+        Try
+            Dim templateId = jsonDoc("templateId")?.ToString()
+
+            ' 识别docx映射卡片（ID前缀 "docx_"）
+            If templateId IsNot Nothing AndAlso templateId.StartsWith("docx_") Then
+                Dim mappingId = templateId.Substring(5)
+                Dim mapping = SemanticMappingManager.Instance.GetMappingById(mappingId)
+                If mapping IsNot Nothing Then
+                    ApplyReformatWithMapping(mapping)
+                    Return
+                Else
+                    GlobalStatusStrip.ShowWarning("语义映射不存在")
+                    Return
+                End If
+            End If
+
+            ' 常规模板
+            Dim template = ReformatTemplateManager.Instance.GetTemplateById(templateId)
+            If template Is Nothing Then
+                GlobalStatusStrip.ShowWarning("模板不存在")
+                Return
+            End If
+
+            ApplyReformatWithTemplate(template)
+
+        Catch ex As Exception
+            Debug.WriteLine($"HandleUseReformatTemplate 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"使用模板失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 使用模板进行排版（由子类实现）
+    ''' </summary>
+    Protected Overridable Sub ApplyReformatWithTemplate(template As ReformatTemplate)
+        GlobalStatusStrip.ShowWarning("当前应用不支持模板排版")
+    End Sub
+
+    ''' <summary>
+    ''' 使用SemanticStyleMapping直接排版（由子类实现，用于docx解析的映射）
+    ''' </summary>
+    Protected Overridable Sub ApplyReformatWithMapping(mapping As SemanticStyleMapping)
+        GlobalStatusStrip.ShowWarning("当前应用不支持文档映射排版")
+    End Sub
+
+#Region "排版规范处理方法"
+
+    ''' <summary>
+    ''' 获取排版规范列表
+    ''' </summary>
+    Protected Sub HandleGetStyleGuides()
+        Try
+            Dim guides = StyleGuideManager.Instance.GetAllStyleGuides()
+            Dim json = JsonConvert.SerializeObject(guides, Formatting.None)
+            ExecuteJavaScriptAsyncJS($"loadStyleGuideList({json});")
+        Catch ex As Exception
+            Debug.WriteLine($"HandleGetStyleGuides 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 刷新排版规范列表（Public，供外部调用）
+    ''' </summary>
+    Public Sub RefreshStyleGuides()
+        HandleGetStyleGuides()
+    End Sub
+
+    ''' <summary>
+    ''' 使用排版规范
+    ''' </summary>
+    Protected Overridable Sub HandleUseStyleGuide(jsonDoc As JObject)
+        Try
+            Dim guideId = jsonDoc("guideId")?.ToString()
+            Dim guide = StyleGuideManager.Instance.GetStyleGuideById(guideId)
+
+            If guide Is Nothing Then
+                GlobalStatusStrip.ShowWarning("规范不存在")
+                Return
+            End If
+
+            ' 由子类实现具体的排版逻辑
+            ApplyReformatWithStyleGuide(guide)
+
+        Catch ex As Exception
+            Debug.WriteLine($"HandleUseStyleGuide 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"使用规范失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 使用规范进行排版（由子类实现）
+    ''' </summary>
+    Protected Overridable Sub ApplyReformatWithStyleGuide(guide As StyleGuideResource)
+        GlobalStatusStrip.ShowWarning("当前应用不支持规范排版")
+    End Sub
+
+    ''' <summary>
+    ''' 上传规范文档
+    ''' </summary>
+    Protected Sub HandleUploadStyleGuideDocument()
+        Try
+            If Me.InvokeRequired Then
+                Me.Invoke(Sub() HandleUploadStyleGuideDocument())
+                Return
+            End If
+
+            Dim ofd As New OpenFileDialog With {
+                .Filter = "规范文档 (*.txt;*.md;*.csv)|*.txt;*.md;*.csv|所有文件 (*.*)|*.*",
+                .Title = "选择排版规范文档"
+            }
+
+            If ofd.ShowDialog() = DialogResult.OK Then
+                Dim filePath = ofd.FileName
+
+                ' 自动检测文件编码后读取
+                Dim detectedEncoding = DetectFileEncoding(filePath)
+                Dim content = File.ReadAllText(filePath, detectedEncoding)
+
+                ' 创建StyleGuide对象
+                Dim guide As New StyleGuideResource()
+                guide.Id = Guid.NewGuid().ToString()
+                guide.Name = Path.GetFileNameWithoutExtension(filePath)
+                guide.GuideContent = content
+                guide.SourceFileName = Path.GetFileName(filePath)
+                guide.SourceFileExtension = Path.GetExtension(filePath)
+                guide.FileEncoding = detectedEncoding.EncodingName
+                guide.Category = "通用"
+                guide.CreatedAt = DateTime.Now
+                guide.LastModified = DateTime.Now
+
+                ' 保存
+                StyleGuideManager.Instance.AddStyleGuide(guide)
+
+                ' 刷新前端列表
+                HandleGetStyleGuides()
+
+                GlobalStatusStrip.ShowSuccess($"规范文档「{guide.Name}」已添加")
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"HandleUploadStyleGuideDocument 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"上传规范失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 删除规范
+    ''' </summary>
+    Protected Sub HandleDeleteStyleGuide(jsonDoc As JObject)
+        Try
+            Dim guideId = jsonDoc("guideId")?.ToString()
+            If StyleGuideManager.Instance.DeleteStyleGuide(guideId) Then
+                HandleGetStyleGuides()
+                GlobalStatusStrip.ShowSuccess("规范已删除")
+            Else
+                GlobalStatusStrip.ShowWarning("无法删除预置规范")
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"HandleDeleteStyleGuide 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 更新规范内容（编辑保存）
+    ''' </summary>
+    Protected Sub HandleUpdateStyleGuide(jsonDoc As JObject)
+        Try
+            Dim guideId = jsonDoc("guideId")?.ToString()
+            Dim newContent = jsonDoc("guideContent")?.ToString()
+            If String.IsNullOrEmpty(guideId) Then Return
+
+            Dim guide = StyleGuideManager.Instance.GetStyleGuideById(guideId)
+            If guide Is Nothing Then Return
+            If guide.IsPreset Then
+                GlobalStatusStrip.ShowWarning("预置规范不可编辑")
+                Return
+            End If
+
+            guide.GuideContent = newContent
+            StyleGuideManager.Instance.UpdateStyleGuide(guide)
+            HandleGetStyleGuides()
+            GlobalStatusStrip.ShowSuccess($"规范「{guide.Name}」已保存")
+        Catch ex As Exception
+            Debug.WriteLine($"HandleUpdateStyleGuide 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 复制规范
+    ''' </summary>
+    Protected Sub HandleDuplicateStyleGuide(jsonDoc As JObject)
+        Try
+            Dim guideId = jsonDoc("guideId")?.ToString()
+            Dim newName = jsonDoc("newName")?.ToString()
+            Dim duplicate = StyleGuideManager.Instance.DuplicateStyleGuide(guideId, newName)
+            If duplicate IsNot Nothing Then
+                HandleGetStyleGuides()
+                GlobalStatusStrip.ShowSuccess($"规范「{duplicate.Name}」已创建")
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"HandleDuplicateStyleGuide 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 导出规范
+    ''' </summary>
+    Protected Sub HandleExportStyleGuide(jsonDoc As JObject)
+        Try
+            If Me.InvokeRequired Then
+                Me.Invoke(Sub() HandleExportStyleGuide(jsonDoc))
+                Return
+            End If
+
+            Dim guideId = jsonDoc("guideId")?.ToString()
+            Dim guide = StyleGuideManager.Instance.GetStyleGuideById(guideId)
+            If guide Is Nothing Then Return
+
+            Dim extension = If(String.IsNullOrEmpty(guide.SourceFileExtension), ".md", guide.SourceFileExtension)
+            Dim sfd As New SaveFileDialog With {
+                .Filter = $"规范文件 (*{extension})|*{extension}|所有文件 (*.*)|*.*",
+                .FileName = guide.Name & extension,
+                .Title = "导出规范文档"
+            }
+
+            If sfd.ShowDialog() = DialogResult.OK Then
+                If StyleGuideManager.Instance.ExportStyleGuide(guideId, sfd.FileName) Then
+                    GlobalStatusStrip.ShowSuccess($"规范已导出到: {sfd.FileName}")
+                End If
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"HandleExportStyleGuide 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 上传模板文档用于AI分析
+    ''' </summary>
+    Protected Overridable Sub HandleUploadTemplateDocumentForAiAnalysis()
+        GlobalStatusStrip.ShowWarning("当前应用不支持AI模板分析")
+    End Sub
+
+#End Region
+
+    ''' <summary>
+    ''' 在Word中预览模板
+    ''' </summary>
+    Protected Overridable Sub HandlePreviewTemplateInWord(jsonDoc As JObject)
+        GlobalStatusStrip.ShowWarning("当前应用不支持模板预览")
+    End Sub
+
+    ''' <summary>
+    ''' 保存当前文档为模板
+    ''' </summary>
+    Protected Overridable Sub HandleSaveCurrentDocumentAsTemplate()
+        GlobalStatusStrip.ShowWarning("当前应用不支持保存文档为模板")
+    End Sub
+
+    ''' <summary>
+    ''' 导入模板
+    ''' </summary>
+    Protected Sub HandleImportTemplate()
+        Try
+            If Me.InvokeRequired Then
+                Me.Invoke(Sub() HandleImportTemplate())
+                Return
+            End If
+
+            Dim ofd As New OpenFileDialog With {
+                .Filter = "模板文件 (*.json;*.doc;*.docx;*.dotx;*.ppt;*.pptx)|*.json;*.doc;*.docx;*.dotx;*.ppt;*.pptx|JSON文件 (*.json)|*.json|Word文档/模板 (*.doc;*.docx;*.dotx)|*.doc;*.docx;*.dotx|PowerPoint文档 (*.ppt;*.pptx)|*.ppt;*.pptx|所有文件 (*.*)|*.*",
+                .Title = "选择要导入的模板文件"
+            }
+
+            If ofd.ShowDialog() = DialogResult.OK Then
+                Dim ext = System.IO.Path.GetExtension(ofd.FileName).ToLower()
+
+                ' .docx/.dotx 文件使用WordTemplateParser解析为SemanticStyleMapping
+                If ext = ".docx" OrElse ext = ".dotx" Then
+                    HandleUploadDocxTemplateFromPath(ofd.FileName)
+                    Return
+                End If
+
+                Dim imported = ReformatTemplateManager.Instance.ImportTemplate(ofd.FileName)
+                If imported IsNot Nothing Then
+                    GlobalStatusStrip.ShowInfo("模板「" & imported.Name & "」导入成功")
+                    ' 刷新前端列表
+                    HandleGetReformatTemplates()
+                Else
+                    GlobalStatusStrip.ShowWarning("模板导入失败，请检查文件格式")
+                End If
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"HandleImportTemplate 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"导入模板失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 导出模板
+    ''' </summary>
+    Protected Sub HandleExportTemplate(jsonDoc As JObject)
+        Try
+            If Me.InvokeRequired Then
+                Me.Invoke(Sub() HandleExportTemplate(jsonDoc))
+                Return
+            End If
+
+            Dim templateId = jsonDoc("templateId")?.ToString()
+            Dim template = ReformatTemplateManager.Instance.GetTemplateById(templateId)
+
+            If template Is Nothing Then
+                GlobalStatusStrip.ShowWarning("模板不存在")
+                Return
+            End If
+
+            Dim sfd As New SaveFileDialog With {
+                .Filter = "模板文件 (*.json)|*.json",
+                .Title = "导出模板",
+                .FileName = $"{template.Name}.json"
+            }
+
+            If sfd.ShowDialog() = DialogResult.OK Then
+                If ReformatTemplateManager.Instance.ExportTemplate(templateId, sfd.FileName) Then
+                    GlobalStatusStrip.ShowInfo($"模板已导出到: {sfd.FileName}")
+                Else
+                    GlobalStatusStrip.ShowWarning("模板导出失败")
+                End If
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"HandleExportTemplate 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"导出模板失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 复制模板
+    ''' </summary>
+    Protected Sub HandleDuplicateTemplate(jsonDoc As JObject)
+        Try
+            Dim templateId = jsonDoc("templateId")?.ToString()
+            Dim newName = jsonDoc("newName")?.ToString()
+
+            Dim duplicated = ReformatTemplateManager.Instance.DuplicateTemplate(templateId, newName)
+            If duplicated IsNot Nothing Then
+                GlobalStatusStrip.ShowInfo("模板「" & duplicated.Name & "」创建成功")
+                ' 刷新前端列表
+                HandleGetReformatTemplates()
+            Else
+                GlobalStatusStrip.ShowWarning("复制模板失败")
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"HandleDuplicateTemplate 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"复制模板失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 删除模板
+    ''' </summary>
+    Protected Sub HandleDeleteTemplate(jsonDoc As JObject)
+        Try
+            Dim templateId = jsonDoc("templateId")?.ToString()
+
+            If ReformatTemplateManager.Instance.DeleteTemplate(templateId) Then
+                GlobalStatusStrip.ShowInfo("模板已删除")
+                ' 刷新前端列表
+                HandleGetReformatTemplates()
+            Else
+                GlobalStatusStrip.ShowWarning("无法删除预置模板")
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"HandleDeleteTemplate 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"删除模板失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 打开模板编辑器
+    ''' </summary>
+    Protected Sub HandleOpenTemplateEditor(jsonDoc As JObject)
+        Try
+            If Me.InvokeRequired Then
+                Me.Invoke(Sub() HandleOpenTemplateEditor(jsonDoc))
+                Return
+            End If
+
+            Dim templateId = jsonDoc("templateId")?.ToString()
+            Dim template As ReformatTemplate = Nothing
+
+            If Not String.IsNullOrEmpty(templateId) Then
+                template = ReformatTemplateManager.Instance.GetTemplateById(templateId)
+            End If
+
+            ' 尝试使用 CustomTaskPane（由子类实现）
+            If ShowTemplateEditorPane(template) Then
+                Return ' 子类成功显示了 CustomTaskPane
+            End If
+
+            ' 回退：使用传统的 WinForm 对话框
+            Dim previewCallback = GetStylePreviewCallback()
+            Dim editorForm As New ReformatTemplateEditorForm(template, previewCallback)
+            If editorForm.ShowDialog() = DialogResult.OK Then
+                ' 刷新前端列表
+                HandleGetReformatTemplates()
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"HandleOpenTemplateEditor 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"打开模板编辑器失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 显示模板编辑器面板（子类可重写以使用 CustomTaskPane）
+    ''' </summary>
+    ''' <param name="template">要编辑的模板，为空则新建</param>
+    ''' <returns>如果成功显示返回 True，否则返回 False 以使用回退的 WinForm</returns>
+    Protected Overridable Function ShowTemplateEditorPane(template As ReformatTemplate) As Boolean
+        Return False ' 默认不支持 CustomTaskPane
+    End Function
+
+    ''' <summary>
+    ''' 获取样式预览回调（子类可重写以提供实时预览功能）
+    ''' </summary>
+    Protected Overridable Function GetStylePreviewCallback() As PreviewStyleCallback
+        Return Nothing
+    End Function
+
+    ''' <summary>
+    ''' 进入模板选择模式（供Ribbon调用）
+    ''' </summary>
+    Public Async Sub EnterReformatTemplateMode()
+        Try
+            ' 先进入模板模式
+            Await ExecuteJavaScriptAsyncJS("enterReformatTemplateMode();")
+            ' 等待一小段时间确保DOM更新
+            Await Task.Delay(100)
+            ' 然后发送模板列表到前端
+            HandleGetReformatTemplates()
+        Catch ex As Exception
+            Debug.WriteLine($"EnterReformatTemplateMode 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 退出模板选择模式
+    ''' </summary>
+    Public Sub ExitReformatTemplateMode()
+        Try
+            ExecuteJavaScriptAsyncJS("exitReformatTemplateMode();")
+        Catch ex As Exception
+            Debug.WriteLine($"ExitReformatTemplateMode 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ' ========== AI模板编辑器功能 ==========
+
+    ''' <summary>
+    ''' 进入AI模板编辑模式（供外部调用）
+    ''' </summary>
+    Public Sub EnterAiTemplateEditorMode(Optional template As ReformatTemplate = Nothing)
+        Try
+            Dim templateJson As String = ""
+            If template IsNot Nothing Then
+                templateJson = JsonConvert.SerializeObject(template)
+            End If
+            ExecuteJavaScriptAsyncJS($"enterAiTemplateEditor('{EscapeJsString(templateJson)}');")
+        Catch ex As Exception
+            Debug.WriteLine($"EnterAiTemplateEditorMode 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 处理开始AI模板创建对话（Plan A: 在普通聊天中创建模板）
+    ''' </summary>
+    Protected Sub HandleStartAiTemplateChat(jsonDoc As JObject)
+        Try
+            If Me.InvokeRequired Then
+                Me.Invoke(Sub() HandleStartAiTemplateChat(jsonDoc))
+                Return
+            End If
+
+            Dim mode As String = jsonDoc("mode")?.ToString()
+            Dim promptMessage As String
+
+            If mode = "fromSelection" Then
+                ' 从选区创建：先分析文档样式
+                promptMessage = "请帮我根据当前文档的排版样式创建一个ReformatTemplate模板。" & vbCrLf &
+                               "请分析文档中的标题、正文、段落格式等，生成一个完整的JSON格式模板。" & vbCrLf &
+                               "模板必须包含Name、Layout、BodyStyles、PageSettings字段。"
+            Else
+                ' 普通创建模式
+                promptMessage = "我想创建一个文档排版模板（ReformatTemplate）。" & vbCrLf &
+                               "请问你想创建什么类型的文档模板？（如：公文、论文、报告、简历等）" & vbCrLf &
+                               "请告诉我模板的用途，我会帮你生成一个完整的JSON格式模板。"
+            End If
+
+            ' 在聊天输入框中填充提示消息
+            Dim escapedPrompt = EscapeJsString(promptMessage)
+            ExecuteJavaScriptAsyncJS($"document.getElementById('message-input').value = '{escapedPrompt}'; document.getElementById('message-input').focus();")
+
+            GlobalStatusStrip.ShowInfo("请在聊天框中描述您需要的模板类型，AI将为您生成模板")
+
+        Catch ex As Exception
+            Debug.WriteLine($"HandleStartAiTemplateChat 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"启动AI模板对话失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 处理保存AI模板
+    ''' </summary>
+    Protected Sub HandleSaveAiTemplate(jsonDoc As JObject)
+        Try
+            If Me.InvokeRequired Then
+                Me.Invoke(Sub() HandleSaveAiTemplate(jsonDoc))
+                Return
+            End If
+
+            ' 支持两种字段名：templateJson（新）和 template（旧）
+            Dim templateJson As String = jsonDoc("templateJson")?.ToString()
+            If String.IsNullOrWhiteSpace(templateJson) Then
+                templateJson = jsonDoc("template")?.ToString()
+            End If
+            If String.IsNullOrWhiteSpace(templateJson) Then
+                GlobalStatusStrip.ShowWarning("没有可保存的模板数据")
+                Return
+            End If
+
+            Dim template = JsonConvert.DeserializeObject(Of ReformatTemplate)(templateJson)
+
+            ' 判断是新增还是更新
+            If String.IsNullOrWhiteSpace(template.Id) Then
+                ' 新模板：使用AddTemplate（会自动生成ID）
+                ReformatTemplateManager.Instance.AddTemplate(template)
+            Else
+                ' 已有ID：检查是否存在，存在则更新，否则添加
+                Dim existing = ReformatTemplateManager.Instance.GetTemplateById(template.Id)
+                If existing IsNot Nothing Then
+                    ReformatTemplateManager.Instance.UpdateTemplate(template)
+                Else
+                    ReformatTemplateManager.Instance.AddTemplate(template)
+                End If
+            End If
+
+            GlobalStatusStrip.ShowInfo($"模板 '{template.Name}' 已保存")
+
+            ' 通知前端刷新列表
+            HandleGetReformatTemplates()
+
+        Catch ex As Exception
+            Debug.WriteLine($"HandleSaveAiTemplate 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"保存模板失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 处理预览AI模板
+    ''' </summary>
+    Protected Overridable Sub HandlePreviewAiTemplate(jsonDoc As JObject)
+        Try
+            If Me.InvokeRequired Then
+                Me.Invoke(Sub() HandlePreviewAiTemplate(jsonDoc))
+                Return
+            End If
+
+            Dim templateJson As String = jsonDoc("templateJson")?.ToString()
+            If String.IsNullOrWhiteSpace(templateJson) Then
+                GlobalStatusStrip.ShowWarning("没有可预览的模板数据")
+                Return
+            End If
+
+            Dim template = JsonConvert.DeserializeObject(Of ReformatTemplate)(templateJson)
+
+            ' 调用子类实现的预览方法
+            PreviewTemplateInDocument(template)
+
+        Catch ex As Exception
+            Debug.WriteLine($"HandlePreviewAiTemplate 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"预览模板失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 在文档中预览模板效果（由子类实现）
+    ''' </summary>
+    Protected Overridable Sub PreviewTemplateInDocument(template As ReformatTemplate)
+        GlobalStatusStrip.ShowWarning("当前应用不支持模板预览")
+    End Sub
+
+#End Region
+
     Protected Overridable Sub HandleExecuteCode(jsonDoc As JObject)
         Dim code As String = jsonDoc("code").ToString()
         Dim preview As Boolean = Boolean.Parse(jsonDoc("executecodePreview"))
         Dim language As String = jsonDoc("language").ToString()
         Dim responseUuid As String = If(jsonDoc("responseUuid")?.ToString(), "")
-        
+
         Try
             ' 执行代码
             ExecuteCode(code, language, preview)
-            
+
             ' 执行成功后通知前端（清空引用区、更新按钮状态）
             If Not String.IsNullOrEmpty(responseUuid) Then
                 ExecuteJavaScriptAsyncJS($"handleExecutionSuccess('{responseUuid}')")
@@ -2067,14 +2793,14 @@ Public MustInherit Class BaseChatControl
     ' 文本/CSV 解析已委托给 FileParserService，请使用 _fileParserService.ParseTextFile()
 
     Protected MustOverride Function GetApplication() As ApplicationInfo
-    
+
     ''' <summary>
     ''' 获取Office应用类型，用于前端区分Word/PowerPoint/Excel
     ''' </summary>
     Protected Overridable Function GetOfficeAppType() As String
         Return "Unknown"
     End Function
-    
+
     Protected MustOverride Function GetVBProject() As VBProject
     Protected MustOverride Function RunCodePreview(vbaCode As String, preview As Boolean) As Boolean
     Protected MustOverride Function RunCode(vbaCode As String)
@@ -2206,15 +2932,15 @@ Public MustInherit Class BaseChatControl
                 ' 使用PromptManager生成组合后的提示词
                 Dim appInfo = GetApplication()
                 Dim appType = If(appInfo IsNot Nothing, appInfo.Type.ToString(), "Excel")
-                
+
                 Dim context As New PromptContext With {
                     .ApplicationType = appType,
                     .IntentResult = CurrentIntentResult,
                     .FunctionMode = responseMode
                 }
-                
+
                 systemPrompt = PromptManager.Instance.GetCombinedPrompt(context)
-                
+
                 ' 如果PromptManager返回空（没有配置），使用基础提示词
                 If String.IsNullOrWhiteSpace(systemPrompt) Then
                     systemPrompt =
@@ -3409,4 +4135,142 @@ Public MustInherit Class BaseChatControl
             GlobalStatusStrip.ShowWarning("重试失败: " & ex.Message)
         End Try
     End Sub
+
+#Region "工具方法"
+
+    ''' <summary>
+    ''' 自动检测文件编码（支持BOM检测和GBK回退）
+    ''' </summary>
+    Private Function DetectFileEncoding(filePath As String) As System.Text.Encoding
+        Try
+            Dim bytes = File.ReadAllBytes(filePath)
+            If bytes.Length = 0 Then Return System.Text.Encoding.UTF8
+
+            ' 检测BOM头
+            If bytes.Length >= 3 AndAlso bytes(0) = &HEF AndAlso bytes(1) = &HBB AndAlso bytes(2) = &HBF Then
+                Return System.Text.Encoding.UTF8
+            End If
+            If bytes.Length >= 2 AndAlso bytes(0) = &HFF AndAlso bytes(1) = &HFE Then
+                Return System.Text.Encoding.Unicode ' UTF-16 LE
+            End If
+            If bytes.Length >= 2 AndAlso bytes(0) = &HFE AndAlso bytes(1) = &HFF Then
+                Return System.Text.Encoding.BigEndianUnicode ' UTF-16 BE
+            End If
+
+            ' 无BOM：尝试UTF-8解码验证
+            Try
+                Dim utf8 As New System.Text.UTF8Encoding(False, True) ' throwOnInvalidBytes=True
+                utf8.GetString(bytes)
+                ' 如果没抛异常，说明是合法的UTF-8
+                Return System.Text.Encoding.UTF8
+            Catch ex As System.Text.DecoderFallbackException
+                ' UTF-8解码失败，回退到GBK（中文Windows常用编码）
+            End Try
+
+            ' 尝试使用GBK编码
+            Try
+                Return System.Text.Encoding.GetEncoding("GBK")
+            Catch
+                ' 如果系统不支持GBK，使用Default编码
+                Return System.Text.Encoding.Default
+            End Try
+        Catch ex As Exception
+            Debug.WriteLine($"编码检测失败: {ex.Message}")
+            Return System.Text.Encoding.UTF8
+        End Try
+    End Function
+
+#End Region
+
+#Region "语义排版Handler"
+
+    ''' <summary>
+    ''' 上传.docx模板文件并解析为SemanticStyleMapping
+    ''' </summary>
+    Protected Sub HandleUploadDocxTemplate()
+        Try
+            If Me.InvokeRequired Then
+                Me.Invoke(Sub() HandleUploadDocxTemplate())
+                Return
+            End If
+
+            Dim ofd As New OpenFileDialog With {
+                .Filter = "Word模板文件 (*.docx;*.dotx)|*.docx;*.dotx|所有文件 (*.*)|*.*",
+                .Title = "选择Word模板文件"
+            }
+
+            If ofd.ShowDialog() = DialogResult.OK Then
+                HandleUploadDocxTemplateFromPath(ofd.FileName)
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"HandleUploadDocxTemplate 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"上传模板失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 从指定路径解析.docx模板
+    ''' </summary>
+    Protected Overridable Sub HandleUploadDocxTemplateFromPath(filePath As String)
+        ' 默认不支持，由WordAi子类覆盖实现
+        GlobalStatusStrip.ShowWarning("当前应用不支持解析Word模板")
+    End Sub
+
+    ''' <summary>
+    ''' 删除docx语义映射
+    ''' </summary>
+    Protected Sub HandleDeleteDocxMapping(jsonDoc As JObject)
+        Try
+            Dim mappingId = jsonDoc("mappingId")?.ToString()
+            If String.IsNullOrEmpty(mappingId) Then Return
+
+            Dim mapping = SemanticMappingManager.Instance.GetMappingById(mappingId)
+            If mapping IsNot Nothing Then
+                ' 删除关联的.docx文件
+                If Not String.IsNullOrEmpty(mapping.SourceFilePath) AndAlso IO.File.Exists(mapping.SourceFilePath) Then
+                    Try
+                        IO.File.Delete(mapping.SourceFilePath)
+                    Catch ex As Exception
+                        Debug.WriteLine($"删除模板文件失败: {ex.Message}")
+                    End Try
+                End If
+                SemanticMappingManager.Instance.DeleteMapping(mappingId)
+            End If
+
+            ' 刷新模板列表
+            HandleGetReformatTemplates()
+            GlobalStatusStrip.ShowInfo("已删除文档映射")
+        Catch ex As Exception
+            Debug.WriteLine($"HandleDeleteDocxMapping 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"删除映射失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 撤销排版（回退UndoRecord快照）
+    ''' </summary>
+    Protected Sub HandleUndoReformat()
+        Try
+            Dim appInfo = GetApplication()
+            If appInfo Is Nothing Then Return
+
+            Dim officeApp As Object = Nothing
+            Try
+                officeApp = GetOfficeApplicationObject()
+            Catch ex As Exception
+                Debug.WriteLine("获取 Office 应用对象失败: " & ex.Message)
+            End Try
+
+            If officeApp IsNot Nothing Then
+                officeApp.ActiveDocument.Undo()
+                GlobalStatusStrip.ShowInfo("已撤销排版操作")
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"HandleUndoReformat 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"撤销排版失败: {ex.Message}")
+        End Try
+    End Sub
+
+#End Region
+
 End Class

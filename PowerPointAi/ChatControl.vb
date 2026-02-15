@@ -40,6 +40,191 @@ Public Class ChatControl
         _reformatTypes = types
     End Sub
 
+    ''' <summary>
+    ''' 使用模板进行排版（覆盖基类方法）
+    ''' </summary>
+    Protected Overrides Async Sub ApplyReformatWithTemplate(template As ReformatTemplate)
+        Try
+            Dim pptApp = Globals.ThisAddIn.Application
+            Dim activeWindow = pptApp.ActiveWindow
+            Dim selection = activeWindow.Selection
+
+            ' 收集所有待排版的形状
+            Dim selectedShapes As New List(Of Microsoft.Office.Interop.PowerPoint.Shape)()
+            Dim shapeTypes As New List(Of String)()
+
+            Try
+                If selection.Type = Microsoft.Office.Interop.PowerPoint.PpSelectionType.ppSelectionShapes Then
+                    ' 选中了形状
+                    For Each shp As Microsoft.Office.Interop.PowerPoint.Shape In selection.ShapeRange
+                        If shp.HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue AndAlso
+                           shp.TextFrame.HasText = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                            selectedShapes.Add(shp)
+                            shapeTypes.Add(GetShapeTypeName(shp))
+                        End If
+                    Next
+                ElseIf selection.Type = Microsoft.Office.Interop.PowerPoint.PpSelectionType.ppSelectionSlides Then
+                    ' 选中了幻灯片，获取所有文本形状
+                    For Each slide As Microsoft.Office.Interop.PowerPoint.Slide In selection.SlideRange
+                        For Each shp As Microsoft.Office.Interop.PowerPoint.Shape In slide.Shapes
+                            If shp.HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue AndAlso
+                               shp.TextFrame.HasText = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                                selectedShapes.Add(shp)
+                                shapeTypes.Add(GetShapeTypeName(shp))
+                            End If
+                        Next
+                    Next
+                End If
+            Catch ex As Exception
+                Debug.WriteLine("获取选中内容失败: " & ex.Message)
+            End Try
+
+            If selectedShapes.Count = 0 Then
+                GlobalStatusStrip.ShowWarning("请先选中需要排版的幻灯片或文本框。")
+                Return
+            End If
+
+            ' 统计形状类型
+            Dim titleCount = shapeTypes.Where(Function(t) t.Contains("标题")).Count()
+            Dim bodyCount = shapeTypes.Where(Function(t) t = "正文" OrElse t = "文本框").Count()
+
+            ' 采样策略：只取代表性样本（最多5个）
+            Dim sampleBlocks As New Newtonsoft.Json.Linq.JArray()
+            Dim sampleIndices As New List(Of Integer)()
+            Dim totalCount = selectedShapes.Count
+
+            If totalCount <= 5 Then
+                For i As Integer = 0 To totalCount - 1
+                    sampleIndices.Add(i)
+                Next
+            Else
+                ' 采样：首2、中1、尾2
+                sampleIndices.Add(0)
+                sampleIndices.Add(1)
+                sampleIndices.Add(CInt(Math.Floor(totalCount / 2)))
+                sampleIndices.Add(totalCount - 2)
+                sampleIndices.Add(totalCount - 1)
+            End If
+
+            For Each idx In sampleIndices
+                Dim shp = selectedShapes(idx)
+                Dim textContent = ""
+                Try
+                    textContent = shp.TextFrame.TextRange.Text
+                    ' 头尾采样：截断过长文本
+                    If textContent.Length > 80 Then
+                        textContent = textContent.Substring(0, 40) & "..." & textContent.Substring(textContent.Length - 30)
+                    End If
+                Catch
+                End Try
+
+                Dim sampleObj As New Newtonsoft.Json.Linq.JObject()
+                sampleObj("sampleIndex") = idx
+                sampleObj("text") = textContent
+                sampleObj("currentType") = shapeTypes(idx)
+                sampleBlocks.Add(sampleObj)
+            Next
+
+            ' 显示排版模式吸顶提示
+            Await ExecuteJavaScriptAsyncJS("showReformatModeIndicator();")
+
+            ' 构建带模板的系统提示
+            Dim systemPrompt As New System.Text.StringBuilder()
+            systemPrompt.AppendLine("你是PowerPoint排版助手。用户选择了「" & template.Name & "」模板进行排版。")
+            systemPrompt.AppendLine()
+            systemPrompt.AppendLine("【模板配置】")
+            systemPrompt.AppendLine($"模板名称：{template.Name}")
+            systemPrompt.AppendLine($"模板分类：{template.Category}")
+            systemPrompt.AppendLine($"模板描述：{template.Description}")
+            systemPrompt.AppendLine()
+
+            ' 版式配置
+            If template.Layout IsNot Nothing AndAlso template.Layout.Elements IsNot Nothing AndAlso template.Layout.Elements.Count > 0 Then
+                systemPrompt.AppendLine("版式骨架元素：")
+                For Each el In template.Layout.Elements
+                    systemPrompt.AppendLine($"  - {el.Name}: {el.Font?.FontNameCN} {el.Font?.FontSize}pt, {el.Paragraph?.Alignment}")
+                Next
+                systemPrompt.AppendLine()
+            End If
+
+            ' 正文样式
+            If template.BodyStyles IsNot Nothing AndAlso template.BodyStyles.Count > 0 Then
+                systemPrompt.AppendLine("正文样式规则：")
+                For Each style In template.BodyStyles
+                    systemPrompt.AppendLine($"  - {style.RuleName}: {style.Font?.FontNameCN} {style.Font?.FontSize}pt")
+                Next
+                systemPrompt.AppendLine()
+            End If
+
+            ' AI说明
+            If Not String.IsNullOrEmpty(template.AiGuidance) Then
+                systemPrompt.AppendLine("【模板说明】")
+                systemPrompt.AppendLine(template.AiGuidance)
+                systemPrompt.AppendLine()
+            End If
+
+            systemPrompt.AppendLine("【文档信息】")
+            systemPrompt.AppendLine($"演示文稿共有{totalCount}个文本框（{titleCount}个标题，{bodyCount}个正文/文本框）。")
+            systemPrompt.AppendLine($"我发送了{sampleIndices.Count}个代表性样本给你。")
+            systemPrompt.AppendLine()
+
+            systemPrompt.AppendLine("【任务要求】")
+            systemPrompt.AppendLine("请根据模板配置和文本框样本，返回具体的排版规则JSON。格式如下：")
+            systemPrompt.AppendLine("```json")
+            systemPrompt.AppendLine("{")
+            systemPrompt.AppendLine("  ""rules"": [{""type"": ""title"", ""matchCondition"": ""..."", ""formatting"": {""fontNameCN"": ""黑体"", ""fontSize"": 36, ""bold"": true, ""alignment"": ""center""}}],")
+            systemPrompt.AppendLine("  ""sampleClassification"": [{""sampleIndex"": 0, ""appliedRule"": ""title""}],")
+            systemPrompt.AppendLine("  ""summary"": ""排版策略说明""")
+            systemPrompt.AppendLine("}")
+            systemPrompt.AppendLine("```")
+            systemPrompt.AppendLine()
+            systemPrompt.AppendLine("formatting字段说明：fontNameCN(中文字体), fontNameEN(英文字体), fontSize(字号pt), bold(加粗), alignment(对齐left/center/right)")
+            systemPrompt.AppendLine()
+            systemPrompt.AppendLine("以下是采样的文本框样本：")
+            systemPrompt.AppendLine(sampleBlocks.ToString(Newtonsoft.Json.Formatting.Indented))
+
+            ' 保存上下文用于后续应用
+            SetReformatContext(selectedShapes.Cast(Of Object).ToList(), shapeTypes)
+
+            ' 发送请求
+            Await Send("请使用「" & template.Name & "」模板对选中内容进行排版。", systemPrompt.ToString(), False, "reformat")
+
+            GlobalStatusStrip.ShowInfo("正在使用「" & template.Name & "」模板排版...")
+
+        Catch ex As Exception
+            Debug.WriteLine($"ApplyReformatWithTemplate 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"排版失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 获取形状类型名称（用于模板排版）
+    ''' </summary>
+    Private Function GetShapeTypeName(shp As Microsoft.Office.Interop.PowerPoint.Shape) As String
+        Try
+            If shp.PlaceholderFormat IsNot Nothing Then
+                Select Case shp.PlaceholderFormat.Type
+                    Case Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderTitle,
+                         Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderCenterTitle
+                        Return "标题"
+                    Case Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderSubtitle
+                        Return "副标题"
+                    Case Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderBody
+                        Return "正文"
+                End Select
+            End If
+        Catch
+        End Try
+        Return "文本框"
+    End Function
+
+    ''' <summary>
+    ''' 获取当前 Office 应用程序名称
+    ''' </summary>
+    Protected Overrides Function GetOfficeApplicationName() As String
+        Return "PowerPoint"
+    End Function
+
 
     Public Sub New()
         ' 此调用是设计师所必需的。

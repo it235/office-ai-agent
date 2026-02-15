@@ -1197,5 +1197,12 @@ Public Class ChatControl
 
         Return snapshot
     End Function
+
+    ''' <summary>
+    ''' 获取当前 Office 应用程序名称
+    ''' </summary>
+    Protected Overrides Function GetOfficeApplicationName() As String
+        Return "Excel"
+    End Function
 End Class
 

@@ -68,90 +68,10 @@ Public Class Ribbon1
         End Try
     End Sub
 
-    ' 排版功能（优化版：基于采样获取格式规则，减少token消耗）
+    ' 排版功能 - 进入模板选择模式
     Protected Overrides Async Sub ReformatButton_Click(sender As Object, e As RibbonControlEventArgs)
         Try
-            Dim pptApp = Globals.ThisAddIn.Application
-            Dim activeWindow = pptApp.ActiveWindow
-            Dim selection = activeWindow.Selection
-
-            ' 检查选择类型
-            Dim hasValidSelection As Boolean = False
-            Dim selectedShapes As New List(Of Microsoft.Office.Interop.PowerPoint.Shape)()
-            Dim shapeTypes As New List(Of String)()
-
-            Try
-                If selection.Type = Microsoft.Office.Interop.PowerPoint.PpSelectionType.ppSelectionShapes Then
-                    ' 选中了形状
-                    For Each shp As Microsoft.Office.Interop.PowerPoint.Shape In selection.ShapeRange
-                        If shp.HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue AndAlso
-                           shp.TextFrame.HasText = Microsoft.Office.Core.MsoTriState.msoTrue Then
-                            selectedShapes.Add(shp)
-                            ' 判断形状类型
-                            Dim shapeType = GetShapeType(shp)
-                            shapeTypes.Add(shapeType)
-                        End If
-                    Next
-                    hasValidSelection = selectedShapes.Count > 0
-                ElseIf selection.Type = Microsoft.Office.Interop.PowerPoint.PpSelectionType.ppSelectionSlides Then
-                    ' 选中了幻灯片，获取所有文本形状
-                    For Each slide As Microsoft.Office.Interop.PowerPoint.Slide In selection.SlideRange
-                        For Each shp As Microsoft.Office.Interop.PowerPoint.Shape In slide.Shapes
-                            If shp.HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue AndAlso
-                               shp.TextFrame.HasText = Microsoft.Office.Core.MsoTriState.msoTrue Then
-                                selectedShapes.Add(shp)
-                                shapeTypes.Add(GetShapeType(shp))
-                            End If
-                        Next
-                    Next
-                    hasValidSelection = selectedShapes.Count > 0
-                End If
-            Catch ex As Exception
-                Debug.WriteLine("获取选中内容失败: " & ex.Message)
-            End Try
-
-            If Not hasValidSelection Then
-                GlobalStatusStripAll.ShowWarning("请先选中需要排版的幻灯片或文本框。")
-                Return
-            End If
-
-            ' 采样策略：只取代表性样本（最多5个）
-            Dim sampleBlocks As New Newtonsoft.Json.Linq.JArray()
-            Dim sampleIndices As New List(Of Integer)()
-            Dim totalCount = selectedShapes.Count
-
-            If totalCount <= 5 Then
-                For i As Integer = 0 To totalCount - 1
-                    sampleIndices.Add(i)
-                Next
-            Else
-                ' 采样：首2、中1、尾2
-                sampleIndices.Add(0)
-                sampleIndices.Add(1)
-                sampleIndices.Add(CInt(Math.Floor(totalCount / 2)))
-                sampleIndices.Add(totalCount - 2)
-                sampleIndices.Add(totalCount - 1)
-            End If
-
-            For Each idx In sampleIndices
-                Dim shp = selectedShapes(idx)
-                Dim textContent = ""
-                Try
-                    textContent = shp.TextFrame.TextRange.Text
-                    ' 截断过长文本
-                    If textContent.Length > 100 Then
-                        textContent = textContent.Substring(0, 100) & "..."
-                    End If
-                Catch
-                End Try
-
-                Dim sampleObj As New Newtonsoft.Json.Linq.JObject()
-                sampleObj("sampleIndex") = idx
-                sampleObj("text") = textContent
-                sampleObj("currentType") = shapeTypes(idx)
-                sampleBlocks.Add(sampleObj)
-            Next
-
+            ' 打开Chat面板并进入模板选择模式（不再预先检查选中内容，改为选择模板后再检查）
             Globals.ThisAddIn.ShowChatTaskPane()
             Await Task.Delay(250)
 
@@ -161,62 +81,11 @@ Public Class Ribbon1
                 Return
             End If
 
-            ' 显示排版模式提示
-            Await chatCtrl.ExecuteJavaScriptAsyncJS("showReformatModeIndicator();")
-            buildHtmlHint(chatCtrl, $"正在向模型发起排版请求（共{totalCount}个文本框，采样{sampleIndices.Count}个）...")
-
-            ' 构建系统提示
-            Dim systemPrompt As New System.Text.StringBuilder()
-            systemPrompt.AppendLine("你是PowerPoint排版助手。我提供幻灯片文本框样本，请分析并给出统一的排版规则。")
-            systemPrompt.AppendLine()
-            systemPrompt.AppendLine($"重要：我有{totalCount}个文本框需要排版，但只发送了{sampleIndices.Count}个代表性样本给你。")
-            systemPrompt.AppendLine("请根据样本判断文本类型（标题/副标题/正文等），给出分类规则。")
-            systemPrompt.AppendLine()
-            systemPrompt.AppendLine("PowerPoint排版参考规则：")
-            systemPrompt.AppendLine("1. 标题：黑体/Arial，32-44pt，加粗，居中")
-            systemPrompt.AppendLine("2. 副标题：微软雅黑，24-28pt，居中")
-            systemPrompt.AppendLine("3. 正文：宋体/Times New Roman，18-24pt，左对齐或两端对齐")
-            systemPrompt.AppendLine()
-            systemPrompt.AppendLine("请返回一个严格的JSON对象，格式如下：")
-            systemPrompt.AppendLine("```json")
-            systemPrompt.AppendLine("{")
-            systemPrompt.AppendLine("  ""rules"": [")
-            systemPrompt.AppendLine("    {")
-            systemPrompt.AppendLine("      ""type"": ""title"",")
-            systemPrompt.AppendLine("      ""matchCondition"": ""占位符类型为标题"",")
-            systemPrompt.AppendLine("      ""formatting"": {")
-            systemPrompt.AppendLine("        ""fontNameCN"": ""黑体"",")
-            systemPrompt.AppendLine("        ""fontNameEN"": ""Arial"",")
-            systemPrompt.AppendLine("        ""fontSize"": 36,")
-            systemPrompt.AppendLine("        ""bold"": true,")
-            systemPrompt.AppendLine("        ""alignment"": ""center""")
-            systemPrompt.AppendLine("      }")
-            systemPrompt.AppendLine("    }")
-            systemPrompt.AppendLine("  ],")
-            systemPrompt.AppendLine("  ""sampleClassification"": [")
-            systemPrompt.AppendLine("    {""sampleIndex"": 0, ""appliedRule"": ""title""}")
-            systemPrompt.AppendLine("  ],")
-            systemPrompt.AppendLine("  ""summary"": ""简述排版策略""")
-            systemPrompt.AppendLine("}")
-            systemPrompt.AppendLine("```")
-            systemPrompt.AppendLine()
-            systemPrompt.AppendLine("formatting字段说明：")
-            systemPrompt.AppendLine("- fontNameCN: 中文字体")
-            systemPrompt.AppendLine("- fontNameEN: 英文字体")
-            systemPrompt.AppendLine("- fontSize: 字号(pt)")
-            systemPrompt.AppendLine("- bold: 是否加粗")
-            systemPrompt.AppendLine("- alignment: 对齐方式(left/center/right)")
-            systemPrompt.AppendLine()
-            systemPrompt.AppendLine("以下是采样的文本框样本：")
-            systemPrompt.AppendLine(sampleBlocks.ToString(Newtonsoft.Json.Formatting.Indented))
-
-            ' 保存上下文用于后续应用
-            chatCtrl.SetReformatContext(selectedShapes.Cast(Of Object).ToList(), shapeTypes)
-
-            Await chatCtrl.Send("请根据采样文本框分析并给出排版规则。", systemPrompt.ToString(), False, "reformat")
+            ' 进入模板选择模式
+            chatCtrl.EnterReformatTemplateMode()
 
         Catch ex As Exception
-            MessageBox.Show("执行排版过程出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("进入排版模式出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
 

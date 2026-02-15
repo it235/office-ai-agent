@@ -37,14 +37,429 @@ Public Class ChatControl
     Private _reformatParagraphs As List(Of Object) = Nothing
     Private _reformatStyles As List(Of String) = Nothing
     Private _reformatTypes As List(Of String) = Nothing ' text/image/table/formula
+    Private _reformatMapping As SemanticStyleMapping = Nothing ' 语义映射上下文
+    Private _reformatRetryCount As Integer = 0 ' 重试计数器，防止死循环
+    Private Const MAX_REFORMAT_RETRIES As Integer = 2 ' 最大重试次数
 
     ''' <summary>
     ''' 设置排版上下文，用于规则匹配后应用格式
     ''' </summary>
-    Public Sub SetReformatContext(paragraphs As List(Of Object), styles As List(Of String), Optional types As List(Of String) = Nothing)
+    Public Sub SetReformatContext(paragraphs As List(Of Object), styles As List(Of String), Optional types As List(Of String) = Nothing, Optional mapping As SemanticStyleMapping = Nothing)
         _reformatParagraphs = paragraphs
         _reformatStyles = styles
         _reformatTypes = types
+        _reformatMapping = mapping
+        _reformatRetryCount = 0 ' 重置重试计数器
+    End Sub
+
+    ''' <summary>
+    ''' 获取当前 Office 应用程序名称
+    ''' </summary>
+    Protected Overrides Function GetOfficeApplicationName() As String
+        Return "Word"
+    End Function
+
+    ''' <summary>
+    ''' 处理模板预览请求（Word 特定实现）
+    ''' </summary>
+    Protected Overrides Sub HandlePreviewTemplateInWord(jsonDoc As Newtonsoft.Json.Linq.JObject)
+        Try
+            Dim templateId As String = jsonDoc("templateId")?.ToString()
+            If String.IsNullOrEmpty(templateId) Then
+                GlobalStatusStrip.ShowWarning("模板ID不能为空")
+                Return
+            End If
+
+            ' docx映射卡片：直接打开关联的.docx文件预览
+            If templateId.StartsWith("docx_") Then
+                Dim mappingId = templateId.Substring(5)
+                Dim mapping = SemanticMappingManager.Instance.GetMappingById(mappingId)
+                If mapping Is Nothing Then
+                    GlobalStatusStrip.ShowWarning("语义映射不存在")
+                    Return
+                End If
+                If String.IsNullOrEmpty(mapping.SourceFilePath) OrElse Not IO.File.Exists(mapping.SourceFilePath) Then
+                    GlobalStatusStrip.ShowWarning("原始模板文件已丢失，请重新上传")
+                    Return
+                End If
+                Dim wordApp = Globals.ThisAddIn.Application
+                wordApp.Documents.Open(mapping.SourceFilePath, ReadOnly:=True)
+                GlobalStatusStrip.ShowInfo($"已打开模板文档预览: {mapping.Name}")
+                Return
+            End If
+
+            ' 常规模板预览
+            Dim template As ReformatTemplate = ReformatTemplateManager.Instance.GetTemplateById(templateId)
+            If template Is Nothing Then
+                GlobalStatusStrip.ShowWarning($"找不到ID为 {templateId} 的模板")
+                Return
+            End If
+
+            Dim wordApp2 = Globals.ThisAddIn.Application
+
+            ' 检查是否已存在预览文档（通过内容标记识别）
+            Dim existingDoc As Microsoft.Office.Interop.Word.Document = Nothing
+            For Each d As Microsoft.Office.Interop.Word.Document In wordApp2.Documents
+                Try
+                    If d.Content.Text.Contains("【模板预览】") Then
+                        existingDoc = d
+                        Exit For
+                    End If
+                Catch
+                End Try
+            Next
+
+            Dim doc As Microsoft.Office.Interop.Word.Document
+            If existingDoc IsNot Nothing Then
+                doc = existingDoc
+                doc.Content.Delete()
+            Else
+                doc = wordApp2.Documents.Add()
+            End If
+
+            ApplyTemplateToDocument(doc, template)
+            doc.Activate()
+
+            GlobalStatusStrip.ShowInfo($"已预览模板: {template.Name}")
+
+        Catch ex As Exception
+            GlobalStatusStrip.ShowWarning($"预览模板失败: {ex.Message}")
+            Debug.WriteLine($"HandlePreviewTemplateInWord 错误: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 将模板应用到Word文档（预览用）
+    ''' </summary>
+    Private Sub ApplyTemplateToDocument(doc As Microsoft.Office.Interop.Word.Document, template As ReformatTemplate)
+        Try
+            ' 添加预览标记标题
+            Dim para = doc.Paragraphs.Add()
+            para.Range.Text = $"【模板预览】{template.Name}"
+            para.Range.Font.Size = 16
+            para.Range.Font.Bold = 1
+            para.Range.ParagraphFormat.Alignment = Word.WdParagraphAlignment.wdAlignParagraphCenter
+            para.Range.InsertParagraphAfter()
+
+            ' 添加分隔线
+            para = doc.Paragraphs.Add()
+            para.Range.Text = "─────────────────────────────"
+            para.Range.ParagraphFormat.Alignment = Word.WdParagraphAlignment.wdAlignParagraphCenter
+            para.Range.InsertParagraphAfter()
+
+            ' 如果有布局配置，添加相应的示例内容
+            If template.Layout IsNot Nothing AndAlso template.Layout.Elements IsNot Nothing Then
+                For i As Integer = 0 To Math.Min(template.Layout.Elements.Count - 1, 5)
+                    Dim element = template.Layout.Elements(i)
+
+                    ' 添加新段落
+                    para = doc.Paragraphs.Add()
+                    para.Range.Text = If(String.IsNullOrEmpty(element.DefaultValue), $"【{element.Name}】示例内容", element.DefaultValue)
+
+                    ' 安全地应用字体设置
+                    If element.Font IsNot Nothing Then
+                        If Not String.IsNullOrEmpty(element.Font.FontNameCN) Then
+                            para.Range.Font.Name = element.Font.FontNameCN
+                            para.Range.Font.NameFarEast = element.Font.FontNameCN
+                        End If
+                        If element.Font.FontSize > 0 Then
+                            para.Range.Font.Size = CSng(element.Font.FontSize)
+                        End If
+                        para.Range.Font.Bold = If(element.Font.Bold, 1, 0)
+                    End If
+
+                    ' 安全地应用段落设置
+                    If element.Paragraph IsNot Nothing Then
+                        Select Case element.Paragraph.Alignment?.ToLower()
+                            Case "center"
+                                para.Range.ParagraphFormat.Alignment = Word.WdParagraphAlignment.wdAlignParagraphCenter
+                            Case "right"
+                                para.Range.ParagraphFormat.Alignment = Word.WdParagraphAlignment.wdAlignParagraphRight
+                            Case "justify"
+                                para.Range.ParagraphFormat.Alignment = Word.WdParagraphAlignment.wdAlignParagraphJustify
+                            Case Else
+                                para.Range.ParagraphFormat.Alignment = Word.WdParagraphAlignment.wdAlignParagraphLeft
+                        End Select
+                    End If
+
+                    ' 应用颜色设置
+                    If element.Color IsNot Nothing AndAlso Not String.IsNullOrEmpty(element.Color.FontColor) Then
+                        Try
+                            Dim color As System.Drawing.Color = System.Drawing.ColorTranslator.FromHtml(element.Color.FontColor)
+                            para.Range.Font.Color = System.Drawing.ColorTranslator.ToOle(color)
+                        Catch ex As Exception
+                            Debug.WriteLine($"应用版式元素颜色失败: {ex.Message}")
+                        End Try
+                    End If
+
+                    para.Range.InsertParagraphAfter()
+                Next
+            End If
+
+            ' 添加正文样式预览
+            If template.BodyStyles IsNot Nothing AndAlso template.BodyStyles.Count > 0 Then
+                para = doc.Paragraphs.Add()
+                para.Range.Text = "─────正文样式预览─────"
+                para.Range.ParagraphFormat.Alignment = Word.WdParagraphAlignment.wdAlignParagraphCenter
+                para.Range.InsertParagraphAfter()
+
+                For Each style In template.BodyStyles
+                    para = doc.Paragraphs.Add()
+                    para.Range.Text = $"【{style.RuleName}】这是正文样式的示例文本，用于展示排版效果。"
+
+                    If style.Font IsNot Nothing Then
+                        If Not String.IsNullOrEmpty(style.Font.FontNameCN) Then
+                            para.Range.Font.Name = style.Font.FontNameCN
+                            para.Range.Font.NameFarEast = style.Font.FontNameCN
+                        End If
+                        If style.Font.FontSize > 0 Then
+                            para.Range.Font.Size = CSng(style.Font.FontSize)
+                        End If
+                        para.Range.Font.Bold = If(style.Font.Bold, 1, 0)
+                    End If
+
+                    If style.Paragraph IsNot Nothing Then
+                        If style.Paragraph.FirstLineIndent > 0 AndAlso para.Range.Font.Size > 0 Then
+                            para.Range.ParagraphFormat.FirstLineIndent = CSng(style.Paragraph.FirstLineIndent * para.Range.Font.Size)
+                        End If
+                    End If
+
+                    ' 应用颜色设置
+                    If style.Color IsNot Nothing AndAlso Not String.IsNullOrEmpty(style.Color.FontColor) Then
+                        Try
+                            Dim color As System.Drawing.Color = System.Drawing.ColorTranslator.FromHtml(style.Color.FontColor)
+                            para.Range.Font.Color = System.Drawing.ColorTranslator.ToOle(color)
+                        Catch ex As Exception
+                            Debug.WriteLine($"应用正文样式颜色失败: {ex.Message}")
+                        End Try
+                    End If
+
+                    para.Range.InsertParagraphAfter()
+                Next
+            End If
+
+        Catch ex As Exception
+            Debug.WriteLine($"ApplyTemplateToDocument 错误: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 使用模板进行排版（覆盖基类方法）- 语义标注流水线
+    ''' </summary>
+    Protected Overrides Async Sub ApplyReformatWithTemplate(template As ReformatTemplate)
+        Try
+            ' 转换旧模板为SemanticStyleMapping
+            Dim mapping = LegacyTemplateConverter.Convert(template)
+            If mapping Is Nothing Then
+                GlobalStatusStrip.ShowWarning("模板转换失败")
+                Return
+            End If
+
+            Await StartSemanticReformatPipeline(mapping, template.Name)
+        Catch ex As Exception
+            Debug.WriteLine($"ApplyReformatWithTemplate 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"排版失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 使用docx解析的SemanticStyleMapping直接排版（覆盖基类方法）
+    ''' </summary>
+    Protected Overrides Async Sub ApplyReformatWithMapping(mapping As SemanticStyleMapping)
+        Try
+            Await StartSemanticReformatPipeline(mapping, mapping.Name)
+        Catch ex As Exception
+            Debug.WriteLine($"ApplyReformatWithMapping 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"排版失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 共用语义排版流水线：收集段落 → 构建提示词 → 发送AI标注请求
+    ''' </summary>
+    Private Async Function StartSemanticReformatPipeline(mapping As SemanticStyleMapping, displayName As String) As Task
+        Dim wordApp = Globals.ThisAddIn.Application
+        Dim selText As String = String.Empty
+
+        Try
+            If wordApp IsNot Nothing AndAlso wordApp.Selection IsNot Nothing Then
+                selText = If(wordApp.Selection.Range IsNot Nothing, wordApp.Selection.Range.Text, String.Empty)
+            End If
+        Catch
+            selText = String.Empty
+        End Try
+
+        If String.IsNullOrWhiteSpace(selText) Then
+            GlobalStatusStrip.ShowWarning("请先选中需要排版的文本内容。")
+            Return
+        End If
+
+        Dim selRange = wordApp.Selection.Range
+
+        ' 收集所有段落信息
+        Dim allParagraphs As New List(Of Microsoft.Office.Interop.Word.Paragraph)()
+        Dim paragraphStyles As New List(Of String)()
+        Dim paragraphTypes As New List(Of String)()
+        Dim paragraphTexts As New List(Of String)()
+
+        For Each p As Microsoft.Office.Interop.Word.Paragraph In selRange.Paragraphs
+            Dim paraText As String = If(p.Range.Text IsNot Nothing, p.Range.Text.ToString().TrimEnd(vbCr, vbLf), String.Empty)
+
+            Dim paraType As String = "text"
+            Try
+                If p.Range.InlineShapes.Count > 0 Then
+                    paraType = "image"
+                ElseIf p.Range.Tables.Count > 0 Then
+                    paraType = "table"
+                ElseIf p.Range.OMaths.Count > 0 Then
+                    paraType = "formula"
+                End If
+            Catch
+            End Try
+
+            If Not String.IsNullOrWhiteSpace(paraText) OrElse paraType <> "text" Then
+                allParagraphs.Add(p)
+
+                Dim styleName As String = ""
+                Try
+                    styleName = p.Style.NameLocal
+                Catch
+                    styleName = "正文"
+                End Try
+                paragraphStyles.Add(styleName)
+                paragraphTypes.Add(paraType)
+                paragraphTexts.Add(paraText)
+            End If
+        Next
+
+        If allParagraphs.Count = 0 Then
+            GlobalStatusStrip.ShowWarning("选中的内容没有有效段落。")
+            Return
+        End If
+
+        ' 显示排版模式吸顶提示
+        Await ExecuteJavaScriptAsyncJS("showReformatModeIndicator();")
+
+        ' 退出模板选择模式（显示聊天区域供后续交互），但保留mapping上下文
+        ExitReformatTemplateMode()
+
+        ' 构建语义标注提示词
+        Dim systemPrompt = SemanticPromptBuilder.BuildSemanticTaggingPrompt(mapping, paragraphTexts)
+
+        ' 保存段落上下文
+        SetReformatContext(allParagraphs.Cast(Of Object).ToList(), paragraphStyles, paragraphTypes, mapping)
+
+        ' 发送语义标注请求
+        Await Send("请使用「" & displayName & "」对选中内容进行语义标注。", systemPrompt, False, "semantic_reformat")
+
+        GlobalStatusStrip.ShowInfo("正在使用「" & displayName & "」排版...")
+    End Function
+
+    ''' <summary>
+    ''' 使用规范进行排版（覆盖基类方法）- 语义标注流水线
+    ''' </summary>
+    Protected Overrides Async Sub ApplyReformatWithStyleGuide(guide As StyleGuideResource)
+        Try
+            Dim wordApp = Globals.ThisAddIn.Application
+            Dim selText As String = String.Empty
+
+            Try
+                If wordApp IsNot Nothing AndAlso wordApp.Selection IsNot Nothing Then
+                    selText = If(wordApp.Selection.Range IsNot Nothing, wordApp.Selection.Range.Text, String.Empty)
+                End If
+            Catch
+                selText = String.Empty
+            End Try
+
+            ' 必须先选中内容
+            If String.IsNullOrWhiteSpace(selText) Then
+                GlobalStatusStrip.ShowWarning("请先选中需要排版的文本内容。")
+                Return
+            End If
+
+            Dim selRange = wordApp.Selection.Range
+
+            ' 收集所有段落信息
+            Dim allParagraphs As New List(Of Microsoft.Office.Interop.Word.Paragraph)()
+            Dim paragraphStyles As New List(Of String)()
+            Dim paragraphTypes As New List(Of String)()
+            Dim paragraphTexts As New List(Of String)()
+
+            For Each p As Microsoft.Office.Interop.Word.Paragraph In selRange.Paragraphs
+                Dim paraText As String = If(p.Range.Text IsNot Nothing, p.Range.Text.ToString().TrimEnd(vbCr, vbLf), String.Empty)
+
+                Dim paraType As String = "text"
+                Try
+                    If p.Range.InlineShapes.Count > 0 Then
+                        paraType = "image"
+                    ElseIf p.Range.Tables.Count > 0 Then
+                        paraType = "table"
+                    ElseIf p.Range.OMaths.Count > 0 Then
+                        paraType = "formula"
+                    End If
+                Catch
+                End Try
+
+                If Not String.IsNullOrWhiteSpace(paraText) OrElse paraType <> "text" Then
+                    allParagraphs.Add(p)
+
+                    Dim styleName As String = ""
+                    Try
+                        styleName = p.Style.NameLocal
+                    Catch
+                        styleName = "正文"
+                    End Try
+                    paragraphStyles.Add(styleName)
+                    paragraphTypes.Add(paraType)
+                    paragraphTexts.Add(paraText)
+                End If
+            Next
+
+            If allParagraphs.Count = 0 Then
+                GlobalStatusStrip.ShowWarning("选中的内容没有有效段落。")
+                Return
+            End If
+
+            ' 显示排版模式吸顶提示
+            Await ExecuteJavaScriptAsyncJS("showReformatModeIndicator();")
+
+            ' 成功开始处理，退出模板选择模式
+            ExitReformatTemplateMode()
+
+            ' 检查是否有缓存的SemanticStyleMapping
+            Dim mapping = SemanticMappingManager.Instance.GetMappingBySourceId(guide.Id)
+
+            If mapping IsNot Nothing Then
+                ' 使用缓存的映射，直接进行语义标注
+                Dim systemPrompt = SemanticPromptBuilder.BuildSemanticTaggingPrompt(mapping, paragraphTexts)
+                SetReformatContext(allParagraphs.Cast(Of Object).ToList(), paragraphStyles, paragraphTypes, mapping)
+
+                ' 开始Undo快照
+                Try
+                    wordApp.UndoRecord.StartCustomRecord("AI排版")
+                Catch ex As Exception
+                    Debug.WriteLine($"StartCustomRecord 失败: {ex.Message}")
+                End Try
+
+                Await Send("请使用「" & guide.Name & "」排版规范对选中内容进行语义标注。", systemPrompt, False, "semantic_reformat")
+            Else
+                ' 没有缓存，需要先让AI将规范转为映射，再进行语义标注
+                ' 使用两步模式：先转换规范，再标注
+                Dim conversionPrompt = StyleGuideConverter.BuildConversionPrompt(guide.GuideContent)
+
+                ' 保存段落信息（mapping暂时为Nothing，在收到转换结果后设置）
+                SetReformatContext(allParagraphs.Cast(Of Object).ToList(), paragraphStyles, paragraphTypes, Nothing)
+
+                ' 发送规范转换请求（mode为styleguide_convert）
+                Await Send("请解析「" & guide.Name & "」排版规范并提取格式参数。", conversionPrompt, False, "styleguide_convert")
+            End If
+
+            GlobalStatusStrip.ShowInfo("正在使用「" & guide.Name & "」规范排版...")
+
+        Catch ex As Exception
+            Debug.WriteLine($"ApplyReformatWithStyleGuide 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"排版失败: {ex.Message}")
+        End Try
     End Sub
 
 
@@ -164,6 +579,116 @@ Public Class ChatControl
         Return "Word"
     End Function
 
+    ''' <summary>
+    ''' 获取样式预览回调（Word实现：将样式应用到选中的文本）
+    ''' </summary>
+    Protected Overrides Function GetStylePreviewCallback() As PreviewStyleCallback
+        Return AddressOf ApplyStylePreviewToSelection
+    End Function
+
+    ''' <summary>
+    ''' 显示模板编辑器面板（使用 CustomTaskPane）
+    ''' </summary>
+    Protected Overrides Function ShowTemplateEditorPane(template As ReformatTemplate) As Boolean
+        Try
+            Globals.ThisAddIn.ShowTemplateEditorTaskPane(template)
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine($"ShowTemplateEditorPane 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 将样式预览应用到Word中选中的文本（Public供外部调用）
+    ''' </summary>
+    Public Sub ApplyStylePreviewToSelection(fontName As String, fontSize As Double, bold As Boolean, alignment As String, firstLineIndent As Double, lineSpacing As Double)
+        Try
+            Dim wordApp = Globals.ThisAddIn.Application
+            Dim doc = wordApp.ActiveDocument
+            If doc Is Nothing Then Return
+
+            Dim selection = wordApp.Selection
+            Dim previewRange As Word.Range = Nothing
+
+            ' 检查是否有有效的选中内容
+            Dim hasValidSelection = selection IsNot Nothing AndAlso
+                                   selection.Type <> Word.WdSelectionType.wdNoSelection AndAlso
+                                   Not String.IsNullOrWhiteSpace(selection.Text?.Replace(vbCr, "").Replace(vbLf, ""))
+
+            If hasValidSelection Then
+                ' 使用选中的文本
+                previewRange = selection.Range
+            Else
+                ' 没有选中文本，查找或创建预览段落
+                Dim previewMarker = "【样式预览】"
+                Dim found = False
+
+                ' 查找已有的预览段落
+                For Each para As Word.Paragraph In doc.Paragraphs
+                    If para.Range.Text.StartsWith(previewMarker) Then
+                        previewRange = para.Range
+                        found = True
+                        Exit For
+                    End If
+                Next
+
+                ' 如果没有找到，在文档末尾创建预览段落
+                If Not found Then
+                    Dim endRange = doc.Range(doc.Content.End - 1, doc.Content.End - 1)
+                    endRange.InsertParagraphAfter()
+                    endRange = doc.Range(doc.Content.End - 1, doc.Content.End - 1)
+                    endRange.Text = previewMarker & "这是用于预览样式效果的示例文本，您可以在此查看字体、字号、对齐等效果。"
+                    previewRange = doc.Paragraphs.Last.Range
+                End If
+            End If
+
+            If previewRange Is Nothing Then Return
+
+            ' 应用字体
+            If Not String.IsNullOrEmpty(fontName) Then
+                previewRange.Font.Name = fontName
+                previewRange.Font.NameFarEast = fontName
+            End If
+
+            ' 应用字号（磅值）
+            If fontSize > 0 Then
+                previewRange.Font.Size = CSng(fontSize)
+            End If
+
+            ' 应用加粗
+            previewRange.Font.Bold = If(bold, 1, 0)
+
+            ' 应用对齐方式
+            Select Case alignment?.ToLower()
+                Case "left"
+                    previewRange.ParagraphFormat.Alignment = Word.WdParagraphAlignment.wdAlignParagraphLeft
+                Case "center"
+                    previewRange.ParagraphFormat.Alignment = Word.WdParagraphAlignment.wdAlignParagraphCenter
+                Case "right"
+                    previewRange.ParagraphFormat.Alignment = Word.WdParagraphAlignment.wdAlignParagraphRight
+                Case "justify"
+                    previewRange.ParagraphFormat.Alignment = Word.WdParagraphAlignment.wdAlignParagraphJustify
+            End Select
+
+            ' 应用首行缩进（字符数转换为磅值）
+            If firstLineIndent > 0 AndAlso fontSize > 0 Then
+                previewRange.ParagraphFormat.FirstLineIndent = CSng(firstLineIndent * fontSize)
+            Else
+                previewRange.ParagraphFormat.FirstLineIndent = 0
+            End If
+
+            ' 应用行距
+            If lineSpacing > 0 Then
+                previewRange.ParagraphFormat.LineSpacingRule = Word.WdLineSpacing.wdLineSpaceMultiple
+                previewRange.ParagraphFormat.LineSpacing = CSng(lineSpacing * 12)
+            End If
+
+        Catch ex As Exception
+            Debug.WriteLine($"ApplyStylePreviewToSelection 出错: {ex.Message}")
+        End Try
+    End Sub
+
     ' 返回 Word Application 对象
     Protected Overrides Function GetOfficeApplicationObject() As Object
         Return Globals.ThisAddIn.Application
@@ -267,14 +792,14 @@ Public Class ChatControl
                 If doc.Tables.Count > 0 Then
                     contentBuilder.AppendLine()
                     contentBuilder.AppendLine($"=== 文档包含 {doc.Tables.Count} 个表格 ===")
-                    
+
                     Dim tableIndex As Integer = 0
                     For Each tbl As Microsoft.Office.Interop.Word.Table In doc.Tables
                         tableIndex += 1
                         If tableIndex > 5 Then Exit For ' 限制表格数量
-                        
+
                         contentBuilder.AppendLine($"表格 {tableIndex}: {tbl.Rows.Count}行×{tbl.Columns.Count}列")
-                        
+
                         ' 读取表格前几行
                         Dim maxRows = Math.Min(tbl.Rows.Count, 5)
                         For rowIdx = 1 To maxRows
@@ -650,6 +1175,30 @@ Public Class ChatControl
                 mode = _responseModeMap(_finalUuid)
             End If
 
+            ' 语义标注排版模式：AI返回标注JSON，由渲染引擎确定性应用格式
+            If String.Equals(mode, "semantic_reformat", StringComparison.OrdinalIgnoreCase) Then
+                Try
+                    Dim aiText As String = allPlainMarkdownBuffer.ToString()
+                    ApplySemanticTaggingResult(aiText)
+                Catch ex As Exception
+                    Debug.WriteLine("语义标注排版处理失败: " & ex.Message)
+                End Try
+                MyBase.CheckAndCompleteProcessingHook(_finalUuid, allPlainMarkdownBuffer)
+                Return
+            End If
+
+            ' 规范转换模式：AI返回规范的结构化JSON，解析后进入语义标注阶段
+            If String.Equals(mode, "styleguide_convert", StringComparison.OrdinalIgnoreCase) Then
+                Try
+                    Dim aiText As String = allPlainMarkdownBuffer.ToString()
+                    HandleStyleGuideConversionResult(aiText)
+                Catch ex As Exception
+                    Debug.WriteLine("规范转换处理失败: " & ex.Message)
+                End Try
+                MyBase.CheckAndCompleteProcessingHook(_finalUuid, allPlainMarkdownBuffer)
+                Return
+            End If
+
             ' 如果是排版重构动作，则触发 showComparison
             If _responseSelectionMap.ContainsKey(_finalUuid) AndAlso String.Equals(mode, "reformat", StringComparison.OrdinalIgnoreCase) Then
                 Try
@@ -794,10 +1343,16 @@ Public Class ChatControl
         Return Nothing
     End Function
 
-    ' 排版功能（支持新的规则模式和旧的逐段落模式）
+    ' 排版功能（支持语义标注模式、规则模式和旧的逐段落模式）
     Protected Overrides Sub HandleApplyDocumentPlanItem(jsonDoc As JObject)
         Try
             Dim responseUuid As String = If(jsonDoc("uuid") IsNot Nothing, jsonDoc("uuid").ToString(), String.Empty)
+
+            ' 语义标注模式（新流水线）：有tags字段
+            If jsonDoc("tags") IsNot Nothing AndAlso jsonDoc("tags").Type = JTokenType.Array Then
+                ApplySemanticTaggingResult(jsonDoc("tags").ToString(Newtonsoft.Json.Formatting.None))
+                Return
+            End If
 
             ' 检测是否为新的规则模式（有rules字段）
             If jsonDoc("rules") IsNot Nothing AndAlso jsonDoc("rules").Type = JTokenType.Array Then
@@ -1088,9 +1643,196 @@ Public Class ChatControl
                 End If
             End If
 
+            ' 字体颜色
+            If formatting("color") IsNot Nothing Then
+                Dim colorStr As String = formatting("color").ToString()
+                If Not String.IsNullOrEmpty(colorStr) AndAlso colorStr <> "auto" Then
+                    Try
+                        Dim color As System.Drawing.Color = System.Drawing.ColorTranslator.FromHtml(colorStr)
+                        targetRange.Font.Color = System.Drawing.ColorTranslator.ToOle(color)
+                    Catch ex As Exception
+                        Debug.WriteLine("设置字体颜色失败: " & ex.Message)
+                    End Try
+                End If
+            End If
+
         Catch ex As Exception
             Debug.WriteLine("ApplyFormattingToRange 出错: " & ex.Message)
             Throw
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 处理AI语义标注结果 - 渲染引擎确定性应用格式
+    ''' </summary>
+    Private Async Sub ApplySemanticTaggingResult(taggingJson As String)
+        Try
+            If _reformatMapping Is Nothing Then
+                GlobalStatusStrip.ShowWarning("排版映射上下文丢失")
+                Return
+            End If
+
+            If _reformatParagraphs Is Nothing OrElse _reformatParagraphs.Count = 0 Then
+                GlobalStatusStrip.ShowWarning("排版段落上下文丢失")
+                Return
+            End If
+
+            ' 校验AI标注结果
+            Dim validation = TaggingValidator.Validate(taggingJson, _reformatMapping, _reformatParagraphs.Count)
+
+            If Not validation.IsValid Then
+                ' 严重错误：尝试重试
+                Debug.WriteLine("语义标注校验失败，错误数: " & validation.Errors.Count)
+
+                ' 检查重试次数限制
+                _reformatRetryCount += 1
+                If _reformatRetryCount > MAX_REFORMAT_RETRIES Then
+                    ' 超过重试限制，显示错误给用户
+                    Debug.WriteLine($"重试次数超过限制({MAX_REFORMAT_RETRIES})，停止重试")
+                    GlobalStatusStrip.ShowWarning($"AI标注解析失败，已重试{MAX_REFORMAT_RETRIES}次")
+                    _reformatRetryCount = 0 ' 重置计数器
+
+                    ' 显示错误详情
+                    Dim errorMsg = String.Join(vbCrLf, validation.Errors.Take(5))
+                    If validation.Errors.Count > 5 Then
+                        errorMsg &= vbCrLf & $"...还有{validation.Errors.Count - 5}个错误"
+                    End If
+                    Await ShowReformatError($"AI标注解析失败:{vbCrLf}{errorMsg}")
+                    Return
+                End If
+
+                ' 收集段落文本用于重试
+                Dim paragraphTexts As New List(Of String)()
+                For Each para In _reformatParagraphs
+                    Try
+                        paragraphTexts.Add(If(para.Range.Text?.ToString().TrimEnd(vbCr, vbLf), ""))
+                    Catch
+                        paragraphTexts.Add("")
+                    End Try
+                Next
+
+                Debug.WriteLine($"第{_reformatRetryCount}次重试...")
+                Dim retryPrompt = SemanticPromptBuilder.BuildRetryPrompt(_reformatMapping, paragraphTexts, validation.Errors)
+                Await Send("标注结果存在错误，请修正。", retryPrompt, False, "semantic_reformat")
+                Return
+            End If
+
+            ' 校验通过，重置重试计数器
+            _reformatRetryCount = 0
+
+            ' 使用渲染引擎应用格式
+            Dim wordApp = Globals.ThisAddIn.Application
+
+            ' 开始Undo快照（必须紧贴格式操作，跨async边界会失效）
+            Try
+                wordApp.UndoRecord.StartCustomRecord("AI排版")
+            Catch ex As Exception
+                Debug.WriteLine($"StartCustomRecord 失败: {ex.Message}")
+            End Try
+
+            Dim renderResult = SemanticRenderingEngine.ApplySemanticFormatting(
+                validation.ValidatedTags, _reformatMapping, _reformatParagraphs, _reformatTypes, wordApp)
+
+            ' 结束Undo快照
+            Try
+                wordApp.UndoRecord.EndCustomRecord()
+            Catch ex As Exception
+                Debug.WriteLine($"EndCustomRecord 失败: {ex.Message}")
+            End Try
+
+            ' 推送排版结果到前端
+            Dim resultJson = renderResult.ToJson()
+            Await ExecuteJavaScriptAsyncJS($"showReformatResult({resultJson.ToString(Formatting.None)});")
+
+            ' 显示状态
+            Dim resultMsg = $"排版完成，共处理 {renderResult.AppliedCount} 个段落"
+            If renderResult.SkippedCount > 0 Then
+                resultMsg &= $"，跳过 {renderResult.SkippedCount} 个特殊元素"
+            End If
+            If validation.AutoFixedCount > 0 Then
+                resultMsg &= $"，自动修正 {validation.AutoFixedCount} 个标签"
+            End If
+            GlobalStatusStrip.ShowInfo(resultMsg)
+
+            ' 清理段落引用（段落对象会失效），但保留映射上下文以支持后续排版
+            _reformatParagraphs = Nothing
+            _reformatStyles = Nothing
+            _reformatTypes = Nothing
+            ' _reformatMapping 保留，用户可继续使用同一映射排版其他内容
+
+        Catch ex As Exception
+            Debug.WriteLine($"ApplySemanticTaggingResult 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"语义排版应用失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 显示排版错误到前端
+    ''' </summary>
+    Private Async Function ShowReformatError(errorMsg As String) As Task
+        Try
+            Dim errorJson = New JObject From {
+                {"success", False},
+                {"error", errorMsg}
+            }
+            Await ExecuteJavaScriptAsyncJS($"showReformatResult({errorJson.ToString(Formatting.None)});")
+        Catch ex As Exception
+            Debug.WriteLine($"ShowReformatError 出错: {ex.Message}")
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 处理规范转换结果 - AI将规范文本转为结构化映射后，继续发起语义标注
+    ''' </summary>
+    Private Async Sub HandleStyleGuideConversionResult(aiResponseJson As String)
+        Try
+            ' 解析AI返回的规范映射
+            Dim guideName As String = "排版规范"
+            Dim guideId As String = ""
+
+            ' 尝试从响应映射获取规范信息
+            Dim mapping = StyleGuideConverter.ParseAiResponse(aiResponseJson, guideName, guideId)
+
+            If mapping Is Nothing OrElse mapping.SemanticTags.Count = 0 Then
+                GlobalStatusStrip.ShowWarning("规范转换结果解析失败")
+                Return
+            End If
+
+            ' 缓存映射
+            SemanticMappingManager.Instance.AddMapping(mapping)
+
+            ' 更新上下文中的mapping
+            _reformatMapping = mapping
+
+            ' 收集段落文本
+            Dim paragraphTexts As New List(Of String)()
+            If _reformatParagraphs IsNot Nothing Then
+                For Each para In _reformatParagraphs
+                    Try
+                        paragraphTexts.Add(If(para.Range.Text?.ToString().TrimEnd(vbCr, vbLf), ""))
+                    Catch
+                        paragraphTexts.Add("")
+                    End Try
+                Next
+            End If
+
+            ' 构建语义标注提示词
+            Dim systemPrompt = SemanticPromptBuilder.BuildSemanticTaggingPrompt(mapping, paragraphTexts)
+
+            ' 开始Undo快照
+            Dim wordApp = Globals.ThisAddIn.Application
+            Try
+                wordApp.UndoRecord.StartCustomRecord("AI排版")
+            Catch ex As Exception
+                Debug.WriteLine($"StartCustomRecord 失败: {ex.Message}")
+            End Try
+
+            ' 发送语义标注请求
+            Await Send("规范已解析，现在进行语义标注。", systemPrompt, False, "semantic_reformat")
+
+        Catch ex As Exception
+            Debug.WriteLine($"HandleStyleGuideConversionResult 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"规范转换后标注失败: {ex.Message}")
         End Try
     End Sub
 
@@ -1334,7 +2076,7 @@ Public Class ChatControl
     ''' </summary>
     Protected Overrides Sub HandleSaveSettings(jsonDoc As JObject)
         MyBase.HandleSaveSettings(jsonDoc)
-        
+
         ' 同步更新Word补全管理器的启用状态
         Try
             Dim enableAutocomplete As Boolean = If(jsonDoc("enableAutocomplete")?.Value(Of Boolean)(), False)
@@ -1359,29 +2101,29 @@ Public Class ChatControl
             ' 使用严格的结构验证
             Dim errorMessage As String = ""
             Dim normalizedJson As JToken = Nothing
-            
+
             If Not WordJsonCommandSchema.ValidateJsonStructure(jsonCode, errorMessage, normalizedJson) Then
                 ' 格式验证失败
                 Debug.WriteLine($"Word JSON格式验证失败: {errorMessage}")
                 Debug.WriteLine($"原始JSON: {jsonCode.Substring(0, Math.Min(200, jsonCode.Length))}...")
-                
+
                 ShareRibbon.GlobalStatusStrip.ShowWarning($"JSON格式不符合规范: {errorMessage}")
                 Return False
             End If
-            
+
             ' 验证通过，根据类型执行
             If normalizedJson.Type = JTokenType.Object Then
                 Dim jsonObj = CType(normalizedJson, JObject)
-                
+
                 ' 命令数组格式
                 If jsonObj("commands") IsNot Nothing Then
                     Return ExecuteWordCommandsArray(jsonObj("commands"), jsonCode, preview)
                 End If
-                
+
                 ' 单命令格式
                 Return ExecuteWordSingleCommand(jsonObj, jsonCode, preview)
             End If
-            
+
             ShareRibbon.GlobalStatusStrip.ShowWarning("无效的JSON格式")
             Return False
 
@@ -1450,7 +2192,7 @@ Public Class ChatControl
     Private Function ExecuteWordSingleCommand(commandJson As JObject, processedJson As String, preview As Boolean) As Boolean
         Try
             Dim command = commandJson("command")?.ToString()
-            
+
             ' 预览 - 使用增强的预览表单
             If preview Then
                 If Not ShareRibbon.CommandPreviewForm.ShowPreview("Word命令预览", commandJson) Then
@@ -1483,7 +2225,7 @@ Public Class ChatControl
         Try
             Dim command = commandJson("command")?.ToString()
             Dim params = commandJson("params")
-            
+
             Dim doc = Globals.ThisAddIn.Application.ActiveDocument
             Dim selection = Globals.ThisAddIn.Application.Selection
 
@@ -1556,6 +2298,18 @@ Public Class ChatControl
 
             If params("fontName") IsNot Nothing Then
                 range.Font.Name = params("fontName").ToString()
+            End If
+
+            If params("color") IsNot Nothing Then
+                Dim colorStr As String = params("color").ToString()
+                If Not String.IsNullOrEmpty(colorStr) AndAlso colorStr <> "auto" Then
+                    Try
+                        Dim color As System.Drawing.Color = System.Drawing.ColorTranslator.FromHtml(colorStr)
+                        range.Font.Color = System.Drawing.ColorTranslator.ToOle(color)
+                    Catch ex As Exception
+                        Debug.WriteLine("设置字体颜色失败: " & ex.Message)
+                    End Try
+                End If
             End If
 
             Return True
@@ -1680,7 +2434,7 @@ Public Class ChatControl
             {"副标题", "副标题"},
             {"Subtitle", "Subtitle"}
         }
-        
+
         If styleMap.ContainsKey(styleName) Then
             Return styleMap(styleName)
         End If
@@ -1765,7 +2519,7 @@ Public Class ChatControl
     Private Sub ApplyMargins(doc As Object, margins As JToken)
         Try
             Dim pageSetup = doc.PageSetup
-            
+
             ' 单位转换: 厘米 -> 磅 (1cm = 28.35磅)
             Const cmToPoints As Single = 28.35F
 
@@ -1813,7 +2567,7 @@ Public Class ChatControl
             Dim bodyTheme = theme("body")
             If bodyTheme IsNot Nothing Then
                 ApplyStyleFromTheme(doc, "正文", bodyTheme)
-                
+
                 ' 应用行间距到所有段落
                 If bodyTheme("lineSpacing") IsNot Nothing Then
                     Dim lineSpacing = bodyTheme("lineSpacing").Value(Of Single)()
@@ -1838,7 +2592,7 @@ Public Class ChatControl
     Private Sub ApplyStyleFromTheme(doc As Object, styleName As String, themeSettings As JToken)
         Try
             Dim style = doc.Styles(styleName)
-            
+
             If themeSettings("font") IsNot Nothing Then
                 style.Font.Name = themeSettings("font").ToString()
             End If
@@ -1859,6 +2613,51 @@ Public Class ChatControl
 
         Catch ex As Exception
             Debug.WriteLine($"ApplyStyleFromTheme ({styleName}) 出错: {ex.Message}")
+        End Try
+    End Sub
+
+#End Region
+
+#Region "语义排版 - .docx模板解析"
+
+    ''' <summary>
+    ''' 覆盖基类方法：从.docx文件解析SemanticStyleMapping并推送前端预览
+    ''' </summary>
+    Protected Overrides Sub HandleUploadDocxTemplateFromPath(filePath As String)
+        Try
+            Dim mapping = WordTemplateParser.ExtractFromDocx(filePath)
+            If mapping Is Nothing OrElse mapping.SemanticTags.Count = 0 Then
+                GlobalStatusStrip.ShowWarning("模板解析失败，未能提取到有效的样式信息")
+                Return
+            End If
+
+            ' 将原始docx拷贝到数据目录，关联到映射
+            Try
+                Dim templateDir = IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    ConfigSettings.OfficeAiAppDataFolder, "docx_templates")
+                If Not IO.Directory.Exists(templateDir) Then
+                    IO.Directory.CreateDirectory(templateDir)
+                End If
+                Dim destPath = IO.Path.Combine(templateDir, mapping.Id & IO.Path.GetExtension(filePath))
+                IO.File.Copy(filePath, destPath, True)
+                mapping.SourceFilePath = destPath
+            Catch ex As Exception
+                Debug.WriteLine($"拷贝模板文件到数据目录失败: {ex.Message}")
+                ' 非致命错误，继续保存映射
+            End Try
+
+            ' 保存映射
+            SemanticMappingManager.Instance.AddMapping(mapping)
+
+            ' 序列化为JSON并推送前端预览
+            Dim json = Newtonsoft.Json.JsonConvert.SerializeObject(mapping, Newtonsoft.Json.Formatting.None)
+            ExecuteJavaScriptAsyncJS($"showMappingPreview({json});")
+
+            GlobalStatusStrip.ShowInfo($"模板「{mapping.Name}」解析完成，提取到 {mapping.SemanticTags.Count} 个语义标签")
+        Catch ex As Exception
+            Debug.WriteLine($"HandleUploadDocxTemplateFromPath 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"模板解析失败: {ex.Message}")
         End Try
     End Sub
 

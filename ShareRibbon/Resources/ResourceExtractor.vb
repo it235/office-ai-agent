@@ -58,7 +58,8 @@ Public Class ResourceExtractor
                 {"intent_preview", "intent-preview.js"},
                 {"ralph_loop", "ralph-loop.js"},
                 {"ralph_agent", "ralph-agent.js"},
-                {"model_switcher", "model-switcher.js"}
+                {"model_switcher", "model-switcher.js"},
+                {"reformat_template", "reformat-template.js"}
             }
 
             ' 释放JS资源

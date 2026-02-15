@@ -20,6 +20,7 @@ Public Class WordCompletionManager
     Private _debounceTimer As System.Threading.Timer
     Private _lastParagraphText As String = ""
     Private _lastFullParagraphContent As String = ""  ' 用于检测内容是否真正变化
+    Private _lastParaStart As Integer = -1  ' 上次段落起始位置，用于检测是否切换了段落
     Private _uiSyncContext As SynchronizationContext  ' UI线程同步上下文
     Private _cancellationTokenSource As CancellationTokenSource
 
@@ -117,12 +118,11 @@ Public Class WordCompletionManager
             ' 检查是否应该保留 ghost text（光标仍在原位）
             If _ghostTextManager IsNot Nothing AndAlso _ghostTextManager.HasGhostText Then
                 If Not _ghostTextManager.IsCursorAtGhostTextStart() Then
-                    ' 光标已移动，清除 ghost text 并取消待处理操作
+                    ' 光标已移动，同步清除 ghost text（避免Post延迟导致竞态）
                     CancelPendingOperations()
-                    _ghostTextManager.ClearGhostText()
+                    _ghostTextManager.ClearGhostTextDirect()
                 Else
                     ' 光标仍在原位，ghost text 还在显示，不需要新的请求
-                    Debug.WriteLine("[WordCompletion] Ghost text 仍在显示，跳过新请求")
                     Return
                 End If
             End If
@@ -132,19 +132,43 @@ Public Class WordCompletionManager
                 Return
             End If
 
+            ' 跳过多段落选区（如 Ctrl+A 全选）
+            Try
+                If sel.Range.Paragraphs.Count > 1 Then
+                    Return
+                End If
+            Catch
+                ' COM异常忽略
+            End Try
+
+            ' 跳过非插入点选区（选中了文本块）
+            If sel.Type <> Microsoft.Office.Interop.Word.WdSelectionType.wdSelectionIP Then
+                Return
+            End If
+
             Dim currentParagraph = sel.Range.Paragraphs(1)
             If currentParagraph Is Nothing Then Return
 
+            ' 重新读取段落内容（ghost text 清除后内容可能已变化）
             Dim paragraphText = currentParagraph.Range.Text
 
             If String.IsNullOrWhiteSpace(paragraphText) OrElse paragraphText.Length < 5 Then
                 Return
             End If
 
-            ' 检查段落内容是否真正变化（核心：防止光标移动触发补全）
             Dim cleanParagraphText = paragraphText.TrimEnd(vbCr, vbLf)
+            Dim currentParaStart = currentParagraph.Range.Start
+
+            ' 检测是否切换到了不同段落（光标移动到其他段落，不触发补全）
+            If currentParaStart <> _lastParaStart Then
+                _lastParaStart = currentParaStart
+                _lastFullParagraphContent = cleanParagraphText
+                _lastParagraphText = ""
+                Return  ' 仅更新跟踪状态，不触发补全
+            End If
+
+            ' 同一段落内：检查内容是否真正变化
             If cleanParagraphText = _lastFullParagraphContent Then
-                ' 段落内容未变化，仅是光标移动，不触发补全
                 Return
             End If
 
@@ -167,11 +191,8 @@ Public Class WordCompletionManager
 
             ' 检查光标位置的文本是否变化（二次防抖）
             If textBeforeCursor = _lastParagraphText Then
-                Debug.WriteLine("[WordCompletion] 光标前文本未变化，跳过请求")
                 Return
             End If
-
-            Debug.WriteLine($"[WordCompletion] 内容变化检测到，准备请求补全")
 
             ' 取消之前的定时器和请求
             CancelPendingOperations()

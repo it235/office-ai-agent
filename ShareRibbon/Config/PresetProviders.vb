@@ -1,4 +1,4 @@
-Imports ShareRibbon.ConfigManager
+﻿Imports ShareRibbon.ConfigManager
 
 ''' <summary>
 ''' 预置服务商配置
@@ -31,7 +31,7 @@ Public Class PresetProviders
         Dim siliconflow As New ConfigItem()
         siliconflow.pltform = "硅基流动 (SiliconFlow)"
         siliconflow.url = "https://api.siliconflow.cn/v1/chat/completions"
-        siliconflow.registerUrl = "https://cloud.siliconflow.cn/account/ak"
+        siliconflow.registerUrl = "https://cloud.siliconflow.cn/i/PGhr3knx"
         siliconflow.providerType = ProviderType.Cloud
         siliconflow.isPreset = True
         siliconflow.key = ""
@@ -78,7 +78,8 @@ Public Class PresetProviders
         Dim zhipu As New ConfigItem()
         zhipu.pltform = "智谱清言 (GLM)"
         zhipu.url = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
-        zhipu.registerUrl = "https://open.bigmodel.cn/usercenter/apikeys"
+        zhipu.registerUrl = "https://www.bigmodel.cn/invite?icode=pRDixwFdhElsS8rrQ7JbplwpqjqOwPB5EXW6OL4DgqY%3D"
+        '    https://open.bigmodel.cn/usercenter/apikeys
         zhipu.providerType = ProviderType.Cloud
         zhipu.isPreset = True
         zhipu.key = ""

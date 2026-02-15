@@ -2083,3 +2083,113 @@ function updateFileParsingProgress(current, total, fileName) {
 // 导出文件解析进度函数
 window.showFileParsingProgress = showFileParsingProgress;
 window.updateFileParsingProgress = updateFileParsingProgress;
+
+// ============================================================
+// 语义排版结果展示 + 撤销/确认
+// ============================================================
+
+/**
+ * 显示排版结果卡片（渲染引擎完成后由VB调用）
+ * @param {Object} result - {appliedCount, skippedCount, tags: {tagId: count}}
+ */
+function showReformatResult(result) {
+    try {
+        // 隐藏排版模式指示器
+        hideReformatModeIndicator();
+
+        const chatContainer = document.getElementById('chat-container');
+        if (!chatContainer) return;
+
+        // 构建标签使用统计
+        let tagStats = '';
+        if (result.tags) {
+            const entries = Object.entries(result.tags);
+            tagStats = entries.map(([tag, count]) => `${tag} × ${count}`).join(' | ');
+        }
+
+        const card = document.createElement('div');
+        card.className = 'reformat-result-card';
+        card.innerHTML = `
+            <div style="background: #f8f9fa; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; margin: 8px 0;">
+                <div style="font-size: 13px; font-weight: 600; color: #2d3748; margin-bottom: 6px;">
+                    排版完成：处理 ${result.appliedCount || 0} 个段落${result.skippedCount > 0 ? `，跳过 ${result.skippedCount} 个特殊元素` : ''}
+                </div>
+                ${tagStats ? `<div style="font-size: 11px; color: #718096; margin-bottom: 8px; word-break: break-all;">${tagStats}</div>` : ''}
+                <div style="display: flex; gap: 8px;">
+                    <button onclick="undoReformat()" style="padding: 5px 14px; font-size: 12px; border: 1px solid #e53e3e; color: #e53e3e; background: white; border-radius: 4px; cursor: pointer;">
+                        撤销排版
+                    </button>
+                    <button onclick="reenterReformatMode()" style="padding: 5px 14px; font-size: 12px; border: 1px solid #667eea; color: #667eea; background: white; border-radius: 4px; cursor: pointer;">
+                        继续排版
+                    </button>
+                    <button onclick="acceptReformat(this)" style="padding: 5px 14px; font-size: 12px; border: 1px solid #38a169; color: white; background: #38a169; border-radius: 4px; cursor: pointer;">
+                        确认
+                    </button>
+                </div>
+            </div>
+        `;
+
+        chatContainer.appendChild(card);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    } catch (err) {
+        console.error('showReformatResult error:', err);
+    }
+}
+
+/**
+ * 撤销排版（发送消息到VB后端）
+ */
+function undoReformat() {
+    try {
+        const payload = JSON.stringify({ type: 'undoReformat' });
+        if (window.chrome && window.chrome.webview) {
+            window.chrome.webview.postMessage(payload);
+        } else if (window.vsto) {
+            window.vsto.postMessage(payload);
+        }
+
+        // 移除结果卡片
+        const cards = document.querySelectorAll('.reformat-result-card');
+        cards.forEach(c => c.remove());
+    } catch (err) {
+        console.error('undoReformat error:', err);
+    }
+}
+
+/**
+ * 确认排版结果
+ * @param {HTMLElement} btn - 确认按钮
+ */
+function acceptReformat(btn) {
+    try {
+        // 隐藏结果卡片
+        const card = btn ? btn.closest('.reformat-result-card') : null;
+        if (card) {
+            card.style.opacity = '0.5';
+            card.querySelector('div > div:last-child').innerHTML = '<span style="color: #38a169; font-size: 12px;">已确认</span>';
+        }
+    } catch (err) {
+        console.error('acceptReformat error:', err);
+    }
+}
+
+/**
+ * 重新进入排版模板选择模式（从结果卡片触发）
+ */
+function reenterReformatMode() {
+    try {
+        // 移除结果卡片
+        const cards = document.querySelectorAll('.reformat-result-card');
+        cards.forEach(c => c.remove());
+
+        // 隐藏排版模式指示器
+        hideReformatModeIndicator();
+
+        // 重新进入模板选择模式
+        if (typeof enterReformatTemplateMode === 'function') {
+            enterReformatTemplateMode();
+        }
+    } catch (err) {
+        console.error('reenterReformatMode error:', err);
+    }
+}

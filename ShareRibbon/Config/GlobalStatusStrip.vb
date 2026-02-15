@@ -1,4 +1,4 @@
-Imports System.Windows.Forms
+﻿Imports System.Windows.Forms
 Imports System.Drawing
 
 Public Module GlobalStatusStrip
@@ -22,6 +22,14 @@ Public Module GlobalStatusStrip
         End If
     End Sub
 
+    Public Sub ShowSuccess(message As String)
+        ' 确保在UI线程上执行
+        If StatusStrip.InvokeRequired Then
+            StatusStrip.Invoke(Sub() ShowWarningInternal(message))
+        Else
+            ShowWarningInternal(message)
+        End If
+    End Sub
     Private Sub ShowWarningInternal(message As String)
         ToolStripStatusLabel.Text = "警告：" & message
         ToolStripStatusLabel.ForeColor = Color.Red

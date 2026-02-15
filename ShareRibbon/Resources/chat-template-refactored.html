@@ -46,6 +46,102 @@
         <!-- message content list -->
     </div>
 
+    <!-- 排版模板选择模式容器 -->
+    <div id="reformat-template-mode" style="display:none;">
+        <!-- 模式标题栏 -->
+        <div class="template-mode-header">
+            <div class="template-mode-title">
+                <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                <span id="resource-mode-title">选择排版资源</span>
+            </div>
+            <div class="template-mode-actions">
+                <button class="template-action-btn small-btn" onclick="createNewTemplate()" id="btn-new-template" title="新建排版模板">
+                    <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                    新建
+                </button>
+                <button class="template-action-btn small-btn" onclick="saveCurrentDocumentAsTemplate()" id="btn-save-resource" title="保存左侧文档内容为排版模板">
+                    <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
+                    保存
+                </button>
+                <button class="template-action-btn small-btn" onclick="importTemplate()" id="btn-import-resource" title="从文件导入排版模板">
+                    <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
+                    导入
+                </button>
+                <button id="manage-templates-btn" class="template-action-btn small-btn manage-btn" onclick="toggleManageMode()">
+                    <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+                    管理
+                </button>
+                <button id="exit-template-mode-btn" class="template-header-btn exit-btn">退出</button>
+            </div>
+        </div>
+        
+        <!-- 资源类型Tab切换 -->
+        <div class="resource-type-tabs">
+            <button class="resource-tab active" data-type="template" onclick="switchResourceTab('template')">
+                <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                排版模板
+            </button>
+            <button class="resource-tab" data-type="styleguide" onclick="switchResourceTab('styleguide')">
+                <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z"/></svg>
+                排版规范
+            </button>
+        </div>
+        
+        <!-- 模板列表（网格布局） -->
+        <div id="template-list-container" class="template-list-container">
+            <div id="template-cards-wrapper" class="template-cards-wrapper">
+                <!-- 模板卡片将在此处动态生成 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 模板预览对话框 -->
+    <div id="template-preview-dialog" class="template-preview-overlay" style="display:none;">
+        <div class="template-preview-dialog">
+            <div class="template-preview-header">
+                <span>模板预览</span>
+                <button id="close-template-preview-btn" class="template-preview-close-btn" onclick="closeTemplatePreview()">&times;</button>
+            </div>
+            <div id="template-preview-content" class="template-preview-content">
+                <!-- 预览内容将在此处动态生成 -->
+            </div>
+            <div class="template-preview-footer">
+                <button id="preview-template-in-word-btn" class="template-preview-btn secondary" onclick="previewTemplateInWord()">在Word中预览</button>
+                <button id="use-template-from-preview-btn" class="template-preview-btn primary" onclick="useTemplateFromPreview()">使用此模板</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 规范预览对话框 -->
+    <div id="styleguide-preview-dialog" class="styleguide-preview-overlay" style="display:none;">
+        <div class="styleguide-preview-dialog" data-mode="view">
+            <div class="styleguide-preview-header">
+                <span id="styleguide-preview-title">规范预览</span>
+                <button class="styleguide-preview-close-btn" onclick="closeStyleGuidePreview()">&times;</button>
+            </div>
+            <div id="styleguide-preview-content" class="styleguide-preview-content">
+                <!-- Markdown渲染内容（预览模式） -->
+            </div>
+            <div id="styleguide-editor-container" class="styleguide-editor-container" style="display:none;">
+                <div class="styleguide-editor-pane">
+                    <label class="styleguide-editor-label">Markdown 源码</label>
+                    <textarea id="styleguide-editor-input" class="styleguide-editor-textarea"></textarea>
+                </div>
+                <div class="styleguide-editor-pane">
+                    <label class="styleguide-editor-label">实时预览</label>
+                    <div id="styleguide-editor-preview" class="styleguide-preview-content styleguide-editor-preview-area"></div>
+                </div>
+            </div>
+            <div class="styleguide-preview-footer">
+                <button id="styleguide-edit-btn" class="styleguide-preview-btn secondary" onclick="enterStyleGuideEditMode()">编辑</button>
+                <button class="styleguide-preview-btn secondary" onclick="closeStyleGuidePreview()">关闭</button>
+                <button id="styleguide-use-btn" class="styleguide-preview-btn primary" onclick="useStyleGuideFromPreview()">使用此规范</button>
+                <button id="styleguide-save-btn" class="styleguide-preview-btn primary" onclick="saveStyleGuideEdit()" style="display:none;">保存</button>
+                <button id="styleguide-cancel-edit-btn" class="styleguide-preview-btn secondary" onclick="cancelStyleGuideEditMode()" style="display:none;">取消编辑</button>
+            </div>
+        </div>
+    </div>
+
     <!-- message chat input bottom -->
     <div id="chat-bottom-bar">
 
@@ -325,6 +421,7 @@
     <script src="https://officeai.local/js/ralph-loop.js"></script>
     <script src="https://officeai.local/js/ralph-agent.js"></script>
     <script src="https://officeai.local/js/model-switcher.js"></script>
+    <script src="https://officeai.local/js/reformat-template.js"></script>
 
     <!-- 工具函数 -->
     <script>

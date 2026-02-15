@@ -144,126 +144,10 @@ Public Class Ribbon1
         End Try
     End Sub
 
-    ' 排版功能（优化版：基于采样获取格式规则，减少token消耗）
+    ' 排版功能 - 进入模板选择模式
     Protected Overrides Async Sub ReformatButton_Click(sender As Object, e As RibbonControlEventArgs)
         Try
-            Dim wordApp = Globals.ThisAddIn.Application
-            Dim selText As String = String.Empty
-
-            Try
-                If wordApp IsNot Nothing AndAlso wordApp.Selection IsNot Nothing Then
-                    selText = If(wordApp.Selection.Range IsNot Nothing, wordApp.Selection.Range.Text, String.Empty)
-                End If
-            Catch
-                selText = String.Empty
-            End Try
-
-            ' 必须先选中内容
-            If String.IsNullOrWhiteSpace(selText) Then
-                GlobalStatusStripAll.ShowWarning("请先选中需要排版的文本内容。")
-                Return
-            End If
-
-            Dim doc = Globals.ThisAddIn.Application.ActiveDocument
-            Dim selRange = wordApp.Selection.Range
-
-            ' 收集所有段落信息（用于后续应用格式）
-            Dim allParagraphs As New List(Of Microsoft.Office.Interop.Word.Paragraph)()
-            Dim paragraphStyles As New List(Of String)()
-            Dim paragraphTypes As New List(Of String)() ' text/image/table/formula
-
-            For Each p As Microsoft.Office.Interop.Word.Paragraph In selRange.Paragraphs
-                Dim paraText As String = If(p.Range.Text IsNot Nothing, p.Range.Text.ToString().TrimEnd(vbCr, vbLf), String.Empty)
-
-                ' 检测段落类型
-                Dim paraType As String = "text"
-                Try
-                    ' 检查是否包含图片
-                    If p.Range.InlineShapes.Count > 0 Then
-                        paraType = "image"
-                    ElseIf p.Range.Tables.Count > 0 Then
-                        paraType = "table"
-                    ElseIf p.Range.OMaths.Count > 0 Then
-                        paraType = "formula"
-                    End If
-                Catch
-                End Try
-
-                ' 只处理文本段落，跳过空段落但保留特殊元素段落的记录
-                If Not String.IsNullOrWhiteSpace(paraText) OrElse paraType <> "text" Then
-                    allParagraphs.Add(p)
-
-                    Dim styleName As String = ""
-                    Try
-                        styleName = p.Style.NameLocal
-                    Catch
-                        styleName = "正文"
-                    End Try
-                    paragraphStyles.Add(styleName)
-                    paragraphTypes.Add(paraType)
-                End If
-            Next
-
-            If allParagraphs.Count = 0 Then
-                MessageBox.Show("选中的内容没有有效段落。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
-                Return
-            End If
-
-            ' 统计特殊元素
-            Dim imageCount = paragraphTypes.Where(Function(t) t = "image").Count()
-            Dim tableCount = paragraphTypes.Where(Function(t) t = "table").Count()
-            Dim formulaCount = paragraphTypes.Where(Function(t) t = "formula").Count()
-            Dim textCount = paragraphTypes.Where(Function(t) t = "text").Count()
-
-            ' 采样策略：只取文本段落的代表性样本（最多5个）
-            Dim sampleBlocks As New Newtonsoft.Json.Linq.JArray()
-            Dim sampleIndices As New List(Of Integer)()
-
-            ' 获取所有文本段落的索引
-            Dim textIndices As New List(Of Integer)()
-            For i As Integer = 0 To allParagraphs.Count - 1
-                If paragraphTypes(i) = "text" Then
-                    textIndices.Add(i)
-                End If
-            Next
-
-            ' 智能采样：从文本段落中取样
-            Dim totalTextCount = textIndices.Count
-            If totalTextCount <= 5 Then
-                ' 文本段落少于5个，全部采样
-                sampleIndices.AddRange(textIndices)
-            ElseIf totalTextCount > 0 Then
-                ' 采样策略：首2、中1、尾2
-                sampleIndices.Add(textIndices(0))
-                If totalTextCount > 1 Then sampleIndices.Add(textIndices(1))
-                If totalTextCount > 2 Then sampleIndices.Add(textIndices(CInt(Math.Floor(totalTextCount / 2))))
-                If totalTextCount > 3 Then sampleIndices.Add(textIndices(totalTextCount - 2))
-                If totalTextCount > 4 Then sampleIndices.Add(textIndices(totalTextCount - 1))
-            End If
-
-            For Each idx In sampleIndices
-                Dim p = allParagraphs(idx)
-                Dim paraText = If(p.Range.Text IsNot Nothing, p.Range.Text.ToString().TrimEnd(vbCr, vbLf), String.Empty)
-
-                ' 智能截断：长段落使用首尾采样（保留语义特征）
-                Const HEAD_TAIL_THRESHOLD As Integer = 80
-                Const HEAD_LENGTH As Integer = 40
-                Const TAIL_LENGTH As Integer = 30
-
-                If paraText.Length > HEAD_TAIL_THRESHOLD Then
-                    ' 首尾采样：前40字符 + ... + 后30字符
-                    Dim head = paraText.Substring(0, HEAD_LENGTH)
-                    Dim tail = paraText.Substring(paraText.Length - TAIL_LENGTH)
-                    paraText = head & "..." & tail
-                End If
-
-                Dim paraObj As New Newtonsoft.Json.Linq.JObject()
-                paraObj("sampleIndex") = idx
-                paraObj("text") = paraText
-                paraObj("currentStyle") = paragraphStyles(idx)
-                sampleBlocks.Add(paraObj)
-            Next
-
+            ' 打开Chat面板并进入模板选择模式（不再预先检查选中内容，改为选择模板后再检查）
             Globals.ThisAddIn.ShowChatTaskPane()
             Await Task.Delay(250)
 
@@ -273,89 +157,11 @@ Public Class Ribbon1
                 Return
             End If
 
-            ' 显示排版模式吸顶提示
-            Await chatCtrl.ExecuteJavaScriptAsyncJS("showReformatModeIndicator();")
-
-            ' 构建前端提示（包含特殊元素统计）
-            Dim hintParts As New List(Of String)()
-            hintParts.Add($"共{allParagraphs.Count}个段落")
-            If textCount > 0 Then hintParts.Add($"{textCount}个文本")
-            If imageCount > 0 Then hintParts.Add($"{imageCount}个图片")
-            If tableCount > 0 Then hintParts.Add($"{tableCount}个表格")
-            If formulaCount > 0 Then hintParts.Add($"{formulaCount}个公式")
-            hintParts.Add($"采样{sampleIndices.Count}个")
-            buildHtmlHint(chatCtrl, $"正在向模型发起排版请求（{String.Join("，", hintParts)}）...")
-
-            ' 构建优化的系统提示 - 返回格式规则而非每段落的格式
-            Dim systemPrompt As New System.Text.StringBuilder()
-            systemPrompt.AppendLine("你是Word排版助手。我提供文档段落样本，请分析并给出统一的排版规则。")
-            systemPrompt.AppendLine()
-            systemPrompt.AppendLine($"重要：文档共有{allParagraphs.Count}个元素（{textCount}个文本段落，{imageCount}个图片，{tableCount}个表格，{formulaCount}个公式）。")
-            systemPrompt.AppendLine($"我只发送了{sampleIndices.Count}个代表性文本样本给你。图片、表格、公式不需要文字排版。")
-            systemPrompt.AppendLine("请根据样本判断段落类型（标题/正文/列表等），给出分类规则。")
-            systemPrompt.AppendLine()
-            systemPrompt.AppendLine("排版参考规则：")
-            systemPrompt.AppendLine("1. 中文字体使用宋体，英文使用Times New Roman")
-            systemPrompt.AppendLine("2. 正文字号12pt（小四），标题根据级别设置（如16pt/14pt）")
-            systemPrompt.AppendLine("3. 正文段落首行缩进2字符，标题不缩进")
-            systemPrompt.AppendLine("4. 行距1.5倍")
-            systemPrompt.AppendLine()
-            systemPrompt.AppendLine("请返回一个严格的JSON对象，格式如下：")
-            systemPrompt.AppendLine("```json")
-            systemPrompt.AppendLine("{")
-            systemPrompt.AppendLine("  ""rules"": [")
-            systemPrompt.AppendLine("    {")
-            systemPrompt.AppendLine("      ""type"": ""title1"",")
-            systemPrompt.AppendLine("      ""matchCondition"": ""样式名包含标题或文本较短且无句号"",")
-            systemPrompt.AppendLine("      ""formatting"": {")
-            systemPrompt.AppendLine("        ""fontNameCN"": ""黑体"",")
-            systemPrompt.AppendLine("        ""fontNameEN"": ""Arial"",")
-            systemPrompt.AppendLine("        ""fontSize"": 16,")
-            systemPrompt.AppendLine("        ""bold"": true,")
-            systemPrompt.AppendLine("        ""alignment"": ""center"",")
-            systemPrompt.AppendLine("        ""firstLineIndent"": 0,")
-            systemPrompt.AppendLine("        ""lineSpacing"": 1.5")
-            systemPrompt.AppendLine("      }")
-            systemPrompt.AppendLine("    },")
-            systemPrompt.AppendLine("    {")
-            systemPrompt.AppendLine("      ""type"": ""body"",")
-            systemPrompt.AppendLine("      ""matchCondition"": ""其他段落"",")
-            systemPrompt.AppendLine("      ""formatting"": {")
-            systemPrompt.AppendLine("        ""fontNameCN"": ""宋体"",")
-            systemPrompt.AppendLine("        ""fontNameEN"": ""Times New Roman"",")
-            systemPrompt.AppendLine("        ""fontSize"": 12,")
-            systemPrompt.AppendLine("        ""bold"": false,")
-            systemPrompt.AppendLine("        ""alignment"": ""justify"",")
-            systemPrompt.AppendLine("        ""firstLineIndent"": 2,")
-            systemPrompt.AppendLine("        ""lineSpacing"": 1.5")
-            systemPrompt.AppendLine("      }")
-            systemPrompt.AppendLine("    }")
-            systemPrompt.AppendLine("  ],")
-            systemPrompt.AppendLine("  ""sampleClassification"": [")
-            systemPrompt.AppendLine("    {""sampleIndex"": 0, ""appliedRule"": ""title1""},")
-            systemPrompt.AppendLine("    {""sampleIndex"": 1, ""appliedRule"": ""body""}")
-            systemPrompt.AppendLine("  ],")
-            systemPrompt.AppendLine("  ""summary"": ""简述排版策略""")
-            systemPrompt.AppendLine("}")
-            systemPrompt.AppendLine("```")
-            systemPrompt.AppendLine()
-            systemPrompt.AppendLine("字段说明：")
-            systemPrompt.AppendLine("- rules: 格式规则数组，每种段落类型一个规则")
-            systemPrompt.AppendLine("- type: 规则名称（如title1/title2/body/list等）")
-            systemPrompt.AppendLine("- matchCondition: 用自然语言描述匹配条件")
-            systemPrompt.AppendLine("- formatting: 格式属性")
-            systemPrompt.AppendLine("- sampleClassification: 告诉我每个样本应用哪个规则")
-            systemPrompt.AppendLine()
-            systemPrompt.AppendLine("以下是采样的段落样本：")
-            systemPrompt.AppendLine(sampleBlocks.ToString(Newtonsoft.Json.Formatting.Indented))
-
-            ' 保存段落信息到chatCtrl用于后续应用格式
-            chatCtrl.SetReformatContext(allParagraphs.Cast(Of Object).ToList(), paragraphStyles, paragraphTypes)
-
-            Await chatCtrl.Send("请根据采样段落分析并给出排版规则。", systemPrompt.ToString(), False, "reformat")
+            ' 进入模板选择模式
+            chatCtrl.EnterReformatTemplateMode()
 
         Catch ex As Exception
-            MessageBox.Show("执行排版过程出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("进入排版模式出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
 

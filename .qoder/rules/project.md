@@ -6,13 +6,13 @@ trigger: always_on
 
 ## 项目背景
 
-我正在开发一个基于vsto+vb.net的office插件，主要是依托大模型的能力来完成Office自动化。
+我正在基于vsto+vb.net开发office ai智能体插件，期望借助大模型来提升excel/word/powerpoint的能力，请你熟读根目录下的AGENTS.md和.qoder目录下过去的实现，了解我的架构和分层逻辑。
 
 
 ## 项目说明
 请你一定要读取AGENTS.md，他是项目的描述文件，在根目录一级ExcelAi、PowerPointAi、WordAi、ShareRibbon下都有。
 该项目有4个模块，ExcelAi是负责Excel的插件，WordAi是给Word的插件，PowerPointAi是给PowerPoint使用的插件，这3个模块是实现模块，都有自己的Ribbon，他们都集成自ShareRibbon模块，ShareRibbon模块是一个抽象和公共逻辑处理模块，因为以上3个套件都有类似的Ribbon区，我就单独做了这个ShareRibbon。
-ShareRibbon中有2个及其重要的类，分别是Controls/BaseChatControl.vb和Ribbon/BaseOfficeRibbon.vb，他们都有3个子类在各子模块，另外还有1个Resources/chat-template.html，这个是我右侧的用户使用的panel面板，里面存放了和vb交互的各种js代码，大模型的结果也会写到html中，通过markdown转换成html。
+ShareRibbon中有2个及其重要的类，分别是Controls/BaseChatControl.vb和Ribbon/BaseOfficeRibbon.vb，他们都有3个子类在各子模块，另外还有1个Resources/chat-template-refactored.html，这个是我右侧的用户使用的panel面板，里面存放了和vb交互的各种js代码，大模型的结果也会写到html中，通过markdown转换成html。
 
 
 ## 项目预期

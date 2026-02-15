@@ -20,6 +20,10 @@ Public Class ThisAddIn
     Private _doubaoControl As DoubaoChat
     Private _doubaoTaskPane As Microsoft.Office.Tools.CustomTaskPane
     
+    ' 模板编辑器
+    Private _templateEditorControl As ReformatTemplateEditorControl
+    Private _templateEditorTaskPane As Microsoft.Office.Tools.CustomTaskPane
+    
     ' Word补全管理器
     Private _completionManager As WordCompletionManager
 
@@ -214,4 +218,143 @@ Public Class ThisAddIn
         Await CreateDoubaoTaskPane()
         _doubaoTaskPane.Visible = True
     End Sub
+    
+    ''' <summary>
+    ''' 显示模板编辑器任务窗格
+    ''' </summary>
+    Public Sub ShowTemplateEditorTaskPane(Optional template As ReformatTemplate = Nothing)
+        Try
+            ' 如果已存在，先关闭
+            If _templateEditorTaskPane IsNot Nothing Then
+                Try
+                    Me.CustomTaskPanes.Remove(_templateEditorTaskPane)
+                Catch
+                End Try
+                _templateEditorTaskPane = Nothing
+                _templateEditorControl = Nothing
+            End If
+            
+            ' 创建预览回调（安全处理 chatControl 可能为 Nothing 的情况）
+            Dim previewCallback As PreviewStyleCallback = Nothing
+            If chatControl IsNot Nothing Then
+                previewCallback = AddressOf chatControl.ApplyStylePreviewToSelection
+            End If
+            
+            ' 创建占位符预览回调
+            Dim placeholderPreviewCallback As TemplatePlaceholderPreviewCallback = AddressOf ApplyPlaceholderPreviewToDocument
+            
+            ' 创建新的编辑器控件
+            _templateEditorControl = New ReformatTemplateEditorControl(template, previewCallback, placeholderPreviewCallback)
+            
+            ' 绑定事件
+            AddHandler _templateEditorControl.TemplateSaved, Sub(s, t)
+                GlobalStatusStrip.ShowInfo($"模板「{t.Name}」已保存")
+                HideTemplateEditorTaskPane()
+                ' 刷新前端模板列表
+                If chatControl IsNot Nothing Then
+                    chatControl.RefreshReformatTemplates()
+                End If
+            End Sub
+            
+            AddHandler _templateEditorControl.EditorClosed, Sub(s, e)
+                HideTemplateEditorTaskPane()
+            End Sub
+            
+            ' 创建TaskPane
+            _templateEditorTaskPane = Me.CustomTaskPanes.Add(_templateEditorControl, "排版模板编辑器")
+            _templateEditorTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
+            _templateEditorTaskPane.Width = 380
+            _templateEditorTaskPane.Visible = True
+            
+        Catch ex As Exception
+            MessageBox.Show($"打开模板编辑器失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Debug.WriteLine($"ShowTemplateEditorTaskPane 错误: {ex.Message}")
+        End Try
+    End Sub
+    
+    ''' <summary>
+    ''' 隐藏模板编辑器任务窗格
+    ''' </summary>
+    Public Sub HideTemplateEditorTaskPane()
+        Try
+            If _templateEditorTaskPane IsNot Nothing Then
+                _templateEditorTaskPane.Visible = False
+                Me.CustomTaskPanes.Remove(_templateEditorTaskPane)
+                _templateEditorTaskPane = Nothing
+                _templateEditorControl = Nothing
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"HideTemplateEditorTaskPane 错误: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 应用占位符预览到文档
+    ''' </summary>
+    Private Sub ApplyPlaceholderPreviewToDocument(placeholderId As String, content As String, fontConfig As FontConfig, paragraphConfig As ParagraphConfig, colorConfig As ColorConfig)
+        Try
+            Dim wordApp = Me.Application
+            If wordApp Is Nothing OrElse wordApp.Selection Is Nothing Then Return
+
+            Dim selRange = wordApp.Selection.Range
+
+            ' 清除当前选择内容
+            selRange.Text = ""
+
+            ' 应用占位符内容
+            selRange.Text = content
+
+            ' 应用字体设置
+            If fontConfig IsNot Nothing Then
+                If Not String.IsNullOrEmpty(fontConfig.FontNameCN) Then
+                    selRange.Font.NameFarEast = fontConfig.FontNameCN
+                End If
+                If fontConfig.FontSize > 0 Then
+                    selRange.Font.Size = CSng(fontConfig.FontSize)
+                End If
+                selRange.Font.Bold = If(fontConfig.Bold, 0, 0)
+                selRange.Font.Italic = If(fontConfig.Italic, 0, 0)
+                selRange.Font.Underline = If(fontConfig.Underline, 0, 0)
+            End If
+
+            ' 应用颜色设置
+            If colorConfig IsNot Nothing AndAlso Not String.IsNullOrEmpty(colorConfig.FontColor) Then
+                Try
+                    Dim color As System.Drawing.Color = System.Drawing.ColorTranslator.FromHtml(colorConfig.FontColor)
+                    selRange.Font.Color = System.Drawing.ColorTranslator.ToOle(color)
+                Catch ex As Exception
+                    Debug.WriteLine($"应用颜色失败: {ex.Message}")
+                End Try
+            End If
+
+            ' 应用段落设置
+            If paragraphConfig IsNot Nothing Then
+                Select Case paragraphConfig.Alignment?.ToLower()
+                    Case "center"
+                        selRange.ParagraphFormat.Alignment = Word.WdParagraphAlignment.wdAlignParagraphCenter
+                    Case "right"
+                        selRange.ParagraphFormat.Alignment = Word.WdParagraphAlignment.wdAlignParagraphRight
+                    Case "justify"
+                        selRange.ParagraphFormat.Alignment = Word.WdParagraphAlignment.wdAlignParagraphJustify
+                    Case Else
+                        selRange.ParagraphFormat.Alignment = Word.WdParagraphAlignment.wdAlignParagraphLeft
+                End Select
+
+                If paragraphConfig.FirstLineIndent > 0 AndAlso selRange.Font.Size > 0 Then
+                    selRange.ParagraphFormat.FirstLineIndent = CSng(paragraphConfig.FirstLineIndent * selRange.Font.Size)
+                End If
+
+                If paragraphConfig.LineSpacing > 0 Then
+                    selRange.ParagraphFormat.LineSpacingRule = Word.WdLineSpacing.wdLineSpaceMultiple
+                    selRange.ParagraphFormat.LineSpacing = CSng(paragraphConfig.LineSpacing * 12)
+                End If
+            End If
+
+            Debug.WriteLine($"应用占位符预览: {placeholderId} -> {content}")
+
+        Catch ex As Exception
+            Debug.WriteLine($"ApplyPlaceholderPreviewToDocument 错误: {ex.Message}")
+        End Try
+    End Sub
+
 End Class

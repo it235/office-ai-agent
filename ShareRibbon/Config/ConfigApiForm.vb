@@ -495,8 +495,27 @@ Public Class ConfigApiForm
                     End If
                 Next
 
-                ' 刷新UI
-                CloudProviderListBox_SelectedIndexChanged(Nothing, Nothing)
+                ' 保存用户当前输入的值（防止被覆盖）
+                Dim savedApiKey = cloudApiKeyTextBox.Text
+                Dim savedUrl = cloudUrlTextBox.Text
+                Dim savedPlatform = cloudPlatformTextBox.Text
+                Dim savedTranslate = cloudTranslateCheckBox.Checked
+                
+                ' 刷新UI（仅更新模型列表）
+                cloudModelCheckedListBox.Items.Clear()
+                For Each model In currentCloudConfig.model
+                    Dim displayText = If(String.IsNullOrEmpty(model.displayName), model.modelName, model.displayName)
+                    cloudModelCheckedListBox.Items.Add(model, model.selected)
+                Next
+                
+                ' 恢复用户输入的值
+                cloudApiKeyTextBox.Text = savedApiKey
+                If Not currentCloudConfig.isPreset Then
+                    cloudUrlTextBox.Text = savedUrl
+                    cloudPlatformTextBox.Text = savedPlatform
+                End If
+                cloudTranslateCheckBox.Checked = savedTranslate
+                
                 MessageBox.Show($"已获取 {models.Count} 个模型", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Else
                 MessageBox.Show("未获取到模型列表，请检查API Key是否正确", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning)
@@ -719,6 +738,12 @@ Public Class ConfigApiForm
         Try
             Dim models = Await ModelApiClient.GetModelsAsync(apiUrl, apiKey)
             If models.Count > 0 Then
+                ' 保存用户当前输入的值（防止被覆盖）
+                Dim savedApiKey = localApiKeyTextBox.Text
+                Dim savedUrl = localUrlTextBox.Text
+                Dim savedPlatform = localPlatformTextBox.Text
+                Dim savedTranslate = localTranslateCheckBox.Checked
+                
                 ' 清空并重新加载模型列表
                 currentLocalConfig.model.Clear()
                 For Each modelName In models
@@ -729,8 +754,19 @@ Public Class ConfigApiForm
                     })
                 Next
 
-                ' 刷新UI
-                LocalProviderListBox_SelectedIndexChanged(Nothing, Nothing)
+                ' 仅刷新模型列表UI
+                localModelCheckedListBox.Items.Clear()
+                For Each model In currentLocalConfig.model
+                    Dim displayText = If(String.IsNullOrEmpty(model.displayName), model.modelName, model.displayName)
+                    localModelCheckedListBox.Items.Add(model, model.selected)
+                Next
+                
+                ' 恢复用户输入的值
+                localApiKeyTextBox.Text = savedApiKey
+                localUrlTextBox.Text = savedUrl
+                localPlatformTextBox.Text = savedPlatform
+                localTranslateCheckBox.Checked = savedTranslate
+                
                 MessageBox.Show($"已获取 {models.Count} 个模型", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Else
                 MessageBox.Show("未获取到模型列表，请确保本地服务已启动", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning)
