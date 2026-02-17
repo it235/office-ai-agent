@@ -192,10 +192,14 @@ Public Class RalphLoopController
     End Sub
 
     ''' <summary>
-    ''' 获取规划提示词
+    ''' 获取规划提示词（可选带入意图识别结果，供阶段四统一智能体使用）
     ''' </summary>
-    Public Function GetPlanningPrompt(userGoal As String) As String
-        Return String.Format(PLANNING_PROMPT, userGoal)
+    Public Function GetPlanningPrompt(userGoal As String, Optional intent As IntentResult = Nothing) As String
+        Dim basePrompt = String.Format(PLANNING_PROMPT, userGoal)
+        If intent IsNot Nothing AndAlso Not String.IsNullOrEmpty(intent.UserFriendlyDescription) Then
+            basePrompt &= vbCrLf & vbCrLf & "已识别意图：" & intent.UserFriendlyDescription & "（类型：" & intent.IntentType.ToString() & "）。请基于此制定执行计划。"
+        End If
+        Return basePrompt
     End Function
 
     ''' <summary>

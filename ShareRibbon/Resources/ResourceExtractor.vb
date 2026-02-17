@@ -1,4 +1,4 @@
-﻿Imports System.IO
+Imports System.IO
 
 Public Class ResourceExtractor
     Public Shared Function ExtractResources() As String
@@ -59,7 +59,8 @@ Public Class ResourceExtractor
                 {"ralph_loop", "ralph-loop.js"},
                 {"ralph_agent", "ralph-agent.js"},
                 {"model_switcher", "model-switcher.js"},
-                {"reformat_template", "reformat-template.js"}
+                {"reformat_template", "reformat-template.js"},
+                {"config_panel", "config-panel.js"}
             }
 
             ' 释放JS资源

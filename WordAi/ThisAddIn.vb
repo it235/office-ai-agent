@@ -1,4 +1,4 @@
-﻿Imports System.Diagnostics
+Imports System.Diagnostics
 Imports System.IO
 Imports System.Runtime.InteropServices
 Imports System.Threading.Tasks
@@ -28,11 +28,16 @@ Public Class ThisAddIn
     Private _completionManager As WordCompletionManager
 
     Private Sub WordAi_Startup() Handles Me.Startup
-
+        SqliteAssemblyResolver.EnsureRegistered()
         Try
             WebView2Loader.EnsureWebView2Loader()
         Catch ex As Exception
             MessageBox.Show($"WebView2 初始化失败: {ex.Message}")
+        End Try
+        Try
+            SqliteNativeLoader.EnsureLoaded()
+        Catch ex As Exception
+            MessageBox.Show($"SQLite 原生库加载失败，Skills/记忆功能可能不可用: {ex.Message}")
         End Try
 
         ' 处理工作表和工作簿切换事件

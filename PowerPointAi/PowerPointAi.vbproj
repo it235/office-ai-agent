@@ -43,6 +43,17 @@
       <Install>true</Install>
     </BootstrapperPackage>
   </ItemGroup>
+  <!-- e_sqlite3.dll：与 WebView2Loader 同级，供 vdproj ContentFiles 收集 -->
+  <ItemGroup Condition="Exists('..\packages\SourceGear.sqlite3.3.50.4.5\runtimes\win-x64\native\e_sqlite3.dll')">
+    <Content Include="..\packages\SourceGear.sqlite3.3.50.4.5\runtimes\win-x64\native\e_sqlite3.dll">
+      <Link>runtimes\win-x64\native\e_sqlite3.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\packages\SourceGear.sqlite3.3.50.4.5\runtimes\win-x86\native\e_sqlite3.dll">
+      <Link>runtimes\win-x86\native\e_sqlite3.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
   <PropertyGroup>
     <!--
       OfficeApplication
@@ -139,6 +150,10 @@
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="System.Data.SQLite, Version=2.0.2.0, Culture=neutral, PublicKeyToken=db937bc2d44ff139, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Data.SQLite.2.0.2\lib\net471\System.Data.SQLite.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Microsoft.Office.Tools.v4.0.Framework, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">

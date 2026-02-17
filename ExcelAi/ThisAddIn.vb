@@ -21,6 +21,7 @@ Public Class ThisAddIn
     Public Shared chatControl As ChatControl
 
     Private Sub ExcelAi_Startup() Handles Me.Startup
+        SqliteAssemblyResolver.EnsureRegistered()
         Try
             Debug.WriteLine("正在初始化GlobalStatusStrip...")
             GlobalStatusStripAll.InitializeApplication(Me.Application)
@@ -33,6 +34,11 @@ Public Class ThisAddIn
             WebView2Loader.EnsureWebView2Loader()
         Catch ex As Exception
             MessageBox.Show($"WebView2 初始化失败: {ex.Message}")
+        End Try
+        Try
+            SqliteNativeLoader.EnsureLoaded()
+        Catch ex As Exception
+            MessageBox.Show($"SQLite 原生库加载失败，Skills/记忆功能可能不可用: {ex.Message}")
         End Try
 
         ' 初始化 Timer，用于WPS中扩大聊天区域的宽度

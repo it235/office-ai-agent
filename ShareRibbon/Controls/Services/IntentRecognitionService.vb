@@ -1,4 +1,4 @@
-﻿' ShareRibbon\Controls\Services\IntentRecognitionService.vb
+' ShareRibbon\Controls\Services\IntentRecognitionService.vb
 ' 意图识别服务：分析用户输入并识别操作意图
 
 Imports System.Diagnostics
@@ -490,6 +490,13 @@ Public Class IntentRecognitionService
                 End If
                 If context("selection") IsNot Nothing AndAlso Not String.IsNullOrEmpty(context("selection").ToString()) Then
                     contextInfo &= $"选中内容预览:" & vbCrLf & context("selection").ToString() & vbCrLf
+                End If
+                ' 阶段四：内容区引用摘要与 RAG 记忆
+                If context("referenceSummary") IsNot Nothing AndAlso Not String.IsNullOrEmpty(context("referenceSummary").ToString()) Then
+                    contextInfo &= "用户引用: " & context("referenceSummary").ToString() & vbCrLf
+                End If
+                If context("ragSnippets") IsNot Nothing AndAlso Not String.IsNullOrEmpty(context("ragSnippets").ToString()) Then
+                    contextInfo &= "相关记忆:" & vbCrLf & context("ragSnippets").ToString() & vbCrLf
                 End If
             End If
 

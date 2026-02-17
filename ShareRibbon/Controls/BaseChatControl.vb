@@ -1,4 +1,4 @@
-﻿' ShareRibbon\Controls\BaseChatControl.vb
+' ShareRibbon\Controls\BaseChatControl.vb
 Imports System.Diagnostics
 Imports System.Drawing
 Imports System.IO
@@ -381,6 +381,28 @@ Public MustInherit Class BaseChatControl
                     HandleGetHistoryFiles()
                 Case "openHistoryFile"
                     HandleOpenHistoryFile(jsonDoc)
+                Case "getSessionList"
+                    HandleGetSessionList()
+                Case "loadSession"
+                    HandleLoadSession(jsonDoc)
+                Case "newSession"
+                    HandleNewSession()
+                Case "getPromptTemplates"
+                    HandleGetPromptTemplates(jsonDoc)
+                Case "savePromptTemplate"
+                    HandleSavePromptTemplate(jsonDoc)
+                Case "deletePromptTemplate"
+                    HandleDeletePromptTemplate(jsonDoc)
+                Case "getAtomicMemories"
+                    HandleGetAtomicMemories(jsonDoc)
+                Case "deleteAtomicMemory"
+                    HandleDeleteAtomicMemory(jsonDoc)
+                Case "getUserProfile"
+                    HandleGetUserProfile()
+                Case "saveUserProfile"
+                    HandleSaveUserProfile(jsonDoc)
+                Case "importSkillsFromFolder"
+                    HandleImportSkillsFromFolder(jsonDoc)
                 Case "getMcpConnections"
                     HandleGetMcpConnections()
                 Case "saveMcpSettings"
@@ -794,6 +816,48 @@ Public MustInherit Class BaseChatControl
     End Function
 
     ''' <summary>
+    ''' 为意图识别/规划阶段丰富上下文：内容区引用摘要 + RAG 相关记忆（阶段四统一智能体）
+    ''' </summary>
+    Protected Sub EnrichContextForIntent(snapshot As JObject,
+                                        question As String,
+                                        filePaths As List(Of String),
+                                        selectedContents As List(Of SendMessageReferenceContentItem))
+        If snapshot Is Nothing Then Return
+        Dim refParts As New List(Of String)()
+        If filePaths IsNot Nothing AndAlso filePaths.Count > 0 Then
+            refParts.Add($"用户引用了 {filePaths.Count} 个文件")
+        End If
+        If selectedContents IsNot Nothing AndAlso selectedContents.Count > 0 Then
+            refParts.Add($"{selectedContents.Count} 段选中内容")
+            For i = 0 To Math.Min(selectedContents.Count - 1, 4)
+                Dim item = selectedContents(i)
+                Dim desc = If(String.IsNullOrEmpty(item.sheetName), item.address, $"{item.sheetName}: {item.address}")
+                If desc.Length > 60 Then desc = desc.Substring(0, 57) & "..."
+                refParts.Add($"  - {desc}")
+            Next
+        End If
+        If refParts.Count > 0 Then
+            snapshot("referenceSummary") = String.Join("；" & vbCrLf, refParts)
+        End If
+        If Not String.IsNullOrWhiteSpace(question) Then
+            Try
+                Dim memories = MemoryService.GetRelevantMemories(StripQuestion(question), 2)
+                If memories IsNot Nothing AndAlso memories.Count > 0 Then
+                    Dim lines As New List(Of String)()
+                    For Each m In memories
+                        Dim c = If(m.Content, "").Trim()
+                        If c.Length > 200 Then c = c.Substring(0, 197) & "..."
+                        If Not String.IsNullOrEmpty(c) Then lines.Add(c)
+                    Next
+                    If lines.Count > 0 Then snapshot("ragSnippets") = String.Join(vbCrLf & "---" & vbCrLf, lines)
+                End If
+            Catch ex As Exception
+                Debug.WriteLine($"EnrichContextForIntent RAG: {ex.Message}")
+            End Try
+        End If
+    End Sub
+
+    ''' <summary>
     ''' 调用大模型获取补全建议
     ''' </summary>
     Private Async Function RequestCompletionsFromLLM(inputText As String, contextSnapshot As JObject) As Task(Of List(Of String))
@@ -1126,18 +1190,24 @@ Public MustInherit Class BaseChatControl
 
     ' ========== 自动补全功能相关方法结束 ==========
 
-    ' 新增：处理用户接受答案
+    ' 新增：处理用户接受答案（收藏回答时更新 conversation.is_collected）
     Protected Sub HandleAcceptAnswer(jsonDoc As JObject)
         Try
             Dim uuid As String = If(jsonDoc("uuid") IsNot Nothing, jsonDoc("uuid").ToString(), String.Empty)
             Dim content As String = If(jsonDoc("content") IsNot Nothing, jsonDoc("content").ToString(), String.Empty)
 
-            ' 简单记录与提示（可扩展为在历史中设置标记或持久化）
             Debug.WriteLine($"用户接受回答: UUID={uuid}")
-            Debug.WriteLine(content)
-
-            ' 你也可以向前端反馈已接受（可选）
             GlobalStatusStrip.ShowInfo("用户已接受 AI 回答")
+
+            ' 更新 conversation 表收藏状态
+            Dim sid = _chatStateService.CurrentSessionId
+            If Not String.IsNullOrEmpty(sid) Then
+                Try
+                    ConversationRepository.SetLastAssistantCollected(sid, True)
+                Catch ex As Exception
+                    Debug.WriteLine($"SetLastAssistantCollected 失败: {ex.Message}")
+                End Try
+            End If
         Catch ex As Exception
             Debug.WriteLine($"HandleAcceptAnswer 出错: {ex.Message}")
         End Try
@@ -1187,6 +1257,7 @@ Public MustInherit Class BaseChatControl
 
     Private Sub ClearChatContext()
         systemHistoryMessageData.Clear()
+        _chatStateService.StartNewSession()
         Debug.WriteLine("已清空聊天记忆（上下文）")
     End Sub
 
@@ -1214,6 +1285,285 @@ Public MustInherit Class BaseChatControl
     Protected Sub HandleOpenHistoryFile(jsonDoc As JObject)
         HistoryService.OpenHistoryFile(jsonDoc)
     End Sub
+
+    ''' <summary>
+    ''' 获取近期会话列表（来自 session_summary），供历史侧边栏展示
+    ''' </summary>
+    Protected Sub HandleGetSessionList()
+        Try
+            Dim limit As Integer = 50
+            Dim summaries = MemoryRepository.GetRecentSessionSummaries(limit)
+            Dim list As New List(Of Object)()
+            For Each s In summaries
+                list.Add(New With {
+                    .sessionId = s.SessionId,
+                    .title = If(String.IsNullOrEmpty(s.Title), "会话", s.Title),
+                    .snippet = If(String.IsNullOrEmpty(s.Snippet), "", s.Snippet),
+                    .createdAt = s.CreatedAt,
+                    .fileName = s.Title,
+                    .fullPath = s.SessionId,
+                    .lastModified = s.CreatedAt
+                })
+            Next
+            Dim jsonResult As String = JsonConvert.SerializeObject(list)
+            ExecuteJavaScriptAsyncJS($"setHistoryFilesList({jsonResult});")
+        Catch ex As Exception
+            Debug.WriteLine("HandleGetSessionList 失败: " & ex.Message)
+            ExecuteJavaScriptAsyncJS("setHistoryFilesList([]);")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 加载指定会话到当前 Chat 并渲染消息
+    ''' </summary>
+    Protected Sub HandleLoadSession(jsonDoc As JObject)
+        Try
+            Dim sessionId As String = jsonDoc("sessionId")?.ToString()
+            If String.IsNullOrEmpty(sessionId) Then Return
+            _chatStateService.SwitchToSession(sessionId)
+            Dim messages As New List(Of Object)()
+            For Each m In _chatStateService.HistoryMessages
+                If m.role = "user" OrElse m.role = "assistant" Then
+                    messages.Add(New With {.role = m.role, .content = m.content, .createTime = m.Timestamp.ToString("yyyy-MM-dd HH:mm:ss")})
+                End If
+            Next
+            Dim jsonResult As String = JsonConvert.SerializeObject(messages)
+            ExecuteJavaScriptAsyncJS($"setChatMessages({jsonResult});")
+        Catch ex As Exception
+            Debug.WriteLine("HandleLoadSession 失败: " & ex.Message)
+            GlobalStatusStrip.ShowWarning("加载会话失败")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 新建会话：清空状态并清空聊天区域
+    ''' </summary>
+    Protected Sub HandleNewSession()
+        Try
+            _chatStateService.StartNewSession()
+            ExecuteJavaScriptAsyncJS("if(typeof clearChatContent==='function')clearChatContent();")
+            GlobalStatusStrip.ShowInfo("已新建会话")
+        Catch ex As Exception
+            Debug.WriteLine("HandleNewSession 失败: " & ex.Message)
+        End Try
+    End Sub
+
+#Region "阶段二：配置面板（场景/Skills、记忆管理）"
+
+    Protected Sub HandleGetPromptTemplates(jsonDoc As JObject)
+        Try
+            Dim scenario As String = jsonDoc("scenario")?.ToString()
+            If String.IsNullOrEmpty(scenario) Then scenario = "excel"
+            Dim list = PromptTemplateRepository.ListByScenario(scenario)
+            Dim arr As New List(Of Object)()
+            For Each r In list
+                arr.Add(New With {
+                    .id = r.Id,
+                    .templateName = r.TemplateName,
+                    .scenario = r.Scenario,
+                    .content = r.Content,
+                    .isSkill = r.IsSkill,
+                    .extraJson = r.ExtraJson,
+                    .sort = r.Sort
+                })
+            Next
+            Dim json = JsonConvert.SerializeObject(arr)
+            ExecuteJavaScriptAsyncJS($"setPromptTemplatesList({json});")
+        Catch ex As Exception
+            Debug.WriteLine("HandleGetPromptTemplates 失败: " & ex.Message)
+            ExecuteJavaScriptAsyncJS("setPromptTemplatesList([]);")
+        End Try
+    End Sub
+
+    Protected Sub HandleSavePromptTemplate(jsonDoc As JObject)
+        Try
+            Dim id As Long = If(jsonDoc("id")?.Value(Of Long)(), 0)
+            Dim templateName As String = jsonDoc("templateName")?.ToString()
+            Dim scenario As String = jsonDoc("scenario")?.ToString()
+            Dim content As String = jsonDoc("content")?.ToString()
+            Dim isSkill As Integer = If(jsonDoc("isSkill")?.Value(Of Integer)(), 0)
+            Dim extraJson As String = jsonDoc("extraJson")?.ToString()
+            Dim sort As Integer = If(jsonDoc("sort")?.Value(Of Integer)(), 0)
+            Dim record As New PromptTemplateRecord With {
+                .Id = id,
+                .TemplateName = templateName,
+                .Scenario = If(String.IsNullOrEmpty(scenario), "common", scenario),
+                .Content = content,
+                .IsSkill = isSkill,
+                .ExtraJson = If(extraJson, ""),
+                .Sort = sort
+            }
+            If id > 0 Then
+                PromptTemplateRepository.Update(record)
+                GlobalStatusStrip.ShowInfo("已更新")
+            Else
+                PromptTemplateRepository.Insert(record)
+                GlobalStatusStrip.ShowInfo("已添加")
+            End If
+            HandleGetPromptTemplates(JObject.Parse("{""scenario"":""" & record.Scenario & """}"))
+        Catch ex As Exception
+            Debug.WriteLine("HandleSavePromptTemplate 失败: " & ex.Message)
+            GlobalStatusStrip.ShowWarning("保存失败: " & ex.Message)
+        End Try
+    End Sub
+
+    Protected Sub HandleDeletePromptTemplate(jsonDoc As JObject)
+        Try
+            Dim id As Long = jsonDoc("id")?.Value(Of Long)()
+            If id <= 0 Then Return
+            PromptTemplateRepository.Delete(id)
+            GlobalStatusStrip.ShowInfo("已删除")
+            Dim scenario As String = jsonDoc("scenario")?.ToString()
+            If String.IsNullOrEmpty(scenario) Then scenario = "excel"
+            Dim jo As JObject = JObject.FromObject(New With {.scenario = scenario})
+            HandleGetPromptTemplates(jo)
+        Catch ex As Exception
+            Debug.WriteLine("HandleDeletePromptTemplate 失败: " & ex.Message)
+            GlobalStatusStrip.ShowWarning("删除失败: " & ex.Message)
+        End Try
+    End Sub
+
+    Protected Sub HandleGetAtomicMemories(jsonDoc As JObject)
+        Try
+            Dim limit As Integer = If(jsonDoc("limit")?.Value(Of Integer)(), 100)
+            Dim appType As String = jsonDoc("appType")?.ToString()
+            If String.IsNullOrEmpty(appType) Then appType = GetOfficeAppType()
+            Dim list = MemoryRepository.ListAtomicMemories(limit, 0, appType)
+            Dim arr As New List(Of Object)()
+            For Each r In list
+                arr.Add(New With {.id = r.Id, .content = r.Content, .createTime = r.CreateTime})
+            Next
+            Dim json = JsonConvert.SerializeObject(arr)
+            ExecuteJavaScriptAsyncJS($"setAtomicMemoriesList({json});")
+        Catch ex As Exception
+            Debug.WriteLine("HandleGetAtomicMemories 失败: " & ex.Message)
+            ExecuteJavaScriptAsyncJS("setAtomicMemoriesList([]);")
+        End Try
+    End Sub
+
+    Protected Sub HandleDeleteAtomicMemory(jsonDoc As JObject)
+        Try
+            Dim id As Long = jsonDoc("id")?.Value(Of Long)()
+            If id <= 0 Then Return
+            MemoryRepository.DeleteAtomicMemory(id)
+            GlobalStatusStrip.ShowInfo("已删除")
+            Dim appType As String = jsonDoc("appType")?.ToString()
+            If String.IsNullOrEmpty(appType) Then appType = GetOfficeAppType()
+            Dim jo As JObject = JObject.FromObject(New With {.limit = 100, .appType = appType})
+            HandleGetAtomicMemories(jo)
+        Catch ex As Exception
+            Debug.WriteLine("HandleDeleteAtomicMemory 失败: " & ex.Message)
+            GlobalStatusStrip.ShowWarning("删除失败: " & ex.Message)
+        End Try
+    End Sub
+
+    Protected Sub HandleGetUserProfile()
+        Try
+            Dim content As String = MemoryRepository.GetUserProfile()
+            Dim json As String = JsonConvert.SerializeObject(If(content, ""))
+            ExecuteJavaScriptAsyncJS("setUserProfileContent(" & json & ");")
+        Catch ex As Exception
+            Debug.WriteLine("HandleGetUserProfile 失败: " & ex.Message)
+            ExecuteJavaScriptAsyncJS("setUserProfileContent('');")
+        End Try
+    End Sub
+
+    Protected Sub HandleSaveUserProfile(jsonDoc As JObject)
+        Try
+            Dim content As String = jsonDoc("content")?.ToString()
+            MemoryRepository.UpdateUserProfile(content)
+            GlobalStatusStrip.ShowInfo("用户画像已保存")
+        Catch ex As Exception
+            Debug.WriteLine("HandleSaveUserProfile 失败: " & ex.Message)
+            GlobalStatusStrip.ShowWarning("保存失败: " & ex.Message)
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 从文件夹批量导入 Skill（.json/.md），与 SkillsConfigForm 的导入逻辑一致
+    ''' </summary>
+    Protected Sub HandleImportSkillsFromFolder(jsonDoc As JObject)
+        If InvokeRequired Then
+            Me.Invoke(Sub() HandleImportSkillsFromFolder(jsonDoc))
+            Return
+        End If
+        Try
+            Dim scenario As String = jsonDoc("scenario")?.ToString()
+            If String.IsNullOrEmpty(scenario) Then scenario = "excel"
+            Using dlg As New FolderBrowserDialog()
+                dlg.Description = "选择包含 .json / .md Skill 文件的文件夹"
+                If dlg.ShowDialog() <> DialogResult.OK Then Return
+                Dim folder = dlg.SelectedPath
+                Dim files As New List(Of String)()
+                Try
+                    files.AddRange(Directory.GetFiles(folder, "*.json"))
+                    files.AddRange(Directory.GetFiles(folder, "*.md"))
+                Catch ex As Exception
+                    GlobalStatusStrip.ShowWarning("读取文件夹失败: " & ex.Message)
+                    Return
+                End Try
+                Dim sort = 0
+                Dim count = 0
+                For Each filePath In files
+                    Try
+                        Dim content = File.ReadAllText(filePath)
+                        Dim ext = Path.GetExtension(filePath).ToLowerInvariant()
+                        Dim name = Path.GetFileNameWithoutExtension(filePath)
+                        Dim record As PromptTemplateRecord = Nothing
+                        If ext = ".json" Then
+                            Dim jo = JObject.Parse(content)
+                            Dim pt = jo("promptTemplate")
+                            Dim ct = jo("content")
+                            Dim pm = jo("prompt")
+                            Dim promptTemplate = If(pt IsNot Nothing, pt.ToString(), If(ct IsNot Nothing, ct.ToString(), If(pm IsNot Nothing, pm.ToString(), "")))
+                            If String.IsNullOrWhiteSpace(promptTemplate) Then Continue For
+                            Dim sn = jo("skillName")
+                            Dim nm = jo("name")
+                            Dim skillName = If(sn IsNot Nothing, sn.ToString(), If(nm IsNot Nothing, nm.ToString(), name))
+                            Dim supportedApps = If(jo("supported_apps"), jo("supportedApps"))
+                            Dim extraJo As New JObject()
+                            If supportedApps IsNot Nothing AndAlso TypeOf supportedApps Is JArray Then
+                                extraJo("supported_apps") = supportedApps
+                            End If
+                            Dim params = If(jo("parameters"), jo("params"))
+                            If params IsNot Nothing Then extraJo("parameters") = params
+                            Dim extra = If(extraJo.Count > 0, extraJo.ToString(), "")
+                            record = New PromptTemplateRecord With {
+                                .TemplateName = skillName,
+                                .Content = promptTemplate,
+                                .IsSkill = 1,
+                                .ExtraJson = extra,
+                                .Scenario = scenario,
+                                .Sort = sort
+                            }
+                        Else
+                            record = New PromptTemplateRecord With {
+                                .TemplateName = name,
+                                .Content = content,
+                                .IsSkill = 1,
+                                .ExtraJson = "",
+                                .Scenario = scenario,
+                                .Sort = sort
+                            }
+                        End If
+                        PromptTemplateRepository.Insert(record)
+                        sort += 1
+                        count += 1
+                    Catch ex As Exception
+                        Debug.WriteLine($"导入 {filePath} 失败: {ex.Message}")
+                    End Try
+                Next
+                GlobalStatusStrip.ShowInfo($"已从文件夹导入 {count} 个 Skill")
+                Dim joRefresh As JObject = JObject.FromObject(New With {.scenario = scenario})
+                HandleGetPromptTemplates(joRefresh)
+            End Using
+        Catch ex As Exception
+            Debug.WriteLine("HandleImportSkillsFromFolder 失败: " & ex.Message)
+            GlobalStatusStrip.ShowWarning("导入失败: " & ex.Message)
+        End Try
+    End Sub
+
+#End Region
 
     Protected Overridable Sub HandleCheckedChange(jsonDoc As JObject)
         Dim prop As String = jsonDoc("property").ToString()
@@ -1502,8 +1852,9 @@ Public MustInherit Class BaseChatControl
                              End If
 
                              ' 不是追问，进行意图识别
-                             ' 获取上下文快照
+                             ' 获取上下文快照并注入内容区引用与 RAG 记忆（阶段四统一智能体）
                              Dim contextSnapshot = GetContextSnapshot()
+                             EnrichContextForIntent(contextSnapshot, originalQuestion, filePaths, selectedContents)
 
                              ' 使用异步方法进行意图识别（调用大模型）
                              CurrentIntentResult = Await IntentService.IdentifyIntentAsync(originalQuestion, contextSnapshot)
@@ -1587,8 +1938,9 @@ Public MustInherit Class BaseChatControl
         If intent IsNot Nothing AndAlso intent.Confidence > 0.2 Then
             Dim optimizedPrompt = IntentService.GetOptimizedSystemPrompt(intent)
             Debug.WriteLine($"使用意图优化提示词: {intent.IntentType}")
+            Dim intentDesc As String = If(intent.UserFriendlyDescription, "")
             Task.Run(Async Function()
-                         Await Send(message, optimizedPrompt, True, "")
+                         Await Send(message, optimizedPrompt, True, "", intentDesc)
                      End Function)
         Else
             ' 回退到普通发送
@@ -1597,7 +1949,7 @@ Public MustInherit Class BaseChatControl
     End Sub
 
     ''' <summary>
-    ''' 处理用户确认意图
+    ''' 处理用户确认意图。Agent 模式下进入「规划 → Spec 展示 → 逐步执行」流程（阶段四统一智能体）。
     ''' </summary>
     Protected Sub HandleConfirmIntent(jsonDoc As JObject)
         Try
@@ -1613,14 +1965,41 @@ Public MustInherit Class BaseChatControl
                 ExecuteJavaScriptAsyncJS($"showDetectedIntent('{_pendingIntentResult.IntentType}')")
             End If
 
-            ' 使用保存的意图结果发送消息
-            SendChatMessageWithIntent(_pendingIntentMessage, _pendingIntentResult)
+            ' Agent 模式：意图确认后请求 Spec 规划并进入 Ralph Loop 逐步执行（阶段四）
+            Dim currentChatMode As String = ChatSettings.chatMode
+            If currentChatMode = "agent" AndAlso _pendingIntentResult IsNot Nothing Then
+                Dim msg = _pendingIntentMessage
+                Dim intent = _pendingIntentResult
+                Dim paths = _pendingFilePaths
+                _pendingIntentMessage = Nothing
+                _pendingIntentResult = Nothing
+                _pendingFilePaths = Nothing
+                Task.Run(Async Function()
+                             Try
+                                 Dim goal = If(String.IsNullOrWhiteSpace(intent.OriginalInput), intent.UserFriendlyDescription, intent.OriginalInput)
+                                 Dim appType = GetOfficeAppType()
+                                 Dim loopSession = Await _ralphLoopController.StartNewLoop(goal, appType)
+                                 Dim loopDataJson = $"{{""goal"":""{EscapeJavaScriptString(goal)}"",""steps"":[],""status"":""planning""}}"
+                                 ExecuteJavaScriptAsyncJS($"showLoopPlanCard({loopDataJson})")
+                                 GlobalStatusStrip.ShowInfo("正在规划任务...")
+                                 Dim planningPrompt = _ralphLoopController.GetPlanningPrompt(goal, intent)
+                                 _isRalphLoopPlanning = True
+                                 Await Send(planningPrompt, "", False, "")
+                             Catch ex As Exception
+                                 Debug.WriteLine($"[HandleConfirmIntent Agent] {ex.Message}")
+                                 GlobalStatusStrip.ShowWarning("规划启动失败，改为直接发送")
+                                 SendChatMessageWithIntent(msg, intent)
+                             End Try
+                         End Function)
+                GlobalStatusStrip.ShowInfo("已确认意图，正在规划...")
+                Return
+            End If
 
-            ' 清空待确认状态
+            ' 普通模式：直接按意图发送
+            SendChatMessageWithIntent(_pendingIntentMessage, _pendingIntentResult)
             _pendingIntentMessage = Nothing
             _pendingIntentResult = Nothing
             _pendingFilePaths = Nothing
-
             GlobalStatusStrip.ShowInfo("已确认意图，正在处理...")
         Catch ex As Exception
             Debug.WriteLine($"HandleConfirmIntent 出错: {ex.Message}")
@@ -2873,7 +3252,7 @@ Public MustInherit Class BaseChatControl
     ' 存储调用Send时的请求参数（requestUuid/responseUuid -> JObject）
     Protected _savedRequestParams As New Dictionary(Of String, JObject)()
 
-    Public Async Function Send(question As String, systemPrompt As String, addHistory As Boolean, responseMode As String) As Task
+    Public Async Function Send(question As String, systemPrompt As String, addHistory As Boolean, responseMode As String, Optional intentDescription As String = Nothing) As Task
         Dim apiUrl As String = ConfigSettings.ApiUrl
         Dim apiKey As String = ConfigSettings.ApiKey
 
@@ -2955,6 +3334,17 @@ Public MustInherit Class BaseChatControl
 
 
             Dim requestBody As String = CreateRequestBody(requestUuid, question, systemPrompt, addHistory)
+            ' 阶段三：若使用 RAG 或带意图，在 Chat 中显示简短提示
+            Dim ragCount As Integer = 0
+            If addHistory AndAlso MemoryConfig.UseContextBuilder AndAlso (MemoryConfig.EnableUserProfile OrElse MemoryConfig.RagTopN > 0) Then
+                Dim mems = MemoryService.GetRelevantMemories(StripQuestion(question), MemoryConfig.RagTopN)
+                ragCount = If(mems IsNot Nothing, mems.Count, 0)
+            End If
+            If ragCount > 0 OrElse Not String.IsNullOrEmpty(intentDescription) Then
+                Dim intentEscaped As String = If(intentDescription, "").Replace("\", "\\").Replace("'", "\'").Replace(vbCr, " ").Replace(vbLf, " ")
+                Dim js As String = $"showContextHints({{ ragCount: {ragCount}, intent: '{intentEscaped}' }});"
+                ExecuteJavaScriptAsyncJS(js)
+            End If
             Await SendHttpRequestStream(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody, StripQuestion(question), requestUuid, addHistory, responseMode)
             Await SaveFullWebPageAsync2()
         Catch ex As Exception
@@ -2983,48 +3373,76 @@ Public MustInherit Class BaseChatControl
     Private Function CreateRequestBody(uuid As String, question As String, systemPrompt As String, addHistory As Boolean) As String
         Dim result As String = StripQuestion(question)
 
-        ' 构建 messages 数组（使用 JArray 确保正确的 JSON 序列化）
-        Dim messagesArray As New JArray()
+        ' 构建 messages 数组
+        Dim messagesArray As JArray = Nothing
+        Dim usedContextBuilder As Boolean = False
 
-        Dim systemMessage = New HistoryMessage() With {
-            .role = "system",
-            .content = systemPrompt
-        }
-        Dim q = New HistoryMessage() With {
-                .role = "user",
-                .content = result
-            }
+        ' 尝试使用 ContextBuilder 分层组装（Memory + Skills）
+        If addHistory AndAlso MemoryConfig.UseContextBuilder Then
+            Try
+                Dim appInfo = GetApplication()
+                Dim appType = If(appInfo IsNot Nothing, appInfo.Type.ToString(), "Excel")
+                Dim scenario = appType.ToLowerInvariant()
+                Dim sessionMsgs As New List(Of HistoryMessage)()
+                For Each m In systemHistoryMessageData
+                    If m.role <> "system" AndAlso Not String.IsNullOrEmpty(m.content) Then
+                        sessionMsgs.Add(m)
+                    End If
+                Next
+                Dim vars As New Dictionary(Of String, String)()
+                If _selectionPendingMap.ContainsKey(uuid) Then
+                    Dim sel = _selectionPendingMap(uuid)
+                    If sel IsNot Nothing AndAlso Not String.IsNullOrEmpty(sel.SelectedText) Then
+                        vars("选中内容") = sel.SelectedText
+                    End If
+                End If
+                Dim enableMem = MemoryConfig.EnableUserProfile OrElse MemoryConfig.RagTopN > 0
+                Dim built = ChatContextBuilder.BuildMessages(scenario, appType, result, sessionMsgs, result, systemPrompt, vars, enableMem)
+                messagesArray = New JArray()
+                For Each msg In built
+                    Dim msgObj = New JObject()
+                    msgObj("role") = msg.role
+                    msgObj("content") = If(msg.content, String.Empty)
+                    messagesArray.Add(msgObj)
+                Next
+                usedContextBuilder = True
 
-        If addHistory Then
-            ' 添加或替换 system 消息（保证只有一条 system）
-            Dim existingSystem = systemHistoryMessageData.FirstOrDefault(Function(m) m.role = "system")
-            If existingSystem IsNot Nothing Then
-                systemHistoryMessageData.Remove(existingSystem)
+                ' 更新本地 systemHistoryMessageData 与持久化
+                Dim existingSystem = systemHistoryMessageData.FirstOrDefault(Function(m) m.role = "system")
+                If existingSystem IsNot Nothing Then systemHistoryMessageData.Remove(existingSystem)
+                systemHistoryMessageData.Insert(0, New HistoryMessage With {.role = "system", .content = systemPrompt})
+                systemHistoryMessageData.Add(New HistoryMessage With {.role = "user", .content = result})
+                ManageHistoryMessageSize()
+                _chatStateService.AddMessage("user", result)
+            Catch ex As Exception
+                Debug.WriteLine("ContextBuilder 降级: " & ex.Message)
+                usedContextBuilder = False
+            End Try
+        End If
+
+        If Not usedContextBuilder Then
+            messagesArray = New JArray()
+            Dim systemMessage = New HistoryMessage() With {.role = "system", .content = systemPrompt}
+            Dim q = New HistoryMessage() With {.role = "user", .content = result}
+
+            If addHistory Then
+                Dim existingSystem = systemHistoryMessageData.FirstOrDefault(Function(m) m.role = "system")
+                If existingSystem IsNot Nothing Then systemHistoryMessageData.Remove(existingSystem)
+                systemHistoryMessageData.Insert(0, systemMessage)
+                systemHistoryMessageData.Add(q)
+                ManageHistoryMessageSize()
+                _chatStateService.AddMessage("user", result)
+
+                For Each message In systemHistoryMessageData
+                    Dim msgObj = New JObject()
+                    msgObj("role") = message.role
+                    msgObj("content") = If(message.content, String.Empty)
+                    messagesArray.Add(msgObj)
+                Next
+            Else
+                messagesArray.Add(New JObject() From {{"role", "system"}, {"content", If(systemPrompt, "")}})
+                messagesArray.Add(New JObject() From {{"role", "user"}, {"content", result}})
             End If
-            systemHistoryMessageData.Insert(0, systemMessage)
-            systemHistoryMessageData.Add(q)
-
-            ' 管理历史消息大小
-            ManageHistoryMessageSize()
-
-            ' 将历史消息转换为 JObject（自动处理所有特殊字符转义）
-            For Each message In systemHistoryMessageData
-                Dim msgObj = New JObject()
-                msgObj("role") = message.role
-                msgObj("content") = If(message.content, String.Empty)
-                messagesArray.Add(msgObj)
-            Next
-        Else
-            ' 仅使用当前消息，不添加历史
-            Dim tempMessageData As New List(Of HistoryMessage)
-            tempMessageData.Insert(0, systemMessage)
-            tempMessageData.Add(q)
-            For Each message In tempMessageData
-                Dim msgObj = New JObject()
-                msgObj("role") = message.role
-                msgObj("content") = If(message.content, String.Empty)
-                messagesArray.Add(msgObj)
-            Next
         End If
 
 
@@ -3349,6 +3767,24 @@ Public MustInherit Class BaseChatControl
             If addHistory Then
                 systemHistoryMessageData.Add(answer)
                 ManageHistoryMessageSize()
+                _chatStateService.AddMessage("assistant", answer.content)
+
+                ' 异步保存原子记忆（fire-and-forget），带上当前宿主便于按应用筛选
+                MemoryService.SaveAtomicMemoryAsync(originQuestion, answer.content, _chatStateService.CurrentSessionId, GetOfficeAppType())
+
+                ' 新会话首条回复后写入 session_summary（Task 9.2）
+                If systemHistoryMessageData.Count = 3 Then
+                    Dim sid = _chatStateService.CurrentSessionId
+                    Dim title = If(originQuestion?.Length > 80, originQuestion.Substring(0, 80) & "...", If(originQuestion, ""))
+                    Dim snippet = If(originQuestion?.Length > 200, originQuestion.Substring(0, 200) & "...", If(originQuestion, ""))
+                    If Not String.IsNullOrWhiteSpace(sid) AndAlso Not String.IsNullOrWhiteSpace(title) Then
+                        Try
+                            MemoryService.SaveSessionSummary(sid, title, snippet)
+                        Catch ex As Exception
+                            Debug.WriteLine("SaveSessionSummary 失败: " & ex.Message)
+                        End Try
+                    End If
+                End If
             End If
 
             allMarkdownBuffer.Clear()

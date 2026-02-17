@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -207,6 +207,9 @@
   </data>
   <data name="reformat_template" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\js\reformat-template.js;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
+  </data>
+  <data name="config_panel" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\js\config-panel.js;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
   </data>
   <data name="chat_template_refactored" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\chat-template-refactored.html;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>

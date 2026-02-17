@@ -604,10 +604,37 @@ window.openFileDialogFromVB = openFileDialogFromVB;
 window.addFilesFromDialog = addFilesFromDialog;
 window.initDragDrop = initDragDrop;
 
-// ========== 意图识别显示功能 ==========
+// ========== 阶段三：RAG / 意图在 Chat 中的体现 ==========
 
 /**
- * 显示检测到的意图
+ * 在聊天区域显示上下文提示：RAG 检索条数、识别到的意图（由 VB 在发请求前调用）
+ * @param {Object} options - { ragCount?: number, intent?: string }
+ */
+function showContextHints(options) {
+    try {
+        if (!options || (options.ragCount === undefined && !options.intent)) return;
+        const ragCount = options.ragCount || 0;
+        const intent = options.intent || '';
+        const parts = [];
+        if (ragCount > 0) parts.push('已根据当前问题检索 ' + ragCount + ' 条相关记忆');
+        if (intent) parts.push('识别意图：' + intent);
+        if (parts.length === 0) return;
+
+        const container = document.getElementById('chat-container');
+        if (!container) return;
+
+        const hintEl = document.createElement('div');
+        hintEl.className = 'context-hints';
+        hintEl.innerHTML = parts.map(p => '<span class="context-hint-item">' + escapeHtml(p) + '</span>').join('');
+        container.appendChild(hintEl);
+        hintEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch (err) {
+        console.error('showContextHints error:', err);
+    }
+}
+
+/**
+ * 显示检测到的意图（保留兼容，建议用 showContextHints({ intent: description })）
  * @param {string} intentType - 意图类型
  */
 function showDetectedIntent(intentType) {

@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -289,12 +289,13 @@
     <!-- 历史记录侧边栏 -->
     <div id="history-sidebar" class="sidebar-hidden">
         <div class="sidebar-header">
-            <h3>历史聊天记录</h3>
+            <h3>历史会话</h3>
+            <button id="new-session-btn" type="button" title="新会话" style="margin-right:8px; padding:4px 10px; background:#4a6fa5; color:white; border:none; border-radius:4px; cursor:pointer;">新会话</button>
             <button id="close-sidebar-btn" title="关闭">×</button>
         </div>
         <div class="sidebar-content">
             <div id="history-list">
-                <!-- 历史记录列表将在这里动态加载 -->
+                <!-- 会话列表将在这里动态加载 -->
             </div>
         </div>
     </div>
@@ -383,9 +384,88 @@
             <div class="setting-tip">单条回复记录对话数，每次想让ai记住历史多少条对话</div>
         </div>
 
+        <div class="setting-item" style="border-top:1px solid #eee; padding-top:12px;">
+            <label class="setting-label">配置</label>
+            <div style="margin-top:8px;">
+                <button type="button" id="btn-config-skills" class="config-entry-btn">场景与 Skills</button>
+                <button type="button" id="btn-config-memory" class="config-entry-btn">记忆管理</button>
+            </div>
+            <div class="setting-tip">在 Chat 内管理提示词、Skills 与记忆，无需单独打开配置窗口</div>
+        </div>
+
         <div class="settings-buttons">
             <button class="settings-button cancel-button" id="settings-cancel" onclick="settingsCancel()">取消</button>
             <button class="settings-button save-button" id="settings-save" onclick="settingsSave()">保存</button>
+        </div>
+    </div>
+
+    <!-- 配置面板：场景与 Skills / 记忆管理（阶段二） -->
+    <div class="overlay" id="config-panel-overlay" style="display:none;"></div>
+    <div id="config-panel" class="config-panel" style="display:none;">
+        <div class="config-panel-header">
+            <span class="config-panel-title">配置</span>
+            <button type="button" id="config-panel-close" class="config-panel-close">×</button>
+        </div>
+        <div class="config-panel-tabs">
+            <button type="button" class="config-tab active" data-tab="skills">场景与 Skills</button>
+            <button type="button" class="config-tab" data-tab="memory">记忆管理</button>
+        </div>
+        <div id="config-tab-skills" class="config-tab-content">
+            <div class="config-section config-section-row">
+                <label class="config-label">场景</label>
+                <select id="config-skills-scenario" class="config-select" title="当前应用下可用的场景，common 为通用"></select>
+                <button type="button" id="config-skills-refresh" class="config-btn config-btn-secondary">刷新</button>
+                <button type="button" id="config-skills-import-folder" class="config-btn config-btn-secondary" title="选择包含 .json/.md Skill 文件的文件夹批量导入">从文件夹导入</button>
+            </div>
+            <div class="config-split">
+                <div class="config-list-wrap">
+                    <div id="config-skills-list" class="config-list"></div>
+                </div>
+                <div class="config-editor-wrap">
+                    <div class="config-editor-field">
+                        <label>名称</label>
+                        <input type="text" id="config-skills-name" placeholder="模板名称">
+                    </div>
+                    <div class="config-editor-field">
+                        <label>内容</label>
+                        <textarea id="config-skills-content" rows="8" placeholder="提示词或 Skill 内容"></textarea>
+                    </div>
+                    <div class="config-editor-field">
+                        <label><input type="checkbox" id="config-skills-isskill"> 是 Skill</label>
+                    </div>
+                    <div class="config-editor-field" id="config-skills-supported-wrap" style="display:none;">
+                        <label>supported_apps</label>
+                        <input type="text" id="config-skills-supported" placeholder="Excel,Word,PowerPoint">
+                    </div>
+                    <div class="config-editor-actions">
+                        <button type="button" id="config-skills-save" class="config-btn-primary">保存</button>
+                        <button type="button" id="config-skills-delete">删除</button>
+                        <button type="button" id="config-skills-new">新建</button>
+                    </div>
+                    <p class="config-hint">可参考官方 Skill 规范，将 .json / .md 文件放入同一文件夹后使用「从文件夹导入」批量添加。</p>
+                </div>
+            </div>
+        </div>
+        <div id="config-tab-memory" class="config-tab-content" style="display:none;">
+            <div class="config-memory-section">
+                <h4 class="config-section-heading">记忆片段 <span class="config-section-desc" title="从对话中自动提取的要点，用于 RAG 检索，仅显示当前应用下的记录">（最近 100 条）</span></h4>
+                <div class="config-split config-memory-split">
+                    <div class="config-list-wrap">
+                        <div id="config-memory-atomic-list" class="config-list"></div>
+                        <button type="button" id="config-memory-atomic-refresh">刷新</button>
+                    </div>
+                    <div class="config-editor-wrap">
+                        <textarea id="config-memory-atomic-content" rows="6" readonly placeholder="选中一项查看内容"></textarea>
+                        <button type="button" id="config-memory-atomic-delete">删除选中</button>
+                    </div>
+                </div>
+            </div>
+            <div class="config-memory-section">
+                <h4 class="config-section-heading">用户画像 <span class="config-section-desc" title="固定注入到上下文的背景信息，如您的角色、偏好、常用表述，便于 AI 更懂您">（可选）</span></h4>
+                <textarea id="config-memory-profile" rows="6" placeholder="例如：我是财务人员，常用 Excel 做报表；希望回答简洁、带示例"></textarea>
+                <button type="button" id="config-memory-profile-save">保存</button>
+                <button type="button" id="config-memory-profile-clear">清空</button>
+            </div>
         </div>
     </div>
 
@@ -415,6 +495,7 @@
     <script src="https://officeai.local/js/settings-manager.js"></script>
     <script src="https://officeai.local/js/mcp-manager.js"></script>
     <script src="https://officeai.local/js/history-manager.js"></script>
+    <script src="https://officeai.local/js/config-panel.js"></script>
     <script src="https://officeai.local/js/revision-manager.js"></script>
     <script src="https://officeai.local/js/autocomplete.js"></script>
     <script src="https://officeai.local/js/intent-preview.js"></script>
@@ -425,6 +506,11 @@
 
     <!-- 工具函数 -->
     <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            if (window.configPanel && typeof window.configPanel.init === 'function') {
+                window.configPanel.init();
+            }
+        });
         // 设置输入框文本（由VB.NET调用）
         function setInputText(text) {
             var smartInput = document.getElementById('smart-input');

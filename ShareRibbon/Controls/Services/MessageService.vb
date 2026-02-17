@@ -71,7 +71,7 @@ Public Class MessageService
                 Case "saveMcpSettings"
                     HandleSaveMcpSettings(jsonDoc)
                 Case "clearContext"
-                    _stateService.ClearHistory()
+                    _stateService.StartNewSession()
                 Case "acceptAnswer"
                     HandleAcceptAnswer(jsonDoc)
                 Case "rejectAnswer"

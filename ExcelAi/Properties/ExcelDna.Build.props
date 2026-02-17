@@ -64,9 +64,13 @@
   -->
   <PropertyGroup>
     <!--
-      Enable/Disable packing of .dna files
+      Enable/Disable packing of .dna files.
+      Debug: 禁用 Pack，避免 Excel 加载 xll 时构建失败（"could not be deleted"）
+      Release: 启用 Pack 生成 -packed.xll 用于分发
     -->
-    <RunExcelDnaPack Condition="'$(RunExcelDnaPack)' == ''">true</RunExcelDnaPack>
+    <!-- Debug/其他: false 避免 xll 被 Excel 加载时构建失败 -->
+    <RunExcelDnaPack Condition="'$(RunExcelDnaPack)' == ''">false</RunExcelDnaPack>
+    <RunExcelDnaPack Condition="'$(Configuration)' == 'Release'">true</RunExcelDnaPack>
 
     <!--
       Suffix used for packed .xll files e.g. MyAddIn-packed.xll

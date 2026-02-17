@@ -259,6 +259,43 @@ window.clearAllChats = function () {
     }
 };
 
+// 供 VB 调用：清空当前聊天区域（新会话）
+window.clearChatContent = function () {
+    return window.clearAllChats ? window.clearAllChats() : false;
+};
+
+// 供 VB 调用：加载历史会话消息并渲染
+window.setChatMessages = function (messages) {
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+        if (window.clearChatContent) window.clearChatContent();
+        return;
+    }
+    if (window.clearChatContent) window.clearChatContent();
+    const chatContainer = document.getElementById('chat-container');
+    if (!chatContainer) return;
+    for (let i = 0; i < messages.length; i++) {
+        const m = messages[i];
+        const role = (m.role || '').toLowerCase();
+        const sender = role === 'user' ? 'Me' : 'AI';
+        const createTime = m.createTime || new Date().toLocaleString('zh-CN');
+        const uuid = 'hist-' + i + '-' + Date.now();
+        if (typeof createChatSection === 'function') {
+            createChatSection(sender, createTime, uuid);
+        }
+        const contentEl = document.getElementById('content-' + uuid);
+        if (contentEl && typeof marked !== 'undefined') {
+            try {
+                contentEl.innerHTML = marked.parse(m.content || '');
+            } catch (e) {
+                contentEl.textContent = m.content || '';
+            }
+        }
+    }
+    if (window.autoScrollEnabled !== false && chatContainer.lastElementChild) {
+        chatContainer.lastElementChild.scrollIntoView({ behavior: 'smooth' });
+    }
+};
+
 // Get full chat container HTML
 window.getFullChatHTML = function () {
     const chatContainer = document.getElementById('chat-container');

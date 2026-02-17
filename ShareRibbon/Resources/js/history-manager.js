@@ -12,11 +12,18 @@ window.historyManager = {
         const sidebar = document.getElementById('history-sidebar');
         const overlay = document.getElementById('sidebar-overlay');
         const closeBtn = document.getElementById('close-sidebar-btn');
+        const newSessionBtn = document.getElementById('new-session-btn');
 
         // Bind events
         toggleBtn.addEventListener('click', () => this.toggleSidebar());
         closeBtn.addEventListener('click', () => this.closeSidebar());
         overlay.addEventListener('click', () => this.closeSidebar());
+        if (newSessionBtn) {
+            newSessionBtn.addEventListener('click', () => {
+                this.sendMessageToVB({ type: 'newSession' });
+                this.closeSidebar();
+            });
+        }
 
         // Keyboard event
         document.addEventListener('keydown', (e) => {
@@ -71,13 +78,13 @@ window.historyManager = {
         // Show loading state
         historyList.innerHTML = '<div class="loading-state">正在加载历史记录...</div>';
 
-        // Request history files from backend
+        // Request session list from backend (conversation/session_summary)
         this.sendMessageToVB({
-            type: 'getHistoryFiles'
+            type: 'getSessionList'
         });
     },
 
-    // Display history files from backend
+    // Display session list or history files from backend
     displayHistoryFiles: function (files) {
         const historyList = document.getElementById('history-list');
 
@@ -85,25 +92,57 @@ window.historyManager = {
             historyList.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-state-icon">📄</div>
-                    <div class="empty-state-text">您还没有任何历史记录</div>
+                    <div class="empty-state-text">您还没有任何历史会话</div>
                 </div>
             `;
             return;
         }
 
-        // Sort by filename (newest first)
-        files.sort((a, b) => b.fileName.localeCompare(a.fileName));
+        // 会话列表（含 sessionId）：按时间倒序
+        if (files[0] && files[0].sessionId !== undefined) {
+            files.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+            const itemsHtml = files.map(s => {
+                const title = (s.title || '会话').replace(/'/g, "\\'");
+                const sid = (s.sessionId || '').replace(/'/g, "\\'");
+                return `<div class="history-item" data-session-id="${s.sessionId}" onclick="historyManager.loadSession('${sid}')">
+                    <div class="history-item-title">${this.escapeHtml(title)}</div>
+                    <div class="history-item-date">${this.formatSessionDate(s.createdAt)}</div>
+                </div>`;
+            }).join('');
+            historyList.innerHTML = itemsHtml;
+            return;
+        }
 
-        // Generate file list HTML
+        // 兼容：旧版文件列表
+        files.sort((a, b) => (b.fileName || '').localeCompare(a.fileName || ''));
         const itemsHtml = files.map(file => `
-            <div class="history-item" onclick="historyManager.openHistoryFile('${file.fullPath.replace(/\\/g, '\\\\')}')">
+            <div class="history-item" onclick="historyManager.openHistoryFile('${(file.fullPath || '').replace(/\\/g, '\\\\')}')">
                 <div class="history-item-title">${this.formatFileName(file.fileName)}</div>
                 <div class="history-item-date">${this.formatFileDate(file.fileName)}</div>
                 <div class="history-item-size">${this.formatFileSize(file.size)}</div>
             </div>
         `).join('');
-
         historyList.innerHTML = itemsHtml;
+    },
+
+    escapeHtml: function (text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    },
+
+    formatSessionDate: function (createdAt) {
+        if (!createdAt) return '未知时间';
+        return String(createdAt).replace('T', ' ').substring(0, 19);
+    },
+
+    loadSession: function (sessionId) {
+        this.sendMessageToVB({
+            type: 'loadSession',
+            sessionId: sessionId
+        });
+        this.closeSidebar();
     },
 
     // Format filename for display

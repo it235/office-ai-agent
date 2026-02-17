@@ -264,9 +264,55 @@ Public Class PowerPointDocumentTranslateService
                 Try
                     Dim originalSlide = _presentation.Slides(slideIdx)
 
-                    ' 复制当前幻灯片到其后面
-                    originalSlide.Copy()
-                    Dim newSlide = _presentation.Slides.Paste(slideIdx + 1)(1)
+                    ' 使用Duplicate方法完整复制幻灯片（包括所有背景格式）
+                    Dim newSlide As Slide = Nothing
+                    Try
+                        ' Duplicate会在原幻灯片后面创建完全相同的副本
+                        newSlide = originalSlide.Duplicate()(1)
+                        
+                        ' 将新幻灯片移动到正确的位置
+                        If newSlide.SlideIndex <> slideIdx + 1 Then
+                            newSlide.MoveTo(slideIdx + 1)
+                        End If
+                    Catch dupEx As Exception
+                        Debug.WriteLine($"Duplicate幻灯片 {slideIdx} 失败: {dupEx.Message}")
+                        ' 如果Duplicate失败，尝试使用Copy/Paste作为后备方案
+                        Try
+                            originalSlide.Copy()
+                            newSlide = _presentation.Slides.Paste(slideIdx + 1)(1)
+                            
+                            ' 手动复制背景格式
+                            If originalSlide.FollowMasterBackground = Microsoft.Office.Core.MsoTriState.msoFalse Then
+                                newSlide.FollowMasterBackground = Microsoft.Office.Core.MsoTriState.msoFalse
+                                If originalSlide.Background.Fill.Visible = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                                    newSlide.Background.Fill.Visible = Microsoft.Office.Core.MsoTriState.msoTrue
+                                    Select Case originalSlide.Background.Fill.Type
+                                        Case Microsoft.Office.Core.MsoFillType.msoFillSolid
+                                            newSlide.Background.Fill.Solid()
+                                            newSlide.Background.Fill.ForeColor.RGB = originalSlide.Background.Fill.ForeColor.RGB
+                                        Case Microsoft.Office.Core.MsoFillType.msoFillPatterned
+                                            newSlide.Background.Fill.Patterned(originalSlide.Background.Fill.Pattern)
+                                            newSlide.Background.Fill.ForeColor.RGB = originalSlide.Background.Fill.ForeColor.RGB
+                                            newSlide.Background.Fill.BackColor.RGB = originalSlide.Background.Fill.BackColor.RGB
+                                        Case Microsoft.Office.Core.MsoFillType.msoFillGradient
+                                            ' 渐变填充需要复制更多属性
+                                            ' 由于渐变属性复杂，这里依赖Paste的自动复制
+                                        Case Microsoft.Office.Core.MsoFillType.msoFillTextured
+                                            ' 纹理填充
+                                        Case Microsoft.Office.Core.MsoFillType.msoFillPicture
+                                            ' 图片填充
+                                    End Select
+                                End If
+                            Else
+                                newSlide.FollowMasterBackground = Microsoft.Office.Core.MsoTriState.msoTrue
+                            End If
+                        Catch copyEx As Exception
+                            Debug.WriteLine($"Copy/Paste幻灯片 {slideIdx} 也失败: {copyEx.Message}")
+                            Continue For
+                        End Try
+                    End Try
+
+                    If newSlide Is Nothing Then Continue For
 
                     ' 在新幻灯片上替换为译文
                     Dim slideItems = slideResults(slideIdx)

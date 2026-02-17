@@ -42,6 +42,9 @@ Public Class ChatStateService
         Private _isFirstMessage As Boolean = True
         Private _chatHtmlFilePath As String = String.Empty
 
+        ' 当前会话 ID（用于持久化到 conversation 表）
+        Private _currentSessionId As String = Nothing
+
 #Region "属性"
 
         ''' <summary>
@@ -125,6 +128,18 @@ Public Class ChatStateService
             End Get
         End Property
 
+        ''' <summary>
+        ''' 当前会话 ID，新建会话时生成 GUID
+        ''' </summary>
+        Public ReadOnly Property CurrentSessionId As String
+            Get
+                If String.IsNullOrEmpty(_currentSessionId) Then
+                    _currentSessionId = Guid.NewGuid().ToString()
+                End If
+                Return _currentSessionId
+            End Get
+        End Property
+
 #End Region
 
 #Region "历史管理"
@@ -139,6 +154,15 @@ Public Class ChatStateService
                 .Timestamp = DateTime.Now
             })
             ManageHistorySize()
+
+            ' 持久化到 conversation 表
+            If role = "user" OrElse role = "assistant" Then
+                Try
+                    ConversationRepository.InsertMessage(CurrentSessionId, role, content, False)
+                Catch ex As Exception
+                    Debug.WriteLine("ConversationRepository.InsertMessage 失败: " & ex.Message)
+                End Try
+            End If
         End Sub
 
         ''' <summary>
@@ -172,6 +196,48 @@ Public Class ChatStateService
         ''' </summary>
         Public Sub ClearHistory()
             _historyMessages.Clear()
+        End Sub
+
+        ''' <summary>
+        ''' 新建会话：生成新 session_id，清空缓冲区
+        ''' </summary>
+        Public Sub StartNewSession()
+            _currentSessionId = Guid.NewGuid().ToString()
+            _historyMessages.Clear()
+            _firstQuestion = String.Empty
+            _isFirstMessage = True
+            _chatHtmlFilePath = String.Empty
+            ClearBuffers()
+            ResetSessionTokens()
+        End Sub
+
+        ''' <summary>
+        ''' 切换到指定会话：从 conversation 表加载该会话消息并设为当前会话
+        ''' </summary>
+        Public Sub SwitchToSession(sessionId As String)
+            If String.IsNullOrEmpty(sessionId) Then Return
+            _currentSessionId = sessionId
+            _historyMessages.Clear()
+            _firstQuestion = String.Empty
+            _isFirstMessage = False
+            _chatHtmlFilePath = String.Empty
+            ClearBuffers()
+            ResetSessionTokens()
+            Try
+                Dim messages = ConversationRepository.GetMessagesBySession(sessionId)
+                For Each dto In messages
+                    Dim ts As DateTime = DateTime.Now
+                    DateTime.TryParse(dto.CreateTime, ts)
+                    _historyMessages.Add(New HistoryMessage With {
+                        .role = dto.Role,
+                        .content = dto.Content,
+                        .Timestamp = ts
+                    })
+                Next
+                ManageHistorySize()
+            Catch ex As Exception
+                Debug.WriteLine("SwitchToSession 加载消息失败: " & ex.Message)
+            End Try
         End Sub
 
         ''' <summary>
