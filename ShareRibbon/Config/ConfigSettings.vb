@@ -8,7 +8,10 @@ Public Class ConfigSettings
     Public Shared Property ApiKey As String
     Public Shared Property ModelName As String
     Public Shared Property mcpable As Boolean
-    
+
+    ' Embedding 模型配置
+    Public Shared Property EmbeddingModel As String = "text-embedding-3-small"
+
     ' FIM (Fill-In-the-Middle) 补全能力
     Public Shared Property fimSupported As Boolean = False
     Public Shared Property fimUrl As String = ""

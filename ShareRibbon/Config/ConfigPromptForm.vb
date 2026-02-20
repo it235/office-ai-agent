@@ -1,6 +1,5 @@
-Imports System.Drawing
+﻿Imports System.Drawing
 Imports System.IO
-Imports System.Reflection
 Imports System.Text
 Imports System.Windows.Forms
 Imports Newtonsoft.Json
@@ -61,7 +60,7 @@ Public Class ConfigPromptForm
 
     ' 默认提示词
     Private ReadOnly DEFAULT_PROMPTS As New Dictionary(Of String, String) From {
-        {"Excel", "你是一名Excel专家，擅长数据分析、公式计算和VBA编程。如果用户需求明确，返回JSON命令执行操作；如果需求不明确，请先询问澄清。"},
+        {"Excel", "你是一名Excel专家，擅长数据分析、公式计算。如果用户需求明确，返回JSON命令执行操作；如果需求不明确，请先询问澄清。"},
         {"Word", "你是一名Word文档专家，擅长文档编辑、格式排版和内容生成。如果用户需求明确，返回JSON命令执行操作；如果需求不明确，请先询问澄清。"},
         {"PowerPoint", "你是一名PowerPoint演示专家，擅长幻灯片设计、动画效果和内容创作。如果用户需求明确，返回JSON命令执行操作；如果需求不明确，请先询问澄清。"}
     }
@@ -109,41 +108,6 @@ Public Class ConfigPromptForm
         tabQuickQuestions = New TabPage("快捷问题")
         InitializeQuickQuestionsTab()
         tabControl.TabPages.Add(tabQuickQuestions)
-
-        ' 场景与 Skills 配置页（prompt_template 表）
-        Dim tabSkills As New TabPage("场景与Skills")
-        Dim btnSkills As New Button() With {.Text = "打开 Skills 配置", .Location = New Point(15, 15), .Size = New Size(150, 28)}
-        AddHandler btnSkills.Click, Sub(s, ev)
-                                        Try
-                                            Using f As New SkillsConfigForm()
-                                                f.ShowDialog()
-                                            End Using
-                                        Catch ex As Exception
-                                            Dim msg = GetFullExceptionMessage(ex)
-                                            MessageBox.Show("打开 Skills 配置失败：" & vbCrLf & msg, "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning)
-                                        End Try
-                                    End Sub
-        tabSkills.Controls.Add(btnSkills)
-        Dim btnMemoryConfig As New Button() With {.Text = "记忆配置", .Location = New Point(175, 15), .Size = New Size(100, 28)}
-        AddHandler btnMemoryConfig.Click, Sub(s, ev)
-                                             Using f As New MemoryConfigForm()
-                                                 f.ShowDialog()
-                                             End Using
-                                         End Sub
-        tabSkills.Controls.Add(btnMemoryConfig)
-        Dim btnMemoryManage As New Button() With {.Text = "记忆管理", .Location = New Point(285, 15), .Size = New Size(100, 28)}
-        AddHandler btnMemoryManage.Click, Sub(s, ev)
-                                             Try
-                                                 Using f As New MemoryManageForm()
-                                                     f.ShowDialog()
-                                                 End Using
-                                             Catch ex As Exception
-                                                 Dim msg = GetFullExceptionMessage(ex)
-                                                 MessageBox.Show("打开记忆管理失败：" & vbCrLf & msg, "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning)
-                                             End Try
-                                         End Sub
-        tabSkills.Controls.Add(btnMemoryManage)
-        tabControl.TabPages.Add(tabSkills)
 
         Me.Controls.Add(tabControl)
 
@@ -779,27 +743,7 @@ Public Class ConfigPromptForm
         End Get
     End Property
 
-    ''' <summary>
-    ''' 获取完整异常信息，便于 WPS 等环境下诊断程序集加载失败
-    ''' </summary>
-    Private Shared Function GetFullExceptionMessage(ex As Exception) As String
-        Dim sb As New StringBuilder()
-        Dim current As Exception = ex
-        Dim depth As Integer = 0
-        While current IsNot Nothing AndAlso depth < 5
-            If depth > 0 Then sb.Append(" <- ")
-            sb.Append(current.GetType().Name).Append(": ").Append(current.Message)
-            Dim rtl = TryCast(current, ReflectionTypeLoadException)
-            If rtl IsNot Nothing AndAlso rtl.LoaderExceptions IsNot Nothing Then
-                For Each le In rtl.LoaderExceptions
-                    If le IsNot Nothing Then sb.Append(" [加载失败: ").Append(le.Message).Append("]")
-                Next
-            End If
-            current = current.InnerException
-            depth += 1
-        End While
-        Return sb.ToString()
-    End Function
+
 
     ' 提示词配置项
     Public Class PromptConfigItem

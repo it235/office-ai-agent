@@ -1,4 +1,4 @@
-' ShareRibbon\Controls\BaseChatControl.vb
+﻿' ShareRibbon\Controls\BaseChatControl.vb
 Imports System.Diagnostics
 Imports System.Drawing
 Imports System.IO
@@ -312,6 +312,25 @@ Public MustInherit Class BaseChatControl
 
     Protected Sub InitializeSettings()
         Try
+            ' 确保记忆功能配置是开启的（默认）
+            Debug.WriteLine($"[InitializeSettings] 初始化记忆配置...")
+            Debug.WriteLine($"[InitializeSettings] UseContextBuilder: {MemoryConfig.UseContextBuilder}")
+            Debug.WriteLine($"[InitializeSettings] RagTopN: {MemoryConfig.RagTopN}")
+            Debug.WriteLine($"[InitializeSettings] EnableUserProfile: {MemoryConfig.EnableUserProfile}")
+            
+            ' 如果 UseContextBuilder 是关闭的，我们强制开启它
+            If Not MemoryConfig.UseContextBuilder Then
+                Debug.WriteLine($"[InitializeSettings] UseContextBuilder 未开启，强制开启...")
+                MemoryConfig.UseContextBuilder = True
+            End If
+            
+            ' 确保 RagTopN 至少是 5
+            If MemoryConfig.RagTopN < 3 Then
+                MemoryConfig.RagTopN = 5
+            End If
+            
+            Debug.WriteLine($"[InitializeSettings] 记忆配置已确保开启: UseContextBuilder={MemoryConfig.UseContextBuilder}, RagTopN={MemoryConfig.RagTopN}")
+
             ' 加载设置
             Dim chatSettings As New ChatSettings(GetApplication())
             selectedCellChecked = ChatSettings.selectedCellChecked
@@ -1767,6 +1786,11 @@ Public MustInherit Class BaseChatControl
 
                          fileContentBuilder.AppendLine("--- 文件内容结束 ---" & vbCrLf)
 
+                         ' 文件解析完成，先保存到记忆（同步保存确保立即可检索），再在主线程继续处理消息
+                         Dim appTypeForMemory = GetOfficeAppType()
+                         Dim sessionIdForMemory = If(_chatStateService?.CurrentSessionId, Guid.NewGuid().ToString())
+                         MemoryService.SaveFileContentToMemory(originalQuestion, fileContentBuilder.ToString(), sessionIdForMemory, appTypeForMemory)
+
                          ' 文件解析完成，在主线程继续处理消息
                          Me.Invoke(Sub()
                                        GlobalStatusStrip.ShowInfo($"文件解析完成，共解析 {parsedFiles.Count} 个文件")
@@ -1811,6 +1835,12 @@ Public MustInherit Class BaseChatControl
         ' 然后添加文件内容（如果有）
         If Not String.IsNullOrEmpty(fileContent) Then
             finalMessageToLLM &= fileContent
+        End If
+
+        ' 首先保存用户消息到历史记录（确保即便是意图预览模式，用户消息也会被保存）
+        If Not String.IsNullOrWhiteSpace(originalQuestion) Then
+            _chatStateService?.AddMessage("user", originalQuestion)
+            Debug.WriteLine($"已保存用户消息到ChatStateService: {originalQuestion}")
         End If
 
         stopReaderStream = False ' Reset stop flag before sending new message
@@ -1895,6 +1925,7 @@ Public MustInherit Class BaseChatControl
                                  _pendingIntentMessage = finalMessageToLLM
                                  _pendingIntentResult = CurrentIntentResult
                                  _pendingFilePaths = filePaths
+                                 _pendingIntentUserInput = originalQuestion
 
                                  ' 构建意图预览数据并发送给前端
                                  Dim clarification = IntentService.GenerateIntentClarification(originalQuestion, contextSnapshot)
@@ -1974,6 +2005,7 @@ Public MustInherit Class BaseChatControl
                 _pendingIntentMessage = Nothing
                 _pendingIntentResult = Nothing
                 _pendingFilePaths = Nothing
+                _pendingIntentUserInput = Nothing
                 Task.Run(Async Function()
                              Try
                                  Dim goal = If(String.IsNullOrWhiteSpace(intent.OriginalInput), intent.UserFriendlyDescription, intent.OriginalInput)
@@ -2000,6 +2032,7 @@ Public MustInherit Class BaseChatControl
             _pendingIntentMessage = Nothing
             _pendingIntentResult = Nothing
             _pendingFilePaths = Nothing
+            _pendingIntentUserInput = Nothing
             GlobalStatusStrip.ShowInfo("已确认意图，正在处理...")
         Catch ex As Exception
             Debug.WriteLine($"HandleConfirmIntent 出错: {ex.Message}")
@@ -2007,12 +2040,22 @@ Public MustInherit Class BaseChatControl
         End Try
     End Sub
 
+    ' 用于暂存待确认意图时的用户消息（以便取消时可以从历史中移除）
+    Private _pendingIntentUserInput As String = Nothing
+
     ''' <summary>
     ''' 处理用户取消意图
     ''' </summary>
     Protected Sub HandleCancelIntent()
         Try
             Debug.WriteLine("用户取消意图")
+
+            ' 如果有暂存的用户输入，从ChatStateService中移除
+            If Not String.IsNullOrEmpty(_pendingIntentUserInput) Then
+                ' 这里需要ChatStateService有移除最后一条消息的方法，如果没有就只能忽略
+                Debug.WriteLine("用户取消意图，之前的用户消息不会从历史中移除")
+                _pendingIntentUserInput = Nothing
+            End If
 
             ' 清空待确认状态
             _pendingIntentMessage = Nothing
@@ -2204,12 +2247,19 @@ Public MustInherit Class BaseChatControl
     ''' 获取应用类型（子类重写）
     ''' </summary>
     Protected Overridable Function GetApplicationType() As String
-        Return "Office"
+        Dim appInfo = GetApplication()
+        Dim appType = If(appInfo IsNot Nothing, appInfo.Type.ToString(), "Excel")
+        Return appType
     End Function
 
 #End Region
 
 #Region "Ralph Agent 智能助手"
+
+    ' Agent思考消息的UUID
+    Private _agentThinkingUuid As String = Nothing
+    ' Agent的原始用户请求（用于保存到历史记录）
+    Private _agentOriginalUserRequest As String = Nothing
 
     ''' <summary>
     ''' 初始化Agent控制器
@@ -2220,7 +2270,11 @@ Public MustInherit Class BaseChatControl
 
             ' 设置回调
             _ralphAgentController.OnStatusChanged = Sub(status)
-                                                        ExecuteJavaScriptAsyncJS($"updateAgentStatus('{_ralphAgentController.GetCurrentSession()?.Id}', 'running', '{EscapeJavaScriptString(status)}')")
+                                                        ' 只有在Agent模式下且有思考UUID时才更新
+                                                        Dim currentChatMode As String = ChatSettings.chatMode
+                                                        If currentChatMode = "agent" AndAlso Not String.IsNullOrEmpty(_agentThinkingUuid) Then
+                                                            ExecuteJavaScriptAsyncJS($"var thinkingDiv = document.getElementById('content-{_agentThinkingUuid}'); if(thinkingDiv) thinkingDiv.innerHTML = '<div style=""padding: 8px 0; color: #2563eb;"">⚡ {EscapeJavaScriptString(status)}</div>';")
+                                                        End If
                                                     End Sub
 
             _ralphAgentController.OnStepStarted = Sub(stepIndex, desc)
@@ -2233,6 +2287,43 @@ Public MustInherit Class BaseChatControl
                                                     End Sub
 
             _ralphAgentController.OnAgentCompleted = Sub(success)
+                                                         ' 保存用户消息到历史
+                                                         If Not String.IsNullOrWhiteSpace(_agentOriginalUserRequest) Then
+                                                             ' 保存到 systemHistoryMessageData（主要历史记录）
+                                                             systemHistoryMessageData.Add(New HistoryMessage With {
+                                                                 .role = "user",
+                                                                 .content = _agentOriginalUserRequest
+                                                             })
+                                                             ManageHistoryMessageSize()
+                                                             ' 同时也保存到 ChatStateService
+                                                             _chatStateService?.AddMessage("user", _agentOriginalUserRequest)
+                                                             Debug.WriteLine($"[Agent] 已保存用户消息到历史: {_agentOriginalUserRequest}")
+                                                         End If
+
+                                                         ' 保存 Assistant 回复到历史
+                                                         Dim session = _ralphAgentController.GetCurrentSession()
+                                                         If session IsNot Nothing Then
+                                                             Dim assistantReply = If(String.IsNullOrEmpty(session.Summary), "任务完成", session.Summary)
+                                                             If Not String.IsNullOrEmpty(session.Understanding) Then
+                                                                 assistantReply = session.Understanding & vbCrLf & vbCrLf & assistantReply
+                                                             End If
+                                                             ' 保存到 systemHistoryMessageData（主要历史记录）
+                                                             systemHistoryMessageData.Add(New HistoryMessage With {
+                                                                 .role = "assistant",
+                                                                 .content = assistantReply
+                                                             })
+                                                             ManageHistoryMessageSize()
+                                                             ' 同时也保存到 ChatStateService
+                                                             _chatStateService?.AddMessage("assistant", assistantReply)
+                                                             Debug.WriteLine($"[Agent] 已保存Assistant回复到历史")
+
+                                                             ' 异步保存到原子记忆
+                                                             MemoryService.SaveAtomicMemoryAsync(_agentOriginalUserRequest, assistantReply, _chatStateService.CurrentSessionId, GetOfficeAppType())
+                                                         End If
+
+                                                         ' 清除临时变量
+                                                         _agentOriginalUserRequest = Nothing
+
                                                          ExecuteJavaScriptAsyncJS($"completeAgent('{_ralphAgentController.GetCurrentSession()?.Id}', {success.ToString().ToLower()}, '')")
                                                      End Sub
 
@@ -2254,33 +2345,65 @@ Public MustInherit Class BaseChatControl
     Protected Async Sub HandleStartAgent(jsonDoc As JObject)
         Try
             Dim request = jsonDoc("request")?.ToString()
-            If String.IsNullOrEmpty(request) Then
-                GlobalStatusStrip.ShowWarning("请输入任务描述")
+            Dim filePathsToken = jsonDoc("filePaths")
+            Dim selectedContentToken = jsonDoc("selectedContent")
+
+            If String.IsNullOrEmpty(request) AndAlso (filePathsToken Is Nothing OrElse filePathsToken.Type <> JTokenType.Array) AndAlso (selectedContentToken Is Nothing OrElse selectedContentToken.Type <> JTokenType.Array) Then
+                GlobalStatusStrip.ShowWarning("请输入任务描述或添加文件引用")
                 Return
             End If
 
             Debug.WriteLine($"[RalphAgent] 启动Agent，需求: {request}")
 
+            ' 保存原始用户请求，等 Agent 完成后一起保存到历史
+            _agentOriginalUserRequest = request
+
+            ' 解析文件路径和选中内容
+            Dim filePaths As New List(Of String)()
+            Dim selectedContents As New List(Of SendMessageReferenceContentItem)()
+
+            If filePathsToken IsNot Nothing AndAlso filePathsToken.Type = JTokenType.Array Then
+                filePaths = filePathsToken.ToObject(Of List(Of String))()
+                Debug.WriteLine($"[RalphAgent] 收到 {filePaths.Count} 个文件引用")
+            End If
+
+            If selectedContentToken IsNot Nothing AndAlso selectedContentToken.Type = JTokenType.Array Then
+                Try
+                    selectedContents = selectedContentToken.ToObject(Of List(Of SendMessageReferenceContentItem))()
+                    Debug.WriteLine($"[RalphAgent] 收到 {selectedContents.Count} 个选中内容引用")
+                Catch ex As Exception
+                    Debug.WriteLine($"Error deserializing selectedContent: {ex.Message}")
+                End Try
+            End If
+
             ' 初始化控制器
             InitializeAgentController()
 
-            ' 获取当前Office内容
-            Dim appType = GetApplicationType()
-            Dim currentContent = GetCurrentOfficeContent()
+            ' 先在聊天界面显示AI正在思考的消息
+            _agentThinkingUuid = Guid.NewGuid().ToString()
+            Dim now = DateTime.Now
+            Dim timestamp = now.ToString("yyyy-MM-dd HH:mm:ss")
+            ' 创建AI消息section
+            ExecuteJavaScriptAsyncJS($"createChatSection('AI', '{timestamp}', '{_agentThinkingUuid}')")
+            ' 显示思考状态
+            ExecuteJavaScriptAsyncJS($"var thinkingDiv = document.getElementById('content-{_agentThinkingUuid}'); if(thinkingDiv) thinkingDiv.innerHTML = '<div class=""thinking-indicator""><div class=""thinking-dots""><span></span><span></span><span></span></div><span style=""margin-left: 12px; color: #6c757d;"">正在分析您的需求...</span></div>';")
 
-            GlobalStatusStrip.ShowInfo("正在分析您的需求...")
+            ' 保存原始请求
+            Dim originalQuestion As String = request
 
-            ' 启动Agent规划
-            Dim success = Await _ralphAgentController.StartAgent(request, appType, currentContent)
+            ' 构建最终发送给 LLM 的消息
+            Dim finalMessageToLLM As String = request
 
-            If success Then
-                ' 显示规划卡片
-                Dim session = _ralphAgentController.GetCurrentSession()
-                If session IsNot Nothing Then
-                    ShowAgentPlanCard(session)
-                End If
+            ' 处理选中的内容
+            finalMessageToLLM = AppendCurrentSelectedContent("--- 我此次的问题：" & finalMessageToLLM & " ---")
+
+            ' 检查是否有文件需要解析
+            If filePaths IsNot Nothing AndAlso filePaths.Count > 0 Then
+                ' 异步处理文件解析，避免卡死UI
+                HandleStartAgentWithFilesAsync(finalMessageToLLM, originalQuestion, filePaths, selectedContents)
             Else
-                GlobalStatusStrip.ShowWarning("无法分析您的需求，请重试")
+                ' 没有文件，直接处理消息
+                HandleStartAgentCore(finalMessageToLLM, originalQuestion, "")
             End If
 
         Catch ex As Exception
@@ -2290,7 +2413,181 @@ Public MustInherit Class BaseChatControl
     End Sub
 
     ''' <summary>
-    ''' 显示Agent规划卡片
+    ''' 异步解析文件并启动Agent（参考HandleSendMessageWithFilesAsync）
+    ''' </summary>
+    Private Sub HandleStartAgentWithFilesAsync(question As String, originalQuestion As String,
+                                              filePaths As List(Of String),
+                                              selectedContents As List(Of SendMessageReferenceContentItem))
+        ' 显示进度提示
+        GlobalStatusStrip.ShowInfo($"正在解析 {filePaths.Count} 个文件...")
+        ExecuteJavaScriptAsyncJS("showFileParsingProgress(true)")
+
+        Task.Run(Sub()
+                     Try
+                         Dim fileContentBuilder As New StringBuilder()
+                         Dim totalFiles = filePaths.Count
+                         Dim processedFiles = 0
+
+                         fileContentBuilder.AppendLine(vbCrLf & "--- 以下是用户引用的其他文件内容 ---")
+
+                         ' 获取当前工作目录（需要在主线程调用）
+                         Dim currentWorkingDir As String = ""
+                         Me.Invoke(Sub()
+                                       currentWorkingDir = GetCurrentWorkingDirectory()
+                                   End Sub)
+
+                         For Each filePath As String In filePaths
+                             Try
+                                 processedFiles += 1
+
+                                 ' 更新进度
+                                 Me.Invoke(Sub()
+                                               GlobalStatusStrip.ShowInfo($"正在解析文件 ({processedFiles}/{totalFiles}): {Path.GetFileName(filePath)}")
+                                               ExecuteJavaScriptAsyncJS($"updateFileParsingProgress({processedFiles}, {totalFiles}, '{EscapeJsString(Path.GetFileName(filePath))}')")
+                                           End Sub)
+
+                                 ' 确定完整文件路径
+                                 Dim fullFilePath As String = filePath
+
+                                 ' 如果是绝对路径且文件存在，直接使用
+                                 If Path.IsPathRooted(filePath) AndAlso File.Exists(filePath) Then
+                                     fullFilePath = filePath
+                                     Debug.WriteLine($"使用绝对路径: {fullFilePath}")
+                                 ElseIf Not String.IsNullOrEmpty(currentWorkingDir) Then
+                                     ' 尝试在当前工作目录下查找
+                                     Dim tryPath = Path.Combine(currentWorkingDir, Path.GetFileName(filePath))
+                                     If File.Exists(tryPath) Then
+                                         fullFilePath = tryPath
+                                         Debug.WriteLine($"在工作目录找到文件: {fullFilePath}")
+                                     End If
+                                 End If
+
+                                 If File.Exists(fullFilePath) Then
+                                     ' 根据文件扩展名选择合适的解析方法
+                                     Dim fileExtension As String = Path.GetExtension(fullFilePath).ToLower()
+                                     Dim fileContentResult As FileContentResult = Nothing
+
+                                     Select Case fileExtension
+                                         Case ".xlsx", ".xls", ".xlsm", ".xlsb"
+                                             ' Excel文件解析需要在主线程
+                                             Me.Invoke(Sub()
+                                                           fileContentResult = ParseFile(fullFilePath)
+                                                       End Sub)
+                                         Case ".docx", ".doc", ".wps"
+                                             Me.Invoke(Sub()
+                                                           fileContentResult = ParseFile(fullFilePath)
+                                                       End Sub)
+                                         Case ".pptx", ".ppt"
+                                             Me.Invoke(Sub()
+                                                           fileContentResult = ParseFile(fullFilePath)
+                                                       End Sub)
+                                         Case ".csv", ".txt"
+                                             fileContentResult = _fileParserService.ParseTextFile(fullFilePath)
+                                         Case Else
+                                             fileContentResult = New FileContentResult With {
+                                        .FileName = Path.GetFileName(fullFilePath),
+                                        .FileType = "Unknown",
+                                        .ParsedContent = $"[不支持的文件类型: {fileExtension}]"
+                                    }
+                                     End Select
+
+                                     If fileContentResult IsNot Nothing Then
+                                         fileContentBuilder.AppendLine($"文件名: {fileContentResult.FileName}")
+                                         fileContentBuilder.AppendLine($"文件内容:")
+                                         fileContentBuilder.AppendLine(fileContentResult.ParsedContent)
+                                         fileContentBuilder.AppendLine("---")
+                                     End If
+                                 Else
+                                     fileContentBuilder.AppendLine($"文件 '{Path.GetFileName(filePath)}' 未找到，尝试路径: {fullFilePath}")
+                                     Debug.WriteLine($"文件未找到: {fullFilePath}")
+                                 End If
+                             Catch ex As Exception
+                                 Debug.WriteLine($"Error processing file '{filePath}': {ex.Message}")
+                                 fileContentBuilder.AppendLine($"处理文件 '{Path.GetFileName(filePath)}' 时出错: {ex.Message}")
+                                 fileContentBuilder.AppendLine("---")
+                             End Try
+                         Next
+
+                         fileContentBuilder.AppendLine("--- 文件内容结束 ---" & vbCrLf)
+
+                         ' 文件解析完成，先保存到记忆（同步保存确保立即可检索），再在主线程继续处理消息
+                         Dim appTypeForMemory = GetOfficeAppType()
+                         Dim sessionIdForMemory = If(_chatStateService?.CurrentSessionId, Guid.NewGuid().ToString())
+                         MemoryService.SaveFileContentToMemory(originalQuestion, fileContentBuilder.ToString(), sessionIdForMemory, appTypeForMemory)
+
+                         Me.Invoke(Sub()
+                                       GlobalStatusStrip.ShowInfo($"文件解析完成，共解析 {processedFiles} 个文件")
+                                       ExecuteJavaScriptAsyncJS("showFileParsingProgress(false)")
+
+                                       Dim questionWithFiles = question & " 用户提问结束，后续引用的文件都在同一目录下所以可以放心读取。 ---"
+                                       HandleStartAgentCore(questionWithFiles, originalQuestion, fileContentBuilder.ToString())
+                                   End Sub)
+
+                     Catch ex As Exception
+                         Debug.WriteLine($"HandleStartAgentWithFilesAsync 出错: {ex.Message}")
+                         Me.Invoke(Sub()
+                                       GlobalStatusStrip.ShowWarning($"文件解析失败: {ex.Message}")
+                                       ExecuteJavaScriptAsyncJS("showFileParsingProgress(false)")
+                                   End Sub)
+                     End Try
+                 End Sub)
+    End Sub
+
+    ''' <summary>
+    ''' 处理Agent启动的核心逻辑（文件解析完成后调用）
+    ''' </summary>
+    Private Sub HandleStartAgentCore(question As String, originalQuestion As String, fileContent As String)
+        ' 构建最终发送给 LLM 的消息
+        Dim finalMessageToLLM As String = question
+
+        ' 然后添加文件内容（如果有）
+        If Not String.IsNullOrEmpty(fileContent) Then
+            finalMessageToLLM &= fileContent
+        End If
+
+        Task.Run(Async Function()
+                     Try
+                         ' 获取当前Office内容
+                         Dim appType = GetApplicationType()
+                         Dim currentContent = GetCurrentOfficeContent()
+
+                         ' 从 systemHistoryMessageData 获取历史对话（这是主要的历史记录）
+                         Dim historyMessages As New List(Of Tuple(Of String, String))()
+                         For Each msg In systemHistoryMessageData
+                             ' 只包含user和assistant消息，不包含system消息
+                             If msg.role = "user" OrElse msg.role = "assistant" Then
+                                 historyMessages.Add(New Tuple(Of String, String)(msg.role, msg.content))
+                             End If
+                         Next
+                         Debug.WriteLine($"[RalphAgent] 获取到 {historyMessages.Count} 条历史消息")
+
+                         GlobalStatusStrip.ShowInfo("正在分析您的需求...")
+
+                         ' 启动Agent规划（包含历史对话）
+                         Dim success = Await _ralphAgentController.StartAgent(finalMessageToLLM, appType, currentContent, historyMessages)
+
+                         If success Then
+                             ' 显示规划卡片
+                             Dim session = _ralphAgentController.GetCurrentSession()
+                             If session IsNot Nothing Then
+                                 ShowAgentPlanCard(session)
+                             End If
+                         Else
+                             GlobalStatusStrip.ShowWarning("无法分析您的需求，请重试")
+                             ' 规划失败，清除思考消息UUID
+                             _agentThinkingUuid = Nothing
+                         End If
+                     Catch ex As Exception
+                         Debug.WriteLine($"HandleStartAgentCore 出错: {ex.Message}")
+                         GlobalStatusStrip.ShowWarning($"分析需求失败: {ex.Message}")
+                         ' 出错时也清除思考消息UUID
+                         _agentThinkingUuid = Nothing
+                     End Try
+                 End Function)
+    End Sub
+
+    ''' <summary>
+    ''' 显示Agent规划卡片（替换思考消息）
     ''' </summary>
     Private Sub ShowAgentPlanCard(session As RalphAgentSession)
         Try
@@ -2303,9 +2600,12 @@ Public MustInherit Class BaseChatControl
             Next
             stepsJson.Append("]")
 
-            Dim planJson = $"{{""sessionId"":""{session.Id}"",""understanding"":""{EscapeJavaScriptString(session.Understanding)}"",""steps"":{stepsJson.ToString()},""summary"":""{EscapeJavaScriptString(session.Summary)}""}}"
+            Dim planJson = $"{{""sessionId"":""{session.Id}"",""understanding"":""{EscapeJavaScriptString(session.Understanding)}"",""steps"":{stepsJson.ToString()},""summary"":""{EscapeJavaScriptString(session.Summary)}"",""replaceThinkingUuid"":""{_agentThinkingUuid}""}}"
 
             ExecuteJavaScriptAsyncJS($"showAgentPlanCard({planJson})")
+
+            ' 清除思考消息UUID，避免后续在普通Chat模式下误用
+            _agentThinkingUuid = Nothing
 
         Catch ex As Exception
             Debug.WriteLine($"ShowAgentPlanCard 出错: {ex.Message}")
@@ -2339,6 +2639,9 @@ Public MustInherit Class BaseChatControl
             If _ralphAgentController IsNot Nothing Then
                 _ralphAgentController.AbortAgent()
             End If
+
+            ' 清除思考消息UUID
+            _agentThinkingUuid = Nothing
 
             GlobalStatusStrip.ShowInfo("已终止Agent")
 
@@ -2459,7 +2762,7 @@ Public MustInherit Class BaseChatControl
                 Return
             End If
 
-            Dim configForm As New ConfigApiForm()
+            Dim configForm As New ConfigApiForm(GetApplication())
             If configForm.ShowDialog() = DialogResult.OK Then
                 ' 配置已更新，刷新前端显示
                 UpdateModelDisplayInUI()
@@ -3397,6 +3700,10 @@ Public MustInherit Class BaseChatControl
                     End If
                 End If
                 Dim enableMem = MemoryConfig.EnableUserProfile OrElse MemoryConfig.RagTopN > 0
+                
+                Debug.WriteLine($"[CreateRequestBody] 尝试使用 ContextBuilder，UseContextBuilder={MemoryConfig.UseContextBuilder}, enableMem={enableMem}")
+                Debug.WriteLine($"[CreateRequestBody] 当前会话消息数: {sessionMsgs.Count}")
+                
                 Dim built = ChatContextBuilder.BuildMessages(scenario, appType, result, sessionMsgs, result, systemPrompt, vars, enableMem)
                 messagesArray = New JArray()
                 For Each msg In built
@@ -3406,6 +3713,8 @@ Public MustInherit Class BaseChatControl
                     messagesArray.Add(msgObj)
                 Next
                 usedContextBuilder = True
+                
+                Debug.WriteLine($"[CreateRequestBody] ContextBuilder 构建成功，消息数: {messagesArray.Count}")
 
                 ' 更新本地 systemHistoryMessageData 与持久化
                 Dim existingSystem = systemHistoryMessageData.FirstOrDefault(Function(m) m.role = "system")
@@ -3416,8 +3725,11 @@ Public MustInherit Class BaseChatControl
                 _chatStateService.AddMessage("user", result)
             Catch ex As Exception
                 Debug.WriteLine("ContextBuilder 降级: " & ex.Message)
+                Debug.WriteLine("ContextBuilder 降级堆栈: " & ex.StackTrace)
                 usedContextBuilder = False
             End Try
+        Else
+            Debug.WriteLine($"[CreateRequestBody] 不使用 ContextBuilder，addHistory={addHistory}, UseContextBuilder={MemoryConfig.UseContextBuilder}")
         End If
 
         If Not usedContextBuilder Then
@@ -3761,7 +4073,7 @@ Public MustInherit Class BaseChatControl
 
             Dim answer = New HistoryMessage() With {
             .role = "assistant",
-            .content = $"这是大模型基于用户问题的答复作为历史参考：{allMarkdownBuffer.ToString()}"
+            .content = allMarkdownBuffer.ToString()
         }
 
             If addHistory Then
@@ -3848,9 +4160,9 @@ Public MustInherit Class BaseChatControl
 
     Private Sub ProcessStreamChunk(rawChunk As String, uuid As String, originQuestion As String)
         Try
-            Debug.WriteLine($"[ProcessStreamChunk] 收到原始数据长度: {rawChunk.Length}")
+            'Debug.WriteLine($"[ProcessStreamChunk] 收到原始数据长度: {rawChunk.Length}")
             Dim lines As String() = rawChunk.Split({vbCr, vbLf}, StringSplitOptions.RemoveEmptyEntries)
-            Debug.WriteLine($"[ProcessStreamChunk] 分割后行数: {lines.Length}")
+            'Debug.WriteLine($"[ProcessStreamChunk] 分割后行数: {lines.Length}")
 
             For Each line In lines
                 line = line.Trim()
@@ -3858,7 +4170,7 @@ Public MustInherit Class BaseChatControl
                     Debug.WriteLine("[ProcessStreamChunk] 收到 [DONE] 标记")
                     ' 在流结束时处理所有完成的工具调用
                     If _pendingToolCalls.Count > 0 Then
-                        Debug.WriteLine("[DONE] 时发现未处理的工具调用，开始处理")
+                        'Debug.WriteLine("[DONE] 时发现未处理的工具调用，开始处理")
                         ProcessCompletedToolCalls(uuid, originQuestion)
                     End If
                     FlushBuffer("content", uuid) ' 最后刷新缓冲区
@@ -3891,7 +4203,7 @@ Public MustInherit Class BaseChatControl
 
                 Dim content As String = jsonObj("choices")(0)("delta")("content")?.ToString()
                 If Not String.IsNullOrEmpty(content) Then
-                    Debug.WriteLine($"[ProcessStreamChunk] 解析到content: {content.Substring(0, Math.Min(50, content.Length))}...")
+                    'Debug.WriteLine($"[ProcessStreamChunk] 解析到content: {content.Substring(0, Math.Min(50, content.Length))}...")
                     _currentMarkdownBuffer.Append(content)
                     FlushBuffer("content", uuid)
 
@@ -4248,7 +4560,7 @@ Public MustInherit Class BaseChatControl
             allMarkdownBuffer.Append(escapedContent)
             allPlainMarkdownBuffer.Append(plainContent)
         End If
-        Debug.Print(js)
+        'Debug.Print(js)
         Await ExecuteJavaScriptAsyncJS(js)
     End Sub
 

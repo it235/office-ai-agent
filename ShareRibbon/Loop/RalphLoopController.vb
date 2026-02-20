@@ -3,13 +3,63 @@ Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 
 ''' <summary>
-''' Ralph Loop 控制器 - 管理规划、执行、循环流程
+''' 增强版 Ralph Loop 控制器 - 智能规划、执行、循环流程
 ''' </summary>
 Public Class RalphLoopController
     Private ReadOnly _memory As RalphLoopMemory
     Private _currentChatControl As BaseChatControl
 
-    ' 规划提示词模板
+    ' 增强版规划提示词模板 - 更智能，支持记忆上下文
+    Private Const ENHANCED_PLANNING_PROMPT As String = "你是一个智能任务规划专家。深度分析用户目标、相关记忆和Office上下文，制定详细、可执行的计划。
+
+【输入信息】
+- 用户目标：{0}
+- 当前应用：{1}
+{2}
+
+【规划原则】
+1. **目标分解**：将复杂目标分解为可独立执行的步骤
+2. **智能步骤**：每个步骤应该具体、可验证、可回滚
+3. **上下文感知**：结合选中区域、当前工作表、相关记忆来规划
+4. **风险评估**：对每个步骤评估风险级别（safe/medium/risky）
+5. **依赖关系**：标注步骤之间的依赖关系
+
+【返回JSON格式】
+```json
+{
+  ""goal_summary"": ""用户目标的简短总结"",
+  ""estimated_complexity"": ""low/medium/high"",
+  ""risk_level"": ""safe/medium/risky"",
+  ""steps"": [
+    {
+      ""step_number"": 1,
+      ""description"": ""步骤的详细描述"",
+      ""intent"": ""意图类型(data_query/format/chart/formula/clean/transform)"",
+      ""risk_level"": ""safe/medium/risky"",
+      ""estimated_time"": ""预估时间(如10秒)"",
+      ""depends_on"": [],
+      ""rollback_hint"": ""回滚建议""
+    }
+  ],
+  ""success_criteria"": ""任务完成的判断标准"",
+  ""notes"": ""注意事项和提示""
+}
+```
+
+【步骤数量建议】
+- low复杂度：1-2步
+- medium复杂度：3-4步
+- high复杂度：5-8步
+
+【示例】
+用户目标：""计算销售总额并生成图表""
+返回步骤：
+1. 识别销售数据范围
+2. 计算销售总额
+3. 创建柱状图展示数据
+4. 调整图表样式"
+
+    ' 兼容旧版的规划提示词模板
     Private Const PLANNING_PROMPT As String = "你是一个任务规划专家。用户有一个目标需要完成，请分析这个目标并制定执行计划。
 
 用户目标：{0}
@@ -190,6 +240,29 @@ Public Class RalphLoopController
     Public Sub ClearAndEndLoop()
         _memory.ClearActiveLoop()
     End Sub
+
+    ''' <summary>
+    ''' 获取增强版规划提示词 - 支持记忆上下文和意图信息
+    ''' </summary>
+    Public Function GetEnhancedPlanningPrompt(userGoal As String, applicationType As String, Optional intent As IntentResult = Nothing, Optional memoryContext As String = Nothing, Optional officeContext As String = Nothing) As String
+        Dim memoryInfo As String = ""
+        If Not String.IsNullOrEmpty(memoryContext) Then
+            memoryInfo = "- 相关记忆：" & vbCrLf & memoryContext
+        End If
+
+        Dim officeInfo As String = ""
+        If Not String.IsNullOrEmpty(officeContext) Then
+            officeInfo = "- Office上下文：" & vbCrLf & officeContext
+        End If
+
+        Dim basePrompt = String.Format(ENHANCED_PLANNING_PROMPT, userGoal, applicationType, memoryInfo & vbCrLf & officeInfo)
+        
+        If intent IsNot Nothing AndAlso Not String.IsNullOrEmpty(intent.UserFriendlyDescription) Then
+            basePrompt &= vbCrLf & vbCrLf & "【已识别意图】" & intent.UserFriendlyDescription & "（类型：" & intent.IntentType.ToString() & "）。请基于此制定执行计划。"
+        End If
+        
+        Return basePrompt
+    End Function
 
     ''' <summary>
     ''' 获取规划提示词（可选带入意图识别结果，供阶段四统一智能体使用）

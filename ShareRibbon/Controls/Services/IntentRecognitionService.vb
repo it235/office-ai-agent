@@ -459,7 +459,7 @@ Public Class IntentRecognitionService
     End Function
 
     ''' <summary>
-    ''' 调用大模型识别意图
+    ''' 调用大模型识别意图 - 增强版，包含记忆上下文
     ''' </summary>
     Private Async Function IdentifyIntentWithLLMAsync(question As String, context As JObject) As Task(Of IntentResult)
         Dim result As New IntentResult()
@@ -500,8 +500,8 @@ Public Class IntentRecognitionService
                 End If
             End If
 
-            ' 构建意图识别提示词
-            Dim systemPrompt = GetIntentRecognitionSystemPrompt()
+            ' 增强版提示词：构建更智能的意图识别系统提示词
+            Dim systemPrompt = GetEnhancedIntentRecognitionSystemPrompt()
             Dim userMessage = $"用户问题: {question}"
             If Not String.IsNullOrEmpty(contextInfo) Then
                 userMessage &= vbCrLf & vbCrLf & "当前Office上下文信息:" & vbCrLf & contextInfo
@@ -543,6 +543,20 @@ Public Class IntentRecognitionService
     End Function
 
     ''' <summary>
+    ''' 获取增强版意图识别系统提示词 - 根据AppType返回不同的提示词
+    ''' </summary>
+    Private Function GetEnhancedIntentRecognitionSystemPrompt() As String
+        Select Case AppType
+            Case OfficeApplicationType.Word
+                Return GetEnhancedWordIntentRecognitionPrompt()
+            Case OfficeApplicationType.PowerPoint
+                Return GetEnhancedPowerPointIntentRecognitionPrompt()
+            Case Else ' Excel
+                Return GetEnhancedExcelIntentRecognitionPrompt()
+        End Select
+    End Function
+
+    ''' <summary>
     ''' 获取意图识别系统提示词 - 根据AppType返回不同的提示词
     ''' </summary>
     Private Function GetIntentRecognitionSystemPrompt() As String
@@ -554,6 +568,75 @@ Public Class IntentRecognitionService
             Case Else ' Excel
                 Return GetExcelIntentRecognitionPrompt()
         End Select
+    End Function
+
+    ''' <summary>
+    ''' 增强版Excel意图识别提示词 - 更智能，支持记忆上下文
+    ''' </summary>
+    Private Function GetEnhancedExcelIntentRecognitionPrompt() As String
+        Return "你是一个智能Excel意图识别专家。深度分析用户的问题、上下文和相关记忆，精准识别用户的真实意图。
+
+【核心分析维度】
+1. 问题语义：理解用户真正想做什么
+2. 上下文关联：结合选中区域、工作表、相关记忆来判断
+3. 操作复杂度：评估是否需要多步骤执行
+4. 风险评估：判断操作是否安全，是否需要用户确认
+
+【返回JSON格式】
+```json
+{
+  ""intentType"": ""DATA_ANALYSIS"",
+  ""confidence"": 0.92,
+  ""description"": ""用户想要对选中区域进行统计分析，计算平均值和总和"",
+  ""requiresConfirmation"": false,
+  ""suggestedAction"": ""直接执行统计计算"",
+  ""executionPriority"": ""high"",
+  ""suggestedSteps"": [
+    ""识别数据范围"",
+    ""计算平均值"",
+    ""计算总和"",
+    ""输出结果""
+  ]
+}
+```
+
+【intentType可选值】
+- DATA_ANALYSIS: 数据分析（统计、汇总、透视表）
+- FORMULA_CALC: 公式计算
+- CHART_GEN: 图表生成
+- DATA_CLEANING: 数据清洗（去重、填充）
+- REPORT_GEN: 报表生成
+- DATA_TRANSFORMATION: 数据转换（合并、拆分）
+- FORMAT_STYLE: 格式样式调整
+- GENERAL_QUERY: 一般问答（不需要操作Excel）
+- UNCLEAR: 意图不明确，需要进一步询问
+- MULTI_STEP_TASK: 多步骤复杂任务（需使用Ralph Loop）
+
+【智能判断规则】
+1. **置信度评估**：
+   - 0.9-1.0: 非常明确，直接执行
+   - 0.7-0.89: 比较明确，可以执行
+   - 0.5-0.69: 不太明确，建议确认
+   - <0.5: 不明确，需要追问
+
+2. **记忆上下文利用**：
+   - 优先参考用户之前的操作习惯和偏好
+   - 注意用户之前遇到的问题和解决方案
+   - 延续之前的对话语境
+
+3. **多步骤任务识别**：
+   - 如果用户需求复杂，需要多个操作完成，设为MULTI_STEP_TASK
+   - 在suggestedSteps中列出关键执行步骤
+
+4. **安全操作判断**：
+   - 只读操作（统计、查询）requiresConfirmation=false
+   - 修改操作（删除、覆盖）requiresConfirmation=true
+   - 大范围数据修改requiresConfirmation=true
+
+【示例场景】
+- 用户说：""帮我算一下销售额"" + 选中了数据区域 → DATA_ANALYSIS, confidence=0.95
+- 用户说：""上次那个图表再做一遍"" + 相关记忆中有图表 → CHART_GEN, confidence=0.88
+- 用户说：""整理一下数据，生成报表"" → MULTI_STEP_TASK, confidence=0.90"
     End Function
 
     ''' <summary>
@@ -594,6 +677,51 @@ requiresConfirmation: 如果意图明确且操作安全，设为false；如果�
     End Function
 
     ''' <summary>
+    ''' 增强版Word意图识别提示词
+    ''' </summary>
+    Private Function GetEnhancedWordIntentRecognitionPrompt() As String
+        Return "你是一个智能Word意图识别专家。深度分析用户的问题、上下文和相关记忆，精准识别用户的真实意图。
+
+【返回JSON格式】
+```json
+{
+  ""intentType"": ""DOCUMENT_EDIT"",
+  ""confidence"": 0.88,
+  ""description"": ""用户想要在光标位置插入文本"",
+  ""requiresConfirmation"": false,
+  ""suggestedAction"": ""直接插入文本"",
+  ""executionPriority"": ""medium"",
+  ""suggestedSteps"": [
+    ""确认插入位置"",
+    ""插入指定文本""
+  ]
+}
+```
+
+【intentType可选值】
+- DOCUMENT_EDIT: 文档编辑（插入、删除、替换文本）
+- TEXT_FORMAT: 文本格式化（字体、段落、样式）
+- TABLE_OPERATION: 表格操作（创建、编辑表格）
+- IMAGE_INSERT: 图片插入和处理
+- TOC_GENERATION: 目录生成和更新
+- REVIEW_COMMENT: 审阅和批注
+- FORMAT_STYLE: 格式样式调整
+- GENERAL_QUERY: 一般问答（不需要操作Word）
+- UNCLEAR: 意图不明确，需要进一步询问
+- MULTI_STEP_TASK: 多步骤复杂任务
+
+【核心分析维度】
+1. 理解用户真实需求，结合选中文本和记忆
+2. 判断操作是否安全，确认是否需要用户确认
+3. 识别是否需要多步骤执行（如美化文档）
+
+【智能判断】
+- 简单问候 → GENERAL_QUERY, confidence=0.9
+- 涉及文档大幅修改 → requiresConfirmation=true
+- 结合记忆中的用户偏好来判断"
+    End Function
+
+    ''' <summary>
     ''' Word意图识别提示词
     ''' </summary>
     Private Function GetWordIntentRecognitionPrompt() As String
@@ -628,6 +756,48 @@ requiresConfirmation: 如果意图明确且操作安全，设为false；如果�
 1. 如果用户只是打招呼或闲聊，intentType设为GENERAL_QUERY，confidence设为0.9
 2. 如果用户的请求涉及文档大幅修改但表述不清，requiresConfirmation设为true
 3. 结合Word上下文信息（如选中文本、当前段落）来更准确地判断意图"
+    End Function
+
+    ''' <summary>
+    ''' 增强版PowerPoint意图识别提示词
+    ''' </summary>
+    Private Function GetEnhancedPowerPointIntentRecognitionPrompt() As String
+        Return "你是一个智能PowerPoint意图识别专家。深度分析用户的问题、上下文和相关记忆，精准识别用户的真实意图。
+
+【返回JSON格式】
+```json
+{
+  ""intentType"": ""SLIDE_CREATE"",
+  ""confidence"": 0.90,
+  ""description"": ""用户想要创建3页演示文稿"",
+  ""requiresConfirmation"": false,
+  ""suggestedAction"": ""批量创建幻灯片"",
+  ""executionPriority"": ""high"",
+  ""suggestedSteps"": [
+    ""确定幻灯片数量"",
+    ""创建第1页标题"",
+    ""创建第2页内容"",
+    ""创建第3页总结""
+  ]
+}
+```
+
+【intentType可选值】
+- SLIDE_CREATE: 创建幻灯片
+- SLIDE_LAYOUT: 幻灯片布局和版式
+- ANIMATION_EFFECT: 动画效果
+- TRANSITION_EFFECT: 切换效果
+- TEMPLATE_APPLY: 应用模板和主题
+- SPEAKER_NOTES: 演讲者备注
+- FORMAT_STYLE: 格式样式调整
+- GENERAL_QUERY: 一般问答（不需要操作PPT）
+- UNCLEAR: 意图不明确，需要进一步询问
+- MULTI_STEP_TASK: 多步骤复杂任务
+
+【智能判断】
+- 用户说""做个PPT"" → MULTI_STEP_TASK, confidence=0.85
+- 用户说""添加动画"" → ANIMATION_EFFECT, confidence=0.92
+- 结合记忆中的模板偏好来判断"
     End Function
 
     ''' <summary>
@@ -1035,7 +1205,6 @@ requiresConfirmation: 如果意图明确且操作安全，设为false；如果�
 如果需求不明确，直接用中文回复询问用户。"
     End Function
 
-    ''' <summary>
     ''' <summary>
     ''' PowerPoint专用JSON Schema约束（内置默认值）
     ''' </summary>

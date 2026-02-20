@@ -1,33 +1,34 @@
-' ShareRibbon\Config\SkillsConfigForm.vb
-' Skills / 场景提示词配置（prompt_template 表）
+﻿' ShareRibbon\Config\SkillsConfigForm.vb
+' Skills配置窗口：展示Claude规范的Skills
 
 Imports System.Drawing
 Imports System.IO
-Imports System.Linq
 Imports System.Windows.Forms
-Imports Newtonsoft.Json
-Imports Newtonsoft.Json.Linq
+Imports ShareRibbon.Services
 
 ''' <summary>
-''' 场景与 Skills 配置窗口：管理 prompt_template 表中的系统提示词与 Skills
+''' Skills配置窗口：展示Claude规范的Skills（只读列表）
 ''' </summary>
 Public Class SkillsConfigForm
     Inherits Form
 
-    Private scenarioCombo As ComboBox
     Private listBox As ListBox
-    Private txtName As TextBox
+    Private _skills As New List(Of SkillFileDefinition)()
+
+    ' 详情区域控件
+    Private lblName As Label
+    Private lblDescription As Label
+    Private lblLicense As Label
+    Private lblCompatibility As Label
+    Private lblAllowedTools As Label
+    Private lblAuthor As Label
+    Private lblVersion As Label
     Private txtContent As TextBox
-    Private txtSupportedApps As TextBox
-    Private chkIsSkill As CheckBox
-    Private lblSupportedApps As Label
-    Private _records As New List(Of PromptTemplateRecord)()
-    Private _currentScenario As String = "excel"
 
     Public Sub New()
-        Me.Text = "场景与 Skills 配置"
-        Me.Size = New Size(700, 500)
-        Me.MinimumSize = New Size(500, 400)
+        Me.Text = "Skills配置"
+        Me.Size = New Size(850, 550)
+        Me.MinimumSize = New Size(700, 450)
         Me.StartPosition = FormStartPosition.CenterScreen
         Me.Font = New Font("Microsoft YaHei UI", 9)
         AddHandler Me.FormClosing, AddressOf OnFormClosing
@@ -36,7 +37,7 @@ Public Class SkillsConfigForm
     End Sub
 
     Private Sub OnFormShown(sender As Object, e As EventArgs)
-        LoadScenario(_currentScenario)
+        LoadSkills()
     End Sub
 
     Private Sub OnFormClosing(sender As Object, e As FormClosingEventArgs)
@@ -46,304 +47,332 @@ Public Class SkillsConfigForm
     End Sub
 
     Private Sub InitializeUI()
-        Dim y As Integer = 15
-
-        ' 场景选择
-        Dim lblScenario As New Label() With {.Text = "场景：", .Location = New Point(15, y + 3), .Size = New Size(45, 20), .Anchor = AnchorStyles.Top Or AnchorStyles.Left}
-        Me.Controls.Add(lblScenario)
-        scenarioCombo = New ComboBox() With {
-            .Location = New Point(65, y),
-            .Size = New Size(120, 24),
-            .DropDownStyle = ComboBoxStyle.DropDownList,
-            .Anchor = AnchorStyles.Top Or AnchorStyles.Left
+        ' 顶部说明
+        Dim lblInfo As New Label() With {
+            .Text = "Skills目录：Documents\OfficeAiAppData\Skills，将符合Claude规范的Skills目录拷贝到此即可",
+            .Location = New Point(15, 10),
+            .Size = New Size(800, 20),
+            .ForeColor = Color.Gray,
+            .Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
         }
-        scenarioCombo.Items.AddRange({"excel", "word", "ppt", "common"})
-        scenarioCombo.SelectedIndex = 0
-        AddHandler scenarioCombo.SelectedIndexChanged, AddressOf ScenarioChanged
-        Me.Controls.Add(scenarioCombo)
+        Me.Controls.Add(lblInfo)
 
         ' 可拖拽分隔的左右布局
         Dim split As New SplitContainer() With {
-            .Location = New Point(15, 52),
-            .Size = New Size(665, 305),
+            .Location = New Point(15, 35),
+            .Size = New Size(805, 430),
             .Anchor = AnchorStyles.Top Or AnchorStyles.Bottom Or AnchorStyles.Left Or AnchorStyles.Right,
-            .SplitterDistance = 200,
-            .Panel1MinSize = 80,
-            .Panel2MinSize = 200,
+            .SplitterDistance = 280,
+            .Panel1MinSize = 150,
+            .Panel2MinSize = 300,
             .FixedPanel = FixedPanel.None
         }
         split.Panel1.SuspendLayout()
         split.Panel2.SuspendLayout()
 
-        ' 左侧：列表（可横向拖拽调整宽度）
-        Dim lblList As New Label() With {.Text = "列表（系统提示词 is_skill=0，Skills is_skill=1）", .Location = New Point(0, 0), .Size = New Size(180, 20), .Anchor = AnchorStyles.Top Or AnchorStyles.Left}
+        ' 左侧：Skills列表
+        Dim lblList As New Label() With {
+            .Text = "已安装的Skills：",
+            .Location = New Point(0, 0),
+            .Size = New Size(270, 20),
+            .Anchor = AnchorStyles.Top Or AnchorStyles.Left
+        }
         split.Panel1.Controls.Add(lblList)
         listBox = New ListBox() With {
             .Location = New Point(0, 22),
-            .Size = New Size(196, 278),
-            .DisplayMember = "DisplayText",
+            .Size = New Size(276, 403),
             .Anchor = AnchorStyles.Top Or AnchorStyles.Bottom Or AnchorStyles.Left Or AnchorStyles.Right,
             .HorizontalScrollbar = True,
-            .HorizontalExtent = 3000
+            .HorizontalExtent = 500
         }
         AddHandler listBox.SelectedIndexChanged, AddressOf ListSelectionChanged
         split.Panel1.Controls.Add(listBox)
 
-        ' 右侧：编辑区
+        ' 右侧：详情区域
         Dim xRight As Integer = 10
         Dim p2Y As Integer = 0
-        Dim lblName As New Label() With {.Text = "名称：", .Location = New Point(xRight, p2Y + 2), .Size = New Size(60, 20), .Anchor = AnchorStyles.Top Or AnchorStyles.Left}
+
+        ' 名称
+        lblName = New Label() With {
+            .Text = "名称：",
+            .Location = New Point(xRight, p2Y),
+            .Size = New Size(70, 20),
+            .Anchor = AnchorStyles.Top Or AnchorStyles.Left,
+            .Font = New Font(Me.Font, FontStyle.Bold)
+        }
         split.Panel2.Controls.Add(lblName)
-        txtName = New TextBox() With {.Location = New Point(xRight + 60, p2Y), .Size = New Size(400, 24), .Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right}
+        Dim txtName As New Label() With {
+            .Name = "txtName",
+            .Location = New Point(xRight + 70, p2Y),
+            .Size = New Size(430, 20),
+            .Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right,
+            .ForeColor = Color.FromArgb(70, 130, 180)
+        }
         split.Panel2.Controls.Add(txtName)
-        p2Y += 35
-        Dim lblContent As New Label() With {.Text = "内容：", .Location = New Point(xRight, p2Y), .Size = New Size(60, 20), .Anchor = AnchorStyles.Top Or AnchorStyles.Left}
+        p2Y += 28
+
+        ' 描述
+        lblDescription = New Label() With {
+            .Text = "描述：",
+            .Location = New Point(xRight, p2Y),
+            .Size = New Size(70, 20),
+            .Anchor = AnchorStyles.Top Or AnchorStyles.Left
+        }
+        split.Panel2.Controls.Add(lblDescription)
+        Dim txtDescription As New Label() With {
+            .Name = "txtDescription",
+            .Location = New Point(xRight + 70, p2Y),
+            .Size = New Size(430, 40),
+            .Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right,
+            .ForeColor = Color.DarkGray
+        }
+        split.Panel2.Controls.Add(txtDescription)
+        p2Y += 48
+
+        ' 元数据行
+        Dim metadataPanel As New Panel() With {
+            .Location = New Point(xRight + 70, p2Y),
+            .Size = New Size(430, 80),
+            .Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right,
+            .BackColor = Color.FromArgb(245, 245, 245)
+        }
+        split.Panel2.Controls.Add(metadataPanel)
+
+        lblLicense = New Label() With {
+            .Text = "许可证：",
+            .Location = New Point(5, 5),
+            .Size = New Size(60, 18),
+            .ForeColor = Color.Gray
+        }
+        metadataPanel.Controls.Add(lblLicense)
+        Dim txtLicense As New Label() With {
+            .Name = "txtLicense",
+            .Location = New Point(70, 5),
+            .Size = New Size(355, 18),
+            .ForeColor = Color.FromArgb(100, 100, 100)
+        }
+        metadataPanel.Controls.Add(txtLicense)
+
+        lblCompatibility = New Label() With {
+            .Text = "环境：",
+            .Location = New Point(5, 28),
+            .Size = New Size(60, 18),
+            .ForeColor = Color.Gray
+        }
+        metadataPanel.Controls.Add(lblCompatibility)
+        Dim txtCompatibility As New Label() With {
+            .Name = "txtCompatibility",
+            .Location = New Point(70, 28),
+            .Size = New Size(355, 18),
+            .ForeColor = Color.FromArgb(100, 100, 100)
+        }
+        metadataPanel.Controls.Add(txtCompatibility)
+
+        lblAllowedTools = New Label() With {
+            .Text = "工具：",
+            .Location = New Point(5, 51),
+            .Size = New Size(60, 18),
+            .ForeColor = Color.Gray
+        }
+        metadataPanel.Controls.Add(lblAllowedTools)
+        Dim txtAllowedTools As New Label() With {
+            .Name = "txtAllowedTools",
+            .Location = New Point(70, 51),
+            .Size = New Size(355, 18),
+            .ForeColor = Color.FromArgb(100, 100, 100)
+        }
+        metadataPanel.Controls.Add(txtAllowedTools)
+
+        lblAuthor = New Label() With {
+            .Text = "作者：",
+            .Location = New Point(5, 74),
+            .Size = New Size(60, 18),
+            .ForeColor = Color.Gray
+        }
+        metadataPanel.Controls.Add(lblAuthor)
+        Dim txtAuthor As New Label() With {
+            .Name = "txtAuthor",
+            .Location = New Point(70, 74),
+            .Size = New Size(200, 18),
+            .ForeColor = Color.FromArgb(100, 100, 100)
+        }
+        metadataPanel.Controls.Add(txtAuthor)
+
+        lblVersion = New Label() With {
+            .Text = "版本：",
+            .Location = New Point(280, 74),
+            .Size = New Size(50, 18),
+            .ForeColor = Color.Gray
+        }
+        metadataPanel.Controls.Add(lblVersion)
+        Dim txtVersion As New Label() With {
+            .Name = "txtVersion",
+            .Location = New Point(330, 74),
+            .Size = New Size(95, 18),
+            .ForeColor = Color.FromArgb(100, 100, 100)
+        }
+        metadataPanel.Controls.Add(txtVersion)
+
+        p2Y += 88
+
+        ' 内容区域
+        Dim lblContent As New Label() With {
+            .Text = "Skill内容：",
+            .Location = New Point(xRight, p2Y),
+            .Size = New Size(70, 20),
+            .Anchor = AnchorStyles.Top Or AnchorStyles.Left
+        }
         split.Panel2.Controls.Add(lblContent)
         txtContent = New TextBox() With {
-            .Location = New Point(xRight + 60, p2Y),
-            .Size = New Size(400, 130),
+            .Location = New Point(xRight + 70, p2Y),
+            .Size = New Size(430, 210),
             .Multiline = True,
             .ScrollBars = ScrollBars.Vertical,
-            .Anchor = AnchorStyles.Top Or AnchorStyles.Bottom Or AnchorStyles.Left Or AnchorStyles.Right
+            .ReadOnly = True,
+            .Anchor = AnchorStyles.Top Or AnchorStyles.Bottom Or AnchorStyles.Left Or AnchorStyles.Right,
+            .BackColor = Color.White,
+            .Font = New Font("Consolas", 8.5)
         }
         split.Panel2.Controls.Add(txtContent)
-        p2Y += 140
-        chkIsSkill = New CheckBox() With {.Text = "是 Skill（is_skill=1）", .Location = New Point(xRight + 60, p2Y), .Size = New Size(180, 24), .Anchor = AnchorStyles.Top Or AnchorStyles.Left}
-        AddHandler chkIsSkill.CheckedChanged, AddressOf IsSkillChanged
-        split.Panel2.Controls.Add(chkIsSkill)
-        p2Y += 30
-        lblSupportedApps = New Label() With {.Text = "supported_apps：", .Location = New Point(xRight, p2Y), .Size = New Size(100, 20), .Anchor = AnchorStyles.Top Or AnchorStyles.Left}
-        split.Panel2.Controls.Add(lblSupportedApps)
-        txtSupportedApps = New TextBox() With {.Location = New Point(xRight + 105, p2Y - 2), .Size = New Size(350, 24), .Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right}
-        txtSupportedApps.Visible = False
-        split.Panel2.Controls.Add(txtSupportedApps)
 
         split.Panel1.ResumeLayout(False)
         split.Panel2.ResumeLayout(False)
         Me.Controls.Add(split)
 
-        ' 按钮
-        y = 365
-        Dim btnAdd As New Button() With {.Text = "新增", .Location = New Point(15, y), .Size = New Size(70, 28), .Anchor = AnchorStyles.Bottom Or AnchorStyles.Left}
-        AddHandler btnAdd.Click, AddressOf BtnAddClick
-        Me.Controls.Add(btnAdd)
-        Dim btnSave As New Button() With {.Text = "保存", .Location = New Point(90, y), .Size = New Size(70, 28), .Anchor = AnchorStyles.Bottom Or AnchorStyles.Left}
-        AddHandler btnSave.Click, AddressOf BtnSaveClick
-        Me.Controls.Add(btnSave)
-        Dim btnDelete As New Button() With {.Text = "删除", .Location = New Point(165, y), .Size = New Size(70, 28), .Anchor = AnchorStyles.Bottom Or AnchorStyles.Left}
-        AddHandler btnDelete.Click, AddressOf BtnDeleteClick
-        Me.Controls.Add(btnDelete)
-        Dim btnImport As New Button() With {.Text = "导入", .Location = New Point(245, y), .Size = New Size(70, 28), .Anchor = AnchorStyles.Bottom Or AnchorStyles.Left}
-        AddHandler btnImport.Click, AddressOf BtnImportClick
-        Me.Controls.Add(btnImport)
-        Dim btnCopy As New Button() With {.Text = "复制选中", .Location = New Point(325, y), .Size = New Size(70, 28), .Anchor = AnchorStyles.Bottom Or AnchorStyles.Left}
-        AddHandler btnCopy.Click, Sub(s, ev)
-                                     If listBox.SelectedItem IsNot Nothing Then
-                                         Try
-                                             Clipboard.SetText(listBox.SelectedItem.ToString())
-                                             GlobalStatusStrip.ShowInfo("已复制")
-                                         Catch ex As Exception
-                                             GlobalStatusStrip.ShowWarning("复制失败: " & ex.Message)
-                                         End Try
-                                     Else
-                                         GlobalStatusStrip.ShowWarning("请先选择一项")
-                                     End If
-                                 End Sub
-        Me.Controls.Add(btnCopy)
+        ' 底部按钮
+        Dim y = 475
+        Dim btnOpenDir As New Button() With {
+            .Text = "打开Skills目录",
+            .Location = New Point(15, y),
+            .Size = New Size(120, 28),
+            .Anchor = AnchorStyles.Bottom Or AnchorStyles.Left,
+            .BackColor = Color.FromArgb(70, 130, 180),
+            .ForeColor = Color.White,
+            .FlatStyle = FlatStyle.Flat
+        }
+        AddHandler btnOpenDir.Click, AddressOf BtnOpenDirClick
+        Me.Controls.Add(btnOpenDir)
 
-        Dim btnClose As New Button() With {.Text = "关闭", .Location = New Point(600, y), .Size = New Size(80, 28), .Anchor = AnchorStyles.Bottom Or AnchorStyles.Right}
+        Dim btnRefresh As New Button() With {
+            .Text = "刷新列表",
+            .Location = New Point(145, y),
+            .Size = New Size(100, 28),
+            .Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
+        }
+        AddHandler btnRefresh.Click, AddressOf BtnRefreshClick
+        Me.Controls.Add(btnRefresh)
+
+        Dim btnClose As New Button() With {
+            .Text = "关闭",
+            .Location = New Point(740, y),
+            .Size = New Size(80, 28),
+            .Anchor = AnchorStyles.Bottom Or AnchorStyles.Right
+        }
         AddHandler btnClose.Click, Sub(s, e) Me.Close()
         Me.Controls.Add(btnClose)
 
         Me.Controls.Add(GlobalStatusStrip.StatusStrip)
     End Sub
 
-    Private Sub ScenarioChanged(sender As Object, e As EventArgs)
-        _currentScenario = If(scenarioCombo.SelectedItem Is Nothing, "excel", scenarioCombo.SelectedItem.ToString())
-        LoadScenario(_currentScenario)
-    End Sub
-
-    Private Sub LoadScenario(scenario As String)
+    Private Sub LoadSkills()
         Try
-            OfficeAiDatabase.EnsureInitialized()
-            _records = PromptTemplateRepository.ListByScenario(scenario)
-            listBox.DataSource = Nothing
+            SkillsDirectoryService.EnsureDirectoryExists()
+            _skills = SkillsDirectoryService.GetAllSkills(forceRefresh:=True)
+
             listBox.Items.Clear()
-            For Each r In _records
-                Dim suffix = If(r.IsSkill = 1, " [Skill]", " [系统]")
-                listBox.Items.Add(New ListItem With {.Record = r, .DisplayText = (If(r.TemplateName, "(未命名)") & suffix)})
+            For Each skill In _skills
+                listBox.Items.Add(New ListItem With {.Skill = skill, .DisplayText = skill.Name})
             Next
+
+            If listBox.Items.Count = 0 Then
+                listBox.Items.Add("(暂无Skills，请打开Skills目录添加)")
+            End If
         Catch ex As Exception
             listBox.Items.Clear()
             listBox.Items.Add("(加载失败: " & ex.Message & ")")
-            GlobalStatusStrip.ShowWarning("加载失败")
+            GlobalStatusStrip.ShowWarning("加载Skills失败")
         End Try
     End Sub
 
     Private Sub ListSelectionChanged(sender As Object, e As EventArgs)
         Dim item = TryCast(listBox.SelectedItem, ListItem)
         If item Is Nothing Then
-            txtName.Text = ""
-            txtContent.Text = ""
-            chkIsSkill.Checked = False
-            txtSupportedApps.Text = ""
+            ClearDetail()
             Return
         End If
-        Dim r = item.Record
-        txtName.Text = r.TemplateName
-        txtContent.Text = r.Content
-        chkIsSkill.Checked = (r.IsSkill = 1)
-        txtSupportedApps.Visible = chkIsSkill.Checked
-        lblSupportedApps.Visible = chkIsSkill.Checked
-        If chkIsSkill.Checked AndAlso Not String.IsNullOrEmpty(r.ExtraJson) Then
-            Try
-                Dim jo = JObject.Parse(r.ExtraJson)
-                Dim arr = If(jo("supported_apps"), jo("supportedApps"))
-                If arr IsNot Nothing AndAlso TypeOf arr Is JArray Then
-                    txtSupportedApps.Text = String.Join(", ", arr.Select(Function(t) t.ToString()))
-                Else
-                    txtSupportedApps.Text = ""
-                End If
-            Catch
-                txtSupportedApps.Text = r.ExtraJson
-            End Try
-        Else
-            txtSupportedApps.Text = ""
+
+        Dim skill = item.Skill
+        If skill Is Nothing Then
+            ClearDetail()
+            Return
         End If
+
+        ' 更新详情
+        Dim txtName = Me.Controls.Find("txtName", True).FirstOrDefault()
+        If txtName IsNot Nothing Then txtName.Text = skill.Name
+
+        Dim txtDescription = Me.Controls.Find("txtDescription", True).FirstOrDefault()
+        If txtDescription IsNot Nothing Then txtDescription.Text = If(String.IsNullOrWhiteSpace(skill.Description), "(无描述)", skill.Description)
+
+        Dim txtLicense = Me.Controls.Find("txtLicense", True).FirstOrDefault()
+        If txtLicense IsNot Nothing Then txtLicense.Text = If(String.IsNullOrWhiteSpace(skill.License), "-", skill.License)
+
+        Dim txtCompatibility = Me.Controls.Find("txtCompatibility", True).FirstOrDefault()
+        If txtCompatibility IsNot Nothing Then txtCompatibility.Text = If(String.IsNullOrWhiteSpace(skill.Compatibility), "-", skill.Compatibility)
+
+        Dim txtAllowedTools = Me.Controls.Find("txtAllowedTools", True).FirstOrDefault()
+        If txtAllowedTools IsNot Nothing Then txtAllowedTools.Text = If(String.IsNullOrWhiteSpace(skill.AllowedToolsText), "-", skill.AllowedToolsText)
+
+        Dim txtAuthor = Me.Controls.Find("txtAuthor", True).FirstOrDefault()
+        If txtAuthor IsNot Nothing Then txtAuthor.Text = If(String.IsNullOrWhiteSpace(skill.Author), "-", skill.Author)
+
+        Dim txtVersion = Me.Controls.Find("txtVersion", True).FirstOrDefault()
+        If txtVersion IsNot Nothing Then txtVersion.Text = If(String.IsNullOrWhiteSpace(skill.Version), "-", skill.Version)
+
+        txtContent.Text = If(String.IsNullOrWhiteSpace(skill.Content), "(无内容)", skill.Content)
     End Sub
 
-    Private Sub IsSkillChanged(sender As Object, e As EventArgs)
-        txtSupportedApps.Visible = chkIsSkill.Checked
-        lblSupportedApps.Visible = chkIsSkill.Checked
-    End Sub
+    Private Sub ClearDetail()
+        Dim txtName = Me.Controls.Find("txtName", True).FirstOrDefault()
+        If txtName IsNot Nothing Then txtName.Text = ""
 
-    Private Sub BtnAddClick(sender As Object, e As EventArgs)
-        txtName.Text = ""
+        Dim txtDescription = Me.Controls.Find("txtDescription", True).FirstOrDefault()
+        If txtDescription IsNot Nothing Then txtDescription.Text = ""
+
+        Dim txtLicense = Me.Controls.Find("txtLicense", True).FirstOrDefault()
+        If txtLicense IsNot Nothing Then txtLicense.Text = ""
+
+        Dim txtCompatibility = Me.Controls.Find("txtCompatibility", True).FirstOrDefault()
+        If txtCompatibility IsNot Nothing Then txtCompatibility.Text = ""
+
+        Dim txtAllowedTools = Me.Controls.Find("txtAllowedTools", True).FirstOrDefault()
+        If txtAllowedTools IsNot Nothing Then txtAllowedTools.Text = ""
+
+        Dim txtAuthor = Me.Controls.Find("txtAuthor", True).FirstOrDefault()
+        If txtAuthor IsNot Nothing Then txtAuthor.Text = ""
+
+        Dim txtVersion = Me.Controls.Find("txtVersion", True).FirstOrDefault()
+        If txtVersion IsNot Nothing Then txtVersion.Text = ""
+
         txtContent.Text = ""
-        chkIsSkill.Checked = False
-        txtSupportedApps.Text = ""
-        txtSupportedApps.Visible = False
-        lblSupportedApps.Visible = False
     End Sub
 
-    Private Sub BtnSaveClick(sender As Object, e As EventArgs)
+    Private Sub BtnOpenDirClick(sender As Object, e As EventArgs)
         Try
-            OfficeAiDatabase.EnsureInitialized()
-            Dim extra As String = ""
-            If chkIsSkill.Checked AndAlso Not String.IsNullOrEmpty(txtSupportedApps.Text.Trim()) Then
-                Dim apps = txtSupportedApps.Text.Split({","c}, StringSplitOptions.RemoveEmptyEntries)
-                Dim arr As New JArray()
-                For Each a In apps
-                    arr.Add(a.Trim())
-                Next
-                extra = New JObject() From {{"supported_apps", arr}}.ToString()
-            End If
-
-            Dim item = TryCast(listBox.SelectedItem, ListItem)
-            If item IsNot Nothing Then
-                Dim r = item.Record
-                r.TemplateName = txtName.Text.Trim()
-                r.Content = txtContent.Text
-                r.IsSkill = If(chkIsSkill.Checked, 1, 0)
-                r.ExtraJson = extra
-                r.Scenario = _currentScenario
-                PromptTemplateRepository.Update(r)
-                GlobalStatusStrip.ShowInfo("已保存")
-            Else
-                Dim r As New PromptTemplateRecord With {
-                    .TemplateName = txtName.Text.Trim(),
-                    .Content = txtContent.Text,
-                    .IsSkill = If(chkIsSkill.Checked, 1, 0),
-                    .ExtraJson = extra,
-                    .Scenario = _currentScenario,
-                    .Sort = _records.Count
-                }
-                PromptTemplateRepository.Insert(r)
-                GlobalStatusStrip.ShowInfo("已新增")
-            End If
-            LoadScenario(_currentScenario)
+            SkillsDirectoryService.OpenSkillsDirectory()
+            GlobalStatusStrip.ShowInfo("已打开Skills目录")
         Catch ex As Exception
-            GlobalStatusStrip.ShowWarning("保存失败: " & ex.Message)
+            GlobalStatusStrip.ShowWarning("打开目录失败: " & ex.Message)
         End Try
     End Sub
 
-    Private Sub BtnImportClick(sender As Object, e As EventArgs)
-        Using dlg As New OpenFileDialog()
-            dlg.Filter = "JSON 或 Markdown (*.json;*.md)|*.json;*.md|JSON (*.json)|*.json|Markdown (*.md)|*.md|All (*.*)|*.*"
-            dlg.FilterIndex = 1
-            If dlg.ShowDialog() <> DialogResult.OK Then Return
-            Try
-                Dim content = File.ReadAllText(dlg.FileName)
-                Dim ext = Path.GetExtension(dlg.FileName).ToLowerInvariant()
-                Dim name = Path.GetFileNameWithoutExtension(dlg.FileName)
-                Dim record As PromptTemplateRecord = Nothing
-
-                If ext = ".json" Then
-                    Dim jo = JObject.Parse(content)
-                    Dim pt = jo("promptTemplate")
-                    Dim ct = jo("content")
-                    Dim pm = jo("prompt")
-                    Dim promptTemplate = If(pt IsNot Nothing, pt.ToString(), If(ct IsNot Nothing, ct.ToString(), If(pm IsNot Nothing, pm.ToString(), "")))
-                    If String.IsNullOrWhiteSpace(promptTemplate) Then
-                        GlobalStatusStrip.ShowWarning("JSON 中需包含 promptTemplate、content 或 prompt 字段")
-                        Return
-                    End If
-                    Dim sn = jo("skillName")
-                    Dim nm = jo("name")
-                    Dim skillName = If(sn IsNot Nothing, sn.ToString(), If(nm IsNot Nothing, nm.ToString(), name))
-                    Dim supportedApps = If(jo("supported_apps"), jo("supportedApps"))
-                    Dim extraJo As New JObject()
-                    If supportedApps IsNot Nothing AndAlso TypeOf supportedApps Is JArray Then
-                        extraJo("supported_apps") = supportedApps
-                    End If
-                    Dim params = If(jo("parameters"), jo("params"))
-                    If params IsNot Nothing Then extraJo("parameters") = params
-                    Dim extra = If(extraJo.Count > 0, extraJo.ToString(), "")
-                    record = New PromptTemplateRecord With {
-                        .TemplateName = skillName,
-                        .Content = promptTemplate,
-                        .IsSkill = 1,
-                        .ExtraJson = extra,
-                        .Scenario = _currentScenario,
-                        .Sort = _records.Count
-                    }
-                Else
-                    record = New PromptTemplateRecord With {
-                        .TemplateName = name,
-                        .Content = content,
-                        .IsSkill = 1,
-                        .ExtraJson = "",
-                        .Scenario = _currentScenario,
-                        .Sort = _records.Count
-                    }
-                End If
-                PromptTemplateRepository.Insert(record)
-                GlobalStatusStrip.ShowInfo("已导入 Skill: " & record.TemplateName)
-                LoadScenario(_currentScenario)
-            Catch ex As Exception
-                GlobalStatusStrip.ShowWarning("导入失败: " & ex.Message)
-            End Try
-        End Using
-    End Sub
-
-    Private Sub BtnDeleteClick(sender As Object, e As EventArgs)
-        Dim item = TryCast(listBox.SelectedItem, ListItem)
-        If item Is Nothing Then
-            GlobalStatusStrip.ShowWarning("请先选择一项")
-            Return
-        End If
-        If MessageBox.Show("确定删除此项？", "确认", MessageBoxButtons.YesNo) <> DialogResult.Yes Then Return
-        Try
-            PromptTemplateRepository.Delete(item.Record.Id)
-            GlobalStatusStrip.ShowInfo("已删除")
-            LoadScenario(_currentScenario)
-        Catch ex As Exception
-            GlobalStatusStrip.ShowWarning("删除失败: " & ex.Message)
-        End Try
+    Private Sub BtnRefreshClick(sender As Object, e As EventArgs)
+        LoadSkills()
+        GlobalStatusStrip.ShowInfo("已刷新Skills列表")
     End Sub
 
     Private Class ListItem
-        Public Property Record As PromptTemplateRecord
+        Public Property Skill As SkillFileDefinition
         Public Property DisplayText As String
         Public Overrides Function ToString() As String
             Return DisplayText

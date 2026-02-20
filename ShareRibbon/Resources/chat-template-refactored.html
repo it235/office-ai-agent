@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -21,7 +21,13 @@
                 <div class="loading-spinner" style="width:16px; height:16px; border:2px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation:spin 0.8s linear infinite;"></div>
                 <span style="font-size:12px; color:rgba(255,255,255,0.9);">AI思考中...</span>
             </div>
-            <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+            <style>
+                @keyframes spin {
+                    to {
+                        transform: rotate(360deg);
+                    }
+                }
+            </style>
             <span id="case-toggle-arrow" style="position:absolute; right:18px; top:50%; transform:translateY(-50%) rotate(-90deg); display:flex; align-items:center; transition:transform 0.2s;">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
                      stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -51,7 +57,7 @@
         <!-- 模式标题栏 -->
         <div class="template-mode-header">
             <div class="template-mode-title">
-                <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" /></svg>
                 <span id="resource-mode-title">选择排版资源</span>
             </div>
             <div class="template-mode-actions">
@@ -60,33 +66,33 @@
                     新建
                 </button> -->
                 <button class="template-action-btn small-btn" onclick="saveCurrentDocumentAsTemplate()" id="btn-save-resource" title="保存左侧文档内容为排版模板">
-                    <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
+                    <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z" /></svg>
                     保存
                 </button>
                 <button class="template-action-btn small-btn" onclick="importTemplate()" id="btn-import-resource" title="从文件导入排版模板">
-                    <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
+                    <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z" /></svg>
                     导入
                 </button>
                 <button id="manage-templates-btn" class="template-action-btn small-btn manage-btn" onclick="toggleManageMode()">
-                    <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+                    <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" /></svg>
                     管理
                 </button>
                 <button id="exit-template-mode-btn" class="template-header-btn exit-btn">退出</button>
             </div>
         </div>
-        
+
         <!-- 资源类型Tab切换 -->
         <div class="resource-type-tabs">
             <button class="resource-tab active" data-type="template" onclick="switchResourceTab('template')">
-                <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" /></svg>
                 根据模板排版
             </button>
             <button class="resource-tab" data-type="styleguide" onclick="switchResourceTab('styleguide')">
-                <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z"/></svg>
+                <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z" /></svg>
                 根据规范排版
             </button>
         </div>
-        
+
         <!-- 模板列表（网格布局） -->
         <div id="template-list-container" class="template-list-container">
             <div id="template-cards-wrapper" class="template-cards-wrapper">
@@ -171,7 +177,7 @@
 
                 <!-- 智能输入框容器 -->
                 <div class="smart-input-container">
-                    <div id="smart-input" contenteditable="true" class="smart-input" 
+                    <div id="smart-input" contenteditable="true" class="smart-input"
                          data-placeholder="请在此输入您的问题... 按Enter键直接发送，Tab采纳补全"></div>
                     <span id="ghost-text" class="ghost-text"></span>
                 </div>
@@ -237,22 +243,6 @@
                             <path d="M10 11v6"></path>
                             <path d="M14 11v6"></path>
                             <path d="M9 3V4a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2V3"></path>
-                        </svg>
-                    </button>
-
-                    <!-- Ralph Agent 智能助手按钮 -->
-                    <button id="ralph-agent-btn" title="启动 Ralph Agent (自动执行任务)" onclick="showAgentInputDialog()">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <!-- 机器人头部 -->
-                            <rect x="3" y="8" width="18" height="12" rx="2"></rect>
-                            <!-- 眼睛 -->
-                            <circle cx="9" cy="13" r="1.5" fill="currentColor"></circle>
-                            <circle cx="15" cy="13" r="1.5" fill="currentColor"></circle>
-                            <!-- 天线 -->
-                            <line x1="12" y1="8" x2="12" y2="4"></line>
-                            <circle cx="12" cy="3" r="1"></circle>
-                            <!-- 嘴巴 -->
-                            <line x1="8" y1="17" x2="16" y2="17"></line>
                         </svg>
                     </button>
 
@@ -353,7 +343,7 @@
             </div>
             <div class="setting-tip">开启后，输入时AI会自动识别意图并提供补全建议</div>
         </div>
-        
+
         <!-- 补全快捷键设置已移至Ribbon区"大模型配置"组的"自动补全"按钮 -->
         <div class="setting-item" style="display:none;">
             <label class="setting-label">补全快捷键</label>
@@ -384,14 +374,7 @@
             <div class="setting-tip">单条回复记录对话数，每次想让ai记住历史多少条对话</div>
         </div>
 
-        <div class="setting-item" style="border-top:1px solid #eee; padding-top:12px;">
-            <label class="setting-label">配置</label>
-            <div style="margin-top:8px;">
-                <button type="button" id="btn-config-skills" class="config-entry-btn">场景与 Skills</button>
-                <button type="button" id="btn-config-memory" class="config-entry-btn">记忆管理</button>
-            </div>
-            <div class="setting-tip">在 Chat 内管理提示词、Skills 与记忆，无需单独打开配置窗口</div>
-        </div>
+
 
         <div class="settings-buttons">
             <button class="settings-button cancel-button" id="settings-cancel" onclick="settingsCancel()">取消</button>
@@ -399,75 +382,7 @@
         </div>
     </div>
 
-    <!-- 配置面板：场景与 Skills / 记忆管理（阶段二） -->
-    <div class="overlay" id="config-panel-overlay" style="display:none;"></div>
-    <div id="config-panel" class="config-panel" style="display:none;">
-        <div class="config-panel-header">
-            <span class="config-panel-title">配置</span>
-            <button type="button" id="config-panel-close" class="config-panel-close">×</button>
-        </div>
-        <div class="config-panel-tabs">
-            <button type="button" class="config-tab active" data-tab="skills">场景与 Skills</button>
-            <button type="button" class="config-tab" data-tab="memory">记忆管理</button>
-        </div>
-        <div id="config-tab-skills" class="config-tab-content">
-            <div class="config-section config-section-row">
-                <label class="config-label">场景</label>
-                <select id="config-skills-scenario" class="config-select" title="当前应用下可用的场景，common 为通用"></select>
-                <button type="button" id="config-skills-refresh" class="config-btn config-btn-secondary">刷新</button>
-                <button type="button" id="config-skills-import-folder" class="config-btn config-btn-secondary" title="选择包含 .json/.md Skill 文件的文件夹批量导入">从文件夹导入</button>
-            </div>
-            <div class="config-split">
-                <div class="config-list-wrap">
-                    <div id="config-skills-list" class="config-list"></div>
-                </div>
-                <div class="config-editor-wrap">
-                    <div class="config-editor-field">
-                        <label>名称</label>
-                        <input type="text" id="config-skills-name" placeholder="模板名称">
-                    </div>
-                    <div class="config-editor-field">
-                        <label>内容</label>
-                        <textarea id="config-skills-content" rows="8" placeholder="提示词或 Skill 内容"></textarea>
-                    </div>
-                    <div class="config-editor-field">
-                        <label><input type="checkbox" id="config-skills-isskill"> 是 Skill</label>
-                    </div>
-                    <div class="config-editor-field" id="config-skills-supported-wrap" style="display:none;">
-                        <label>supported_apps</label>
-                        <input type="text" id="config-skills-supported" placeholder="Excel,Word,PowerPoint">
-                    </div>
-                    <div class="config-editor-actions">
-                        <button type="button" id="config-skills-save" class="config-btn-primary">保存</button>
-                        <button type="button" id="config-skills-delete">删除</button>
-                        <button type="button" id="config-skills-new">新建</button>
-                    </div>
-                    <p class="config-hint">可参考官方 Skill 规范，将 .json / .md 文件放入同一文件夹后使用「从文件夹导入」批量添加。</p>
-                </div>
-            </div>
-        </div>
-        <div id="config-tab-memory" class="config-tab-content" style="display:none;">
-            <div class="config-memory-section">
-                <h4 class="config-section-heading">记忆片段 <span class="config-section-desc" title="从对话中自动提取的要点，用于 RAG 检索，仅显示当前应用下的记录">（最近 100 条）</span></h4>
-                <div class="config-split config-memory-split">
-                    <div class="config-list-wrap">
-                        <div id="config-memory-atomic-list" class="config-list"></div>
-                        <button type="button" id="config-memory-atomic-refresh">刷新</button>
-                    </div>
-                    <div class="config-editor-wrap">
-                        <textarea id="config-memory-atomic-content" rows="6" readonly placeholder="选中一项查看内容"></textarea>
-                        <button type="button" id="config-memory-atomic-delete">删除选中</button>
-                    </div>
-                </div>
-            </div>
-            <div class="config-memory-section">
-                <h4 class="config-section-heading">用户画像 <span class="config-section-desc" title="固定注入到上下文的背景信息，如您的角色、偏好、常用表述，便于 AI 更懂您">（可选）</span></h4>
-                <textarea id="config-memory-profile" rows="6" placeholder="例如：我是财务人员，常用 Excel 做报表；希望回答简洁、带示例"></textarea>
-                <button type="button" id="config-memory-profile-save">保存</button>
-                <button type="button" id="config-memory-profile-clear">清空</button>
-            </div>
-        </div>
-    </div>
+
 
     <!-- 2. 修改弹窗内容为三选一 -->
     <div id="clear-or-delete-actions" style="display:none; position:fixed; bottom:80px; left:50%; transform:translateX(-50%); z-index:999;">
@@ -495,7 +410,7 @@
     <script src="https://officeai.local/js/settings-manager.js"></script>
     <script src="https://officeai.local/js/mcp-manager.js"></script>
     <script src="https://officeai.local/js/history-manager.js"></script>
-    <script src="https://officeai.local/js/config-panel.js"></script>
+
     <script src="https://officeai.local/js/revision-manager.js"></script>
     <script src="https://officeai.local/js/autocomplete.js"></script>
     <script src="https://officeai.local/js/intent-preview.js"></script>

@@ -1,4 +1,4 @@
-' ShareRibbon\Config\StyleGuideResource.vb
+﻿' ShareRibbon\Config\StyleGuideResource.vb
 ' 排版规范资源数据模型
 
 Imports Newtonsoft.Json
@@ -93,9 +93,11 @@ End Enum
 ''' </summary>
 Public Enum TemplateSourceType
     ''' <summary>手动创建</summary>
-    Manual = 0
-    ''' <summary>AI从文档提取</summary>
-    AiExtracted = 1
-    ''' <summary>从文件导入</summary>
-    Imported = 2
+    Manual
+    ''' <summary>从文档解析</summary>
+    Parsed
+    ''' <summary>从规格生成</summary>
+    FromSpec
+    ''' <summary>预置模板</summary>
+    Preset
 End Enum

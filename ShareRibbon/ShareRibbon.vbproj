@@ -208,6 +208,7 @@
     <Compile Include="Storage\MemoryRepository.vb" />
     <Compile Include="Storage\ConversationRepository.vb" />
     <Compile Include="Storage\PromptTemplateRepository.vb" />
+	<Compile Include="Storage\FormatTemplateRepository.vb" />
     <Compile Include="Config\ConfigPromptForm.vb">
       <SubType>Form</SubType>
     </Compile>
@@ -239,6 +240,8 @@
     <Compile Include="Services\Reformat\SemanticPromptBuilder.vb" />
     <Compile Include="Services\Reformat\TaggingValidator.vb" />
     <Compile Include="Services\Reformat\StyleGuideConverter.vb" />
+    <Compile Include="Services\Reformat\DocumentParserService.vb" />
+    <Compile Include="Services\Reformat\FormatPreviewService.vb" />
     <Compile Include="Config\ReformatTemplateEditorForm.vb">
       <SubType>Form</SubType>
     </Compile>
@@ -366,6 +369,9 @@
     <Compile Include="Controls\Services\ExcelContextService.vb" />
     <Compile Include="Controls\Services\ExecutionPlanRenderer.vb" />
     <Compile Include="Controls\Models\ExecutionStep.vb" />
+    <Compile Include="Services\EmbeddingService.vb" />
+    <Compile Include="Services\SkillsDirectoryService.vb" />
+    <Compile Include="Services\SkillsService.vb" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Controls\BaseChatControl.resx">

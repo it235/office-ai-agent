@@ -55,7 +55,7 @@ function isAgentLocked() {
 
 /**
  * 显示Agent规划卡片（嵌入聊天流）
- * @param {Object} planData - { understanding, steps, summary, sessionId }
+ * @param {Object} planData - { understanding, steps, summary, sessionId, replaceThinkingUuid }
  */
 function showAgentPlanCard(planData) {
     try {
@@ -68,10 +68,27 @@ function showAgentPlanCard(planData) {
         const uuid = planData.sessionId || generateUUID();
         const timestamp = formatDateTime(new Date());
 
-        // 创建聊天容器
-        const chatContainer = document.createElement('div');
-        chatContainer.className = 'chat-container ralph-agent-container';
-        chatContainer.id = 'agent-plan-' + uuid;
+        let chatContainer;
+        // 检查是否有需要替换的思考消息
+        if (planData.replaceThinkingUuid) {
+            const thinkingDiv = document.getElementById('content-' + planData.replaceThinkingUuid);
+            const parentContainer = thinkingDiv ? thinkingDiv.closest('.chat-container') : null;
+            if (parentContainer) {
+                // 找到父容器，直接使用它
+                chatContainer = parentContainer;
+                chatContainer.className = 'chat-container ralph-agent-container';
+                chatContainer.id = 'agent-plan-' + uuid;
+                // 清空内容
+                chatContainer.innerHTML = '';
+            }
+        }
+        
+        // 如果没有找到可替换的容器，创建新的
+        if (!chatContainer) {
+            chatContainer = document.createElement('div');
+            chatContainer.className = 'chat-container ralph-agent-container';
+            chatContainer.id = 'agent-plan-' + uuid;
+        }
 
         // 构建步骤HTML
         const stepsHtml = planData.steps ? planData.steps.map((step, idx) => `
@@ -127,12 +144,18 @@ function showAgentPlanCard(planData) {
             </div>
         `;
 
-        // 添加到聊天容器
-        const chatHistoryContainer = document.getElementById('chat-container');
-        if (chatHistoryContainer) {
-            chatHistoryContainer.appendChild(chatContainer);
-            chatContainer.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        // 检查是否已经在容器中（即我们是否替换了思考消息）
+        const isAlreadyInContainer = chatContainer.parentElement && chatContainer.parentElement.id === 'chat-container';
+        if (!isAlreadyInContainer) {
+            // 添加到聊天容器
+            const chatHistoryContainer = document.getElementById('chat-container');
+            if (chatHistoryContainer) {
+                chatHistoryContainer.appendChild(chatContainer);
+            }
         }
+        
+        // 滚动到底部
+        chatContainer.scrollIntoView({ behavior: 'smooth', block: 'end' });
 
         window.ralphAgentState.session.uuid = uuid;
         console.log('[RalphAgent] 显示规划卡片, uuid=' + uuid);

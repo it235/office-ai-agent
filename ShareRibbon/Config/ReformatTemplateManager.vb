@@ -1,5 +1,5 @@
-' ShareRibbon\Config\ReformatTemplateManager.vb
-' 排版模板管理器（单例模式）
+﻿' ShareRibbon\Config\ReformatTemplateManager.vb
+' 排版模板管理器（单例模式，升级为数据库存储）
 
 Imports System.IO
 Imports Newtonsoft.Json
@@ -10,7 +10,8 @@ Imports Newtonsoft.Json
 Public Class ReformatTemplateManager
     Private Shared _instance As ReformatTemplateManager
     Private _templates As List(Of ReformatTemplate)
-    Private ReadOnly _configPath As String
+    Private _repository As FormatTemplateRepository
+    Private _migrated As Boolean = False
 
     ''' <summary>获取单例实例</summary>
     Public Shared ReadOnly Property Instance As ReformatTemplateManager
@@ -29,60 +30,82 @@ Public Class ReformatTemplateManager
         End Get
     End Property
 
+    ''' <summary>获取存储仓库</summary>
+    Public ReadOnly Property Repository As FormatTemplateRepository
+        Get
+            Return _repository
+        End Get
+    End Property
+
     Private Sub New()
-        _configPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            ConfigSettings.OfficeAiAppDataFolder,
-            "reformat_templates.json")
+        _repository = New FormatTemplateRepository()
         LoadTemplates()
     End Sub
 
     ''' <summary>加载模板配置</summary>
     Private Sub LoadTemplates()
-        _templates = New List(Of ReformatTemplate)()
+        _templates = _repository.GetAllTemplates()
 
-        If File.Exists(_configPath) Then
-            Try
-                Dim json = File.ReadAllText(_configPath, Text.Encoding.UTF8)
-                Dim loadedTemplates = JsonConvert.DeserializeObject(Of List(Of ReformatTemplate))(json)
-
-                ' 合并预置模板和用户模板
-                MergePresetsAndUserTemplates(loadedTemplates)
-            Catch ex As Exception
-                Debug.WriteLine($"加载模板配置失败: {ex.Message}")
+        If _templates.Count = 0 Then
+            If Not MigrateFromJson() Then
                 LoadPresetTemplates()
-            End Try
+                SaveAllPresets()
+            End If
         Else
-            ' 首次使用，加载预置模板
-            LoadPresetTemplates()
-            SaveTemplates()
+            EnsurePresetsExist()
         End If
     End Sub
 
-    ''' <summary>合并预置模板和用户模板</summary>
-    Private Sub MergePresetsAndUserTemplates(userTemplates As List(Of ReformatTemplate))
-        If userTemplates Is Nothing Then
-            LoadPresetTemplates()
-            Return
+    ''' <summary>从旧的JSON文件迁移数据</summary>
+    Private Function MigrateFromJson() As Boolean
+        If _migrated Then Return True
+
+        Dim configPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            ConfigSettings.OfficeAiAppDataFolder,
+            "reformat_templates.json")
+
+        If File.Exists(configPath) Then
+            Try
+                Dim json = File.ReadAllText(configPath, Text.Encoding.UTF8)
+                Dim loadedTemplates = JsonConvert.DeserializeObject(Of List(Of ReformatTemplate))(json)
+
+                If loadedTemplates IsNot Nothing AndAlso loadedTemplates.Count > 0 Then
+                    For Each template In loadedTemplates
+                        Try
+                            _repository.SaveTemplate(template)
+                        Catch
+                        End Try
+                    Next
+                    _templates = _repository.GetAllTemplates()
+                    _migrated = True
+
+                    Try
+                        File.Move(configPath, configPath & ".backup")
+                    Catch
+                    End Try
+
+                    Return True
+                End If
+            Catch ex As Exception
+                Debug.WriteLine($"从JSON迁移失败: {ex.Message}")
+            End Try
         End If
+        Return False
+    End Function
 
-        ' 先加载预置模板
+    ''' <summary>确保预置模板存在</summary>
+    Private Sub EnsurePresetsExist()
         Dim presets = GetPresetTemplates()
-        For Each preset In presets
-            Dim existing = userTemplates.FirstOrDefault(Function(t) t.Id = preset.Id)
-            If existing IsNot Nothing Then
-                ' 保留用户修改，但标记为预置
-                existing.IsPreset = True
-                _templates.Add(existing)
-            Else
-                _templates.Add(preset)
-            End If
-        Next
+        Dim existingIds = _templates.Select(Function(t) t.Id).ToHashSet()
 
-        ' 添加用户自定义模板
-        For Each userTemplate In userTemplates
-            If Not userTemplate.IsPreset AndAlso Not _templates.Any(Function(t) t.Id = userTemplate.Id) Then
-                _templates.Add(userTemplate)
+        For Each preset In presets
+            If Not existingIds.Contains(preset.Id) Then
+                Try
+                    _repository.SaveTemplate(preset)
+                    _templates.Add(preset)
+                Catch
+                End Try
             End If
         Next
     End Sub
@@ -92,19 +115,32 @@ Public Class ReformatTemplateManager
         _templates.AddRange(GetPresetTemplates())
     End Sub
 
-    ''' <summary>保存模板配置</summary>
-    Public Sub SaveTemplates()
-        Try
-            Dim dir = Path.GetDirectoryName(_configPath)
-            If Not Directory.Exists(dir) Then
-                Directory.CreateDirectory(dir)
-            End If
+    ''' <summary>保存所有预置模板到数据库</summary>
+    Private Sub SaveAllPresets()
+        For Each template In _templates
+            Try
+                _repository.SaveTemplate(template)
+            Catch
+            End Try
+        Next
+    End Sub
 
-            Dim json = JsonConvert.SerializeObject(_templates, Formatting.Indented)
-            File.WriteAllText(_configPath, json, Text.Encoding.UTF8)
-        Catch ex As Exception
-            Debug.WriteLine($"保存模板配置失败: {ex.Message}")
-        End Try
+    ''' <summary>保存模板</summary>
+    Public Sub SaveTemplate(template As ReformatTemplate)
+        Dim existing = _templates.FirstOrDefault(Function(t) t.Id = template.Id)
+        If existing IsNot Nothing Then
+            template.LastModified = DateTime.Now
+            Dim index = _templates.IndexOf(existing)
+            _templates(index) = template
+        Else
+            template.Id = Guid.NewGuid().ToString()
+            template.CreatedAt = DateTime.Now
+            template.LastModified = DateTime.Now
+            template.IsPreset = False
+            _templates.Add(template)
+        End If
+
+        _repository.SaveTemplate(template)
     End Sub
 
     ''' <summary>添加模板</summary>
@@ -114,7 +150,7 @@ Public Class ReformatTemplateManager
         template.LastModified = DateTime.Now
         template.IsPreset = False
         _templates.Add(template)
-        SaveTemplates()
+        _repository.SaveTemplate(template)
     End Sub
 
     ''' <summary>更新模板</summary>
@@ -124,7 +160,7 @@ Public Class ReformatTemplateManager
             template.LastModified = DateTime.Now
             Dim index = _templates.IndexOf(existing)
             _templates(index) = template
-            SaveTemplates()
+            _repository.SaveTemplate(template)
         End If
     End Sub
 
@@ -133,11 +169,10 @@ Public Class ReformatTemplateManager
         Dim template = _templates.FirstOrDefault(Function(t) t.Id = templateId)
         If template IsNot Nothing Then
             If template.IsPreset Then
-                Return False ' 预置模板不可删除
+                Return False
             End If
             _templates.Remove(template)
-            SaveTemplates()
-            Return True
+            Return _repository.DeleteTemplate(templateId)
         End If
         Return False
     End Function
@@ -146,7 +181,6 @@ Public Class ReformatTemplateManager
     Public Function DuplicateTemplate(templateId As String, newName As String) As ReformatTemplate
         Dim original = _templates.FirstOrDefault(Function(t) t.Id = templateId)
         If original IsNot Nothing Then
-            ' 深拷贝
             Dim json = JsonConvert.SerializeObject(original)
             Dim duplicate = JsonConvert.DeserializeObject(Of ReformatTemplate)(json)
             duplicate.Id = Guid.NewGuid().ToString()
@@ -155,7 +189,7 @@ Public Class ReformatTemplateManager
             duplicate.CreatedAt = DateTime.Now
             duplicate.LastModified = DateTime.Now
             _templates.Add(duplicate)
-            SaveTemplates()
+            _repository.SaveTemplate(duplicate)
             Return duplicate
         End If
         Return Nothing
@@ -181,12 +215,12 @@ Public Class ReformatTemplateManager
         Try
             Dim json = File.ReadAllText(filePath, Text.Encoding.UTF8)
             Dim template = JsonConvert.DeserializeObject(Of ReformatTemplate)(json)
-            template.Id = Guid.NewGuid().ToString() ' 生成新ID
+            template.Id = Guid.NewGuid().ToString()
             template.IsPreset = False
             template.CreatedAt = DateTime.Now
             template.LastModified = DateTime.Now
             _templates.Add(template)
-            SaveTemplates()
+            _repository.SaveTemplate(template)
             Return template
         Catch ex As Exception
             Debug.WriteLine($"导入模板失败: {ex.Message}")
@@ -207,6 +241,11 @@ Public Class ReformatTemplateManager
         Return _templates.Where(Function(t) t.Category = category).ToList()
     End Function
 
+    ''' <summary>按应用类型获取模板</summary>
+    Public Function GetTemplatesByApp(targetApp As String) As List(Of ReformatTemplate)
+        Return _repository.GetTemplatesByApp(targetApp)
+    End Function
+
     ''' <summary>获取所有分类</summary>
     Public Function GetAllCategories() As List(Of String)
         Dim categories = _templates.Select(Function(t) t.Category).Distinct().ToList()
@@ -214,7 +253,7 @@ Public Class ReformatTemplateManager
         Return categories
     End Function
 
-    ''' <summary>刷新模板列表（重新从文件加载）</summary>
+    ''' <summary>刷新模板列表（重新从数据库加载）</summary>
     Public Sub Refresh()
         LoadTemplates()
     End Sub
@@ -225,16 +264,9 @@ Public Class ReformatTemplateManager
     Private Function GetPresetTemplates() As List(Of ReformatTemplate)
         Dim presets As New List(Of ReformatTemplate)()
 
-        ' 预置模板1：通用公文模板
         presets.Add(CreateGeneralOfficialTemplate())
-
-        ' 预置模板2：行政公文模板
         presets.Add(CreateAdministrativeTemplate())
-
-        ' 预置模板3：学术论文模板
         presets.Add(CreateAcademicTemplate())
-
-        ' 预置模板4：商务报告模板
         presets.Add(CreateBusinessReportTemplate())
 
         Return presets
@@ -249,10 +281,10 @@ Public Class ReformatTemplateManager
             .Category = "通用",
             .TargetApp = "Word",
             .IsPreset = True,
+            .TemplateSource = TemplateSourceType.Preset,
             .AiGuidance = "这是标准的党政机关公文格式模板，请严格按照《党政机关公文格式》(GB/T 9704-2012)标准执行。"
         }
 
-        ' 版式配置
         template.Layout = New LayoutConfig()
         template.Layout.Elements.Add(New LayoutElement With {
             .Name = "发文机关",
@@ -299,7 +331,6 @@ Public Class ReformatTemplateManager
             .Color = New ColorConfig("#000000")
         })
 
-        ' 正文样式
         template.BodyStyles.Add(New StyleRule With {
             .RuleName = "正文",
             .MatchCondition = "默认正文段落",
@@ -317,7 +348,6 @@ Public Class ReformatTemplateManager
             .Color = New ColorConfig("#000000")
         })
 
-        ' 页面设置
         template.PageSettings = New PageConfig With {
             .Margins = New MarginsConfig(3.7, 3.5, 2.8, 2.6),
             .Header = New HeaderFooterConfig(False),
@@ -337,10 +367,10 @@ Public Class ReformatTemplateManager
             .Category = "行政",
             .TargetApp = "Word",
             .IsPreset = True,
+            .TemplateSource = TemplateSourceType.Preset,
             .AiGuidance = "严格遵循党政机关公文格式国家标准GB/T 9704-2012。注意版记、附件说明、成文日期等要素的位置。"
         }
 
-        ' 版式配置
         template.Layout = New LayoutConfig()
         template.Layout.Elements.Add(New LayoutElement With {
             .Name = "发文机关标志",
@@ -376,28 +406,7 @@ Public Class ReformatTemplateManager
             .Paragraph = New ParagraphConfig("center", 0, 1.5),
             .Color = New ColorConfig("#000000")
         })
-        template.Layout.Elements.Add(New LayoutElement With {
-            .Name = "文件标题",
-            .ElementType = "text",
-            .DefaultValue = "关于XXXX的通知",
-            .Required = True,
-            .SortOrder = 4,
-            .Font = New FontConfig("方正小标宋简体", "Arial", 22, True),
-            .Paragraph = New ParagraphConfig("center", 0, 1.5) With {.SpaceAfter = 1.5},
-            .Color = New ColorConfig("#000000")
-        })
-        template.Layout.Elements.Add(New LayoutElement With {
-            .Name = "主送机关",
-            .ElementType = "text",
-            .DefaultValue = "各相关单位：",
-            .Required = True,
-            .SortOrder = 5,
-            .Font = New FontConfig("仿宋", "Times New Roman", 16),
-            .Paragraph = New ParagraphConfig("left", 0, 1.5),
-            .Color = New ColorConfig("#000000")
-        })
 
-        ' 正文样式
         template.BodyStyles.Add(New StyleRule With {
             .RuleName = "正文",
             .MatchCondition = "默认正文段落",
@@ -406,16 +415,7 @@ Public Class ReformatTemplateManager
             .Paragraph = New ParagraphConfig("justify", 2, 1.5),
             .Color = New ColorConfig("#000000")
         })
-        template.BodyStyles.Add(New StyleRule With {
-            .RuleName = "大标题",
-            .MatchCondition = "包含'一、'",
-            .SortOrder = 2,
-            .Font = New FontConfig("黑体", "Arial", 16, True),
-            .Paragraph = New ParagraphConfig("left", 0, 1.5),
-            .Color = New ColorConfig("#000000")
-        })
 
-        ' 页面设置
         template.PageSettings = New PageConfig With {
             .Margins = New MarginsConfig(3.7, 3.5, 2.8, 2.6),
             .Header = New HeaderFooterConfig(False),
@@ -435,10 +435,10 @@ Public Class ReformatTemplateManager
             .Category = "学术",
             .TargetApp = "Word",
             .IsPreset = True,
+            .TemplateSource = TemplateSourceType.Preset,
             .AiGuidance = "学术论文标准格式。注意区分摘要、关键词、引言、正文、参考文献等部分。参考文献采用GB/T 7714-2015格式。"
         }
 
-        ' 版式配置
         template.Layout = New LayoutConfig()
         template.Layout.Elements.Add(New LayoutElement With {
             .Name = "论文标题",
@@ -450,34 +450,13 @@ Public Class ReformatTemplateManager
             .Paragraph = New ParagraphConfig("center", 0, 1.5) With {.SpaceAfter = 1},
             .Color = New ColorConfig("#000000")
         })
-        template.Layout.Elements.Add(New LayoutElement With {
-            .Name = "作者信息",
-            .ElementType = "text",
-            .DefaultValue = "作者姓名（单位）",
-            .Required = True,
-            .SortOrder = 2,
-            .Font = New FontConfig("宋体", "Times New Roman", 12),
-            .Paragraph = New ParagraphConfig("center", 0, 1.5) With {.SpaceAfter = 1},
-            .Color = New ColorConfig("#000000")
-        })
-        template.Layout.Elements.Add(New LayoutElement With {
-            .Name = "摘要标题",
-            .ElementType = "text",
-            .DefaultValue = "摘要：",
-            .Required = True,
-            .SortOrder = 3,
-            .Font = New FontConfig("黑体", "Arial", 12, True),
-            .Paragraph = New ParagraphConfig("left", 0, 1.5),
-            .Color = New ColorConfig("#000000")
-        })
 
-        ' 正文样式
         template.BodyStyles.Add(New StyleRule With {
-            .RuleName = "摘要正文",
-            .MatchCondition = "摘要后的段落",
+            .RuleName = "正文",
+            .MatchCondition = "默认正文段落",
             .SortOrder = 1,
-            .Font = New FontConfig("宋体", "Times New Roman", 10.5),
-            .Paragraph = New ParagraphConfig("justify", 0, 1.5),
+            .Font = New FontConfig("宋体", "Times New Roman", 12),
+            .Paragraph = New ParagraphConfig("justify", 2, 1.5),
             .Color = New ColorConfig("#000000")
         })
         template.BodyStyles.Add(New StyleRule With {
@@ -488,24 +467,7 @@ Public Class ReformatTemplateManager
             .Paragraph = New ParagraphConfig("left", 0, 1.5) With {.SpaceBefore = 0.5, .SpaceAfter = 0.5},
             .Color = New ColorConfig("#000000")
         })
-        template.BodyStyles.Add(New StyleRule With {
-            .RuleName = "二级标题",
-            .MatchCondition = "包含'1.1 '或'（一）'开头的短段落",
-            .SortOrder = 3,
-            .Font = New FontConfig("黑体", "Arial", 12, True),
-            .Paragraph = New ParagraphConfig("left", 0, 1.5),
-            .Color = New ColorConfig("#000000")
-        })
-        template.BodyStyles.Add(New StyleRule With {
-            .RuleName = "正文",
-            .MatchCondition = "默认正文段落",
-            .SortOrder = 4,
-            .Font = New FontConfig("宋体", "Times New Roman", 12),
-            .Paragraph = New ParagraphConfig("justify", 2, 1.5),
-            .Color = New ColorConfig("#000000")
-        })
 
-        ' 页面设置
         template.PageSettings = New PageConfig With {
             .Margins = New MarginsConfig(2.54, 2.54, 3.18, 3.18),
             .Header = New HeaderFooterConfig(False),
@@ -525,10 +487,10 @@ Public Class ReformatTemplateManager
             .Category = "商务",
             .TargetApp = "Word",
             .IsPreset = True,
+            .TemplateSource = TemplateSourceType.Preset,
             .AiGuidance = "现代商务报告风格。注重视觉层次，使用微软雅黑字体，标题采用蓝色系。支持图表、数据表格等商务元素。"
         }
 
-        ' 版式配置
         template.Layout = New LayoutConfig()
         template.Layout.Elements.Add(New LayoutElement With {
             .Name = "报告标题",
@@ -540,52 +502,24 @@ Public Class ReformatTemplateManager
             .Paragraph = New ParagraphConfig("center", 0, 1.5) With {.SpaceAfter = 2},
             .Color = New ColorConfig("#2E5090")
         })
-        template.Layout.Elements.Add(New LayoutElement With {
-            .Name = "副标题",
-            .ElementType = "text",
-            .DefaultValue = "子标题",
-            .Required = False,
-            .SortOrder = 2,
-            .Font = New FontConfig("微软雅黑", "Arial", 16),
-            .Paragraph = New ParagraphConfig("center", 0, 1.5) With {.SpaceAfter = 1.5},
-            .Color = New ColorConfig("#666666")
-        })
 
-        ' 正文样式
-        template.BodyStyles.Add(New StyleRule With {
-            .RuleName = "一级标题",
-            .MatchCondition = "章节标题或包含数字编号的标题",
-            .SortOrder = 1,
-            .Font = New FontConfig("微软雅黑", "Arial", 18, True),
-            .Paragraph = New ParagraphConfig("left", 0, 1.5) With {.SpaceBefore = 1, .SpaceAfter = 0.5},
-            .Color = New ColorConfig("#2E5090")
-        })
-        template.BodyStyles.Add(New StyleRule With {
-            .RuleName = "二级标题",
-            .MatchCondition = "二级标题或包含次级编号",
-            .SortOrder = 2,
-            .Font = New FontConfig("微软雅黑", "Arial", 14, True),
-            .Paragraph = New ParagraphConfig("left", 0, 1.5) With {.SpaceBefore = 0.5, .SpaceAfter = 0.5},
-            .Color = New ColorConfig("#000000")
-        })
         template.BodyStyles.Add(New StyleRule With {
             .RuleName = "正文",
             .MatchCondition = "默认正文段落",
-            .SortOrder = 3,
+            .SortOrder = 1,
             .Font = New FontConfig("微软雅黑", "Arial", 11),
             .Paragraph = New ParagraphConfig("justify", 2, 1.5),
             .Color = New ColorConfig("#000000")
         })
         template.BodyStyles.Add(New StyleRule With {
-            .RuleName = "要点列表",
-            .MatchCondition = "包含'·'或'•'",
-            .SortOrder = 4,
-            .Font = New FontConfig("微软雅黑", "Arial", 11),
-            .Paragraph = New ParagraphConfig("left", 0, 1.5) With {.LeftIndent = 1},
-            .Color = New ColorConfig("#000000")
+            .RuleName = "一级标题",
+            .MatchCondition = "章节标题或包含数字编号的标题",
+            .SortOrder = 2,
+            .Font = New FontConfig("微软雅黑", "Arial", 18, True),
+            .Paragraph = New ParagraphConfig("left", 0, 1.5) With {.SpaceBefore = 1, .SpaceAfter = 0.5},
+            .Color = New ColorConfig("#2E5090")
         })
 
-        ' 页面设置
         template.PageSettings = New PageConfig With {
             .Margins = New MarginsConfig(2.5, 2.5, 2.5, 2.5),
             .Header = New HeaderFooterConfig(True, "商务报告", "right"),

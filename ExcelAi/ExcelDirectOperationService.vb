@@ -173,7 +173,7 @@ Public Class ExcelDirectOperationService
             If String.IsNullOrEmpty(targetRange) Then
                 targetRange = params("range")?.ToString()
             End If
-            
+
             ' 如果有targetSheet，组合成完整地址
             Dim targetSheet = params("targetSheet")?.ToString()
             If Not String.IsNullOrEmpty(targetSheet) AndAlso Not String.IsNullOrEmpty(targetRange) Then
@@ -182,7 +182,7 @@ Public Class ExcelDirectOperationService
                     targetRange = $"{targetSheet}!{targetRange}"
                 End If
             End If
-            
+
             ' 支持data或targetData
             Dim data = params("data")
             If data Is Nothing Then
@@ -197,13 +197,13 @@ Public Class ExcelDirectOperationService
             ' 解析目标范围（可能包含工作表名）
             Dim ws As Worksheet
             Dim cellAddress As String = targetRange
-            
+
             If targetRange.Contains("!") Then
                 ' 格式: "SheetName!A1" 或 "'Sheet Name'!A1"
                 Dim parts = targetRange.Split("!"c)
                 Dim sheetName = parts(0).Trim("'"c)
                 cellAddress = parts(1)
-                
+
                 ' 检查工作表是否存在，不存在则创建
                 Try
                     ws = _excelApp.Worksheets(sheetName)
@@ -216,7 +216,7 @@ Public Class ExcelDirectOperationService
             Else
                 ws = _excelApp.ActiveSheet
             End If
-            
+
             Dim range As Range = ws.Range(cellAddress)
 
             ' 支持单值或数组
@@ -265,13 +265,13 @@ Public Class ExcelDirectOperationService
             ' 解析目标范围（可能包含工作表名）
             Dim ws As Worksheet
             Dim cellAddress As String = targetRange
-            
+
             If targetRange.Contains("!") Then
                 ' 格式: "SheetName!A1:B10" 或 "'Sheet Name'!A1:B10"
                 Dim parts = targetRange.Split("!"c)
                 Dim sheetName = parts(0).Trim("'"c)
                 cellAddress = parts(1)
-                
+
                 ' 检查工作表是否存在，不存在则创建
                 Try
                     ws = _excelApp.Worksheets(sheetName)
@@ -283,7 +283,7 @@ Public Class ExcelDirectOperationService
             Else
                 ws = _excelApp.ActiveSheet
             End If
-            
+
             Dim range As Range = ws.Range(cellAddress)
 
             ' 确保公式以=开头
@@ -414,73 +414,214 @@ Public Class ExcelDirectOperationService
             End If
 
             If String.IsNullOrEmpty(targetRange) Then
+                ShareRibbon.GlobalStatusStrip.ShowWarning("FormatRange: 缺少 range 参数")
                 Return False
             End If
 
             Dim ws As Worksheet = _excelApp.ActiveSheet
-            Dim range As Range = ws.Range(targetRange)
+            Dim range As Range = Nothing
+            Dim chartObj As ChartObject = Nothing
 
-            ' 应用样式
-            Dim style = params("style")?.ToString()
-            Select Case style?.ToLower()
-                Case "header"
+            ' 先检查是否是图表对象（如 "Chart 1"）
+            Try
+                chartObj = ws.ChartObjects(targetRange)
+            Catch
+                chartObj = Nothing
+            End Try
+
+            If chartObj IsNot Nothing Then
+                ' 是图表对象，格式化图表
+                Return ExecuteFormatChart(chartObj, params)
+            Else
+                ' 是单元格范围
+                Try
+                    range = ws.Range(targetRange)
+                Catch ex As Exception
+                    ShareRibbon.GlobalStatusStrip.ShowWarning($"FormatRange: 无法找到范围 '{targetRange}': {ex.Message}")
+                    Return False
+                End Try
+
+                ' 应用样式
+                Dim style = params("style")?.ToString()
+                Select Case style?.ToLower()
+                    Case "header"
+                        range.Font.Bold = True
+                        range.Interior.Color = RGB(68, 114, 196)
+                        range.Font.Color = RGB(255, 255, 255)
+                        range.HorizontalAlignment = XlHAlign.xlHAlignCenter
+                    Case "total"
+                        range.Font.Bold = True
+                        range.Borders(XlBordersIndex.xlEdgeTop).LineStyle = XlLineStyle.xlDouble
+                    Case "data"
+                        range.Borders.LineStyle = XlLineStyle.xlContinuous
+                        range.Borders.Weight = XlBorderWeight.xlThin
+                End Select
+
+                ' 应用单独的格式属性
+                Dim boldParam = params("bold")
+                If boldParam IsNot Nothing AndAlso boldParam.Value(Of Boolean)() = True Then
                     range.Font.Bold = True
-                    range.Interior.Color = RGB(68, 114, 196) ' 蓝色背景
-                    range.Font.Color = RGB(255, 255, 255) ' 白色字体
-                    range.HorizontalAlignment = XlHAlign.xlHAlignCenter
-                Case "total"
-                    range.Font.Bold = True
-                    range.Borders(XlBordersIndex.xlEdgeTop).LineStyle = XlLineStyle.xlDouble
-                Case "data"
-                    range.Borders.LineStyle = XlLineStyle.xlContinuous
-                    range.Borders.Weight = XlBorderWeight.xlThin
-            End Select
-
-            ' 应用单独的格式属性
-            Dim boldParam = params("bold")
-            If boldParam IsNot Nothing AndAlso boldParam.Value(Of Boolean)() = True Then
-                range.Font.Bold = True
-            End If
-
-            Dim italicParam = params("italic")
-            If italicParam IsNot Nothing AndAlso italicParam.Value(Of Boolean)() = True Then
-                range.Font.Italic = True
-            End If
-
-            Dim fontSize = params("fontSize")?.Value(Of Integer)()
-            If fontSize.HasValue AndAlso fontSize.Value > 0 Then
-                range.Font.Size = fontSize.Value
-            End If
-
-            Dim bgColor = params("backgroundColor")?.ToString()
-            If Not String.IsNullOrEmpty(bgColor) Then
-                range.Interior.Color = ParseColor(bgColor)
-            End If
-
-            Dim fontColor = params("fontColor")?.ToString()
-            If Not String.IsNullOrEmpty(fontColor) Then
-                range.Font.Color = ParseColor(fontColor)
-            End If
-
-            Dim bordersParam = params("borders")
-            If bordersParam IsNot Nothing Then
-                ' 支持多种格式: true/false, "all", "none", "outline"
-                Dim bordersValue = bordersParam.ToString().ToLower()
-                If bordersValue = "true" OrElse bordersValue = "all" Then
-                    range.Borders.LineStyle = XlLineStyle.xlContinuous
-                    range.Borders.Weight = XlBorderWeight.xlThin
-                ElseIf bordersValue = "outline" Then
-                    range.BorderAround(XlLineStyle.xlContinuous, XlBorderWeight.xlThin)
-                ElseIf bordersValue = "none" OrElse bordersValue = "false" Then
-                    range.Borders.LineStyle = XlLineStyle.xlLineStyleNone
                 End If
-            End If
 
-            ShareRibbon.GlobalStatusStrip.ShowInfo($"格式已应用到 {targetRange}")
-            Return True
+                Dim italicParam = params("italic")
+                If italicParam IsNot Nothing AndAlso italicParam.Value(Of Boolean)() = True Then
+                    range.Font.Italic = True
+                End If
+
+                Dim fontSize = params("fontSize")?.Value(Of Integer)()
+                If fontSize.HasValue AndAlso fontSize.Value > 0 Then
+                    range.Font.Size = fontSize.Value
+                End If
+
+                Dim bgColor = params("backgroundColor")?.ToString()
+                If Not String.IsNullOrEmpty(bgColor) Then
+                    range.Interior.Color = ParseColor(bgColor)
+                End If
+
+                Dim fontColor = params("fontColor")?.ToString()
+                If Not String.IsNullOrEmpty(fontColor) Then
+                    range.Font.Color = ParseColor(fontColor)
+                End If
+
+                Dim bordersParam = params("borders")
+                If bordersParam IsNot Nothing Then
+                    Dim bordersValue = bordersParam.ToString().ToLower()
+                    If bordersValue = "true" OrElse bordersValue = "all" Then
+                        range.Borders.LineStyle = XlLineStyle.xlContinuous
+                        range.Borders.Weight = XlBorderWeight.xlThin
+                    ElseIf bordersValue = "outline" Then
+                        range.BorderAround(XlLineStyle.xlContinuous, XlBorderWeight.xlThin)
+                    ElseIf bordersValue = "none" OrElse bordersValue = "false" Then
+                        range.Borders.LineStyle = XlLineStyle.xlLineStyleNone
+                    End If
+                End If
+
+                ShareRibbon.GlobalStatusStrip.ShowInfo($"格式已应用到 {targetRange}")
+                Return True
+            End If
 
         Catch ex As Exception
             Debug.WriteLine($"ExecuteFormatRange 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"格式化失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行格式化图表命令
+    ''' </summary>
+    Private Function ExecuteFormatChart(chartObj As ChartObject, params As JToken) As Boolean
+        Try
+            With chartObj.Chart
+                ' 获取样式参数
+                Dim styleParams = params("style")
+                If styleParams IsNot Nothing AndAlso styleParams.Type = JTokenType.Object Then
+                    ' 从 style 对象中读取属性
+                    Dim fontSize = styleParams("fontSize")?.Value(Of Integer)()
+                    Dim fontColor = styleParams("fontColor")?.ToString()
+                    Dim bgColor = styleParams("backgroundColor")?.ToString()
+                    Dim boldParam = styleParams("bold")
+
+                    ' 格式化图表标题
+                    If .HasTitle Then
+                        If fontSize.HasValue AndAlso fontSize.Value > 0 Then
+                            .ChartTitle.Font.Size = fontSize.Value
+                        End If
+                        If Not String.IsNullOrEmpty(fontColor) Then
+                            .ChartTitle.Font.Color = ParseColor(fontColor)
+                        End If
+                        If boldParam IsNot Nothing AndAlso boldParam.Value(Of Boolean)() = True Then
+                            .ChartTitle.Font.Bold = True
+                        End If
+                    End If
+
+                    ' 格式化坐标轴
+                    Try
+                        If .Axes IsNot Nothing Then
+                            For Each axis In .Axes
+                                If fontSize.HasValue AndAlso fontSize.Value > 0 Then
+                                    axis.TickLabels.Font.Size = fontSize.Value
+                                End If
+                                If Not String.IsNullOrEmpty(fontColor) Then
+                                    axis.TickLabels.Font.Color = ParseColor(fontColor)
+                                End If
+                            Next
+                        End If
+                    Catch
+                    End Try
+
+                    ' 格式化图例
+                    If .HasLegend Then
+                        If fontSize.HasValue AndAlso fontSize.Value > 0 Then
+                            .Legend.Font.Size = fontSize.Value
+                        End If
+                        If Not String.IsNullOrEmpty(fontColor) Then
+                            .Legend.Font.Color = ParseColor(fontColor)
+                        End If
+                    End If
+
+                    ' 格式化图表区背景
+                    If Not String.IsNullOrEmpty(bgColor) Then
+                        .ChartArea.Interior.Color = ParseColor(bgColor)
+                    End If
+                Else
+                    ' 从根参数中读取属性（向后兼容）
+                    Dim fontSize = params("fontSize")?.Value(Of Integer)()
+                    Dim fontColor = params("fontColor")?.ToString()
+                    Dim bgColor = params("backgroundColor")?.ToString()
+                    Dim boldParam = params("bold")
+
+                    ' 格式化图表标题
+                    If .HasTitle Then
+                        If fontSize.HasValue AndAlso fontSize.Value > 0 Then
+                            .ChartTitle.Font.Size = fontSize.Value
+                        End If
+                        If Not String.IsNullOrEmpty(fontColor) Then
+                            .ChartTitle.Font.Color = ParseColor(fontColor)
+                        End If
+                        If boldParam IsNot Nothing AndAlso boldParam.Value(Of Boolean)() = True Then
+                            .ChartTitle.Font.Bold = True
+                        End If
+                    End If
+
+                    ' 格式化坐标轴
+                    Try
+                        If .Axes IsNot Nothing Then
+                            For Each axis In .Axes
+                                If fontSize.HasValue AndAlso fontSize.Value > 0 Then
+                                    axis.TickLabels.Font.Size = fontSize.Value
+                                End If
+                                If Not String.IsNullOrEmpty(fontColor) Then
+                                    axis.TickLabels.Font.Color = ParseColor(fontColor)
+                                End If
+                            Next
+                        End If
+                    Catch
+                    End Try
+
+                    ' 格式化图例
+                    If .HasLegend Then
+                        If fontSize.HasValue AndAlso fontSize.Value > 0 Then
+                            .Legend.Font.Size = fontSize.Value
+                        End If
+                        If Not String.IsNullOrEmpty(fontColor) Then
+                            .Legend.Font.Color = ParseColor(fontColor)
+                        End If
+                    End If
+
+                    ' 格式化图表区背景
+                    If Not String.IsNullOrEmpty(bgColor) Then
+                        .ChartArea.Interior.Color = ParseColor(bgColor)
+                    End If
+                End If
+            End With
+
+            ShareRibbon.GlobalStatusStrip.ShowInfo($"图表格式已应用")
+            Return True
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteFormatChart 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"格式化图表失败: {ex.Message}")
             Return False
         End Try
     End Function
@@ -494,17 +635,25 @@ Public Class ExcelDirectOperationService
             Dim dataRange = params("dataRange")?.ToString()
             Dim title = params("title")?.ToString()
             Dim position = params("position")?.ToString()
-            Dim categoryAxis = params("categoryAxis")?.ToString()
-            Dim seriesNames = params("seriesNames")
+            Dim categoryAxisParam = params("categoryAxis")
+            Dim seriesNamesParam = params("seriesNames")
             Dim legendPosition = params("legendPosition")?.ToString()
             Dim plotBy = params("plotBy")?.ToString()
 
             If String.IsNullOrEmpty(dataRange) Then
+                ShareRibbon.GlobalStatusStrip.ShowWarning("CreateChart: 缺少 dataRange 参数")
                 Return False
             End If
 
-            Dim ws As Worksheet = _excelApp.ActiveSheet
-            Dim sourceRange As Range = ws.Range(dataRange)
+            ' 解析数据范围
+            Dim ws As Worksheet = Nothing
+            Dim rangeAddress As String = ""
+            If Not ParseExcelRange(dataRange, ws, rangeAddress) Then
+                ShareRibbon.GlobalStatusStrip.ShowWarning("CreateChart: 无法解析数据范围")
+                Return False
+            End If
+
+            Dim sourceRange As Range = ws.Range(rangeAddress)
 
             ' 确定图表类型
             Dim xlChartType As XlChartType = XlChartType.xlColumnClustered
@@ -526,9 +675,12 @@ Public Class ExcelDirectOperationService
             ' 确定图表位置
             Dim positionRange As Range
             If Not String.IsNullOrEmpty(position) Then
-                positionRange = ws.Range(position)
+                Try
+                    positionRange = ws.Range(position)
+                Catch
+                    positionRange = sourceRange.Offset(0, sourceRange.Columns.Count + 1)
+                End Try
             Else
-                ' 默认放在数据右边
                 positionRange = sourceRange.Offset(0, sourceRange.Columns.Count + 1)
             End If
 
@@ -541,7 +693,7 @@ Public Class ExcelDirectOperationService
 
             With chartObj.Chart
                 .ChartType = xlChartType
-                
+
                 ' 设置数据源和绘图方向
                 If Not String.IsNullOrEmpty(plotBy) AndAlso plotBy.ToLower() = "row" Then
                     .SetSourceData(sourceRange, XlRowCol.xlRows)
@@ -555,29 +707,79 @@ Public Class ExcelDirectOperationService
                     .ChartTitle.Text = title
                 End If
 
-                ' 设置系列名称（解决"系列1"问题）
-                If seriesNames IsNot Nothing AndAlso seriesNames.Type = JTokenType.Array Then
-                    Dim names = seriesNames.ToObject(Of List(Of String))()
-                    For i As Integer = 1 To Math.Min(.SeriesCollection.Count, names.Count)
-                        Try
-                            .SeriesCollection(i).Name = names(i - 1)
-                        Catch
-                        End Try
-                    Next
-                End If
-
-                ' 设置分类轴标签
-                If Not String.IsNullOrEmpty(categoryAxis) Then
-                    Try
-                        Dim catRange As Range = ws.Range(categoryAxis)
-                        For i As Integer = 1 To .SeriesCollection.Count
+                ' 设置系列名称（支持数组和范围两种格式）
+                If seriesNamesParam IsNot Nothing Then
+                    If seriesNamesParam.Type = JTokenType.Array Then
+                        ' 数组格式
+                        Dim names = seriesNamesParam.ToObject(Of List(Of String))()
+                        For i As Integer = 1 To Math.Min(.SeriesCollection.Count, names.Count)
                             Try
-                                .SeriesCollection(i).XValues = catRange
-                            Catch
+                                .SeriesCollection(i).Name = names(i - 1)
+                            Catch ex As Exception
+                                Debug.WriteLine($"设置系列 {i} 名称失败: {ex.Message}")
                             End Try
                         Next
-                    Catch
-                    End Try
+                    Else
+                        ' 范围格式（如 "GDP_Sheet1!A2:A{lastRow}"）
+                        Dim seriesNamesRangeStr = seriesNamesParam.ToString()
+                        If Not String.IsNullOrEmpty(seriesNamesRangeStr) Then
+                            Dim namesWs As Worksheet = Nothing
+                            Dim namesAddress As String = ""
+                            If ParseExcelRange(seriesNamesRangeStr, namesWs, namesAddress) Then
+                                Try
+                                    Dim namesRange As Range = namesWs.Range(namesAddress)
+                                    For i As Integer = 1 To Math.Min(.SeriesCollection.Count, namesRange.Rows.Count)
+                                        Try
+                                            Dim nameVal = namesRange.Cells(i, 1).Value
+                                            If nameVal IsNot Nothing Then
+                                                .SeriesCollection(i).Name = nameVal.ToString()
+                                            End If
+                                        Catch ex As Exception
+                                            Debug.WriteLine($"设置系列 {i} 名称失败: {ex.Message}")
+                                        End Try
+                                    Next
+                                Catch ex As Exception
+                                    Debug.WriteLine($"解析系列名称范围失败: {ex.Message}")
+                                End Try
+                            End If
+                        End If
+                    End If
+                End If
+
+                ' 设置分类轴标签（支持数组和范围两种格式）
+                If categoryAxisParam IsNot Nothing Then
+                    If categoryAxisParam.Type = JTokenType.Array Then
+                        ' 数组格式
+                        Dim labels = categoryAxisParam.ToObject(Of List(Of String))()
+                        If .SeriesCollection.Count > 0 Then
+                            Try
+                                .SeriesCollection(1).XValues = labels.ToArray()
+                            Catch ex As Exception
+                                Debug.WriteLine($"设置分类轴标签失败: {ex.Message}")
+                            End Try
+                        End If
+                    Else
+                        ' 范围格式
+                        Dim categoryAxisStr = categoryAxisParam.ToString()
+                        If Not String.IsNullOrEmpty(categoryAxisStr) Then
+                            Dim catWs As Worksheet = Nothing
+                            Dim catAddress As String = ""
+                            If ParseExcelRange(categoryAxisStr, catWs, catAddress) Then
+                                Try
+                                    Dim catRange As Range = catWs.Range(catAddress)
+                                    If .SeriesCollection.Count > 0 Then
+                                        Try
+                                            .SeriesCollection(1).XValues = catRange
+                                        Catch ex As Exception
+                                            Debug.WriteLine($"设置分类轴标签失败: {ex.Message}")
+                                        End Try
+                                    End If
+                                Catch ex As Exception
+                                    Debug.WriteLine($"解析分类轴范围失败: {ex.Message}")
+                                End Try
+                            End If
+                        End If
+                    End If
                 End If
 
                 ' 设置图例
@@ -603,6 +805,7 @@ Public Class ExcelDirectOperationService
 
         Catch ex As Exception
             Debug.WriteLine($"ExecuteCreateChart 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"创建图表失败: {ex.Message}")
             Return False
         End Try
     End Function
@@ -843,7 +1046,7 @@ Public Class ExcelDirectOperationService
 
             Dim ws As Worksheet = _excelApp.ActiveSheet
             Dim dataRange As Range = ws.Range(range)
-            
+
             dataRange.Sort(
                 Key1:=dataRange.Columns(sortColumn.Value),
                 Order1:=order,
@@ -865,7 +1068,7 @@ Public Class ExcelDirectOperationService
     Private Function ExecuteFilterData(params As JToken) As Boolean
         Try
             Dim ws As Worksheet = _excelApp.ActiveSheet
-            
+
             ' 清除筛选
             Dim clearFilter = params("clearFilter")
             If clearFilter IsNot Nothing AndAlso clearFilter.Value(Of Boolean)() = True Then
@@ -885,7 +1088,7 @@ Public Class ExcelDirectOperationService
             End If
 
             Dim dataRange As Range = ws.Range(range)
-            
+
             dataRange.AutoFilter(Field:=column.Value, Criteria1:=criteria)
 
             ShareRibbon.GlobalStatusStrip.ShowInfo($"筛选已应用: 列{column} {criteria}")
@@ -912,7 +1115,7 @@ Public Class ExcelDirectOperationService
 
             Dim ws As Worksheet = _excelApp.ActiveSheet
             Dim dataRange As Range = ws.Range(range)
-            
+
             ' 默认检查所有列
             Dim columnsArray = params("columns")
             Dim cols As Object
@@ -1074,7 +1277,7 @@ Public Class ExcelDirectOperationService
 
             Dim ws As Worksheet = _excelApp.ActiveSheet
             Dim searchRange As Range
-            
+
             If String.IsNullOrEmpty(range) OrElse range.ToLower() = "all" Then
                 searchRange = ws.UsedRange
             Else
@@ -1114,15 +1317,15 @@ Public Class ExcelDirectOperationService
 
             Dim ws As Worksheet = _excelApp.ActiveSheet
             Dim source As Range = ws.Range(sourceRange)
-            
+
             ' 创建新工作表放置透视表
             Dim pivotWs As Worksheet = _excelApp.Worksheets.Add()
             pivotWs.Name = "透视表_" & DateTime.Now.ToString("HHmmss")
-            
+
             Dim pivotCache As PivotCache = _excelApp.ActiveWorkbook.PivotCaches.Create(
                 SourceType:=XlPivotTableSourceType.xlDatabase,
                 SourceData:=source)
-            
+
             Dim pivotTable As PivotTable = pivotCache.CreatePivotTable(
                 TableDestination:=pivotWs.Range("A3"),
                 TableName:="PivotTable1")
@@ -1176,7 +1379,7 @@ Public Class ExcelDirectOperationService
             End If
 
             Dim newSheet As Worksheet
-            
+
             If Not String.IsNullOrEmpty(referenceSheet) AndAlso Not String.IsNullOrEmpty(position) Then
                 Dim refWs As Worksheet = _excelApp.Worksheets(referenceSheet)
                 If position = "before" Then
@@ -1187,7 +1390,7 @@ Public Class ExcelDirectOperationService
             Else
                 newSheet = _excelApp.Worksheets.Add()
             End If
-            
+
             newSheet.Name = name
 
             ShareRibbon.GlobalStatusStrip.ShowInfo($"工作表已创建: {name}")
@@ -1264,7 +1467,7 @@ Public Class ExcelDirectOperationService
 
             Dim sourceWs As Worksheet = _excelApp.Worksheets(sourceName)
             sourceWs.Copy(After:=sourceWs)
-            
+
             ' 复制后的工作表是活动工作表
             Dim newWs As Worksheet = _excelApp.ActiveSheet
             newWs.Name = newName
@@ -1498,7 +1701,7 @@ Public Class ExcelDirectOperationService
             colNum = colNum * 26 + (Asc(c) - Asc("A"c) + 1)
         Next
         colNum += offset
-        
+
         Dim result = ""
         While colNum > 0
             colNum -= 1
@@ -1511,6 +1714,50 @@ Public Class ExcelDirectOperationService
 #End Region
 
 #Region "辅助方法"
+
+    ''' <summary>
+    ''' 解析Excel范围（支持工作表名和{lastRow}占位符）
+    ''' </summary>
+    ''' <param name="rangeStr">范围字符串</param>
+    ''' <param name="ws">输出：工作表对象</param>
+    ''' <param name="rangeAddress">输出：范围地址</param>
+    ''' <returns>是否成功</returns>
+    Private Function ParseExcelRange(rangeStr As String, ByRef ws As Worksheet, ByRef rangeAddress As String) As Boolean
+        Try
+            If String.IsNullOrEmpty(rangeStr) Then
+                Return False
+            End If
+
+            ws = _excelApp.ActiveSheet
+            rangeAddress = rangeStr
+
+            ' 解析工作表名
+            If rangeStr.Contains("!") Then
+                Dim parts = rangeStr.Split("!"c)
+                Dim sheetName = parts(0).Trim("'"c)
+                rangeAddress = parts(1)
+
+                Try
+                    ws = _excelApp.Worksheets(sheetName)
+                Catch
+                    ' 工作表不存在，尝试使用活动工作表
+                    ws = _excelApp.ActiveSheet
+                End Try
+            End If
+
+            ' 替换 {lastRow} 占位符
+            If rangeAddress.Contains("{lastRow}") Then
+                Dim usedRange = ws.UsedRange
+                Dim lastRow = usedRange.Row + usedRange.Rows.Count - 1
+                rangeAddress = rangeAddress.Replace("{lastRow}", lastRow.ToString())
+            End If
+
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine($"ParseExcelRange 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
 
     ''' <summary>
     ''' 解析颜色字符串

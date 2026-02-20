@@ -250,24 +250,24 @@ Public Class ChatControl
             Dim activeSheet As Object = Globals.ThisAddIn.Application.ActiveSheet
             Dim queryTable As Object = Nothing
 
-                ' 获取可用的单元格区域
-                Dim targetCell As Object = activeSheet.Range("A1")
+            ' 获取可用的单元格区域
+            Dim targetCell As Object = activeSheet.Range("A1")
 
-                ' 创建SQL连接字符串 (示例使用当前工作簿作为数据源)
-                Dim connString As String = "OLEDB;Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" &
+            ' 创建SQL连接字符串 (示例使用当前工作簿作为数据源)
+            Dim connString As String = "OLEDB;Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" &
                                       activeWorkbook.FullName & ";Extended Properties='Excel 12.0 Xml;HDR=YES';"
 
-                ' 创建查询定义
-                queryTable = activeSheet.QueryTables.Add(connString, targetCell, sqlCode)
+            ' 创建查询定义
+            queryTable = activeSheet.QueryTables.Add(connString, targetCell, sqlCode)
 
-                ' 设置查询属性
-                queryTable.RefreshStyle = 1 ' xlOverwriteCells
-                queryTable.BackgroundQuery = False
+            ' 设置查询属性
+            queryTable.RefreshStyle = 1 ' xlOverwriteCells
+            queryTable.BackgroundQuery = False
 
-                ' 执行查询
-                queryTable.Refresh(False)
+            ' 执行查询
+            queryTable.Refresh(False)
 
-                GlobalStatusStrip.ShowWarning("SQL查询已执行")
+            GlobalStatusStrip.ShowWarning("SQL查询已执行")
             Return True
         Catch ex As Exception
             MessageBox.Show("执行SQL查询时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
@@ -289,18 +289,18 @@ Public Class ChatControl
 
             ' PowerQuery执行需要较复杂的实现，这里仅提供基本框架
             Dim excelApp = Globals.ThisAddIn.Application
-                Dim wb As Object = excelApp.ActiveWorkbook
+            Dim wb As Object = excelApp.ActiveWorkbook
 
-                ' 检查Excel版本是否支持PowerQuery
-                Dim versionSupported As Boolean = excelApp.Version >= 15 ' Excel 2013及以上版本
+            ' 检查Excel版本是否支持PowerQuery
+            Dim versionSupported As Boolean = excelApp.Version >= 15 ' Excel 2013及以上版本
 
-                If Not versionSupported Then
-                    GlobalStatusStrip.ShowWarning("PowerQuery需要Excel 2013或更高版本")
-                    Return False
-                End If
+            If Not versionSupported Then
+                GlobalStatusStrip.ShowWarning("PowerQuery需要Excel 2013或更高版本")
+                Return False
+            End If
 
-                ' PowerQuery执行逻辑需要根据具体需求实现
-                GlobalStatusStrip.ShowWarning("PowerQuery代码执行功能正在开发中")
+            ' PowerQuery执行逻辑需要根据具体需求实现
+            GlobalStatusStrip.ShowWarning("PowerQuery代码执行功能正在开发中")
             Return True
         Catch ex As Exception
             MessageBox.Show("执行PowerQuery代码时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
@@ -322,27 +322,27 @@ Public Class ChatControl
 
             Dim excelApp = Globals.ThisAddIn.Application
 
-                ' 检查Excel版本是否支持Python (Excel 365)
-                Dim versionSupported As Boolean = False
+            ' 检查Excel版本是否支持Python (Excel 365)
+            Dim versionSupported As Boolean = False
 
-                Try
-                    ' 尝试访问Python对象，如果不支持会抛出异常
-                    Dim pythonObj As Object = excelApp.PythonExecute("print('test')")
-                    versionSupported = True
-                Catch
-                    versionSupported = False
-                End Try
+            Try
+                ' 尝试访问Python对象，如果不支持会抛出异常
+                Dim pythonObj As Object = excelApp.PythonExecute("print('test')")
+                versionSupported = True
+            Catch
+                versionSupported = False
+            End Try
 
-                If Not versionSupported Then
-                    ' 如果内置Python不可用，可以尝试通过外部Python解释器执行
-                    GlobalStatusStrip.ShowWarning("此Excel版本不支持内置Python，尝试使用外部Python...")
+            If Not versionSupported Then
+                ' 如果内置Python不可用，可以尝试通过外部Python解释器执行
+                GlobalStatusStrip.ShowWarning("此Excel版本不支持内置Python，尝试使用外部Python...")
 
-                    ' 创建临时Python文件
-                    Dim tempFile As String = Path.Combine(Path.GetTempPath(), "excel_python_" & Guid.NewGuid().ToString() & ".py")
-                    File.WriteAllText(tempFile, pythonCode)
+                ' 创建临时Python文件
+                Dim tempFile As String = Path.Combine(Path.GetTempPath(), "excel_python_" & Guid.NewGuid().ToString() & ".py")
+                File.WriteAllText(tempFile, pythonCode)
 
-                    ' 使用Process类执行Python脚本
-                    Dim startInfo As New ProcessStartInfo With {
+                ' 使用Process类执行Python脚本
+                Dim startInfo As New ProcessStartInfo With {
                     .FileName = "python", ' 假设Python已安装并在PATH中
                     .Arguments = tempFile,
                     .UseShellExecute = False,
@@ -351,29 +351,29 @@ Public Class ChatControl
                     .CreateNoWindow = True
                 }
 
-                    Using process As Process = Process.Start(startInfo)
-                        Dim output As String = process.StandardOutput.ReadToEnd()
-                        Dim error1 As String = process.StandardError.ReadToEnd()
-                        process.WaitForExit()
+                Using process As Process = Process.Start(startInfo)
+                    Dim output As String = process.StandardOutput.ReadToEnd()
+                    Dim error1 As String = process.StandardError.ReadToEnd()
+                    process.WaitForExit()
 
-                        If Not String.IsNullOrEmpty(error1) Then
+                    If Not String.IsNullOrEmpty(error1) Then
                         GlobalStatusStrip.ShowWarning("Python执行错误: " & error1)
                     Else
-                            GlobalStatusStrip.ShowWarning("Python执行结果: " & output)
-                        End If
-                    End Using
+                        GlobalStatusStrip.ShowWarning("Python执行结果: " & output)
+                    End If
+                End Using
 
-                    ' 删除临时文件
-                    Try
-                        File.Delete(tempFile)
-                    Catch
-                        ' 忽略清理错误
-                    End Try
-                Else
-                    ' 使用Excel内置Python执行代码
-                    Dim result As Object = excelApp.PythonExecute(pythonCode)
-                    GlobalStatusStrip.ShowWarning("Python代码已执行")
-                End If
+                ' 删除临时文件
+                Try
+                    File.Delete(tempFile)
+                Catch
+                    ' 忽略清理错误
+                End Try
+            Else
+                ' 使用Excel内置Python执行代码
+                Dim result As Object = excelApp.PythonExecute(pythonCode)
+                GlobalStatusStrip.ShowWarning("Python代码已执行")
+            End If
 
             Return True
         Catch ex As Exception
@@ -497,7 +497,7 @@ Public Class ChatControl
                     Debug.WriteLine("Excel选中区域数据为空，跳过发送给LLM")
                     Return message
                 End If
-                
+
                 ' 检查数据是否全部为空值
                 Dim hasContent As Boolean = False
                 For Each item In data
@@ -506,7 +506,7 @@ Public Class ChatControl
                         Exit For
                     End If
                 Next
-                
+
                 If Not hasContent Then
                     Debug.WriteLine("Excel选中区域内容全部为空，跳过发送给LLM")
                     Return message
@@ -616,46 +616,46 @@ Public Class ChatControl
         Try
             ' 获取Excel上下文用于占位符替换
             Dim context = ExcelJsonCommandSchema.GetExcelContext(Globals.ThisAddIn.Application)
-            
+
             ' 先替换占位符再解析JSON
             Dim processedJson = jsonCode
             For Each kvp In context
                 processedJson = processedJson.Replace("{" & kvp.Key & "}", kvp.Value)
             Next
-            
+
             ' 使用严格的结构验证
             Dim errorMessage As String = ""
             Dim normalizedJson As Newtonsoft.Json.Linq.JToken = Nothing
-            
+
             If Not ExcelJsonCommandSchema.ValidateJsonStructure(processedJson, errorMessage, normalizedJson) Then
                 ' 格式验证失败，显示详细错误
                 Debug.WriteLine($"JSON格式验证失败: {errorMessage}")
                 Debug.WriteLine($"原始JSON: {processedJson.Substring(0, Math.Min(200, processedJson.Length))}...")
-                
+
                 ShareRibbon.GlobalStatusStrip.ShowWarning($"JSON格式不符合规范: {errorMessage}")
-                
+
                 ' 通知前端显示格式修正提示
                 Dim correctionPrompt = ExcelJsonCommandSchema.GetFormatCorrectionPrompt(
                     processedJson.Substring(0, Math.Min(500, processedJson.Length)),
                     errorMessage)
                 Debug.WriteLine($"格式修正提示已生成，长度: {correctionPrompt.Length}")
-                
+
                 Return False
             End If
-            
+
             ' 验证通过，根据类型执行
             If normalizedJson.Type = Newtonsoft.Json.Linq.JTokenType.Object Then
                 Dim jsonObj = CType(normalizedJson, Newtonsoft.Json.Linq.JObject)
-                
+
                 ' 命令数组格式
                 If jsonObj("commands") IsNot Nothing Then
                     Return ExecuteCommandsArray(jsonObj("commands"), processedJson, preview, context)
                 End If
-                
+
                 ' 单命令格式
                 Return ExecuteSingleCommand(jsonObj, processedJson, preview)
             End If
-            
+
             ShareRibbon.GlobalStatusStrip.ShowWarning("无效的JSON格式")
             Return False
 
@@ -668,8 +668,6 @@ Public Class ChatControl
         End Try
     End Function
 
-    ''' <summary>
-    ''' 将 actions 数组转换为标准的 commands 数组格式
     ''' <summary>
     ''' 执行命令数组
     ''' </summary>
@@ -689,7 +687,7 @@ Public Class ChatControl
                 Try
                     ' 生成批量命令的预览结果
                     Dim previewResult = GenerateBatchPreviewResult(commands, originalJson)
-                    
+
                     ' 显示预览对话框
                     Using dialog As New JsonPreviewDialog()
                         If dialog.ShowPreview(previewResult) <> DialogResult.OK Then
@@ -712,7 +710,7 @@ Public Class ChatControl
                             Dim cmdName = cmdObj("command")?.ToString()
                             Dim range = If(cmdObj("range")?.ToString(), cmdObj("params")?("range")?.ToString())
                             Dim formula = If(cmdObj("formula")?.ToString(), cmdObj("params")?("formula")?.ToString())
-                            
+
                             previewMsg.AppendLine($"{cmdIndex}. {cmdName}")
                             If Not String.IsNullOrEmpty(range) Then previewMsg.AppendLine($"   范围: {range}")
                             If Not String.IsNullOrEmpty(formula) Then previewMsg.AppendLine($"   公式: {formula}")
@@ -738,10 +736,10 @@ Public Class ChatControl
             For Each cmd In commands
                 If cmd.Type = Newtonsoft.Json.Linq.JTokenType.Object Then
                     Dim cmdObj = CType(cmd, Newtonsoft.Json.Linq.JObject)
-                    
+
                     ' 标准化命令结构
                     cmdObj = ExcelJsonCommandSchema.NormalizeCommandStructure(cmdObj)
-                    
+
                     ' 校验命令
                     Dim errorMsg As String = ""
                     If Not ExcelJsonCommandSchema.ValidateCommand(cmdObj, errorMsg) Then
@@ -791,7 +789,7 @@ Public Class ChatControl
             If cmd.Type = Newtonsoft.Json.Linq.JTokenType.Object Then
                 Dim cmdObj = CType(cmd, Newtonsoft.Json.Linq.JObject)
                 Dim cmdName = cmdObj("command")?.ToString()
-                Dim range = If(cmdObj("range")?.ToString(), 
+                Dim range = If(cmdObj("range")?.ToString(),
                             If(cmdObj("params")?("range")?.ToString(),
                             If(cmdObj("params")?("targetRange")?.ToString(), "")))
                 Dim formula = If(cmdObj("formula")?.ToString(), cmdObj("params")?("formula")?.ToString())
@@ -811,7 +809,7 @@ Public Class ChatControl
         summaryBuilder.AppendLine($"即将执行 {commands.Count} 个命令")
         summaryBuilder.AppendLine()
         summaryBuilder.AppendLine("命令列表:")
-        
+
         Dim cmdIndex = 1
         For Each cmd In commands
             If cmd.Type = Newtonsoft.Json.Linq.JTokenType.Object Then
@@ -819,7 +817,7 @@ Public Class ChatControl
                 Dim cmdName = cmdObj("command")?.ToString()
                 Dim formula = If(cmdObj("formula")?.ToString(), cmdObj("params")?("formula")?.ToString())
                 Dim range = If(cmdObj("range")?.ToString(), cmdObj("params")?("range")?.ToString())
-                
+
                 summaryBuilder.AppendLine($"  {cmdIndex}. {cmdName}")
                 If Not String.IsNullOrEmpty(formula) Then summaryBuilder.AppendLine($"      公式: {formula}")
                 If Not String.IsNullOrEmpty(range) Then summaryBuilder.AppendLine($"      范围: {range}")
@@ -881,7 +879,7 @@ Public Class ChatControl
     Private Function ExecuteSingleCommand(commandJson As Newtonsoft.Json.Linq.JObject, processedJson As String, preview As Boolean) As Boolean
         Try
             Dim command = commandJson("command")?.ToString()
-            
+
             ' 校验JSON命令
             Dim errorMsg As String = ""
             If Not ExcelJsonCommandSchema.ValidateCommand(commandJson, errorMsg) Then
@@ -897,7 +895,7 @@ Public Class ChatControl
                 Try
                     ' 生成预览结果
                     Dim previewResult = GenerateJsonPreviewResult(commandJson, processedJson, operationService)
-                    
+
                     ' 显示预览对话框
                     Using dialog As New JsonPreviewDialog()
                         If dialog.ShowPreview(previewResult) <> DialogResult.OK Then
@@ -979,7 +977,7 @@ Public Class ChatControl
             ' 尝试预测单元格变更（简化实现，仅显示目标范围）
             If Not String.IsNullOrEmpty(targetRange) Then
                 result.CellChanges = New List(Of CellChange)()
-                
+
                 ' 简化的变更预测：标记目标范围会被修改
                 result.CellChanges.Add(New CellChange() With {
                     .Address = targetRange,

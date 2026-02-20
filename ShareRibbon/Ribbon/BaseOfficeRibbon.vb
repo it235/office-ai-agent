@@ -58,7 +58,7 @@ Public MustInherit Class BaseOfficeRibbon
     ' 点击Ribbon区的配置API按钮后触发
     Private Sub ConfigApiButton_Click(sender As Object, e As RibbonControlEventArgs) Handles ConfigApiButton.Click
         ' 创建并显示配置 API 的对话框
-        Dim configForm As New ConfigApiForm()
+        Dim configForm As New ConfigApiForm(GetApplication())
         If configForm.ShowDialog() = DialogResult.OK Then
         End If
     End Sub

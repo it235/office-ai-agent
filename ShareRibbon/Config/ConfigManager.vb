@@ -1,5 +1,6 @@
 ﻿Imports System.IO
-Imports Newtonsoft.Json
+Imports Newtonsoft.Json﻿
+
 
 Public Class ConfigManager
     Public Shared Property ConfigData As List(Of ConfigItem)
@@ -21,7 +22,7 @@ Public Class ConfigManager
         Else
             ' 加载用户已有配置
             Dim json As String = File.ReadAllText(configFilePath)
-            Dim loadedData = JsonConvert.DeserializeObject(Of List(Of ConfigItem))(json)
+            Dim loadedData = Newtonsoft.Json.JsonConvert.DeserializeObject(Of List(Of ConfigItem))(json)
 
             ' 合并预置配置和用户配置
             MergeConfigurations(loadedData)
@@ -35,10 +36,14 @@ Public Class ConfigManager
                 ConfigSettings.platform = item.pltform
                 For Each item_m In item.model
                     If item_m.selected Then
-                        ConfigSettings.ModelName = item_m.modelName
-                        ConfigSettings.mcpable = item_m.mcpable
-                        ConfigSettings.fimSupported = item_m.fimSupported
-                        ConfigSettings.fimUrl = If(String.IsNullOrEmpty(item_m.fimUrl), item.url, item_m.fimUrl)
+                        If item_m.modelType = ModelType.Chat Then
+                            ConfigSettings.ModelName = item_m.modelName
+                            ConfigSettings.mcpable = item_m.mcpable
+                            ConfigSettings.fimSupported = item_m.fimSupported
+                            ConfigSettings.fimUrl = If(String.IsNullOrEmpty(item_m.fimUrl), item.url, item_m.fimUrl)
+                        ElseIf item_m.modelType = ModelType.Embedding Then
+                            ConfigSettings.EmbeddingModel = item_m.modelName
+                        End If
                     End If
                 Next
             End If
@@ -119,7 +124,7 @@ Public Class ConfigManager
 
     ' 保存到文件中，默认存在用户的文档目录下
     Public Shared Sub SaveConfig()
-        Dim json As String = JsonConvert.SerializeObject(ConfigData, Formatting.Indented)
+        Dim json As String = Newtonsoft.Json.JsonConvert.SerializeObject(ConfigData, Newtonsoft.Json.Formatting.Indented)
         ' 如果configFilePath的目录不存在就创建
         Dim dir = Path.GetDirectoryName(configFilePath)
         If Not Directory.Exists(dir) Then
@@ -187,8 +192,17 @@ Public Class ConfigManager
         ' 显示名称(含[推理][MCP]标签)
         Public Property displayName As String = ""
         
+        ' 模型类型：Chat(对话) / Embedding(向量)
+        Public Property modelType As ModelType = ModelType.Chat
+        
         Public Overrides Function ToString() As String
             Return If(String.IsNullOrEmpty(displayName), modelName, displayName)
         End Function
     End Class
+    
+    ' 模型类型枚举
+    Public Enum ModelType
+        Chat = 0
+        Embedding = 1
+    End Enum
 End Class

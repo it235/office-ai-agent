@@ -25,6 +25,7 @@ Public Class PresetProviders
         deepseek.model = New List(Of ConfigItemModel)()
         deepseek.model.Add(CreateModel("deepseek-chat", "deepseek-chat [MCP]", True, True, False))
         deepseek.model.Add(CreateModel("deepseek-reasoner", "deepseek-reasoner [推理]", False, False, True))
+        deepseek.model.Add(CreateEmbeddingModel("deepseek-embedding", "deepseek-embedding", False))
         providers.Add(deepseek)
 
         ' 硅基流动 (SiliconFlow)
@@ -41,6 +42,7 @@ Public Class PresetProviders
         siliconflow.model.Add(CreateModel("deepseek-ai/DeepSeek-R1", "DeepSeek-R1 [推理]", False, False, True))
         siliconflow.model.Add(CreateModel("Qwen/Qwen2.5-Coder-32B-Instruct", "Qwen2.5-Coder-32B", False, False, False))
         siliconflow.model.Add(CreateModel("Pro/deepseek-ai/DeepSeek-R1", "DeepSeek-R1-Pro [推理]", False, False, True))
+        siliconflow.model.Add(CreateEmbeddingModel("BAAI/bge-large-zh-v1.5", "BAAI/bge-large-zh-v1.5", True))
         providers.Add(siliconflow)
 
         ' 阿里云百炼 (Qwen)
@@ -57,6 +59,7 @@ Public Class PresetProviders
         aliyun.model.Add(CreateModel("qwen-max", "qwen-max", False, False, False))
         aliyun.model.Add(CreateModel("qwen-plus", "qwen-plus", False, False, False))
         aliyun.model.Add(CreateModel("qwq-32b-preview", "qwq-32b-preview [推理]", False, False, True))
+        aliyun.model.Add(CreateEmbeddingModel("text-embedding-v3", "text-embedding-v3", True))
         providers.Add(aliyun)
 
         ' 百度千帆
@@ -72,6 +75,7 @@ Public Class PresetProviders
         baidu.model.Add(CreateModel("deepseek-v3", "deepseek-v3", True, False, False))
         baidu.model.Add(CreateModel("deepseek-r1", "deepseek-r1 [推理]", False, False, True))
         baidu.model.Add(CreateModel("ernie-4.0-8k", "ernie-4.0-8k", False, False, False))
+        baidu.model.Add(CreateEmbeddingModel("embedding-v1", "embedding-v1", True))
         providers.Add(baidu)
 
         ' 智谱清言 (GLM)
@@ -89,6 +93,7 @@ Public Class PresetProviders
         zhipu.model.Add(CreateModel("glm-4-flash", "glm-4-flash", False, False, False))
         zhipu.model.Add(CreateModel("glm-4-air", "glm-4-air", False, False, False))
         zhipu.model.Add(CreateModel("glm-4-long", "glm-4-long", False, False, False))
+        zhipu.model.Add(CreateEmbeddingModel("embedding-3", "embedding-3", True))
         providers.Add(zhipu)
 
         ' 腾讯混元 (Hunyuan)
@@ -104,6 +109,7 @@ Public Class PresetProviders
         tencent.model.Add(CreateModel("hunyuan-turbo", "hunyuan-turbo", True, False, False))
         tencent.model.Add(CreateModel("hunyuan-pro", "hunyuan-pro", False, False, False))
         tencent.model.Add(CreateModel("hunyuan-standard", "hunyuan-standard", False, False, False))
+        tencent.model.Add(CreateEmbeddingModel("hunyuan-embedding", "hunyuan-embedding", True))
         providers.Add(tencent)
 
         ' OpenRouter
@@ -121,6 +127,7 @@ Public Class PresetProviders
         openrouter.model.Add(CreateModel("anthropic/claude-3.5-sonnet", "claude-3.5-sonnet [MCP]", False, True, False))
         openrouter.model.Add(CreateModel("openai/gpt-4o", "gpt-4o [MCP]", False, True, False))
         openrouter.model.Add(CreateModel("google/gemini-2.0-flash-exp:free", "gemini-2.0-flash [免费]", False, False, False))
+        openrouter.model.Add(CreateEmbeddingModel("openai/text-embedding-3-small", "text-embedding-3-small", True))
         providers.Add(openrouter)
 
         ' Kimi (Moonshot)
@@ -168,6 +175,7 @@ Public Class PresetProviders
         openai.model.Add(CreateModel("gpt-4-turbo", "gpt-4-turbo", False, False, False))
         openai.model.Add(CreateModel("o1", "o1 [推理]", False, False, True))
         openai.model.Add(CreateModel("o1-mini", "o1-mini [推理]", False, False, True))
+        openai.model.Add(CreateEmbeddingModel("text-embedding-3-small", "text-embedding-3-small", True))
         providers.Add(openai)
 
         ' Grok (xAI)
@@ -286,6 +294,21 @@ Public Class PresetProviders
         model.selected = selected
         model.mcpable = mcpable
         model.isReasoningModel = isReasoning
+        model.modelType = ModelType.Chat
+        Return model
+    End Function
+
+    ''' <summary>
+    ''' 创建 Embedding 模型配置项的辅助方法
+    ''' </summary>
+    Private Shared Function CreateEmbeddingModel(modelName As String, displayName As String, selected As Boolean) As ConfigItemModel
+        Dim model As New ConfigItemModel()
+        model.modelName = modelName
+        model.displayName = displayName & " [向量]"
+        model.selected = selected
+        model.mcpable = False
+        model.isReasoningModel = False
+        model.modelType = ModelType.Embedding
         Return model
     End Function
 
