@@ -7,6 +7,13 @@
 window.createChatSection = function (sender, timestamp, uuid) {
     console.log('[createChatSection] 被调用, sender=' + sender + ', uuid=' + uuid);
     
+    // Check if chat container already exists for this uuid
+    const existingChatContainer = document.getElementById('chat-' + uuid);
+    if (existingChatContainer) {
+        console.log('[createChatSection] UUID为' + uuid + '的聊天容器已存在，直接返回');
+        return uuid;
+    }
+    
     // Create chat container
     const chatContainer = document.createElement('div');
     chatContainer.className = 'chat-container';

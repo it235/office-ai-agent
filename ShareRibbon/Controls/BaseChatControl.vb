@@ -2264,7 +2264,7 @@ Public MustInherit Class BaseChatControl
     ''' <summary>
     ''' 初始化Agent控制器
     ''' </summary>
-    Protected Sub InitializeAgentController()
+    Protected Sub InitializeAgentController(Optional agentThinkingUuid As String = Nothing)
         If _ralphAgentController Is Nothing Then
             _ralphAgentController = New RalphAgentController()
 
@@ -2327,9 +2327,9 @@ Public MustInherit Class BaseChatControl
                                                          ExecuteJavaScriptAsyncJS($"completeAgent('{_ralphAgentController.GetCurrentSession()?.Id}', {success.ToString().ToLower()}, '')")
                                                      End Sub
 
-            ' 设置AI请求委托
+            ' 设置AI请求委托，传入thinkingUuid
             _ralphAgentController.SendAIRequest = Async Function(prompt, sysPrompt)
-                                                      Return Await SendAndGetResponse(prompt, sysPrompt)
+                                                      Return Await SendAndGetResponse(prompt, sysPrompt, agentThinkingUuid)
                                                   End Function
 
             ' 设置代码执行委托
@@ -2376,9 +2376,6 @@ Public MustInherit Class BaseChatControl
                 End Try
             End If
 
-            ' 初始化控制器
-            InitializeAgentController()
-
             ' 先在聊天界面显示AI正在思考的消息
             _agentThinkingUuid = Guid.NewGuid().ToString()
             Dim now = DateTime.Now
@@ -2387,6 +2384,9 @@ Public MustInherit Class BaseChatControl
             ExecuteJavaScriptAsyncJS($"createChatSection('AI', '{timestamp}', '{_agentThinkingUuid}')")
             ' 显示思考状态
             ExecuteJavaScriptAsyncJS($"var thinkingDiv = document.getElementById('content-{_agentThinkingUuid}'); if(thinkingDiv) thinkingDiv.innerHTML = '<div class=""thinking-indicator""><div class=""thinking-dots""><span></span><span></span><span></span></div><span style=""margin-left: 12px; color: #6c757d;"">正在分析您的需求...</span></div>';")
+
+            ' 初始化控制器，传入uuid
+            InitializeAgentController(_agentThinkingUuid)
 
             ' 保存原始请求
             Dim originalQuestion As String = request
@@ -2668,21 +2668,21 @@ Public MustInherit Class BaseChatControl
     ''' <summary>
     ''' 发送AI请求并获取完整响应（用于Agent规划）
     ''' </summary>
-    Private Async Function SendAndGetResponse(prompt As String, systemPrompt As String) As Task(Of String)
+    Private Async Function SendAndGetResponse(prompt As String, systemPrompt As String, Optional responseUuid As String = Nothing) As Task(Of String)
         ' 这里需要实现一个同步等待AI响应的方法
         ' 简单实现：使用Send方法但收集完整响应
         Try
             Dim responseBuilder As New StringBuilder()
             Dim completed As Boolean = False
-            Dim uuid = Guid.NewGuid().ToString()
+            Dim uuid = If(responseUuid, Guid.NewGuid().ToString())
 
             ' 创建临时的响应收集器
             _agentResponseBuffer = New StringBuilder()
             _agentResponseUuid = uuid
             _agentResponseCompleted = False
 
-            ' 发送请求
-            Await Send(prompt, systemPrompt, False, "agent_planning")
+            ' 发送请求，传入responseUuid
+            Await Send(prompt, systemPrompt, False, "agent_planning", Nothing, uuid)
 
             ' 等待响应完成（最多60秒）
             Dim timeout = 60000
@@ -3555,7 +3555,7 @@ Public MustInherit Class BaseChatControl
     ' 存储调用Send时的请求参数（requestUuid/responseUuid -> JObject）
     Protected _savedRequestParams As New Dictionary(Of String, JObject)()
 
-    Public Async Function Send(question As String, systemPrompt As String, addHistory As Boolean, responseMode As String, Optional intentDescription As String = Nothing) As Task
+    Public Async Function Send(question As String, systemPrompt As String, addHistory As Boolean, responseMode As String, Optional intentDescription As String = Nothing, Optional responseUuid As String = Nothing) As Task
         Dim apiUrl As String = ConfigSettings.ApiUrl
         Dim apiKey As String = ConfigSettings.ApiKey
 
@@ -3577,7 +3577,7 @@ Public MustInherit Class BaseChatControl
             Return
         End If
 
-        Dim uuid As String = Guid.NewGuid().ToString()
+        Dim uuid As String = If(responseUuid, Guid.NewGuid().ToString())
         ' 这里生成 requestUuid（用于绑定选区）
         Dim requestUuid As String = Guid.NewGuid().ToString()
 
@@ -3648,7 +3648,7 @@ Public MustInherit Class BaseChatControl
                 Dim js As String = $"showContextHints({{ ragCount: {ragCount}, intent: '{intentEscaped}' }});"
                 ExecuteJavaScriptAsyncJS(js)
             End If
-            Await SendHttpRequestStream(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody, StripQuestion(question), requestUuid, addHistory, responseMode)
+            Await SendHttpRequestStream(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody, StripQuestion(question), requestUuid, addHistory, responseMode, responseUuid)
             Await SaveFullWebPageAsync2()
         Catch ex As Exception
             MessageBox.Show("请求失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
@@ -3943,24 +3943,24 @@ Public MustInherit Class BaseChatControl
 
 
     ' 现在接收 requestUuid，内部生成 responseUuid（用于前端展示），并建立 response->request 映射
-    Private Async Function SendHttpRequestStream(apiUrl As String, apiKey As String, requestBody As String, originQuestion As String, requestUuid As String, addHistory As Boolean, responseMode As String) As Task
+    Private Async Function SendHttpRequestStream(apiUrl As String, apiKey As String, requestBody As String, originQuestion As String, requestUuid As String, addHistory As Boolean, responseMode As String, Optional responseUuid As String = Nothing) As Task
 
         ' responseUuid 用于前端显示（与 requestUuid 分离）
-        Dim responseUuid As String = Guid.NewGuid().ToString()
+        Dim uuid As String = If(responseUuid, Guid.NewGuid().ToString())
 
         ' 保存映射：response -> request
         Try
-            _responseToRequestMap(responseUuid) = requestUuid
+            _responseToRequestMap(uuid) = requestUuid
             ' 保存 response -> mode 映射（用于决定 showComparison/showRevisions 行为）
             If Not String.IsNullOrEmpty(responseMode) Then
-                _responseModeMap(responseUuid) = responseMode
+                _responseModeMap(uuid) = responseMode
             End If
 
             ' 如果之前在 request 级别有选区信息（旧逻辑可能把选区存到 _selectionPendingMap(requestUuid)），
-            ' 则立即把选区迁移到以 responseUuid 为键的映射，后续完成阶段直接用 responseUuid 查找。
+            ' 则立即把选区迁移到以 uuid 为键的映射，后续完成阶段直接用 uuid 查找。
             If Not String.IsNullOrEmpty(requestUuid) AndAlso _selectionPendingMap.ContainsKey(requestUuid) Then
                 Try
-                    _responseSelectionMap(responseUuid) = _selectionPendingMap(requestUuid)
+                    _responseSelectionMap(uuid) = _selectionPendingMap(requestUuid)
                     ' 可选地从 request map 中移除，避免内存泄露
                     _selectionPendingMap.Remove(requestUuid)
                 Catch ex As Exception
@@ -3971,8 +3971,8 @@ Public MustInherit Class BaseChatControl
             Debug.WriteLine($"保存 response->request/response->mode 映射失败: {ex.Message}")
         End Try
 
-        ' 保持以前使用的 _finalUuid 用于现有完成逻辑（注意：这是 responseUuid）
-        _finalUuid = responseUuid
+        ' 保持以前使用的 _finalUuid 用于现有完成逻辑（注意：这是 uuid）
+        _finalUuid = uuid
         _mainStreamCompleted = False
         _pendingMcpTasks = 0
 
@@ -3995,64 +3995,64 @@ Public MustInherit Class BaseChatControl
                 Dim aiName As String = ConfigSettings.platform & " " & ConfigSettings.ModelName
 
                 Using response As HttpResponseMessage = Await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead)
-                    response.EnsureSuccessStatusCode()
-                    Debug.WriteLine($"[HTTP] 响应状态码: {response.StatusCode}")
+                        response.EnsureSuccessStatusCode()
+                        Debug.WriteLine($"[HTTP] 响应状态码: {response.StatusCode}")
 
-                    ' 创建前端聊天节（使用 responseUuid 作为显示 id）
-                    Dim jsCreate As String = $"createChatSection('{aiName}', formatDateTime(new Date()), '{responseUuid}');"
-                    Await ExecuteJavaScriptAndWaitAsync(jsCreate)
+                        ' 创建前端聊天节（使用 uuid 作为显示 id）
+                        Dim jsCreate As String = $"createChatSection('{aiName}', formatDateTime(new Date()), '{uuid}');"
+                        Await ExecuteJavaScriptAndWaitAsync(jsCreate)
 
-                    ' 等待确认 rendererMap 已创建
-                    Await WaitForRendererMapAsync(responseUuid)
+                        ' 等待确认 rendererMap 已创建
+                        Await WaitForRendererMapAsync(uuid)
 
-                    ' 在前端 DOM 的 chat 节上设置 dataset.requestId，以便前端后续执行时可以把 requestUuid 发回
-                    Dim jsSetMapping As String = $"(function(){{ var el = document.getElementById('chat-{responseUuid}'); if(el) el.dataset.requestId = '{requestUuid}'; }})();"
-                    Await ExecuteJavaScriptAndWaitAsync(jsSetMapping)
+                        ' 在前端 DOM 的 chat 节上设置 dataset.requestId，以便前端后续执行时可以把 requestUuid 发回
+                        Dim jsSetMapping As String = $"(function(){{ var el = document.getElementById('chat-{uuid}'); if(el) el.dataset.requestId = '{requestUuid}'; }})();"
+                        Await ExecuteJavaScriptAndWaitAsync(jsSetMapping)
 
-                    ' 处理流（后续逻辑不变，但使用 responseUuid 进行 flush 等操作）
-                    Dim stringBuilder As New StringBuilder()
-                    Using responseStream As Stream = Await response.Content.ReadAsStreamAsync()
-                        Using reader As New StreamReader(responseStream, Encoding.UTF8)
-                            Dim buffer(102300) As Char
-                            Dim readCount As Integer
-                            Dim chunkCount As Integer = 0
-                            Do
-                                If stopReaderStream Then
-                                    Debug.WriteLine("[Stream] 用户手动停止流读取")
-                                    _currentMarkdownBuffer.Clear()
-                                    allMarkdownBuffer.Clear()
-                                    Exit Do
+                        ' 处理流（后续逻辑不变，但使用 responseUuid 进行 flush 等操作）
+                        Dim stringBuilder As New StringBuilder()
+                        Using responseStream As Stream = Await response.Content.ReadAsStreamAsync()
+                            Using reader As New StreamReader(responseStream, Encoding.UTF8)
+                                Dim buffer(102300) As Char
+                                Dim readCount As Integer
+                                Dim chunkCount As Integer = 0
+                                Do
+                                    If stopReaderStream Then
+                                        Debug.WriteLine("[Stream] 用户手动停止流读取")
+                                        _currentMarkdownBuffer.Clear()
+                                        allMarkdownBuffer.Clear()
+                                        Exit Do
+                                    End If
+                                    readCount = Await reader.ReadAsync(buffer, 0, buffer.Length)
+                                    If readCount = 0 Then Exit Do
+                                    chunkCount += 1
+                                    Dim chunk As String = New String(buffer, 0, readCount)
+                                    chunk = chunk.Replace("data:", "")
+                                    stringBuilder.Append(chunk)
+
+                                    ' 调试：记录每次读取的数据
+                                    If chunkCount <= 3 Then
+                                        Debug.WriteLine($"[Stream] chunk#{chunkCount} 长度={readCount}, 内容前100字符: {chunk.Substring(0, Math.Min(100, chunk.Length))}")
+                                    End If
+
+                                    If stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}).EndsWith("}") Then
+                                        ProcessStreamChunk(stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}), responseUuid, originQuestion)
+                                        stringBuilder.Clear()
+                                    End If
+                                Loop
+
+                                ' 调试：如果循环结束但stringBuilder不为空，说明有未处理的数据
+                                If stringBuilder.Length > 0 Then
+                                    Debug.WriteLine($"[Stream] 警告：循环结束但stringBuilder还有未处理数据，长度={stringBuilder.Length}")
+                                    Debug.WriteLine($"[Stream] 未处理数据内容: {stringBuilder.ToString().Substring(0, Math.Min(200, stringBuilder.Length))}")
+                                    ' 尝试处理剩余数据
+                                    ProcessStreamChunk(stringBuilder.ToString().Trim(), responseUuid, originQuestion)
                                 End If
-                                readCount = Await reader.ReadAsync(buffer, 0, buffer.Length)
-                                If readCount = 0 Then Exit Do
-                                chunkCount += 1
-                                Dim chunk As String = New String(buffer, 0, readCount)
-                                chunk = chunk.Replace("data:", "")
-                                stringBuilder.Append(chunk)
 
-                                ' 调试：记录每次读取的数据
-                                If chunkCount <= 3 Then
-                                    Debug.WriteLine($"[Stream] chunk#{chunkCount} 长度={readCount}, 内容前100字符: {chunk.Substring(0, Math.Min(100, chunk.Length))}")
-                                End If
-
-                                If stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}).EndsWith("}") Then
-                                    ProcessStreamChunk(stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}), responseUuid, originQuestion)
-                                    stringBuilder.Clear()
-                                End If
-                            Loop
-
-                            ' 调试：如果循环结束但stringBuilder不为空，说明有未处理的数据
-                            If stringBuilder.Length > 0 Then
-                                Debug.WriteLine($"[Stream] 警告：循环结束但stringBuilder还有未处理数据，长度={stringBuilder.Length}")
-                                Debug.WriteLine($"[Stream] 未处理数据内容: {stringBuilder.ToString().Substring(0, Math.Min(200, stringBuilder.Length))}")
-                                ' 尝试处理剩余数据
-                                ProcessStreamChunk(stringBuilder.ToString().Trim(), responseUuid, originQuestion)
-                            End If
-
-                            Debug.WriteLine($"[Stream] 流接收完成，共处理了 {chunkCount} 个chunk")
+                                Debug.WriteLine($"[Stream] 流接收完成，共处理了 {chunkCount} 个chunk")
+                            End Using
                         End Using
                     End Using
-                End Using
             End Using
         Catch ex As Exception
             Debug.WriteLine($"[ERROR] 请求过程中出错: {ex.ToString()}")
