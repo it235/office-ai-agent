@@ -345,14 +345,21 @@ Public Class HttpStreamService
                     End If
 
                     ' 处理推理内容
-                    Dim reasoning_content As String = jsonObj("choices")(0)("delta")("reasoning_content")?.ToString()
+                    Dim reasoning_content As String = Nothing
+                    If jsonObj("choices") IsNot Nothing AndAlso jsonObj("choices").Count > 0 Then
+                        reasoning_content = jsonObj("choices")(0)("delta")("reasoning_content")?.ToString()
+                    End If
+
                     If Not String.IsNullOrEmpty(reasoning_content) Then
                         _currentMarkdownBuffer.Append(reasoning_content)
                         Await FlushBufferAsync("reasoning", uuid)
                     End If
 
                     ' 处理正文内容
-                    Dim content As String = jsonObj("choices")(0)("delta")("content")?.ToString()
+                    Dim content As String = Nothing
+                    If jsonObj("choices") IsNot Nothing AndAlso jsonObj("choices").Count > 0 Then
+                        content = jsonObj("choices")(0)("delta")("content")?.ToString()
+                    End If
                     If Not String.IsNullOrEmpty(content) Then
                         _currentMarkdownBuffer.Append(content)
                         Await FlushBufferAsync("content", uuid)
@@ -643,7 +650,10 @@ Public Class HttpStreamService
                                                 _stateService.AddTokens(CInt(usage("total_tokens")))
                                             End If
 
-                                            Dim content As String = jsonObj("choices")(0)("delta")("content")?.ToString()
+                                            Dim content As String = Nothing
+                                            If jsonObj("choices") IsNot Nothing AndAlso jsonObj("choices").Count > 0 Then
+                                                content = jsonObj("choices")(0)("delta")("content")?.ToString()
+                                            End If
                                             If Not String.IsNullOrEmpty(content) Then
                                                 formattedBuilder.Append(content)
                                             End If
