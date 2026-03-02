@@ -1,4 +1,4 @@
-﻿Imports System.Diagnostics
+Imports System.Diagnostics
 Imports System.Drawing
 Imports System.IO
 Imports System.Linq
@@ -1094,15 +1094,15 @@ Public Class ChatControl
 
     Protected Overrides Function GetCurrentWorkingDirectory() As String
         Try
-            ' 获取当前活动工作簿的路径
-            If Globals.ThisAddIn.Application.ActiveWorkbook IsNot Nothing Then
-                Return Globals.ThisAddIn.Application.ActiveWorkbook.Path
+            ' 获取当前活动演示文稿的路径
+            If Globals.ThisAddIn.Application.ActivePresentation IsNot Nothing Then
+                Return Globals.ThisAddIn.Application.ActivePresentation.Path
             End If
         Catch ex As Exception
             Debug.WriteLine($"获取当前工作目录时出错: {ex.Message}")
         End Try
 
-        ' 如果无法获取工作簿路径，则返回应用程序目录
+        ' 如果无法获取演示文稿路径，则返回应用程序目录
         Return System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)
     End Function
 
@@ -1342,6 +1342,13 @@ Public Class ChatControl
                 Return True ' 返回True表示"成功处理"，避免显示错误
             End If
 
+            ' 修复 AI 可能产生的双重转义（\\\" → \"，即字面反斜杠+引号 → 只保留引号）
+            ' 原因：AI 有时对 code 字段内的引号进行两次转义，导致执行器解析失败
+            If jsonCode.Contains("\""") Then
+                jsonCode = jsonCode.Replace("\""", """")
+                Debug.WriteLine("[PPTChatControl] 已修复双重转义引号")
+            End If
+
             ' 使用严格的结构验证
             Dim errorMessage As String = ""
             Dim normalizedJson As JToken = Nothing
@@ -1490,8 +1497,28 @@ Public Class ChatControl
                     Return ExecuteApplyTransition(params, pres)
                 Case "beautifyslides"
                     Return ExecuteBeautifySlides(params, pres)
+                Case "deleteslide"
+                    Return ExecuteDeleteSlide(params, pres)
+                Case "duplicateslide"
+                    Return ExecuteDuplicateSlide(params, pres)
+                Case "moveslide"
+                    Return ExecuteMoveSlide(params, pres)
+                Case "setslidelayout", "setsliidelayout"
+                    Return ExecuteSetSlideLayout(params, pres)
+                Case "applytheme"
+                    Return ExecuteApplyTheme(params, pres)
+                Case "addspeakernotes"
+                    Return ExecuteAddSpeakerNotes(params, pres)
+                Case "executevba"
+                    Dim vbaCode = params("code")?.ToString()
+                    If String.IsNullOrEmpty(vbaCode) Then
+                        GlobalStatusStrip.ShowWarning("ExecuteVBA 缺少 code 参数")
+                        Return False
+                    End If
+                    Return CodeExecutionService.ExecuteVBACode(vbaCode, False)
                 Case Else
                     Debug.WriteLine($"不支持的PPT命令: {command}")
+                    GlobalStatusStrip.ShowWarning($"暂不支持的PPT命令: {command}")
                     Return False
             End Select
 
@@ -1979,6 +2006,143 @@ Public Class ChatControl
             Debug.WriteLine($"ApplyFontStyle 出错: {ex.Message}")
         End Try
     End Sub
+
+    ''' <summary>
+    ''' 删除幻灯片
+    ''' </summary>
+    Private Function ExecuteDeleteSlide(params As JToken, pres As Object) As Boolean
+        Try
+            Dim slideIndex As Integer = If(params("slideIndex") IsNot Nothing, params("slideIndex").Value(Of Integer)(), -1)
+            If slideIndex = -1 OrElse slideIndex = 0 Then
+                slideIndex = Globals.ThisAddIn.Application.ActiveWindow.View.Slide.SlideIndex
+            End If
+            If pres.Slides.Count <= 1 Then
+                GlobalStatusStrip.ShowWarning("无法删除：演示文稿必须至少保留一张幻灯片")
+                Return False
+            End If
+            If slideIndex < 1 OrElse slideIndex > pres.Slides.Count Then
+                GlobalStatusStrip.ShowWarning($"幻灯片索引 {slideIndex} 超出范围（共 {pres.Slides.Count} 张）")
+                Return False
+            End If
+            pres.Slides(slideIndex).Delete()
+            GlobalStatusStrip.ShowInfo($"已删除第 {slideIndex} 张幻灯片")
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteDeleteSlide 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 复制幻灯片
+    ''' </summary>
+    Private Function ExecuteDuplicateSlide(params As JToken, pres As Object) As Boolean
+        Try
+            Dim slideIndex As Integer = If(params("slideIndex") IsNot Nothing, params("slideIndex").Value(Of Integer)(), -1)
+            If slideIndex = -1 OrElse slideIndex = 0 Then
+                slideIndex = Globals.ThisAddIn.Application.ActiveWindow.View.Slide.SlideIndex
+            End If
+            If slideIndex < 1 OrElse slideIndex > pres.Slides.Count Then Return False
+            pres.Slides(slideIndex).Copy()
+            pres.Slides.Paste(slideIndex + 1)
+            GlobalStatusStrip.ShowInfo($"已复制第 {slideIndex} 张幻灯片")
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteDuplicateSlide 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 移动幻灯片
+    ''' </summary>
+    Private Function ExecuteMoveSlide(params As JToken, pres As Object) As Boolean
+        Try
+            Dim fromIndex As Integer = If(params("fromIndex") IsNot Nothing, params("fromIndex").Value(Of Integer)(), -1)
+            Dim toIndex As Integer = If(params("toIndex") IsNot Nothing, params("toIndex").Value(Of Integer)(), -1)
+            If fromIndex < 1 OrElse fromIndex > pres.Slides.Count Then Return False
+            If toIndex < 1 OrElse toIndex > pres.Slides.Count Then Return False
+            pres.Slides(fromIndex).MoveTo(toIndex)
+            GlobalStatusStrip.ShowInfo($"已将幻灯片从第 {fromIndex} 移到第 {toIndex}")
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteMoveSlide 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 设置幻灯片版式
+    ''' </summary>
+    Private Function ExecuteSetSlideLayout(params As JToken, pres As Object) As Boolean
+        Try
+            Dim layoutName = If(params("layout")?.ToString(), "titleandcontent").ToLower()
+            Dim slideIndex As Integer = If(params("slideIndex") IsNot Nothing, params("slideIndex").Value(Of Integer)(), -1)
+            Dim targetSlide As Object
+            If slideIndex = -1 OrElse slideIndex = 0 Then
+                targetSlide = Globals.ThisAddIn.Application.ActiveWindow.View.Slide
+            ElseIf slideIndex >= 1 AndAlso slideIndex <= pres.Slides.Count Then
+                targetSlide = pres.Slides(slideIndex)
+            Else
+                Return False
+            End If
+            Dim layoutIndex As Integer = 2
+            Select Case layoutName
+                Case "title" : layoutIndex = 1
+                Case "titleandcontent", "titleandbody" : layoutIndex = 2
+                Case "blank" : layoutIndex = 12
+                Case "titleonly" : layoutIndex = 11
+            End Select
+            targetSlide.Layout = layoutIndex
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteSetSlideLayout 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 应用主题
+    ''' </summary>
+    Private Function ExecuteApplyTheme(params As JToken, pres As Object) As Boolean
+        Try
+            Dim themeFile = If(params("themeFile")?.ToString(), "")
+            Dim themeName = If(params("themeName")?.ToString(), "")
+            If Not String.IsNullOrEmpty(themeFile) AndAlso IO.File.Exists(themeFile) Then
+                pres.ApplyTheme(themeFile)
+            ElseIf Not String.IsNullOrEmpty(themeName) Then
+                GlobalStatusStrip.ShowInfo($"内置主题 '{themeName}' 请通过 WPS/PPT 设计菜单手动应用")
+            End If
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteApplyTheme 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 添加演讲备注
+    ''' </summary>
+    Private Function ExecuteAddSpeakerNotes(params As JToken, pres As Object) As Boolean
+        Try
+            Dim notes = If(params("notes")?.ToString(), "")
+            Dim slideIndex As Integer = If(params("slideIndex") IsNot Nothing, params("slideIndex").Value(Of Integer)(), -1)
+            Dim targetSlide As Object
+            If slideIndex = -1 OrElse slideIndex = 0 Then
+                targetSlide = Globals.ThisAddIn.Application.ActiveWindow.View.Slide
+            ElseIf slideIndex >= 1 AndAlso slideIndex <= pres.Slides.Count Then
+                targetSlide = pres.Slides(slideIndex)
+            Else
+                Return False
+            End If
+            targetSlide.NotesPage.Shapes(2).TextFrame.TextRange.Text = notes
+            GlobalStatusStrip.ShowInfo("已添加演讲备注")
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteAddSpeakerNotes 出错: {ex.Message}")
+            Return False
+        End Try
+    End Function
 
 #End Region
 

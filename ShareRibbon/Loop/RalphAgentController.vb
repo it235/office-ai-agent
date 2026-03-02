@@ -196,19 +196,24 @@ code字段必须是JSON命令格式:
     Private Const PLANNING_SYSTEM_PPT As String = "你是一个智能PowerPoint自动化专家。请深度分析用户需求，结合识别到的意图、相关记忆和历史对话，制定一个详细、可执行的计划。每个步骤必须包含可直接执行的代码。
 
 直接返回markdown的JSON代码块对象，格式如下:
-{
+```{
   ""understanding"": ""对用户需求的理解（结合意图和记忆）"",
   ""steps"": [
     {{
       ""step"": 1,
       ""description"": ""步骤描述（用户可读）"",
-      ""code"": ""可执行的Excel JSON命令，不能返回\n\r等转义字符"",
+      ""code"": ""可执行的PowerPoint VBA或JSON命令"",
       ""language"": ""json""
     }}
   ],
   ""summary"": ""执行完成后的预期结果""
-}
+}```
 
+【PowerPoint代码格式要求】
+- 每个步骤的code字段必须是完整的JSON对象字符串，格式为: {{""command"":""命令名"",""params"":{{...}}}}
+- 禁止在code字段中只写命令名（如InsertText），必须包含完整的command和params结构
+- VBA代码通过ExecuteVBA执行: {{""command"":""ExecuteVBA"",""params"":{{""code"":""VBA代码\n换行用\\n""}}}}
+- language字段统一写 json，包括ExecuteVBA也是json格式
 
 【PowerPoint支持的22个命令】
 
@@ -251,6 +256,15 @@ code字段必须是JSON命令格式:
 - 禁止省略 params 包装
 - 禁止使用Excel/Word专属命令
 
+【VBA代码规范】
+- 嵌套For Each循环必须使用不同变量名，如外层shp内层用innerShp
+- 变量声明必须带As关键字: Dim p As Paragraph，不能写Dim p Paragraph
+- PowerPoint中检查文本框用shp.HasTextFrame，不能用TypeOf比较形状类型
+- PowerPoint VBA不能用Excel的Range类型，文本范围用TextRange
+- 所有变量在Sub开头用Dim声明
+- VBA换行用\n转义，不能有真实换行
+- 输出前自检：每个Dim后必须有As，每个For有Next，每个If有End If
+
 【决策优先级】
 1. 优先使用上述22个命令
 2. 复杂需求用ExecuteVBA
@@ -259,7 +273,7 @@ code字段必须是JSON命令格式:
 
 注意：
 1. 每个步骤的code字段必须是可直接执行的完整代码
-2. 不要对JSON引号进行转义
+2. VBA代码的换行必须使用\n转义，以保证JSON格式正确
 3. 只返回一个JSON对象，不要其他内容"
 
     ' === 规划 user 模板（所有应用共用，历史对话通过 messages 数组传递，不再嵌入文本） ===
@@ -288,6 +302,8 @@ code字段必须是JSON命令格式:
             Case Else
                 sys = PLANNING_SYSTEM_EXCEL
         End Select
+        ' 提示词常量按 String.Format 惯例用 {{ }} 转义花括号，此处还原为单括号再发给 AI
+        sys = sys.Replace("{{", "{").Replace("}}", "}")
         Return Tuple.Create(sys, PLANNING_USER_TEMPLATE)
     End Function
 
@@ -309,9 +325,13 @@ code字段必须是JSON命令格式:
 - 多命令: {{""commands"":[{{""command"":""InsertText"",""params"":{{""content"":""文本""}}}},...]}}
 - Word支持的command: InsertText, FormatText, ReplaceText, InsertTable, ApplyStyle, GenerateTOC, BeautifyDocument
 
-【PowerPoint】使用VBA代码
+【PowerPoint】必须使用JSON命令格式:
+- 单命令: {{""command"":""InsertSlide"",""params"":{{""title"":""标题""}}}}
+- 支持的command: InsertSlide, DeleteSlide, DuplicateSlide, MoveSlide, CreateSlides, InsertText, FormatText, InsertShape, InsertImage, InsertTable, FormatSlide, AddAnimation, ApplyTransition, BeautifySlides, SetSlideLayout, InsertChart, InsertVideo, AddSpeakerNotes, SetSlideShow, ApplyTheme, EditSlideMaster
+- 复杂操作（需要PowerPoint对象模型）使用ExecuteVBA: {{""command"":""ExecuteVBA"",""params"":{{""code"":""完整VBA Sub代码\n换行用\\n""}}}}
+- 禁止在ExecuteVBA的code字段中写JSON命令名，必须是真正的VBA/PowerPoint对象模型代码
 
-只返回可执行的代码，用```vba或```json包裹。"
+只返回可执行的JSON代码，用```json包裹。"
 
     Private Const STEP_EXECUTION_USER As String = "当前Office应用: {0}
 当前文档内容:
@@ -730,7 +750,7 @@ code字段必须是JSON命令格式:
                     currentStep.Description,
                     currentStep.Detail)
 
-                Dim codeResponse = Await SendAIRequest(stepUserPrompt, STEP_EXECUTION_SYSTEM, Nothing)
+                Dim codeResponse = Await SendAIRequest(stepUserPrompt, STEP_EXECUTION_SYSTEM.Replace("{{", "{").Replace("}}", "}"), Nothing)
                 code = ExtractCode(codeResponse)
                 language = DetectLanguage(codeResponse)
                 currentStep.GeneratedCode = code

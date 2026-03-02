@@ -1,4 +1,4 @@
-﻿' ShareRibbon\Controls\BaseChatControl.vb
+' ShareRibbon\Controls\BaseChatControl.vb
 Imports System.Diagnostics
 Imports System.Drawing
 Imports System.IO
@@ -4229,13 +4229,20 @@ Public MustInherit Class BaseChatControl
                 }
                 End If
 
-                Dim reasoning_content As String = jsonObj("choices")(0)("delta")("reasoning_content")?.ToString()
+                Dim reasoning_content As String = Nothing
+                If jsonObj("choices") IsNot Nothing AndAlso jsonObj("choices").Count > 0 Then
+                    reasoning_content = jsonObj("choices")(0)("delta")("reasoning_content")?.ToString()
+                End If
+
                 If Not String.IsNullOrEmpty(reasoning_content) Then
                     _currentMarkdownBuffer.Append(reasoning_content)
                     FlushBuffer("reasoning", uuid)
                 End If
 
-                Dim content As String = jsonObj("choices")(0)("delta")("content")?.ToString()
+                Dim content As String = Nothing
+                If jsonObj("choices") IsNot Nothing AndAlso jsonObj("choices").Count > 0 Then
+                    content = jsonObj("choices")(0)("delta")("content")?.ToString()
+                End If
                 'Debug.Print(content)
                 If Not String.IsNullOrEmpty(content) Then
                     'Debug.WriteLine($"[ProcessStreamChunk] 解析到content: {content.Substring(0, Math.Min(50, content.Length))}...")
@@ -4535,7 +4542,10 @@ Public MustInherit Class BaseChatControl
                                                 'Debug.WriteLine($"MCP润色调用tokens: {mcpTokenInfo.Value.TotalTokens}")
                                             End If
 
-                                            Dim content As String = jsonObj("choices")(0)("delta")("content")?.ToString()
+                                            Dim content As String = Nothing
+                                            If jsonObj("choices") IsNot Nothing AndAlso jsonObj("choices").Count > 0 Then
+                                                content = jsonObj("choices")(0)("delta")("content")?.ToString()
+                                            End If
 
                                             If Not String.IsNullOrEmpty(content) Then
                                                 formattedBuilder.Append(content)
