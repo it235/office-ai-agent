@@ -210,8 +210,10 @@ code字段必须是JSON命令格式:
 }```
 
 【PowerPoint代码格式要求】
-- JSON命令: {{""command"":""InsertSlide"",""params"":{{""title"":""标题""}}}}
-- VBA代码通过ExecuteVBA执行，code字段内换行必须用\n转义，不能有真实换行
+- 每个步骤的code字段必须是完整的JSON对象字符串，格式为: {{""command"":""命令名"",""params"":{{...}}}}
+- 禁止在code字段中只写命令名（如InsertText），必须包含完整的command和params结构
+- VBA代码通过ExecuteVBA执行: {{""command"":""ExecuteVBA"",""params"":{{""code"":""VBA代码\n换行用\\n""}}}}
+- language字段统一写 json，包括ExecuteVBA也是json格式
 
 【PowerPoint支持的22个命令】
 
@@ -323,9 +325,13 @@ code字段必须是JSON命令格式:
 - 多命令: {{""commands"":[{{""command"":""InsertText"",""params"":{{""content"":""文本""}}}},...]}}
 - Word支持的command: InsertText, FormatText, ReplaceText, InsertTable, ApplyStyle, GenerateTOC, BeautifyDocument
 
-【PowerPoint】使用VBA代码
+【PowerPoint】必须使用JSON命令格式:
+- 单命令: {{""command"":""InsertSlide"",""params"":{{""title"":""标题""}}}}
+- 支持的command: InsertSlide, DeleteSlide, DuplicateSlide, MoveSlide, CreateSlides, InsertText, FormatText, InsertShape, InsertImage, InsertTable, FormatSlide, AddAnimation, ApplyTransition, BeautifySlides, SetSlideLayout, InsertChart, InsertVideo, AddSpeakerNotes, SetSlideShow, ApplyTheme, EditSlideMaster
+- 复杂操作（需要PowerPoint对象模型）使用ExecuteVBA: {{""command"":""ExecuteVBA"",""params"":{{""code"":""完整VBA Sub代码\n换行用\\n""}}}}
+- 禁止在ExecuteVBA的code字段中写JSON命令名，必须是真正的VBA/PowerPoint对象模型代码
 
-只返回可执行的代码，用```vba或```json包裹。"
+只返回可执行的JSON代码，用```json包裹。"
 
     Private Const STEP_EXECUTION_USER As String = "当前Office应用: {0}
 当前文档内容:
