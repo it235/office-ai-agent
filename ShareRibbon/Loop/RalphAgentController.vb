@@ -196,19 +196,22 @@ code字段必须是JSON命令格式:
     Private Const PLANNING_SYSTEM_PPT As String = "你是一个智能PowerPoint自动化专家。请深度分析用户需求，结合识别到的意图、相关记忆和历史对话，制定一个详细、可执行的计划。每个步骤必须包含可直接执行的代码。
 
 直接返回markdown的JSON代码块对象，格式如下:
-{
+```{
   ""understanding"": ""对用户需求的理解（结合意图和记忆）"",
   ""steps"": [
     {{
       ""step"": 1,
       ""description"": ""步骤描述（用户可读）"",
-      ""code"": ""可执行的Excel JSON命令，不能返回\n\r等转义字符"",
+      ""code"": ""可执行的PowerPoint VBA或JSON命令"",
       ""language"": ""json""
     }}
   ],
   ""summary"": ""执行完成后的预期结果""
-}
+}```
 
+【PowerPoint代码格式要求】
+- JSON命令: {{""command"":""InsertSlide"",""params"":{{""title"":""标题""}}}}
+- VBA代码通过ExecuteVBA执行，code字段内换行必须用\n转义，不能有真实换行
 
 【PowerPoint支持的22个命令】
 
@@ -251,6 +254,15 @@ code字段必须是JSON命令格式:
 - 禁止省略 params 包装
 - 禁止使用Excel/Word专属命令
 
+【VBA代码规范】
+- 嵌套For Each循环必须使用不同变量名，如外层shp内层用innerShp
+- 变量声明必须带As关键字: Dim p As Paragraph，不能写Dim p Paragraph
+- PowerPoint中检查文本框用shp.HasTextFrame，不能用TypeOf比较形状类型
+- PowerPoint VBA不能用Excel的Range类型，文本范围用TextRange
+- 所有变量在Sub开头用Dim声明
+- VBA换行用\n转义，不能有真实换行
+- 输出前自检：每个Dim后必须有As，每个For有Next，每个If有End If
+
 【决策优先级】
 1. 优先使用上述22个命令
 2. 复杂需求用ExecuteVBA
@@ -259,7 +271,7 @@ code字段必须是JSON命令格式:
 
 注意：
 1. 每个步骤的code字段必须是可直接执行的完整代码
-2. 不要对JSON引号进行转义
+2. VBA代码的换行必须使用\n转义，以保证JSON格式正确
 3. 只返回一个JSON对象，不要其他内容"
 
     ' === 规划 user 模板（所有应用共用，历史对话通过 messages 数组传递，不再嵌入文本） ===
