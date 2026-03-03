@@ -116,7 +116,7 @@ Public Class ThisAddIn
                 chatTaskPane.Width = 420
 
         Catch ex As Exception
-            MessageBox.Show($"初始化新建工作簿任务窗格失败: {ex.Message}")
+            MessageBox.Show($"初始化 Word AI 任务窗格失败: {ex.Message}")
         End Try
     End Sub
 
@@ -134,7 +134,7 @@ Public Class ThisAddIn
 
 
         Catch ex As Exception
-            MessageBox.Show($"初始化新建工作簿任务窗格失败: {ex.Message}")
+            MessageBox.Show($"初始化 Word AI 任务窗格失败: {ex.Message}")
         End Try
     End Sub
 
