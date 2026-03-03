@@ -300,6 +300,8 @@ code字段必须是JSON命令格式:
             Case Else
                 sys = PLANNING_SYSTEM_EXCEL
         End Select
+        ' 提示词常量按 String.Format 惯例用 {{ }} 转义花括号，此处还原为单括号再发给 AI
+        sys = sys.Replace("{{", "{").Replace("}}", "}")
         Return Tuple.Create(sys, PLANNING_USER_TEMPLATE)
     End Function
 
@@ -742,7 +744,7 @@ code字段必须是JSON命令格式:
                     currentStep.Description,
                     currentStep.Detail)
 
-                Dim codeResponse = Await SendAIRequest(stepUserPrompt, STEP_EXECUTION_SYSTEM, Nothing)
+                Dim codeResponse = Await SendAIRequest(stepUserPrompt, STEP_EXECUTION_SYSTEM.Replace("{{", "{").Replace("}}", "}"), Nothing)
                 code = ExtractCode(codeResponse)
                 language = DetectLanguage(codeResponse)
                 currentStep.GeneratedCode = code
