@@ -1094,15 +1094,15 @@ Public Class ChatControl
 
     Protected Overrides Function GetCurrentWorkingDirectory() As String
         Try
-            ' 获取当前活动工作簿的路径
-            If Globals.ThisAddIn.Application.ActiveWorkbook IsNot Nothing Then
-                Return Globals.ThisAddIn.Application.ActiveWorkbook.Path
+            ' 获取当前活动演示文稿的路径
+            If Globals.ThisAddIn.Application.ActivePresentation IsNot Nothing Then
+                Return Globals.ThisAddIn.Application.ActivePresentation.Path
             End If
         Catch ex As Exception
             Debug.WriteLine($"获取当前工作目录时出错: {ex.Message}")
         End Try
 
-        ' 如果无法获取工作簿路径，则返回应用程序目录
+        ' 如果无法获取演示文稿路径，则返回应用程序目录
         Return System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)
     End Function
 
