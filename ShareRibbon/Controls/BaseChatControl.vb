@@ -4156,7 +4156,7 @@ Public MustInherit Class BaseChatControl
                                 End If
 
                                 If stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}).EndsWith("}") Then
-                                    ProcessStreamChunk(stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}), responseUuid, originQuestion)
+                                    ProcessStreamChunk(stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}), uuid, originQuestion)
                                     stringBuilder.Clear()
                                 End If
                             Loop
@@ -4166,7 +4166,7 @@ Public MustInherit Class BaseChatControl
                                 Debug.WriteLine($"[Stream] 警告：循环结束但stringBuilder还有未处理数据，长度={stringBuilder.Length}")
                                 Debug.WriteLine($"[Stream] 未处理数据内容: {stringBuilder.ToString().Substring(0, Math.Min(200, stringBuilder.Length))}")
                                 ' 尝试处理剩余数据
-                                ProcessStreamChunk(stringBuilder.ToString().Trim(), responseUuid, originQuestion)
+                                ProcessStreamChunk(stringBuilder.ToString().Trim(), uuid, originQuestion)
                             End If
 
                             Debug.WriteLine($"[Stream] 流接收完成，共处理了 {chunkCount} 个chunk")
