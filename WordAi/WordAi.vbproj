@@ -27,10 +27,6 @@
     <AssemblyName>WordAi</AssemblyName>
     <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <DefineConstants>VSTO40,UseOfficeInterop</DefineConstants>
-    <StartupObject>
-    </StartupObject>
-    <ResolveComReferenceSilent>true</ResolveComReferenceSilent>
-    <BootstrapperEnabled>true</BootstrapperEnabled>
     <PublishUrl>publish\</PublishUrl>
     <InstallUrl />
     <TargetCulture>zh-chs</TargetCulture>
@@ -46,6 +42,8 @@
     <FriendlyName>WordAi</FriendlyName>
     <OfficeApplicationDescription />
     <LoadBehavior>3</LoadBehavior>
+    <BootstrapperEnabled>false</BootstrapperEnabled>
+    <GenerateManifests>true</GenerateManifests>
     <NuGetPackageImportStamp>
     </NuGetPackageImportStamp>
   </PropertyGroup>
@@ -65,17 +63,6 @@
       <ProductName>Microsoft Visual Studio 2010 Tools for Office Runtime %28x86 和 x64%29</ProductName>
       <Install>true</Install>
     </BootstrapperPackage>
-  </ItemGroup>
-  <!-- e_sqlite3.dll：与 WebView2Loader 同级，供 vdproj ContentFiles 收集 -->
-  <ItemGroup Condition="Exists('..\packages\SourceGear.sqlite3.3.50.4.5\runtimes\win-x64\native\e_sqlite3.dll')">
-    <Content Include="..\packages\SourceGear.sqlite3.3.50.4.5\runtimes\win-x64\native\e_sqlite3.dll">
-      <Link>runtimes\win-x64\native\e_sqlite3.dll</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\packages\SourceGear.sqlite3.3.50.4.5\runtimes\win-x86\native\e_sqlite3.dll">
-      <Link>runtimes\win-x86\native\e_sqlite3.dll</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
   </ItemGroup>
   <PropertyGroup>
     <!--
@@ -133,8 +120,7 @@
       Warning level for the compiler.
   -->
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DefineConstants>
-    </DefineConstants>
+    <DefineConstants>VSTO40,UseOfficeInterop</DefineConstants>
     <DefineDebug>false</DefineDebug>
     <DefineTrace>true</DefineTrace>
     <DebugType>pdbonly</DebugType>
@@ -204,6 +190,18 @@
     <Reference Include="System.ValueTuple, Version=4.0.3.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>..\packages\System.ValueTuple.4.5.0\lib\net47\System.ValueTuple.dll</HintPath>
     </Reference>
+    <Reference Include="Markdig, Version=0.41.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\Markdig.0.41.1\lib\net462\Markdig.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Text.Json, Version=8.0.0.5, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Text.Json.8.0.5\lib\net462\System.Text.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Text.Encodings.Web, Version=8.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Text.Encodings.Web.8.0.0\lib\net462\System.Text.Encodings.Web.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Threading.Tasks.Extensions, Version=4.2.1.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Threading.Tasks.Extensions.4.6.0\lib\net462\System.Threading.Tasks.Extensions.dll</HintPath>
+    </Reference>
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
     <Reference Include="System.Core" />
@@ -237,8 +235,8 @@
     <When Condition="$([System.String]::Copy(&quot;;$(DefineConstants);&quot;).ToLower().Contains(';useofficeinterop;')) or $([System.String]::Copy(&quot;,$(DefineConstants),&quot;).ToLower().Contains(',useofficeinterop,'))">
       <ItemGroup>
         <Reference Include="Office, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c">
-          <Private>False</Private>
-          <EmbedInteropTypes>true</EmbedInteropTypes>
+          <HintPath>..\packages\MicrosoftOfficeCore.15.0.0\lib\net20\Office.dll</HintPath>
+          <Private>True</Private>
         </Reference>
         <Reference Include="Microsoft.Office.Interop.Word, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c">
           <Private>False</Private>
@@ -282,7 +280,7 @@
     <Import Include="System.Linq" />
     <Import Include="System.Text" />
     <Import Include="System.Xml.Linq" />
-    <Import Include="Office = Microsoft.Office.Core" />
+    <Import Include="Microsoft.Office.Core" />
     <Import Include="Word = Microsoft.Office.Interop.Word" />
     <Import Include="Microsoft.Office.Tools.Word" />
   </ItemGroup>
@@ -370,6 +368,12 @@
     <None Include="WordAi_TemporaryKey.pfx" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="..\packages\Markdig.0.41.1\lib\net462\Markdig.dll">
+      <Link>Markdig.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\ShareRibbon\ShareRibbon.vbproj">
       <Project>{006508c7-fb9f-4484-a22a-9aa9487acd0b}</Project>
       <Name>ShareRibbon</Name>
@@ -400,7 +404,7 @@
   <!-- Include the build rules for a Visual Basic project. -->
   <Import Project="$(MSBuildToolsPath)\Microsoft.VisualBasic.targets" />
   <!-- Include additional build rules for an Office application add-in. -->
-  <Import Project="$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v17.0\OfficeTools\Microsoft.VisualStudio.Tools.Office.targets" Condition="Exists('$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v17.0\OfficeTools\Microsoft.VisualStudio.Tools.Office.targets')" />
+  <Import Project="$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v18.0\OfficeTools\Microsoft.VisualStudio.Tools.Office.targets" Condition="Exists('$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v18.0\OfficeTools\Microsoft.VisualStudio.Tools.Office.targets')" />
   <!-- This section defines VSTO properties that describe the host-changeable project properties. -->
   <ProjectExtensions>
     <VisualStudio>
@@ -421,4 +425,20 @@
     <Error Condition="!Exists('..\packages\Microsoft.Extensions.Logging.Abstractions.6.0.0\build\Microsoft.Extensions.Logging.Abstractions.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Extensions.Logging.Abstractions.6.0.0\build\Microsoft.Extensions.Logging.Abstractions.targets'))" />
   </Target>
   <Import Project="..\packages\Microsoft.Extensions.Logging.Abstractions.6.0.0\build\Microsoft.Extensions.Logging.Abstractions.targets" Condition="Exists('..\packages\Microsoft.Extensions.Logging.Abstractions.6.0.0\build\Microsoft.Extensions.Logging.Abstractions.targets')" />
+  <!-- Exclude unsigned Markdig.dll from VSTO manifest generation by matching resolved paths -->
+  <Target Name="ExcludeUnsignedAssembliesFromManifest" AfterTargets="ResolveAssemblyReferences" BeforeTargets="VisualStudioForApplicationsBuild">
+    <ItemGroup>
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'Markdig'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'Markdig'" />
+    </ItemGroup>
+  </Target>
+  <!-- Register add-in directly in registry for debugging -->
+  <Target Name="RegisterOfficeAddin" AfterTargets="Build" Condition="'$(Configuration)' == 'Debug'">
+    <PropertyGroup>
+      <AddInRegistryPath>HKCU\Software\Microsoft\Office\$(OfficeApplication)\Addins\$(TargetName)</AddInRegistryPath>
+    </PropertyGroup>
+    <Exec Command="reg add &quot;$(AddInRegistryPath)&quot; /v FriendlyName /t REG_SZ /d &quot;$(FriendlyName)&quot; /f" />
+    <Exec Command="reg add &quot;$(AddInRegistryPath)&quot; /v LoadBehavior /t REG_DWORD /d $(LoadBehavior) /f" />
+    <Exec Command="reg add &quot;$(AddInRegistryPath)&quot; /v Manifest /t REG_SZ /d &quot;$(TargetDir)$(TargetName).vsto|vstolocal&quot; /f" />
+  </Target>
 </Project>

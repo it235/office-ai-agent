@@ -76,7 +76,7 @@ Public Class SqliteNativeLoader
     End Function
 
     ''' <summary>
-    ''' 若 packages 中存在 SourceGear.sqlite3，则拷贝到 runtimes\arch\native\（与 WebView2 一致）
+    ''' 若 packages 中存在 SQLitePCLRaw.lib.e_sqlite3，则拷贝到 runtimes\arch\native\
     ''' </summary>
     Private Shared Sub TryCopyFromPackages(baseDir As String, arch As String)
         ' 从 bin\Debug 向上找到解决方案根目录（含 packages 的目录）
@@ -94,9 +94,14 @@ Public Class SqliteNativeLoader
         Next
         If String.IsNullOrEmpty(packagesDir) Then Return
 
-        Dim sourcePath As String = Path.Combine(packagesDir, "SourceGear.sqlite3.3.50.4.5", "runtimes", arch, "native", "e_sqlite3.dll")
+        ' 优先使用 SQLitePCLRaw.lib.e_sqlite3
+        Dim sourcePath As String = Path.Combine(packagesDir, "SQLitePCLRaw.lib.e_sqlite3.2.1.11", "runtimes", arch, "native", "e_sqlite3.dll")
         If Not File.Exists(sourcePath) Then
-            sourcePath = Path.Combine(packagesDir, "SourceGear.sqlite3.3.50.4.2", "runtimes", arch, "native", "e_sqlite3.dll")
+            ' 尝试其他版本
+            Dim libDirs = Directory.GetDirectories(packagesDir, "SQLitePCLRaw.lib.e_sqlite3*")
+            If libDirs.Length > 0 Then
+                sourcePath = Path.Combine(libDirs(0), "runtimes", arch, "native", "e_sqlite3.dll")
+            End If
         End If
         If Not File.Exists(sourcePath) Then Return
 

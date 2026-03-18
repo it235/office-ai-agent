@@ -103,6 +103,10 @@ Public Class ThisAddIn
 
 
     Private Sub ThisAddIn_Shutdown() Handles Me.Shutdown
+        ' 清理翻译服务资源（右键菜单按钮）
+        If translateService IsNot Nothing Then
+            translateService.Cleanup()
+        End If
         ' 补全功能已禁用，无需取消订阅
     End Sub
 

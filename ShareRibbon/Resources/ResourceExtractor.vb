@@ -16,8 +16,8 @@ Public Class ResourceExtractor
             Directory.CreateDirectory(Path.Combine(appDataPath, "css"))
             Directory.CreateDirectory(Path.Combine(appDataPath, "js"))
 
-            ' 获取资源管理器
-            Dim rm As New Resources.ResourceManager("ShareRibbon.Resources", System.Reflection.Assembly.GetExecutingAssembly())
+            ' 获取资源管理器 - 使用当前类型的程序集，确保在子插件中也能正确获取 ShareRibbon 资源
+            Dim rm As New Resources.ResourceManager("ShareRibbon.Resources", GetType(ResourceExtractor).Assembly)
 
             ' 第三方库资源文件映射
             Dim libraryResources As New Dictionary(Of String, String) From {
@@ -113,7 +113,7 @@ Public Class ResourceExtractor
     ' 调试方法 - 列出所有资源
     Private Shared Sub DebugListResources()
         Try
-            Dim assembly = System.Reflection.Assembly.GetExecutingAssembly()
+            Dim assembly = GetType(ResourceExtractor).Assembly
             Debug.WriteLine("=== 所有嵌入资源 ===")
             For Each resourceName In assembly.GetManifestResourceNames()
                 Debug.WriteLine($"Found resource: {resourceName}")
