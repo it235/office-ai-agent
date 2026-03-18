@@ -496,6 +496,14 @@
   </ItemGroup>
   <ItemGroup>
   </ItemGroup>
+  <!-- 复制 e_sqlite3.dll 到输出目录 (System.Data.SQLite 2.0 需要) -->
+  <Target Name="CopySqliteNativeDll" AfterTargets="Build">
+    <PropertyGroup>
+      <SqliteNativePath>..\packages\SQLitePCLRaw.lib.e_sqlite3.2.1.11\runtimes</SqliteNativePath>
+    </PropertyGroup>
+    <Copy SourceFiles="$(SqliteNativePath)\win-x86\native\e_sqlite3.dll" DestinationFolder="$(OutputPath)runtimes\win-x86\native" Condition="Exists('$(SqliteNativePath)\win-x86\native\e_sqlite3.dll')" />
+    <Copy SourceFiles="$(SqliteNativePath)\win-x64\native\e_sqlite3.dll" DestinationFolder="$(OutputPath)runtimes\win-x64\native" Condition="Exists('$(SqliteNativePath)\win-x64\native\e_sqlite3.dll')" />
+  </Target>
   <Import Project="$(MSBuildToolsPath)\Microsoft.VisualBasic.targets" />
   <Import Project="..\packages\Microsoft.Web.WebView2.1.0.3240.44\build\Microsoft.Web.WebView2.targets" Condition="Exists('..\packages\Microsoft.Web.WebView2.1.0.3240.44\build\Microsoft.Web.WebView2.targets')" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">

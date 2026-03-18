@@ -49,6 +49,22 @@ Public Class WebViewService
 
                 ' 释放资源文件到本地
                 _wwwRoot = ResourceExtractor.ExtractResources()
+                
+                ' 检查资源提取是否成功
+                If String.IsNullOrEmpty(_wwwRoot) Then
+                    Dim errMsg As String = "资源提取失败，无法初始化聊天界面。" & Environment.NewLine
+                    If Not String.IsNullOrEmpty(ResourceExtractor.LastError) Then
+                        errMsg &= "错误详情: " & ResourceExtractor.LastError
+                    End If
+                    MessageBox.Show(errMsg, "初始化错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                    Return
+                End If
+                
+                ' 检查目录是否存在
+                If Not Directory.Exists(_wwwRoot) Then
+                    MessageBox.Show($"资源目录不存在: {_wwwRoot}", "初始化错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                    Return
+                End If
 
                 ' 配置 WebView2 的创建属性
                 _chatBrowser.CreationProperties = New CoreWebView2CreationProperties With {

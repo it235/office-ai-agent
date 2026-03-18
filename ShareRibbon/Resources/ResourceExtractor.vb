@@ -1,7 +1,20 @@
 Imports System.IO
+Imports System.Diagnostics
 
 Public Class ResourceExtractor
+    Private Shared _lastError As String = String.Empty
+    
+    ''' <summary>
+    ''' 获取最后一次错误信息
+    ''' </summary>
+    Public Shared ReadOnly Property LastError As String
+        Get
+            Return _lastError
+        End Get
+    End Property
+    
     Public Shared Function ExtractResources() As String
+        _lastError = String.Empty
         DebugListResources()
         Try
             ' 获取用户本地应用程序数据目录
@@ -16,8 +29,8 @@ Public Class ResourceExtractor
             Directory.CreateDirectory(Path.Combine(appDataPath, "css"))
             Directory.CreateDirectory(Path.Combine(appDataPath, "js"))
 
-            ' 获取资源管理器
-            Dim rm As New Resources.ResourceManager("ShareRibbon.Resources", System.Reflection.Assembly.GetExecutingAssembly())
+            ' 获取资源管理器 - 使用当前类型的程序集，确保在子插件中也能正确获取 ShareRibbon 资源
+            Dim rm As New Resources.ResourceManager("ShareRibbon.Resources", GetType(ResourceExtractor).Assembly)
 
             ' 第三方库资源文件映射
             Dim libraryResources As New Dictionary(Of String, String) From {
@@ -28,8 +41,12 @@ Public Class ResourceExtractor
             }
 
             ' 释放第三方库资源
+            Dim extractErrors As New List(Of String)()
             For Each kvp In libraryResources
-                ExtractResourceToFileFromManager(kvp.Key, kvp.Value, targetDir:=Path.Combine(appDataPath, If(kvp.Value.EndsWith(".js"), "js", "css")), rm:=rm)
+                Dim errMsg As String = ExtractResourceToFileFromManager(kvp.Key, kvp.Value, targetDir:=Path.Combine(appDataPath, If(kvp.Value.EndsWith(".js"), "js", "css")), rm:=rm)
+                If Not String.IsNullOrEmpty(errMsg) Then
+                    extractErrors.Add(errMsg)
+                End If
             Next
 
             ' 自定义CSS资源文件映射
@@ -39,7 +56,10 @@ Public Class ResourceExtractor
 
             ' 释放CSS资源
             For Each kvp In cssResources
-                ExtractResourceToFileFromManager(kvp.Key, kvp.Value, targetDir:=Path.Combine(appDataPath, "css"), rm:=rm)
+                Dim errMsg As String = ExtractResourceToFileFromManager(kvp.Key, kvp.Value, targetDir:=Path.Combine(appDataPath, "css"), rm:=rm)
+                If Not String.IsNullOrEmpty(errMsg) Then
+                    extractErrors.Add(errMsg)
+                End If
             Next
 
             ' 自定义JS资源文件映射
@@ -65,17 +85,27 @@ Public Class ResourceExtractor
 
             ' 释放JS资源
             For Each kvp In jsResources
-                ExtractResourceToFileFromManager(kvp.Key, kvp.Value, targetDir:=Path.Combine(appDataPath, "js"), rm:=rm)
+                Dim errMsg As String = ExtractResourceToFileFromManager(kvp.Key, kvp.Value, targetDir:=Path.Combine(appDataPath, "js"), rm:=rm)
+                If Not String.IsNullOrEmpty(errMsg) Then
+                    extractErrors.Add(errMsg)
+                End If
             Next
+            
+            ' 如果有提取错误，记录但仍然返回路径（部分资源可能已成功）
+            If extractErrors.Count > 0 Then
+                _lastError = String.Join(Environment.NewLine, extractErrors)
+                Debug.WriteLine($"资源提取部分失败: {_lastError}")
+            End If
 
             Return appDataPath
         Catch ex As Exception
-            Debug.WriteLine($"释放资源失败: {ex.Message}")
+            _lastError = $"释放资源失败: {ex.Message}"
+            Debug.WriteLine(_lastError)
             Return String.Empty
         End Try
     End Function
 
-    Private Shared Sub ExtractResourceToFileFromManager(resourceName As String, targetFileName As String, targetDir As String, rm As Resources.ResourceManager)
+    Private Shared Function ExtractResourceToFileFromManager(resourceName As String, targetFileName As String, targetDir As String, rm As Resources.ResourceManager) As String
         Try
             ' 从资源管理器中获取资源
             Dim resourceObj = rm.GetObject(resourceName)
@@ -91,29 +121,39 @@ Public Class ResourceExtractor
                     ' 如果是字符串，转换为字节后写入
                     File.WriteAllText(targetPath, DirectCast(resourceObj, String))
                 Else
-                    Debug.WriteLine($"Unsupported resource type for {resourceName}: {resourceObj.GetType().Name}")
-                    Return
+                    Dim errMsg = $"Unsupported resource type for {resourceName}: {resourceObj.GetType().Name}"
+                    Debug.WriteLine(errMsg)
+                    Return errMsg
                 End If
 
                 Debug.WriteLine($"Successfully extracted {resourceName} to {targetPath}")
+                Return String.Empty
             Else
-                Debug.WriteLine($"Resource not found: {resourceName}")
+                Dim errMsg = $"Resource not found: {resourceName}"
+                Debug.WriteLine(errMsg)
 
                 ' 列出所有可用的资源，以便调试
-                Dim resourceSet = rm.GetResourceSet(Globalization.CultureInfo.CurrentUICulture, True, True)
-                For Each entry As DictionaryEntry In resourceSet
-                    Debug.WriteLine($"Available resource: {entry.Key}")
-                Next
+                Try
+                    Dim resourceSet = rm.GetResourceSet(Globalization.CultureInfo.CurrentUICulture, True, True)
+                    For Each entry As DictionaryEntry In resourceSet
+                        Debug.WriteLine($"Available resource: {entry.Key}")
+                    Next
+                Catch
+                End Try
+                
+                Return errMsg
             End If
         Catch ex As Exception
-            Debug.WriteLine($"提取资源 {resourceName} 失败: {ex.Message}")
+            Dim errMsg = $"提取资源 {resourceName} 失败: {ex.Message}"
+            Debug.WriteLine(errMsg)
+            Return errMsg
         End Try
-    End Sub
+    End Function
 
     ' 调试方法 - 列出所有资源
     Private Shared Sub DebugListResources()
         Try
-            Dim assembly = System.Reflection.Assembly.GetExecutingAssembly()
+            Dim assembly = GetType(ResourceExtractor).Assembly
             Debug.WriteLine("=== 所有嵌入资源 ===")
             For Each resourceName In assembly.GetManifestResourceNames()
                 Debug.WriteLine($"Found resource: {resourceName}")

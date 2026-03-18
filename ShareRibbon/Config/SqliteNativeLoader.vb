@@ -26,8 +26,13 @@ Public Class SqliteNativeLoader
             Dim arch As String = GetRuntimeArchitecture()
             Dim dllPath As String = Nothing
 
-            ' 候选基目录：BaseDirectory、本程序集目录（WPS 等可能不同）
-            Dim candidates As New List(Of String) From {AppDomain.CurrentDomain.BaseDirectory}
+            ' 候选基目录：BaseDirectory、本程序集目录、插件目录（WPS/Office 可能不同）
+            Dim candidates As New List(Of String)()
+            
+            ' 1. BaseDirectory
+            candidates.Add(AppDomain.CurrentDomain.BaseDirectory)
+            
+            ' 2. 本程序集目录
             Try
                 Dim asmDir = Path.GetDirectoryName(GetType(SqliteNativeLoader).Assembly.Location)
                 If Not String.IsNullOrEmpty(asmDir) AndAlso Not candidates.Contains(asmDir) Then
@@ -35,23 +40,68 @@ Public Class SqliteNativeLoader
                 End If
             Catch
             End Try
+            
+            ' 3. 尝试从 VSTO 插件目录查找（通过 CodeBase）
+            Try
+                Dim codeBase = GetType(SqliteNativeLoader).Assembly.CodeBase
+                If Not String.IsNullOrEmpty(codeBase) Then
+                    Dim uri As New Uri(codeBase)
+                    Dim codeBaseDir = Path.GetDirectoryName(uri.LocalPath)
+                    If Not String.IsNullOrEmpty(codeBaseDir) AndAlso Not candidates.Contains(codeBaseDir) Then
+                        candidates.Add(codeBaseDir)
+                    End If
+                End If
+            Catch
+            End Try
+
+            ' 诊断输出
+            Debug.WriteLine($"[SqliteNativeLoader] 架构: {arch}")
+            For Each baseDir In candidates
+                Debug.WriteLine($"[SqliteNativeLoader] 候选目录: {baseDir}")
+            Next
 
             For Each baseDir In candidates
                 If String.IsNullOrEmpty(baseDir) Then Continue For
-                dllPath = Path.Combine(baseDir, "runtimes", arch, "native", "e_sqlite3.dll")
-                If File.Exists(dllPath) Then Exit For
+                
+                ' 尝试多种路径格式
+                Dim pathsToTry As String() = {
+                    Path.Combine(baseDir, "runtimes", arch, "native", "e_sqlite3.dll"),
+                    Path.Combine(baseDir, "runtimes", "win-x86", "native", "e_sqlite3.dll"),
+                    Path.Combine(baseDir, "runtimes", "win-x64", "native", "e_sqlite3.dll")
+                }
+                
+                For Each tryPath In pathsToTry
+                    Debug.WriteLine($"[SqliteNativeLoader] 尝试路径: {tryPath}")
+                    If File.Exists(tryPath) Then
+                        dllPath = tryPath
+                        Exit For
+                    End If
+                Next
+                
+                If Not String.IsNullOrEmpty(dllPath) Then Exit For
+                
                 ' 若不存在则尝试从 packages 拷贝（仅对首个候选，通常是调试目录）
                 TryCopyFromPackages(baseDir, arch)
-                If File.Exists(dllPath) Then Exit For
-                dllPath = Nothing
+                
+                ' 再次检查
+                For Each tryPath In pathsToTry
+                    If File.Exists(tryPath) Then
+                        dllPath = tryPath
+                        Exit For
+                    End If
+                Next
+                
+                If Not String.IsNullOrEmpty(dllPath) Then Exit For
             Next
 
             If String.IsNullOrEmpty(dllPath) OrElse Not File.Exists(dllPath) Then
                 Throw New FileNotFoundException(
-                    $"e_sqlite3.dll 未找到。请将 e_sqlite3.dll 放入 runtimes\{arch}\native\ 目录。可从 NuGet SourceGear.sqlite3 包获取。",
+                    $"e_sqlite3.dll 未找到。架构: {arch}。已搜索目录: {String.Join(", ", candidates)}。请将 e_sqlite3.dll 放入 runtimes\{arch}\native\ 目录。",
                     "runtimes\" & arch & "\native\e_sqlite3.dll")
             End If
 
+            Debug.WriteLine($"[SqliteNativeLoader] 找到 DLL: {dllPath}")
+            
             Dim handle As IntPtr = NativeMethods.LoadLibrary(dllPath)
             If handle = IntPtr.Zero Then
                 Dim err As Integer = Marshal.GetLastWin32Error()
@@ -59,6 +109,7 @@ Public Class SqliteNativeLoader
             End If
 
             _loaded = True
+            Debug.WriteLine($"[SqliteNativeLoader] 加载成功")
         End SyncLock
     End Sub
 
@@ -76,7 +127,7 @@ Public Class SqliteNativeLoader
     End Function
 
     ''' <summary>
-    ''' 若 packages 中存在 SourceGear.sqlite3，则拷贝到 runtimes\arch\native\（与 WebView2 一致）
+    ''' 若 packages 中存在 SQLitePCLRaw.lib.e_sqlite3，则拷贝到 runtimes\arch\native\
     ''' </summary>
     Private Shared Sub TryCopyFromPackages(baseDir As String, arch As String)
         ' 从 bin\Debug 向上找到解决方案根目录（含 packages 的目录）
@@ -94,9 +145,14 @@ Public Class SqliteNativeLoader
         Next
         If String.IsNullOrEmpty(packagesDir) Then Return
 
-        Dim sourcePath As String = Path.Combine(packagesDir, "SourceGear.sqlite3.3.50.4.5", "runtimes", arch, "native", "e_sqlite3.dll")
+        ' 优先使用 SQLitePCLRaw.lib.e_sqlite3
+        Dim sourcePath As String = Path.Combine(packagesDir, "SQLitePCLRaw.lib.e_sqlite3.2.1.11", "runtimes", arch, "native", "e_sqlite3.dll")
         If Not File.Exists(sourcePath) Then
-            sourcePath = Path.Combine(packagesDir, "SourceGear.sqlite3.3.50.4.2", "runtimes", arch, "native", "e_sqlite3.dll")
+            ' 尝试其他版本
+            Dim libDirs = Directory.GetDirectories(packagesDir, "SQLitePCLRaw.lib.e_sqlite3*")
+            If libDirs.Length > 0 Then
+                sourcePath = Path.Combine(libDirs(0), "runtimes", arch, "native", "e_sqlite3.dll")
+            End If
         End If
         If Not File.Exists(sourcePath) Then Return
 

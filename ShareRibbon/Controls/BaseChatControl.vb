@@ -155,6 +155,26 @@ Public MustInherit Class BaseChatControl
             End If
 
             Dim wwwRoot As String = ResourceExtractor.ExtractResources()
+            
+            ' 检查资源提取是否成功
+            If String.IsNullOrEmpty(wwwRoot) Then
+                Dim errMsg As String = "资源提取失败，无法初始化聊天界面。" & Environment.NewLine
+                If Not String.IsNullOrEmpty(ResourceExtractor.LastError) Then
+                    errMsg &= "错误详情: " & ResourceExtractor.LastError
+                End If
+                MessageBox.Show(errMsg, "初始化错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                Return
+            End If
+            
+            ' 检查目录是否存在
+            If Not Directory.Exists(wwwRoot) Then
+                MessageBox.Show($"资源目录不存在: {wwwRoot}", "初始化错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                Return
+            End If
+            
+            ' 诊断：显示资源目录
+            Debug.WriteLine($"[WebView2] wwwRoot = {wwwRoot}")
+
             ChatBrowser.CreationProperties = New CoreWebView2CreationProperties With {
                 .UserDataFolder = userDataFolder
             }
@@ -166,12 +186,25 @@ Public MustInherit Class BaseChatControl
                 ChatBrowser.CoreWebView2.Settings.IsWebMessageEnabled = True
                 ChatBrowser.CoreWebView2.Settings.AreDevToolsEnabled = True
 
-                ChatBrowser.CoreWebView2.SetVirtualHostNameToFolderMapping(
-                    "officeai.local",
-                    wwwRoot,
-                    CoreWebView2HostResourceAccessKind.Allow
-                )
+                ' 设置虚拟主机映射
+                Try
+                    ChatBrowser.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                        "officeai.local",
+                        wwwRoot,
+                        CoreWebView2HostResourceAccessKind.Allow
+                    )
+                    Debug.WriteLine($"[WebView2] 虚拟主机映射成功: officeai.local -> {wwwRoot}")
+                Catch ex As Exception
+                    Debug.WriteLine($"[WebView2] 虚拟主机映射失败: {ex.Message}")
+                    MessageBox.Show($"虚拟主机映射失败: {ex.Message}", "警告", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                End Try
 
+                ' 添加 WebResourceRequested 事件处理作为备用方案
+                AddHandler ChatBrowser.CoreWebView2.WebResourceRequested, AddressOf OnWebResourceRequested
+                ChatBrowser.CoreWebView2.AddWebResourceRequestedFilter("http://officeai.local/*", CoreWebView2WebResourceContext.Script)
+                ChatBrowser.CoreWebView2.AddWebResourceRequestedFilter("http://officeai.local/*", CoreWebView2WebResourceContext.Stylesheet)
+                ChatBrowser.CoreWebView2.AddWebResourceRequestedFilter("http://officeai.local/*", CoreWebView2WebResourceContext.Image)
+                
                 Dim htmlContent As String = My.Resources.chat_template_refactored
                 ChatBrowser.CoreWebView2.NavigateToString(htmlContent)
                 
@@ -192,6 +225,59 @@ Public MustInherit Class BaseChatControl
             Dim errorMessage As String = $"初始化失败: {ex.Message}{Environment.NewLine}类型: {ex.GetType().Name}{Environment.NewLine}堆栈:{ex.StackTrace}"
             MessageBox.Show(errorMessage, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
+    End Function
+    
+    ''' <summary>
+    ''' WebResourceRequested 事件处理 - 作为虚拟主机映射的备用方案
+    ''' </summary>
+    Private Sub OnWebResourceRequested(sender As Object, e As CoreWebView2WebResourceRequestedEventArgs)
+        Try
+            Dim requestUri As Uri = New Uri(e.Request.Uri)
+            Dim localPath As String = requestUri.AbsolutePath.TrimStart("/"c)
+            
+            ' 映射到本地资源目录
+            Dim wwwRoot As String = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "OfficeAI", "www"
+            )
+            Dim filePath As String = Path.Combine(wwwRoot, localPath.Replace("/"c, Path.DirectorySeparatorChar))
+            
+            If File.Exists(filePath) Then
+                Dim mimeType As String = GetMimeType(filePath)
+                Dim fileBytes As Byte() = File.ReadAllBytes(filePath)
+                
+                Dim response = ChatBrowser.CoreWebView2.Environment.CreateWebResourceResponse(
+                    New MemoryStream(fileBytes),
+                    200,
+                    "OK",
+                    $"Content-Type: {mimeType}{Environment.NewLine}Access-Control-Allow-Origin: *"
+                )
+                e.Response = response
+                Debug.WriteLine($"[WebView2] 资源加载成功: {localPath}")
+            Else
+                Debug.WriteLine($"[WebView2] 资源未找到: {filePath}")
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"[WebView2] WebResourceRequested 错误: {ex.Message}")
+        End Try
+    End Sub
+    
+    ''' <summary>
+    ''' 获取文件的 MIME 类型
+    ''' </summary>
+    Private Function GetMimeType(filePath As String) As String
+        Dim ext As String = Path.GetExtension(filePath).ToLower()
+        Select Case ext
+            Case ".js" : Return "application/javascript"
+            Case ".css" : Return "text/css"
+            Case ".html" : Return "text/html"
+            Case ".png" : Return "image/png"
+            Case ".jpg", ".jpeg" : Return "image/jpeg"
+            Case ".gif" : Return "image/gif"
+            Case ".svg" : Return "image/svg+xml"
+            Case ".json" : Return "application/json"
+            Case Else : Return "application/octet-stream"
+        End Select
     End Function
 
     ''' <summary>
@@ -4070,7 +4156,7 @@ Public MustInherit Class BaseChatControl
                                 End If
 
                                 If stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}).EndsWith("}") Then
-                                    ProcessStreamChunk(stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}), responseUuid, originQuestion)
+                                    ProcessStreamChunk(stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}), uuid, originQuestion)
                                     stringBuilder.Clear()
                                 End If
                             Loop
@@ -4080,7 +4166,7 @@ Public MustInherit Class BaseChatControl
                                 Debug.WriteLine($"[Stream] 警告：循环结束但stringBuilder还有未处理数据，长度={stringBuilder.Length}")
                                 Debug.WriteLine($"[Stream] 未处理数据内容: {stringBuilder.ToString().Substring(0, Math.Min(200, stringBuilder.Length))}")
                                 ' 尝试处理剩余数据
-                                ProcessStreamChunk(stringBuilder.ToString().Trim(), responseUuid, originQuestion)
+                                ProcessStreamChunk(stringBuilder.ToString().Trim(), uuid, originQuestion)
                             End If
 
                             Debug.WriteLine($"[Stream] 流接收完成，共处理了 {chunkCount} 个chunk")
