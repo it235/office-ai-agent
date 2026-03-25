@@ -29,9 +29,21 @@ Public MustInherit Class BaseChatControl
     Private _historyService As HistoryService = Nothing
     Private _mcpService As McpService = Nothing
     
-    ' Ralph Loop 控制器
-    Protected _ralphLoopController As New RalphLoopController()
-    
+    ' 延迟初始化的 Ralph Loop 服务
+    Private _ralphLoopService As RalphLoopService = Nothing
+    Protected ReadOnly Property RalphLoopSvc As RalphLoopService
+        Get
+            If _ralphLoopService Is Nothing Then
+                _ralphLoopService = New RalphLoopService(
+                    AddressOf ExecuteJavaScriptAsyncJS,
+                    AddressOf Send,
+                    AddressOf EscapeJavaScriptString,
+                    AddressOf GetApplicationType)
+            End If
+            Return _ralphLoopService
+        End Get
+    End Property
+
     ' Ralph Agent 控制器
     Protected _ralphAgentController As RalphAgentController
 
@@ -1479,12 +1491,12 @@ Public MustInherit Class BaseChatControl
                              Try
                                  Dim goal = If(String.IsNullOrWhiteSpace(intent.OriginalInput), intent.UserFriendlyDescription, intent.OriginalInput)
                                  Dim appType = GetOfficeAppType()
-                                 Dim loopSession = Await _ralphLoopController.StartNewLoop(goal, appType)
+                                 Dim loopSession = Await RalphLoopSvc.Controller.StartNewLoop(goal, appType)
                                  Dim loopDataJson = $"{{""goal"":""{EscapeJavaScriptString(goal)}"",""steps"":[],""status"":""planning""}}"
                                  ExecuteJavaScriptAsyncJS($"showLoopPlanCard({loopDataJson})")
                                  GlobalStatusStrip.ShowInfo("正在规划任务...")
-                                 Dim planningPrompt = _ralphLoopController.GetPlanningPrompt(goal, intent)
-                                 _isRalphLoopPlanning = True
+                                 Dim planningPrompt = RalphLoopSvc.Controller.GetPlanningPrompt(goal, intent)
+                                 RalphLoopSvc.IsPlanning = True
                                  Await Send(planningPrompt, "", False, "")
                              Catch ex As Exception
                                  Debug.WriteLine($"[HandleConfirmIntent Agent] {ex.Message}")
@@ -1546,171 +1558,36 @@ Public MustInherit Class BaseChatControl
     ''' 启动Ralph Loop - 用户输入目标后调用
     ''' </summary>
     Public Async Function StartRalphLoop(userGoal As String) As Task
-        Try
-            Debug.WriteLine($"[RalphLoop] 启动循环，目标: {userGoal}")
-
-            ' 获取应用类型
-            Dim appType = GetApplicationType()
-
-            ' 创建新的循环会话
-            Dim loopSession = Await _ralphLoopController.StartNewLoop(userGoal, appType)
-
-            ' 显示规划中状态
-            Dim loopDataJson = $"{{""goal"":""{EscapeJavaScriptString(userGoal)}"",""steps"":[],""status"":""planning""}}"
-            ExecuteJavaScriptAsyncJS($"showLoopPlanCard({loopDataJson})")
-
-            GlobalStatusStrip.ShowInfo("正在规划任务...")
-
-            ' 调用AI进行任务规划
-            Dim planningPrompt = _ralphLoopController.GetPlanningPrompt(userGoal)
-
-            ' 发送规划请求（使用特殊模式标记）
-            _isRalphLoopPlanning = True
-            Await Send(planningPrompt, "", False, "")
-
-        Catch ex As Exception
-            Debug.WriteLine($"[RalphLoop] 启动失败: {ex.Message}")
-            GlobalStatusStrip.ShowWarning($"启动循环失败: {ex.Message}")
-        End Try
+        Await RalphLoopSvc.StartRalphLoop(userGoal)
     End Function
-
-    ' Ralph Loop 规划模式标记
-    Private _isRalphLoopPlanning As Boolean = False
 
     ''' <summary>
     ''' 处理前端startLoop消息
     ''' </summary>
     Protected Sub HandleStartLoop(jsonDoc As JObject)
-        Try
-            Dim goal = jsonDoc("goal")?.ToString()
-            If Not String.IsNullOrEmpty(goal) Then
-                StartRalphLoop(goal)
-            End If
-        Catch ex As Exception
-            Debug.WriteLine($"HandleStartLoop 出错: {ex.Message}")
-        End Try
+        RalphLoopSvc.HandleStartLoop(jsonDoc)
     End Sub
 
     ''' <summary>
     ''' 处理继续执行循环
     ''' </summary>
     Protected Async Sub HandleContinueLoop()
-        Try
-            Debug.WriteLine("[RalphLoop] 用户点击继续执行")
-
-            Dim nextStep = _ralphLoopController.ExecuteNextStep()
-            If nextStep Is Nothing Then
-                Debug.WriteLine("[RalphLoop] 没有更多步骤")
-                ExecuteJavaScriptAsyncJS("updateLoopStatus('completed')")
-                GlobalStatusStrip.ShowInfo("所有步骤已完成")
-                Return
-            End If
-
-            ' 更新UI显示当前步骤
-            ExecuteJavaScriptAsyncJS($"updateLoopStep({nextStep.StepNumber - 1}, 'running')")
-            ExecuteJavaScriptAsyncJS("updateLoopStatus('running')")
-            GlobalStatusStrip.ShowInfo($"正在执行步骤 {nextStep.StepNumber}: {nextStep.Description}")
-
-            ' 执行当前步骤
-            _currentRalphLoopStep = nextStep
-            Await Send(nextStep.Description, "", True, "")
-
-        Catch ex As Exception
-            Debug.WriteLine($"HandleContinueLoop 出错: {ex.Message}")
-            GlobalStatusStrip.ShowWarning($"执行步骤失败: {ex.Message}")
-        End Try
+        Await RalphLoopSvc.HandleContinueLoop()
     End Sub
-
-    ' 当前执行的步骤
-    Private _currentRalphLoopStep As RalphLoopStep = Nothing
 
     ''' <summary>
     ''' 处理取消循环
     ''' </summary>
     Protected Sub HandleCancelLoop()
-        Try
-            Debug.WriteLine("[RalphLoop] 用户取消循环")
-
-            _ralphLoopController.ClearAndEndLoop()
-            _isRalphLoopPlanning = False
-            _currentRalphLoopStep = Nothing
-
-            ExecuteJavaScriptAsyncJS("hideLoopPlanCard()")
-            GlobalStatusStrip.ShowInfo("已取消循环任务")
-
-        Catch ex As Exception
-            Debug.WriteLine($"HandleCancelLoop 出错: {ex.Message}")
-        End Try
+        RalphLoopSvc.HandleCancelLoop()
     End Sub
 
     ''' <summary>
     ''' 在流完成后检查是否需要处理Ralph Loop
     ''' </summary>
     Protected Sub CheckRalphLoopCompletion(responseContent As String)
-        Try
-            ' 检查是否在规划模式
-            If _isRalphLoopPlanning Then
-                _isRalphLoopPlanning = False
-
-                ' 解析规划结果
-                If _ralphLoopController.ParsePlanningResult(responseContent) Then
-                    Dim loopSession = _ralphLoopController.GetActiveLoop()
-                    If loopSession IsNot Nothing Then
-                        ' 更新前端显示规划结果
-                        Dim stepsJson = BuildStepsJson(loopSession.Steps)
-                        Dim loopDataJson = $"{{""goal"":""{EscapeJavaScriptString(loopSession.OriginalGoal)}"",""steps"":{stepsJson},""status"":""ready""}}"
-                        ExecuteJavaScriptAsyncJS($"showLoopPlanCard({loopDataJson})")
-                        GlobalStatusStrip.ShowInfo("规划完成，点击[继续执行]开始")
-                    End If
-                Else
-                    GlobalStatusStrip.ShowWarning("规划结果解析失败")
-                    ExecuteJavaScriptAsyncJS("hideLoopPlanCard()")
-                End If
-                Return
-            End If
-
-            ' 检查是否在执行步骤
-            If _currentRalphLoopStep IsNot Nothing Then
-                Dim stepNum = _currentRalphLoopStep.StepNumber
-                _ralphLoopController.CompleteCurrentStep(responseContent, True)
-                _currentRalphLoopStep = Nothing
-
-                ' 更新UI
-                ExecuteJavaScriptAsyncJS($"updateLoopStep({stepNum - 1}, 'completed')")
-
-                ' 检查是否还有更多步骤
-                Dim loopSession = _ralphLoopController.GetActiveLoop()
-                If loopSession IsNot Nothing Then
-                    If loopSession.Status = RalphLoopStatus.Paused Then
-                        ExecuteJavaScriptAsyncJS("updateLoopStatus('paused')")
-                        GlobalStatusStrip.ShowInfo($"步骤 {stepNum} 完成，点击继续执行下一步")
-                    ElseIf loopSession.Status = RalphLoopStatus.Completed Then
-                        ExecuteJavaScriptAsyncJS("updateLoopStatus('completed')")
-                        GlobalStatusStrip.ShowInfo("所有步骤已完成！")
-                    End If
-                End If
-            End If
-
-        Catch ex As Exception
-            Debug.WriteLine($"CheckRalphLoopCompletion 出错: {ex.Message}")
-        End Try
+        RalphLoopSvc.CheckRalphLoopCompletion(responseContent)
     End Sub
-
-    ''' <summary>
-    ''' 构建步骤JSON
-    ''' </summary>
-    Private Function BuildStepsJson(steps As List(Of RalphLoopStep)) As String
-        Dim sb As New StringBuilder()
-        sb.Append("[")
-        For i = 0 To steps.Count - 1
-            If i > 0 Then sb.Append(",")
-            Dim s = steps(i)
-            Dim statusStr = s.Status.ToString().ToLower()
-            sb.Append($"{{""description"":""{EscapeJavaScriptString(s.Description)}"",""status"":""{statusStr}""}}")
-        Next
-        sb.Append("]")
-        Return sb.ToString()
-    End Function
 
     ''' <summary>
     ''' 获取应用类型（子类重写）
