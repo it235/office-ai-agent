@@ -18,6 +18,10 @@ Public Class RalphAgentController
     ' Agent状态
     Private _currentSession As RalphAgentSession
     Private _isRunning As Boolean = False
+    ' simple 复杂度时自动跳过用户确认
+    Private _autoExecute As Boolean = False
+    ' 最大步骤重试次数
+    Private Const MaxStepRetries As Integer = 2
 
     ' 回调委托
     Public Property OnStatusChanged As Action(Of String)
@@ -290,6 +294,76 @@ code字段必须是JSON命令格式:
 【相关记忆（RAG检索）】
 {3}"
 
+    ' === Spec 驱动规划提示词 ===
+    Private Const SPEC_SYSTEM As String = "你是一个任务分析专家。请分析用户需求，提取结构化任务规格。
+
+直接返回 JSON 代码块（不要其他内容）：
+```json
+{
+  ""goal"": ""一句话描述核心目标"",
+  ""constraints"": [""约束条件1"", ""约束条件2""],
+  ""success_criteria"": [""成功标准1"", ""成功标准2""],
+  ""complexity"": ""simple""
+}
+```
+
+complexity 取值规则：
+- simple：单一操作，步骤数 <= 2，无需用户确认，直接自动执行
+- medium：2-5个步骤，建议用户确认后执行
+- complex：步骤多或逻辑复杂，必须用户确认
+
+只返回 JSON，不要解释。"
+
+    ''' <summary>
+    ''' Spec 驱动规划：在正式规划前先生成结构化任务规格。
+    ''' 若 complexity=simple，将设置 _autoExecute=True 自动跳过用户确认。
+    ''' </summary>
+    Private Async Function GenerateSpecAsync(userRequest As String, appType As String, currentContent As String) As Task(Of AgentTaskSpec)
+        Dim spec As New AgentTaskSpec()
+        Try
+            OnStatusChanged?.Invoke("正在分析任务复杂度...")
+            Dim sysPrompt = SPEC_SYSTEM.Replace("{{", "{").Replace("}}", "}")
+            Dim userPrompt = $"当前 Office 应用: {appType}{vbCrLf}用户需求: {userRequest}"
+            If Not String.IsNullOrWhiteSpace(currentContent) AndAlso currentContent.Length < 500 Then
+                userPrompt &= $"{vbCrLf}当前内容摘要: {currentContent.Substring(0, Math.Min(300, currentContent.Length))}"
+            End If
+
+            Dim response = Await SendAIRequest(userPrompt, sysPrompt, Nothing)
+            If String.IsNullOrWhiteSpace(response) Then Return spec
+
+            ' 提取 JSON
+            Dim jsonStr = ExtractFirstCompleteJson(response)
+            If String.IsNullOrWhiteSpace(jsonStr) Then Return spec
+
+            Dim specObj = JObject.Parse(jsonStr)
+            spec.Goal = If(specObj("goal")?.ToString(), userRequest)
+            spec.Complexity = If(specObj("complexity")?.ToString(), "medium")
+
+            Dim constraintsArr = TryCast(specObj("constraints"), JArray)
+            If constraintsArr IsNot Nothing Then
+                For Each item In constraintsArr
+                    spec.Constraints.Add(item.ToString())
+                Next
+            End If
+
+            Dim criteriaArr = TryCast(specObj("success_criteria"), JArray)
+            If criteriaArr IsNot Nothing Then
+                For Each item In criteriaArr
+                    spec.SuccessCriteria.Add(item.ToString())
+                Next
+            End If
+
+            Debug.WriteLine($"[RalphAgent] Spec 生成完成: goal={spec.Goal}, complexity={spec.Complexity}")
+            _autoExecute = spec.IsSimple
+            If _autoExecute Then
+                Debug.WriteLine("[RalphAgent] 任务复杂度 simple，将自动跳过确认直接执行")
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"[RalphAgent] GenerateSpecAsync 失败: {ex.Message}，使用默认 Spec")
+        End Try
+        Return spec
+    End Function
+
     Private Function GetPlanningPrompt(appType As String) As Tuple(Of String, String)
         Dim sys As String
         Select Case appType.ToLower()
@@ -363,6 +437,10 @@ code字段必须是JSON命令格式:
         }
 
         Try
+            ' 步骤0: Spec 驱动 — 先分析任务复杂度和目标
+            _autoExecute = False
+            _currentSession.Spec = Await GenerateSpecAsync(userRequest, appType, currentContent)
+
             ' 步骤1: 意图识别（使用LLM进行更智能的识别）
             OnStatusChanged?.Invoke("正在识别您的意图...")
             _intentResult = Await RecognizeIntentAsync(userRequest, appType, currentContent, historyMessages)
@@ -388,21 +466,34 @@ code字段必须是JSON命令格式:
             End If
             Debug.WriteLine($"[RalphAgent] 历史对话包含 {historyMsgs.Count} 条消息，将作为 messages 数组发送")
 
-            ' 步骤4: 制定执行计划
+            ' 步骤4: 制定执行计划（将 Spec 注入规划提示词，提升计划质量）
             OnStatusChanged?.Invoke("正在制定执行计划...")
             Dim intentInfo = FormatIntentInfo(_intentResult)
             Dim ragInfo = FormatRagMemories(_ragMemories)
+            Dim specInfo = FormatSpecInfo(_currentSession.Spec)
 
             Dim planningParts = GetPlanningPrompt(appType)
             Dim systemPrompt = planningParts.Item1
-            Dim userPrompt = String.Format(planningParts.Item2, currentContent, userRequest, intentInfo, ragInfo)
+            Dim baseUserPrompt = String.Format(planningParts.Item2, currentContent, userRequest, intentInfo, ragInfo)
+            ' 将 Spec 追加到 user 提示词末尾
+            Dim userPrompt = If(String.IsNullOrWhiteSpace(specInfo), baseUserPrompt,
+                               baseUserPrompt & vbCrLf & vbCrLf & "【任务规格（Spec）】" & vbCrLf & specInfo)
             Debug.WriteLine($"[RalphAgent] system 提示词长度: {systemPrompt.Length}, user 提示词长度: {userPrompt.Length}")
             Dim response = Await SendAIRequest(userPrompt, systemPrompt, historyMsgs)
 
             ' 解析规划结果
             If ParsePlanningResult(response) Then
-                _currentSession.Status = AgentStatus.WaitingConfirm
-                OnStatusChanged?.Invoke($"规划完成，共 {_currentSession.Steps.Count} 个步骤")
+                If _autoExecute Then
+                    ' simple 任务：自动跳过用户确认，立即执行
+                    Debug.WriteLine("[RalphAgent] 自动执行模式：跳过用户确认")
+                    OnStatusChanged?.Invoke($"规划完成（共 {_currentSession.Steps.Count} 步），自动执行中...")
+                    _currentSession.Status = AgentStatus.Executing
+                    _currentSession.CurrentStepIndex = 0
+                    Await ExecuteNextStep()
+                Else
+                    _currentSession.Status = AgentStatus.WaitingConfirm
+                    OnStatusChanged?.Invoke($"规划完成，共 {_currentSession.Steps.Count} 个步骤")
+                End If
                 Return True
             Else
                 _currentSession.Status = AgentStatus.Failed
@@ -768,6 +859,9 @@ code字段必须是JSON命令格式:
             Else
                 currentStep.Status = StepStatus.Failed
                 OnStepCompleted?.Invoke(stepIndex, False, "无法生成执行代码")
+                ' 无代码视为失败，触发重试逻辑
+                Await AbortIfNoProgressAsync(stepIndex, "无法生成执行代码")
+                Return
             End If
 
             ' 准备下一步
@@ -786,10 +880,35 @@ code字段必须是JSON命令格式:
             currentStep.Status = StepStatus.Failed
             currentStep.ErrorMessage = ex.Message
             OnStepCompleted?.Invoke(stepIndex, False, ex.Message)
-
-            ' 询问是否继续
             OnStatusChanged?.Invoke($"步骤 {stepIndex + 1} 执行失败: {ex.Message}")
+
+            ' AbortIfNoProgress：失败重试，超过 MaxStepRetries 则终止
+            Await AbortIfNoProgressAsync(stepIndex, ex.Message)
         End Try
+    End Function
+
+    ''' <summary>
+    ''' 步骤失败时的重试与终止逻辑：
+    ''' 失败次数 &lt; MaxStepRetries 时自动重试；超过则中止整个 Agent。
+    ''' </summary>
+    Private Async Function AbortIfNoProgressAsync(stepIndex As Integer, errorMsg As String) As Task
+        If _currentSession Is Nothing OrElse stepIndex >= _currentSession.Steps.Count Then Return
+        Dim currentStep = _currentSession.Steps(stepIndex)
+        currentStep.RetryCount += 1
+
+        If currentStep.RetryCount <= MaxStepRetries Then
+            Debug.WriteLine($"[RalphAgent] 步骤 {stepIndex + 1} 失败，第 {currentStep.RetryCount} 次重试...")
+            OnStatusChanged?.Invoke($"步骤 {stepIndex + 1} 失败，正在重试（{currentStep.RetryCount}/{MaxStepRetries}）...")
+            currentStep.Status = StepStatus.Pending
+            ' 清空已生成的代码，强制 LLM 重新生成
+            currentStep.GeneratedCode = Nothing
+            Await Task.Delay(800)
+            Await ExecuteNextStep()
+        Else
+            Debug.WriteLine($"[RalphAgent] 步骤 {stepIndex + 1} 超过最大重试次数 {MaxStepRetries}，终止 Agent")
+            OnStatusChanged?.Invoke($"步骤 {stepIndex + 1} 多次失败（{errorMsg}），任务终止")
+            CompleteAgent(False)
+        End If
     End Function
 
     ''' <summary>
@@ -993,6 +1112,25 @@ code字段必须是JSON命令格式:
     End Function
 
     ''' <summary>
+    ''' 格式化 Spec 信息注入规划提示词
+    ''' </summary>
+    Private Function FormatSpecInfo(spec As AgentTaskSpec) As String
+        If spec Is Nothing Then Return ""
+        Dim sb As New StringBuilder()
+        If Not String.IsNullOrWhiteSpace(spec.Goal) Then
+            sb.AppendLine($"目标: {spec.Goal}")
+        End If
+        If spec.Constraints IsNot Nothing AndAlso spec.Constraints.Count > 0 Then
+            sb.AppendLine($"约束: {String.Join("；", spec.Constraints)}")
+        End If
+        If spec.SuccessCriteria IsNot Nothing AndAlso spec.SuccessCriteria.Count > 0 Then
+            sb.AppendLine($"成功标准: {String.Join("；", spec.SuccessCriteria)}")
+        End If
+        sb.AppendLine($"复杂度: {spec.Complexity}")
+        Return sb.ToString().Trim()
+    End Function
+
+    ''' <summary>
     ''' 格式化RAG记忆用于提示词
     ''' </summary>
     Private Function FormatRagMemories(memories As List(Of AtomicMemoryRecord)) As String
@@ -1030,6 +1168,25 @@ Public Class RalphAgentSession
     Public Property Steps As New List(Of RalphAgentStep)
     Public Property CurrentStepIndex As Integer = 0
     Public Property Status As AgentStatus = AgentStatus.Idle
+    ''' <summary>Spec 驱动的结构化任务规格（GenerateSpecAsync 的结果）</summary>
+    Public Property Spec As AgentTaskSpec = Nothing
+End Class
+
+''' <summary>
+''' Spec 驱动的任务规格：goal / constraints / success_criteria / complexity
+''' </summary>
+Public Class AgentTaskSpec
+    Public Property Goal As String = ""
+    Public Property Constraints As List(Of String) = New List(Of String)()
+    Public Property SuccessCriteria As List(Of String) = New List(Of String)()
+    ''' <summary>simple / medium / complex — simple 时自动跳过用户确认直接执行</summary>
+    Public Property Complexity As String = "medium"
+
+    Public ReadOnly Property IsSimple As Boolean
+        Get
+            Return String.Equals(Complexity, "simple", StringComparison.OrdinalIgnoreCase)
+        End Get
+    End Property
 End Class
 
 ''' <summary>
@@ -1044,6 +1201,8 @@ Public Class RalphAgentStep
     Public Property CodeLanguage As String
     Public Property Status As StepStatus = StepStatus.Pending
     Public Property ErrorMessage As String
+    ''' <summary>当前步骤已重试次数（用于 AbortIfNoProgress 逻辑）</summary>
+    Public Property RetryCount As Integer = 0
 End Class
 
 ''' <summary>

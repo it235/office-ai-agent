@@ -13,11 +13,13 @@ Public Class MemoryService
     ''' </summary>
     Public Shared Function GetRelevantMemories(query As String, Optional topN As Integer? = Nothing, Optional startTime As DateTime? = Nothing, Optional endTime As DateTime? = Nothing, Optional appType As String = Nothing) As List(Of AtomicMemoryRecord)
         Dim n = If(topN.HasValue, topN.Value, MemoryConfig.RagTopN)
-        
+
         Dim queryEmbedding As Single() = Nothing
         Try
-            If Not String.IsNullOrWhiteSpace(query) AndAlso EmbeddingService.IsEmbeddingAvailable() Then
-                Debug.WriteLine($"[MemoryService] 正在生成查询向量...")
+            ' 优化：仅在数据库中确实存在带 embedding 的记忆时才调用向量 API，避免浪费
+            If Not String.IsNullOrWhiteSpace(query) AndAlso EmbeddingService.IsEmbeddingAvailable() AndAlso
+               MemoryRepository.HasMemoriesWithEmbedding(appType) Then
+                Debug.WriteLine($"[MemoryService] 检测到带 embedding 的记忆，生成查询向量...")
                 Dim task = EmbeddingService.GetEmbeddingAsync(query)
                 ' 向量检索超时设置为3秒，避免阻塞UI线程过久
                 task.Wait(TimeSpan.FromSeconds(3))
@@ -31,11 +33,13 @@ Public Class MemoryService
                 End If
             ElseIf Not EmbeddingService.IsEmbeddingAvailable() Then
                 Debug.WriteLine($"[MemoryService] Embedding 不可用，直接使用关键词检索")
+            Else
+                Debug.WriteLine($"[MemoryService] 数据库中无带 embedding 的记忆，跳过向量 API 调用")
             End If
         Catch ex As Exception
             Debug.WriteLine($"[MemoryService] 生成查询向量失败: {ex.Message}")
         End Try
-        
+
         Return MemoryRepository.GetRelevantMemories(query, n, queryEmbedding, startTime, endTime, appType)
     End Function
 
@@ -144,18 +148,22 @@ Public Class MemoryService
     Public Shared Function SearchMemories(keyword As String, Optional startTime As DateTime? = Nothing, Optional endTime As DateTime? = Nothing, Optional appType As String = Nothing) As List(Of AtomicMemoryRecord)
         Dim queryEmbedding As Single() = Nothing
         Try
-            If Not String.IsNullOrWhiteSpace(keyword) Then
+            ' 优化：仅在数据库中存在带 embedding 的记忆时才调用向量 API
+            If Not String.IsNullOrWhiteSpace(keyword) AndAlso EmbeddingService.IsEmbeddingAvailable() AndAlso
+               MemoryRepository.HasMemoriesWithEmbedding(appType) Then
                 Dim taskx = EmbeddingService.GetEmbeddingAsync(keyword)
                 ' 向量检索超时设置为3秒，避免阻塞过久
                 taskx.Wait(TimeSpan.FromSeconds(3))
                 If taskx.IsCompleted Then
                     queryEmbedding = taskx.Result
                 End If
+            Else
+                Debug.WriteLine($"[MemoryService] SearchMemories: 无带 embedding 记忆或 embedding 不可用，跳过向量 API")
             End If
         Catch ex As Exception
             Debug.WriteLine($"[MemoryService] SearchMemories 生成向量失败: {ex.Message}")
         End Try
-        
+
         Return MemoryRepository.GetRelevantMemories(keyword, MemoryConfig.RagTopN, queryEmbedding, startTime, endTime, appType)
     End Function
 

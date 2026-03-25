@@ -72,7 +72,27 @@ Public Class ChatContextBuilder
                         layer1Parts.Add(detailMessage)
                     End If
 
+                    ' 注入 Skill 元信息提示：帮助模型正确选择和处理 Skill
+                    Dim metaHints As New List(Of String)()
+                    metaHints.Add($"[当前推荐Skill: {topSkill.Skill.Name}]")
+                    If topSkill.Skill.Tags IsNot Nothing AndAlso topSkill.Skill.Tags.Count > 0 Then
+                        metaHints.Add($"标签: {String.Join(", ", topSkill.Skill.Tags)}")
+                    End If
+                    If Not String.IsNullOrWhiteSpace(topSkill.Skill.Compatibility) Then
+                        metaHints.Add($"兼容性: {topSkill.Skill.Compatibility}")
+                    End If
+                    If topSkill.Skill.UsageCount > 0 Then
+                        metaHints.Add($"历史使用: {topSkill.Skill.UsageCount} 次")
+                    End If
+                    If topSkill.MatchedKeywords.Count > 0 Then
+                        metaHints.Add($"匹配关键词: {String.Join(", ", topSkill.MatchedKeywords)}")
+                    End If
+                    layer1Parts.Add(String.Join(" | ", metaHints))
+
                     Debug.WriteLine($"[ChatContextBuilder] 匹配到Skill: {topSkill.Skill.Name}, 分数: {topSkill.MatchScore:F1}, 关键词: {String.Join(", ", topSkill.MatchedKeywords)}")
+
+                    ' 记录 Skill 使用统计
+                    SkillsService.RecordSkillUsage(topSkill.Skill.Name)
                 End If
             Else
                 ' 没有匹配的Skills，只提供目录让模型选择

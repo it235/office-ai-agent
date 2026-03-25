@@ -48,25 +48,31 @@ Public Class SkillsService
     End Function
 
     ''' <summary>
-    ''' 计算Skill匹配分数
+    ''' 记录 Skill 使用情况（运行时统计，更新缓存中的实例）
+    ''' </summary>
+    Public Shared Sub RecordSkillUsage(skillName As String)
+        Try
+            Dim allSkills = GetSkillsCatalog()
+            Dim skill = allSkills.FirstOrDefault(Function(s) String.Equals(s.Name, skillName, StringComparison.OrdinalIgnoreCase))
+            If skill IsNot Nothing Then
+                skill.UsageCount += 1
+                skill.LastUsedAt = DateTime.Now
+                Debug.WriteLine($"[SkillsService] 记录 Skill 使用: {skillName}, 累计: {skill.UsageCount}")
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"[SkillsService] RecordSkillUsage 失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 计算Skill匹配分数（含 tags 加分）
     ''' </summary>
     Private Shared Function CalculateMatchScore(userQuery As String, skill As SkillFileDefinition) As SkillMatchResult
         Dim score As Double = 0
         Dim matchedKeywords As New List(Of String)()
         Dim queryLower = userQuery.ToLowerInvariant()
 
-        '' 匹配关键词
-        'If skill.Keywords IsNot Nothing AndAlso skill.Keywords.Count > 0 Then
-        '    For Each keyword In skill.Keywords
-        '        Dim kwLower = keyword.Trim().ToLowerInvariant()
-        '        If Not String.IsNullOrWhiteSpace(kwLower) AndAlso queryLower.Contains(kwLower) Then
-        '            score += 10
-        '            matchedKeywords.Add(keyword.Trim())
-        '        End If
-        '    Next
-        'End If
-
-        ' 匹配名称
+        ' 匹配名称（最高权重）
         If Not String.IsNullOrWhiteSpace(skill.Name) Then
             Dim nameLower = skill.Name.ToLowerInvariant()
             If queryLower.Contains(nameLower) Then
@@ -75,7 +81,7 @@ Public Class SkillsService
             End If
         End If
 
-        ' 匹配描述
+        ' 匹配描述词（2分/词）
         If Not String.IsNullOrWhiteSpace(skill.Description) Then
             Dim descLower = skill.Description.ToLowerInvariant()
             Dim descWords = descLower.Split({" "c, ","c, "，"c, "。"c, "."c}, StringSplitOptions.RemoveEmptyEntries)
@@ -84,6 +90,21 @@ Public Class SkillsService
                     score += 2
                 End If
             Next
+        End If
+
+        ' 匹配 tags（每匹配一个 tag +5分）
+        If skill.Tags IsNot Nothing Then
+            For Each tag In skill.Tags
+                If Not String.IsNullOrWhiteSpace(tag) AndAlso queryLower.Contains(tag.ToLowerInvariant()) Then
+                    score += 5
+                    matchedKeywords.Add(tag)
+                End If
+            Next
+        End If
+
+        ' 使用频率加权（热门 Skill 小幅加分，最多 +3）
+        If skill.UsageCount > 0 Then
+            score += Math.Min(3.0, skill.UsageCount * 0.5)
         End If
 
         Return New SkillMatchResult With {
@@ -109,13 +130,16 @@ Public Class SkillsService
         sb.AppendLine()
 
         For Each skill In skills
-            sb.AppendLine($"### {skill.Name}")
+            ' 热门 Skill 标注星标
+            Dim starMark = If(skill.UsageCount >= 3, " ★", "")
+            sb.AppendLine($"### {skill.Name}{starMark}")
             If Not String.IsNullOrWhiteSpace(skill.Description) Then
                 sb.AppendLine($"- 描述：{skill.Description}")
             End If
-            'If skill.Keywords IsNot Nothing AndAlso skill.Keywords.Count > 0 Then
-            '    sb.AppendLine($"- 关键词：{String.Join(", ", skill.Keywords)}")
-            'End If
+            ' 显示 tags 元信息
+            If skill.Tags IsNot Nothing AndAlso skill.Tags.Count > 0 Then
+                sb.AppendLine($"- 标签：{String.Join(", ", skill.Tags)}")
+            End If
             sb.AppendLine()
         Next
 

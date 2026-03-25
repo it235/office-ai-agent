@@ -94,6 +94,30 @@ Public Class MemoryRepository
     End Function
 
     ''' <summary>
+    ''' 快速检查数据库中是否存在带 embedding 的长期记忆（避免无谓的向量 API 调用）
+    ''' </summary>
+    Public Shared Function HasMemoriesWithEmbedding(Optional appType As String = Nothing) As Boolean
+        Try
+            OfficeAiDatabase.EnsureInitialized()
+            Dim app = If(String.IsNullOrEmpty(appType), "", appType.Trim())
+            Dim hasApp = Not String.IsNullOrEmpty(app)
+            Dim sql = "SELECT COUNT(1) FROM atomic_memory WHERE memory_type = 'long_term' AND embedding IS NOT NULL AND embedding != ''"
+            If hasApp Then sql &= " AND (app_type = @app OR app_type IS NULL OR app_type = '')"
+            Using conn As New SQLiteConnection(OfficeAiDatabase.GetConnectionString())
+                conn.Open()
+                Using cmd As New SQLiteCommand(sql, conn)
+                    If hasApp Then cmd.Parameters.AddWithValue("@app", app)
+                    Dim count = CInt(cmd.ExecuteScalar())
+                    Return count > 0
+                End Using
+            End Using
+        Catch ex As Exception
+            Debug.WriteLine($"[MemoryRepository] HasMemoriesWithEmbedding 失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
     ''' 删除原子记忆
     ''' </summary>
     Public Shared Sub DeleteAtomicMemory(id As Long)

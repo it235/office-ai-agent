@@ -33,6 +33,15 @@ Public Class SkillFileDefinition
     ' 扩展字段
     Public Property FilePath As String
 
+    ''' <summary>标签列表（从 front matter tags 字段解析）</summary>
+    Public Property Tags As List(Of String) = New List(Of String)()
+
+    ''' <summary>使用次数（运行时统计，不持久化到文件）</summary>
+    Public Property UsageCount As Integer = 0
+
+    ''' <summary>最后使用时间</summary>
+    Public Property LastUsedAt As DateTime? = Nothing
+
     Public ReadOnly Property AllowedToolsText As String
         Get
             If AllowedTools Is Nothing OrElse AllowedTools.Count = 0 Then Return ""
@@ -338,6 +347,12 @@ Public Class SkillsDirectoryService
                         skill.Context = value
                     Case "agent"
                         skill.Agent = value
+                    Case "tags"
+                        ' 支持逗号分隔的标签列表
+                        If Not String.IsNullOrWhiteSpace(value) Then
+                            skill.Tags = value.Split({","c}, StringSplitOptions.RemoveEmptyEntries).
+                                Select(Function(s) s.Trim()).Where(Function(s) Not String.IsNullOrWhiteSpace(s)).ToList()
+                        End If
                 End Select
             End If
         Next
