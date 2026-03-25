@@ -361,6 +361,7 @@
     <Compile Include="Controls\Services\ChatContextBuilder.vb" />
     <Compile Include="Controls\Services\ChatStateService.vb" />
     <Compile Include="Controls\Services\UtilsService.vb" />
+    <Compile Include="Controls\Services\AutocompleteService.vb" />
     <Compile Include="Controls\Services\HistoryService.vb" />
     <Compile Include="Controls\Services\HistorySessionService.vb" />
     <Compile Include="Controls\Services\MemoryService.vb" />
