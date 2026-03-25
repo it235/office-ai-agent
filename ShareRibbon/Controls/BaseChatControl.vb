@@ -667,6 +667,8 @@ Public MustInherit Class BaseChatControl
                     HandleCancelLoop()
                 Case "startLoop"
                     HandleStartLoop(jsonDoc)
+                Case "replanLoop"
+                    HandleReplanLoop(jsonDoc)
 
                 ' Ralph Agent 智能助手消息处理
                 Case "startAgent"
@@ -675,6 +677,8 @@ Public MustInherit Class BaseChatControl
                     HandleStartAgentExecution(jsonDoc)
                 Case "abortAgent"
                     HandleAbortAgent()
+                Case "refineAgentPlan"
+                    HandleRefineAgentPlan(jsonDoc)
 
                 ' 文件选择对话框
                 Case "openFileDialog"
@@ -1659,6 +1663,13 @@ Public MustInherit Class BaseChatControl
     End Sub
 
     ''' <summary>
+    ''' 处理重新规划循环
+    ''' </summary>
+    Protected Overridable Sub HandleReplanLoop(jsonDoc As JObject)
+        RalphLoopSvc.HandleReplanLoop(jsonDoc)
+    End Sub
+
+    ''' <summary>
     ''' 在流完成后检查是否需要处理Ralph Loop
     ''' </summary>
     Protected Sub CheckRalphLoopCompletion(responseContent As String)
@@ -1955,6 +1966,13 @@ Public MustInherit Class BaseChatControl
     ''' </summary>
     Protected Sub HandleAbortAgent()
         RalphAgentSvc.HandleAbortAgent()
+    End Sub
+
+    ''' <summary>
+    ''' 处理修改Agent计划（委托给 RalphAgentSvc）
+    ''' </summary>
+    Protected Overridable Sub HandleRefineAgentPlan(jsonDoc As JObject)
+        If RalphAgentSvc IsNot Nothing Then RalphAgentSvc.HandleRefineAgentPlan(jsonDoc)
     End Sub
 
     ''' <summary>

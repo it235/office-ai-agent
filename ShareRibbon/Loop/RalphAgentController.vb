@@ -466,8 +466,33 @@ complexity 取值规则：
             End If
             Debug.WriteLine($"[RalphAgent] 历史对话包含 {historyMsgs.Count} 条消息，将作为 messages 数组发送")
 
-            ' 步骤4: 制定执行计划（将 Spec 注入规划提示词，提升计划质量）
+            ' 步骤4: 制定执行计划
+            Dim planOk = Await RunPlanningPhaseAsync(historyMsgs)
+            If planOk Then
+                Return True
+            Else
+                _isRunning = False
+                Return False
+            End If
+        Catch ex As Exception
+            _currentSession.Status = AgentStatus.Failed
+            OnStatusChanged?.Invoke($"规划出错: {ex.Message}")
+            _isRunning = False
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行规划阶段（将 Spec 注入规划提示词，提升计划质量）。
+    ''' 被 StartAgent 和 RefinePlanAsync 共同调用。
+    ''' </summary>
+    Private Async Function RunPlanningPhaseAsync(Optional historyMsgs As List(Of HistoryMessage) = Nothing) As Task(Of Boolean)
+        Try
             OnStatusChanged?.Invoke("正在制定执行计划...")
+            Dim userRequest = _currentSession.UserRequest
+            Dim appType = _currentSession.ApplicationType
+            Dim currentContent = _currentSession.CurrentContent
+
             Dim intentInfo = FormatIntentInfo(_intentResult)
             Dim ragInfo = FormatRagMemories(_ragMemories)
             Dim specInfo = FormatSpecInfo(_currentSession.Spec)
@@ -498,15 +523,38 @@ complexity 取值规则：
             Else
                 _currentSession.Status = AgentStatus.Failed
                 OnStatusChanged?.Invoke("规划失败，请重试")
-                _isRunning = False
                 Return False
             End If
         Catch ex As Exception
             _currentSession.Status = AgentStatus.Failed
             OnStatusChanged?.Invoke($"规划出错: {ex.Message}")
-            _isRunning = False
             Return False
         End Try
+    End Function
+
+    ''' <summary>
+    ''' 根据用户反馈重新生成执行计划（保留意图和RAG结果，只重新规划）
+    ''' </summary>
+    Public Async Function RefinePlanAsync(feedback As String) As Task
+        If _currentSession Is Nothing Then Return
+
+        ' 重置步骤和状态，保留意图/RAG
+        _currentSession.Steps.Clear()
+        _currentSession.CurrentStepIndex = 0
+        _autoExecute = False
+
+        OnStatusChanged?.Invoke("正在根据反馈重新规划...")
+
+        ' 追加用户反馈到原始请求
+        Dim refinedRequest = _currentSession.UserRequest &
+            vbCrLf & "[用户对执行计划的修改意见] " & feedback
+        _currentSession.UserRequest = refinedRequest
+
+        ' 重新生成 Spec
+        _currentSession.Spec = Await GenerateSpecAsync(refinedRequest, _currentSession.ApplicationType, _currentSession.CurrentContent)
+
+        ' 重新规划
+        Await RunPlanningPhaseAsync()
     End Function
 
     ''' <summary>

@@ -188,4 +188,21 @@ Public Class RalphAgentService
         End Try
     End Sub
 
+    ''' <summary>
+    ''' 处理修改 Agent 计划
+    ''' </summary>
+    Public Sub HandleRefineAgentPlan(jsonDoc As JObject)
+        Dim sessionId = jsonDoc("sessionId")?.ToString()
+        Dim feedback = jsonDoc("feedback")?.ToString()
+        If String.IsNullOrEmpty(feedback) OrElse _ralphAgentController Is Nothing Then Return
+
+        Debug.WriteLine($"[RalphAgentSvc] 用户请求修改计划，sessionId={sessionId}, 反馈={feedback}")
+        _executeScript("addThinkingMessage('正在根据您的意见重新规划...')")
+
+        Dim capturedFeedback = feedback
+        Task.Run(Async Function()
+            Await _ralphAgentController.RefinePlanAsync(capturedFeedback)
+        End Function)
+    End Sub
+
 End Class

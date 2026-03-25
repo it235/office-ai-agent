@@ -123,6 +123,7 @@ function showLoopPlanCard(loopData) {
             `;
         }).join('') : '';
 
+        const attemptCount = loopData.attemptCount || 1;
         card.innerHTML = `
             <div class="loop-header">
                 <span class="loop-icon">🔄</span>
@@ -134,6 +135,10 @@ function showLoopPlanCard(loopData) {
                 <div class="loop-goal">
                     <strong>目标:</strong> ${escapeHtml(loopData.goal || '')}
                 </div>
+                <div class="loop-iteration-info">
+                    <span class="loop-attempt-badge">第 <span id="loop-attempt-count">${attemptCount}</span> 次规划</span>
+                    ${loopData.estimated_complexity ? `<span class="loop-complexity-badge">${escapeHtml(loopData.estimated_complexity)}</span>` : ''}
+                </div>
                 <div class="loop-steps">
                     ${stepsHtml}
                 </div>
@@ -144,6 +149,7 @@ function showLoopPlanCard(loopData) {
                     <button class="loop-btn loop-btn-continue" onclick="continueLoop()" ${loopData.status !== 'paused' && loopData.status !== 'ready' ? 'disabled' : ''}>
                         ▶ 继续执行
                     </button>
+                    <button class="loop-btn loop-btn-replan" onclick="replanLoop()">🔄 重新规划</button>
                     <button class="loop-btn loop-btn-cancel" onclick="cancelLoop()">
                         ✖ 取消
                     </button>
@@ -183,8 +189,9 @@ function toggleLoopCard() {
  * 更新循环步骤状态
  * @param {number} stepIndex - 步骤索引
  * @param {string} status - 状态
+ * @param {string} [message] - 可选消息
  */
-function updateLoopStep(stepIndex, status) {
+function updateLoopStep(stepIndex, status, message) {
     const card = document.getElementById('ralph-loop-card');
     if (!card) return;
 
@@ -195,16 +202,25 @@ function updateLoopStep(stepIndex, status) {
         if (status === 'running') step.classList.add('step-running');
         if (status === 'completed') step.classList.add('step-completed');
         if (status === 'failed') step.classList.add('step-failed');
-        
+
         const iconEl = step.querySelector('.step-icon');
         if (iconEl) iconEl.textContent = getStepIcon(status);
-        
+
         // 滚动到当前步骤
         step.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
     if (window.ralphLoopState.currentSession && window.ralphLoopState.currentSession.steps) {
         window.ralphLoopState.currentSession.steps[stepIndex].status = status;
+    }
+
+    // 步骤完成或暂停时重新启用继续按钮
+    if (status === 'completed' || status === 'paused') {
+        const continueBtn = card.querySelector('.loop-btn-continue');
+        if (continueBtn) {
+            continueBtn.disabled = false;
+            continueBtn.textContent = '▶ 继续执行';
+        }
     }
 }
 
@@ -256,9 +272,26 @@ function hideLoopPlanCard() {
  * 继续执行循环
  */
 function continueLoop() {
+    const btn = document.querySelector('.loop-btn-continue');
+    if (btn && btn.disabled) return;
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ 执行中...';
+    }
     sendMessageToServer({
         type: 'continueLoop'
     });
+}
+
+/**
+ * 重新规划循环
+ */
+function replanLoop() {
+    const feedback = prompt('请说明重新规划的原因或新的要求:');
+    if (feedback && feedback.trim()) {
+        document.querySelectorAll('.loop-btn').forEach(function(b) { b.disabled = true; });
+        sendMessageToServer({ type: 'replanLoop', feedback: feedback.trim() });
+    }
 }
 
 /**
@@ -311,3 +344,4 @@ window.updateLoopStatus = updateLoopStatus;
 window.hideLoopPlanCard = hideLoopPlanCard;
 window.continueLoop = continueLoop;
 window.cancelLoop = cancelLoop;
+window.replanLoop = replanLoop;

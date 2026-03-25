@@ -180,6 +180,54 @@ Public Class RalphLoopService
     End Sub
 
     ''' <summary>
+    ''' 处理重新规划循环
+    ''' </summary>
+    Public Sub HandleReplanLoop(jsonDoc As JObject)
+        Try
+            Dim feedback = jsonDoc("feedback")?.ToString()
+            If String.IsNullOrEmpty(feedback) Then Return
+
+            _executeScript("addThinkingMessage('正在根据您的意见重新规划...')")
+
+            Task.Run(Async Function()
+                Await ReplanAsync(feedback)
+            End Function)
+        Catch ex As Exception
+            Debug.WriteLine($"HandleReplanLoop 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 根据用户反馈重新规划
+    ''' </summary>
+    Private Async Function ReplanAsync(feedback As String) As Task
+        Try
+            Dim loopSession = _ralphLoopController.GetActiveLoop()
+            If loopSession Is Nothing Then Return
+
+            Dim originalGoal = loopSession.OriginalGoal
+            Dim appType = loopSession.ApplicationType
+
+            ' 重置当前会话步骤
+            loopSession.Steps.Clear()
+            loopSession.CurrentStep = 0
+            loopSession.Status = RalphLoopStatus.Planning
+
+            Dim loopDataJson = $"{{""goal"":""{_escapeJs(originalGoal)}"",""steps"":[],""status"":""planning""}}"
+            Await _executeScript($"showLoopPlanCard({loopDataJson})")
+            GlobalStatusStrip.ShowInfo("正在重新规划任务...")
+
+            Dim refinedGoal = originalGoal & vbCrLf & "[用户反馈] " & feedback
+            Dim planningPrompt = _ralphLoopController.GetPlanningPrompt(refinedGoal)
+            _isRalphLoopPlanning = True
+            Await _sendRequest(planningPrompt, "", False, "")
+        Catch ex As Exception
+            Debug.WriteLine($"ReplanAsync 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"重新规划失败: {ex.Message}")
+        End Try
+    End Function
+
+    ''' <summary>
     ''' 构建步骤 JSON 字符串
     ''' </summary>
     Public Function BuildStepsJson(steps As List(Of RalphLoopStep)) As String
