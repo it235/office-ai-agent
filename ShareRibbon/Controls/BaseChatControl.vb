@@ -61,8 +61,24 @@ Public MustInherit Class BaseChatControl
         End Get
     End Property
 
-    ' Ralph Agent 控制器
-    Protected _ralphAgentController As RalphAgentController
+    ' 延迟初始化的 Ralph Agent 服务
+    Private _ralphAgentService As RalphAgentService = Nothing
+    Protected ReadOnly Property RalphAgentSvc As RalphAgentService
+        Get
+            If _ralphAgentService Is Nothing Then
+                _ralphAgentService = New RalphAgentService(
+                    AddressOf ExecuteJavaScriptAsyncJS,
+                    AddressOf EscapeJavaScriptString,
+                    AddressOf SendAndGetResponse,
+                    Sub(c, l, p) CodeExecutionService.ExecuteCode(c, l, p),
+                    _chatStateService,
+                    systemHistoryMessageData,
+                    AddressOf ManageHistoryMessageSize,
+                    AddressOf GetOfficeAppType)
+            End If
+            Return _ralphAgentService
+        End Get
+    End Property
 
     ' 延迟初始化的历史服务
     Protected ReadOnly Property HistoryService As HistoryService
@@ -1619,90 +1635,13 @@ Public MustInherit Class BaseChatControl
 
 #Region "Ralph Agent 智能助手"
 
-    ' Agent思考消息的UUID
-    Private _agentThinkingUuid As String = Nothing
-    ' Agent的原始用户请求（用于保存到历史记录）
-    Private _agentOriginalUserRequest As String = Nothing
-    ' Agent完整用户消息（包含选中内容+文件解析内容，用于历史和记忆存储）
-    Private _agentFullUserMessage As String = Nothing
-
     ''' <summary>
-    ''' 初始化Agent控制器
+    ''' 初始化Agent控制器（委托给 RalphAgentSvc）
     ''' </summary>
     Protected Sub InitializeAgentController(Optional agentThinkingUuid As String = Nothing)
-        If _ralphAgentController Is Nothing Then
-            _ralphAgentController = New RalphAgentController()
-
-            ' 设置回调
-            _ralphAgentController.OnStatusChanged = Sub(status)
-                                                        ' 只有在Agent模式下且有思考UUID时才更新
-                                                        Dim currentChatMode As String = ChatSettings.chatMode
-                                                        If currentChatMode = "agent" AndAlso Not String.IsNullOrEmpty(_agentThinkingUuid) Then
-                                                            ExecuteJavaScriptAsyncJS($"var thinkingDiv = document.getElementById('content-{_agentThinkingUuid}'); if(thinkingDiv) thinkingDiv.innerHTML = '<div style=""padding: 8px 0; color: #2563eb;"">⚡ {EscapeJavaScriptString(status)}</div>';")
-                                                        End If
-                                                    End Sub
-
-            _ralphAgentController.OnStepStarted = Sub(stepIndex, desc)
-                                                      ExecuteJavaScriptAsyncJS($"updateAgentStep('{_ralphAgentController.GetCurrentSession()?.Id}', {stepIndex}, 'running', '')")
-                                                  End Sub
-
-            _ralphAgentController.OnStepCompleted = Sub(stepIndex, success, msg)
-                                                        Dim status = If(success, "completed", "failed")
-                                                        ExecuteJavaScriptAsyncJS($"updateAgentStep('{_ralphAgentController.GetCurrentSession()?.Id}', {stepIndex}, '{status}', '{EscapeJavaScriptString(msg)}')")
-                                                    End Sub
-
-            _ralphAgentController.OnAgentCompleted = Sub(success)
-                                                         ' 使用完整用户消息（含引用内容+文件），回退到原始请求
-                                                         Dim userMsgForHistory = If(Not String.IsNullOrWhiteSpace(_agentFullUserMessage), _agentFullUserMessage, _agentOriginalUserRequest)
-
-                                                         ' 保存用户消息到历史（包含完整的引用/文件内容）
-                                                         If Not String.IsNullOrWhiteSpace(userMsgForHistory) Then
-                                                             systemHistoryMessageData.Add(New HistoryMessage With {
-                                                                 .role = "user",
-                                                                 .content = userMsgForHistory
-                                                             })
-                                                             ManageHistoryMessageSize()
-                                                             _chatStateService?.AddMessage("user", userMsgForHistory)
-                                                             Debug.WriteLine($"[Agent] 已保存完整用户消息到历史，长度: {userMsgForHistory.Length}")
-                                                         End If
-
-                                                         ' 保存 Assistant 回复到历史
-                                                         Dim session = _ralphAgentController.GetCurrentSession()
-                                                         If session IsNot Nothing Then
-                                                             Dim assistantReply = If(String.IsNullOrEmpty(session.Summary), "任务完成", session.Summary)
-                                                             If Not String.IsNullOrEmpty(session.Understanding) Then
-                                                                 assistantReply = session.Understanding & vbCrLf & vbCrLf & assistantReply
-                                                             End If
-                                                             systemHistoryMessageData.Add(New HistoryMessage With {
-                                                                 .role = "assistant",
-                                                                 .content = assistantReply
-                                                             })
-                                                             ManageHistoryMessageSize()
-                                                             _chatStateService?.AddMessage("assistant", assistantReply)
-                                                             Debug.WriteLine($"[Agent] 已保存Assistant回复到历史")
-
-                                                             ' 记忆存储：user 侧用完整消息（含文件/引用），确保 RAG 可检索
-                                                             MemoryService.SaveConversationTurnAsync(userMsgForHistory, assistantReply, _chatStateService.CurrentSessionId, GetOfficeAppType())
-                                                         End If
-
-                                                         ' 清除临时变量
-                                                         _agentOriginalUserRequest = Nothing
-                                                         _agentFullUserMessage = Nothing
-
-                                                         ExecuteJavaScriptAsyncJS($"completeAgent('{_ralphAgentController.GetCurrentSession()?.Id}', {success.ToString().ToLower()}, '')")
-                                                     End Sub
-
-            ' 设置AI请求委托，传入thinkingUuid（第3参数为历史消息列表）
-            _ralphAgentController.SendAIRequest = Async Function(prompt, sysPrompt, historyMsgs)
-                                                      Return Await SendAndGetResponse(prompt, sysPrompt, historyMsgs, agentThinkingUuid)
-                                                  End Function
-
-            ' 设置代码执行委托
-            _ralphAgentController.ExecuteCode = Sub(code, lang, preview)
-                                                    _codeExecutionService?.ExecuteCode(code, lang, preview)
-                                                End Sub
-        End If
+        RalphAgentSvc.InitializeAgentController(agentThinkingUuid)
     End Sub
+
 
     ''' <summary>
     ''' 处理启动Agent请求
@@ -1721,7 +1660,7 @@ Public MustInherit Class BaseChatControl
             Debug.WriteLine($"[RalphAgent] 启动Agent，需求: {request}")
 
             ' 保存原始用户请求，等 Agent 完成后一起保存到历史
-            _agentOriginalUserRequest = request
+            RalphAgentSvc.AgentOriginalUserRequest = request
 
             ' 解析文件路径和选中内容
             Dim filePaths As New List(Of String)()
@@ -1742,16 +1681,16 @@ Public MustInherit Class BaseChatControl
             End If
 
             ' 先在聊天界面显示AI正在思考的消息
-            _agentThinkingUuid = Guid.NewGuid().ToString()
+            RalphAgentSvc.AgentThinkingUuid = Guid.NewGuid().ToString()
             Dim now = DateTime.Now
             Dim timestamp = now.ToString("yyyy-MM-dd HH:mm:ss")
             ' 创建AI消息section
-            ExecuteJavaScriptAsyncJS($"createChatSection('AI', '{timestamp}', '{_agentThinkingUuid}')")
+            ExecuteJavaScriptAsyncJS($"createChatSection('AI', '{timestamp}', '{RalphAgentSvc.AgentThinkingUuid}')")
             ' 显示思考状态
-            ExecuteJavaScriptAsyncJS($"var thinkingDiv = document.getElementById('content-{_agentThinkingUuid}'); if(thinkingDiv) thinkingDiv.innerHTML = '<div class=""thinking-indicator""><div class=""thinking-dots""><span></span><span></span><span></span></div><span style=""margin-left: 12px; color: #6c757d;"">正在分析您的需求...</span></div>';")
+            ExecuteJavaScriptAsyncJS($"var thinkingDiv = document.getElementById('content-{RalphAgentSvc.AgentThinkingUuid}'); if(thinkingDiv) thinkingDiv.innerHTML = '<div class=""thinking-indicator""><div class=""thinking-dots""><span></span><span></span><span></span></div><span style=""margin-left: 12px; color: #6c757d;"">正在分析您的需求...</span></div>';")
 
             ' 初始化控制器，传入uuid
-            InitializeAgentController(_agentThinkingUuid)
+            InitializeAgentController(RalphAgentSvc.AgentThinkingUuid)
 
             ' 保存原始请求
             Dim originalQuestion As String = request
@@ -1911,7 +1850,7 @@ Public MustInherit Class BaseChatControl
         End If
 
         ' 保存完整用户消息（含选中内容+文件内容），供 OnAgentCompleted 存入历史和记忆
-        _agentFullUserMessage = finalMessageToLLM
+        RalphAgentSvc.AgentFullUserMessage = finalMessageToLLM
 
         Task.Run(Async Function()
                      Try
@@ -1932,90 +1871,47 @@ Public MustInherit Class BaseChatControl
                          GlobalStatusStrip.ShowInfo("正在分析您的需求...")
 
                          ' 启动Agent规划（包含历史对话）
-                         Dim success = Await _ralphAgentController.StartAgent(finalMessageToLLM, appType, currentContent, historyMessages)
+                         Dim success = Await RalphAgentSvc.Controller.StartAgent(finalMessageToLLM, appType, currentContent, historyMessages)
 
                          If success Then
                              ' 显示规划卡片
-                             Dim session = _ralphAgentController.GetCurrentSession()
+                             Dim session = RalphAgentSvc.Controller.GetCurrentSession()
                              If session IsNot Nothing Then
                                  ShowAgentPlanCard(session)
                              End If
                          Else
                              GlobalStatusStrip.ShowWarning("无法分析您的需求，请重试")
                              ' 规划失败，清除思考消息UUID
-                             _agentThinkingUuid = Nothing
+                             RalphAgentSvc.AgentThinkingUuid = Nothing
                          End If
                      Catch ex As Exception
                          Debug.WriteLine($"HandleStartAgentCore 出错: {ex.Message}")
                          GlobalStatusStrip.ShowWarning($"分析需求失败: {ex.Message}")
                          ' 出错时也清除思考消息UUID
-                         _agentThinkingUuid = Nothing
+                         RalphAgentSvc.AgentThinkingUuid = Nothing
                      End Try
                  End Function)
     End Sub
 
     ''' <summary>
-    ''' 显示Agent规划卡片（替换思考消息）
+    ''' 显示Agent规划卡片（委托给 RalphAgentSvc）
     ''' </summary>
     Private Sub ShowAgentPlanCard(session As RalphAgentSession)
-        Try
-            Dim stepsJson As New StringBuilder()
-            stepsJson.Append("[")
-            For i = 0 To session.Steps.Count - 1
-                If i > 0 Then stepsJson.Append(",")
-                Dim s = session.Steps(i)
-                stepsJson.Append($"{{""description"":""{EscapeJavaScriptString(s.Description)}"",""detail"":""{EscapeJavaScriptString(s.Detail)}"",""status"":""pending""}}")
-            Next
-            stepsJson.Append("]")
-
-            Dim planJson = $"{{""sessionId"":""{session.Id}"",""understanding"":""{EscapeJavaScriptString(session.Understanding)}"",""steps"":{stepsJson.ToString()},""summary"":""{EscapeJavaScriptString(session.Summary)}"",""replaceThinkingUuid"":""{_agentThinkingUuid}""}}"
-
-            ExecuteJavaScriptAsyncJS($"showAgentPlanCard({planJson})")
-
-            ' 清除思考消息UUID，避免后续在普通Chat模式下误用
-            _agentThinkingUuid = Nothing
-
-        Catch ex As Exception
-            Debug.WriteLine($"ShowAgentPlanCard 出错: {ex.Message}")
-        End Try
+        RalphAgentSvc.ShowAgentPlanCard(session)
     End Sub
 
     ''' <summary>
-    ''' 处理开始执行Agent
+    ''' 处理开始执行Agent（委托给 RalphAgentSvc）
     ''' </summary>
     Protected Async Sub HandleStartAgentExecution(jsonDoc As JObject)
-        Try
-            Debug.WriteLine("[RalphAgent] 用户确认执行")
-
-            If _ralphAgentController IsNot Nothing Then
-                Await _ralphAgentController.StartExecution()
-            End If
-
-        Catch ex As Exception
-            Debug.WriteLine($"HandleStartAgentExecution 出错: {ex.Message}")
-            GlobalStatusStrip.ShowWarning($"执行失败: {ex.Message}")
-        End Try
+        Await RalphAgentSvc.HandleStartAgentExecution()
     End Sub
 
     ''' <summary>
-    ''' 处理终止Agent
+    ''' 处理终止Agent（委托给 RalphAgentSvc）
     ''' </summary>
     Protected Sub HandleAbortAgent()
-        Try
-            Debug.WriteLine("[RalphAgent] 用户终止Agent")
-
-            If _ralphAgentController IsNot Nothing Then
-                _ralphAgentController.AbortAgent()
-            End If
-
-            ' 清除思考消息UUID
-            _agentThinkingUuid = Nothing
-
-            GlobalStatusStrip.ShowInfo("已终止Agent")
-
-        Catch ex As Exception
-            Debug.WriteLine($"HandleAbortAgent 出错: {ex.Message}")
-        End Try
+        RalphAgentSvc.HandleAbortAgent()
     End Sub
 
     ''' <summary>
@@ -2042,9 +1938,9 @@ Public MustInherit Class BaseChatControl
             Dim uuid = If(responseUuid, Guid.NewGuid().ToString())
 
             ' 创建临时的响应收集器
-            _agentResponseBuffer = New StringBuilder()
-            _agentResponseUuid = uuid
-            _agentResponseCompleted = False
+            RalphAgentSvc.AgentResponseBuffer = New StringBuilder()
+            RalphAgentSvc.AgentResponseUuid = uuid
+            RalphAgentSvc.AgentResponseCompleted = False
 
             If historyMessages IsNot Nothing AndAlso historyMessages.Count > 0 Then
                 ' 构建符合 OpenAI API 的 messages 数组：system → history(user/assistant) → user
@@ -2072,14 +1968,14 @@ Public MustInherit Class BaseChatControl
             ' 等待响应完成（最多60秒）
             Dim timeout = 60000
             Dim waited = 0
-            While Not _agentResponseCompleted AndAlso waited < timeout
+            While Not RalphAgentSvc.AgentResponseCompleted AndAlso waited < timeout
                 Await Task.Delay(100)
                 waited += 100
             End While
 
-            Dim result = _agentResponseBuffer.ToString()
-            _agentResponseBuffer = Nothing
-            _agentResponseUuid = Nothing
+            Dim result = RalphAgentSvc.AgentResponseBuffer.ToString()
+            RalphAgentSvc.AgentResponseBuffer = Nothing
+            RalphAgentSvc.AgentResponseUuid = Nothing
 
             Return result
         Catch ex As Exception
@@ -2087,11 +1983,6 @@ Public MustInherit Class BaseChatControl
             Return ""
         End Try
     End Function
-
-    ' Agent响应收集
-    Private _agentResponseBuffer As StringBuilder
-    Private _agentResponseUuid As String
-    Private _agentResponseCompleted As Boolean
 
 #End Region
 
@@ -3206,7 +3097,7 @@ Public MustInherit Class BaseChatControl
                     FlushBuffer("content", uuid) ' 最后刷新缓冲区
 
                     ' 标记Agent响应完成
-                    _agentResponseCompleted = True
+                    RalphAgentSvc.AgentResponseCompleted = True
                     Return
                 End If
                 If line = "" Then
@@ -3246,8 +3137,8 @@ Public MustInherit Class BaseChatControl
                     FlushBuffer("content", uuid)
 
                     ' 如果是Agent规划请求，同时收集到缓冲区
-                    If _agentResponseBuffer IsNot Nothing Then
-                        _agentResponseBuffer.Append(content)
+                    If RalphAgentSvc.AgentResponseBuffer IsNot Nothing Then
+                        RalphAgentSvc.AgentResponseBuffer.Append(content)
                     End If
                 End If
 

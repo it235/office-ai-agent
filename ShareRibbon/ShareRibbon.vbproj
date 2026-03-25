@@ -366,6 +366,7 @@
     <Compile Include="Controls\Services\ReformatService.vb" />
     <Compile Include="Controls\Services\HistoryService.vb" />
     <Compile Include="Controls\Services\HistorySessionService.vb" />
+    <Compile Include="Controls\Services\RalphAgentService.vb" />
     <Compile Include="Controls\Services\MemoryService.vb" />
     <Compile Include="Controls\Services\McpService.vb" />
     <Compile Include="Controls\Services\OfficeCompletionService.vb" />
