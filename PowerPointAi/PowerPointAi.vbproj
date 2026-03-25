@@ -309,16 +309,6 @@
     </Compile>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="..\packages\Markdig.0.41.1\lib\net462\Markdig.dll">
-      <Link>Markdig.dll</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\packages\SQLitePCLRaw.lib.e_sqlite3.2.1.11\runtimes\win-x86\native\e_sqlite3.dll">
-      <Link>runtimes\win-x86\native\e_sqlite3.dll</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\ShareRibbon\ShareRibbon.vbproj">
       <Project>{006508c7-fb9f-4484-a22a-9aa9487acd0b}</Project>
       <Name>ShareRibbon</Name>
