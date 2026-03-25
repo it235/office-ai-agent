@@ -6,20 +6,14 @@ Imports System.Linq
 Imports System.Net
 Imports System.Net.Http
 Imports System.Net.Http.Headers
-Imports System.Net.Mime
-Imports System.Reflection.Emit
 Imports System.Text
 Imports System.Text.JSON
 Imports System.Text.RegularExpressions
 Imports System.Threading
 Imports System.Threading.Tasks
 Imports System.Web
-Imports System.Web.UI.WebControls
 Imports System.Windows.Forms
-Imports System.Windows.Forms.ListBox
-Imports System.Windows.Forms.VisualStyles.VisualStyleElement.StartPanel
 Imports Markdig
-Imports Microsoft.Office.Tools.Ribbon
 Imports Microsoft.Vbe.Interop
 Imports Microsoft.Web.WebView2.Core
 Imports Microsoft.Web.WebView2.WinForms
@@ -58,6 +52,21 @@ Public MustInherit Class BaseChatControl
                 _mcpService = New McpService(AddressOf ExecuteJavaScriptAsyncJS, AddressOf GetApplication)
             End If
             Return _mcpService
+        End Get
+    End Property
+
+    ' 延迟初始化的历史会话服务
+    Private _historySessionService As HistorySessionService = Nothing
+    Protected ReadOnly Property HistorySessionSvc As HistorySessionService
+        Get
+            If _historySessionService Is Nothing Then
+                _historySessionService = New HistorySessionService(
+                    AddressOf ExecuteJavaScriptAsyncJS,
+                    _chatStateService,
+                    AddressOf GetOfficeAppType,
+                    Sub(a) If InvokeRequired Then Me.Invoke(a) Else a())
+            End If
+            Return _historySessionService
         End Get
     End Property
 
@@ -136,17 +145,6 @@ Public MustInherit Class BaseChatControl
     Protected _responseToRequestMap As New Dictionary(Of String, String)()
     Protected _revisionsMap As New Dictionary(Of String, JArray)()
 
-    Protected Overrides Sub WndProc(ByRef m As Message)
-        Const WM_PASTE As Integer = &H302
-        If m.Msg = WM_PASTE Then
-            If Clipboard.ContainsText() Then
-                Dim txt As String = Clipboard.GetText()
-            End If
-            Return
-        End If
-        MyBase.WndProc(m)
-    End Sub
-
     Protected Async Function InitializeWebView2() As Task
         Try
             Dim userDataFolder As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MyAppWebView2Cache")
@@ -212,7 +210,7 @@ Public MustInherit Class BaseChatControl
                 AddHandler ChatBrowser.CoreWebView2.NavigationCompleted, AddressOf OnWebViewNavigationCompleted
                 
                 ' 配置 Markdown 解析器
-                ConfigureMarked()
+                Await ConfigureMarked()
                 
                 ' 设置应用名称的延迟调用
                 Await Task.Delay(500) ' 等待一点时间确保页面加载
@@ -349,7 +347,7 @@ Public MustInherit Class BaseChatControl
             Dim fileName As String
             If Not String.IsNullOrEmpty(firstQuestion) Then
                 ' 简单地取前10个字符
-                Dim questionPrefix As String = GetFirst10Characters(firstQuestion)
+                Dim questionPrefix As String = UtilsService.GetFirst10Characters(firstQuestion)
                 fileName = $"saved_chat_{DateTime.Now:yyyyMMdd_HHmmss}_{questionPrefix}.html"
             Else
                 fileName = $"saved_chat_{DateTime.Now:yyyyMMdd_HHmmss}.html"
@@ -360,17 +358,12 @@ Public MustInherit Class BaseChatControl
         End Get
     End Property
 
-    Private Function GetFirst10Characters(text As String) As String
-        Return UtilsService.GetFirst10Characters(text)
-    End Function
-
-    Private Sub OnWebViewNavigationCompleted(sender As Object, e As CoreWebView2NavigationCompletedEventArgs) Handles ChatBrowser.NavigationCompleted
+    Private Async Sub OnWebViewNavigationCompleted(sender As Object, e As CoreWebView2NavigationCompletedEventArgs) Handles ChatBrowser.NavigationCompleted
         If e.IsSuccess Then
             Try
                 If ChatBrowser.InvokeRequired Then
-                    ' 使用同步的 Invoke 而不是异步的
+                    ' 切换到 UI 线程执行
                     ChatBrowser.Invoke(Sub()
-                                           Task.Delay(100).Wait() ' 同步等待
                                            InitializeSettings()
                                            InitializeMcpSettings() ' 添加MCP初始化
 
@@ -380,7 +373,7 @@ Public MustInherit Class BaseChatControl
                                            End If
                                        End Sub)
                 Else
-                    Task.Delay(100).Wait() ' 同步等待
+                    Await Task.Delay(100)
                     InitializeSettings()
                     InitializeMcpSettings() ' 添加MCP初始化
 
@@ -1383,289 +1376,57 @@ Public MustInherit Class BaseChatControl
 
     ' 处理获取历史文件列表请求 - 委托给 HistoryService
     Protected Sub HandleGetHistoryFiles()
-        HistoryService.GetHistoryFiles()
+        HistorySessionSvc.HandleGetHistoryFiles()
     End Sub
 
-    ' 处理打开历史文件请求 - 委托给 HistoryService
     Protected Sub HandleOpenHistoryFile(jsonDoc As JObject)
-        HistoryService.OpenHistoryFile(jsonDoc)
+        HistorySessionSvc.HandleOpenHistoryFile(jsonDoc)
     End Sub
 
-    ''' <summary>
-    ''' 获取近期会话列表（来自 session_summary），供历史侧边栏展示
-    ''' </summary>
     Protected Sub HandleGetSessionList()
-        Try
-            Dim limit As Integer = 50
-            Dim summaries = MemoryRepository.GetRecentSessionSummaries(limit)
-            Dim list As New List(Of Object)()
-            For Each s In summaries
-                list.Add(New With {
-                    .sessionId = s.SessionId,
-                    .title = If(String.IsNullOrEmpty(s.Title), "会话", s.Title),
-                    .snippet = If(String.IsNullOrEmpty(s.Snippet), "", s.Snippet),
-                    .createdAt = s.CreatedAt,
-                    .fileName = s.Title,
-                    .fullPath = s.SessionId,
-                    .lastModified = s.CreatedAt
-                })
-            Next
-            Dim jsonResult As String = JsonConvert.SerializeObject(list)
-            ExecuteJavaScriptAsyncJS($"setHistoryFilesList({jsonResult});")
-        Catch ex As Exception
-            Debug.WriteLine("HandleGetSessionList 失败: " & ex.Message)
-            ExecuteJavaScriptAsyncJS("setHistoryFilesList([]);")
-        End Try
+        HistorySessionSvc.HandleGetSessionList()
     End Sub
 
-    ''' <summary>
-    ''' 加载指定会话到当前 Chat 并渲染消息
-    ''' </summary>
     Protected Sub HandleLoadSession(jsonDoc As JObject)
-        Try
-            Dim sessionId As String = jsonDoc("sessionId")?.ToString()
-            If String.IsNullOrEmpty(sessionId) Then Return
-            _chatStateService.SwitchToSession(sessionId)
-            Dim messages As New List(Of Object)()
-            For Each m In _chatStateService.HistoryMessages
-                If m.role = "user" OrElse m.role = "assistant" Then
-                    messages.Add(New With {.role = m.role, .content = m.content, .createTime = m.Timestamp.ToString("yyyy-MM-dd HH:mm:ss")})
-                End If
-            Next
-            Dim jsonResult As String = JsonConvert.SerializeObject(messages)
-            ExecuteJavaScriptAsyncJS($"setChatMessages({jsonResult});")
-        Catch ex As Exception
-            Debug.WriteLine("HandleLoadSession 失败: " & ex.Message)
-            GlobalStatusStrip.ShowWarning("加载会话失败")
-        End Try
+        HistorySessionSvc.HandleLoadSession(jsonDoc)
     End Sub
 
-    ''' <summary>
-    ''' 新建会话：清空状态并清空聊天区域
-    ''' </summary>
     Protected Sub HandleNewSession()
-        Try
-            _chatStateService.StartNewSession()
-            ExecuteJavaScriptAsyncJS("if(typeof clearChatContent==='function')clearChatContent();")
-            GlobalStatusStrip.ShowInfo("已新建会话")
-        Catch ex As Exception
-            Debug.WriteLine("HandleNewSession 失败: " & ex.Message)
-        End Try
+        HistorySessionSvc.HandleNewSession()
     End Sub
 
 #Region "阶段二：配置面板（场景/Skills、记忆管理）"
 
     Protected Sub HandleGetPromptTemplates(jsonDoc As JObject)
-        Try
-            Dim scenario As String = jsonDoc("scenario")?.ToString()
-            If String.IsNullOrEmpty(scenario) Then scenario = "excel"
-            Dim list = PromptTemplateRepository.ListByScenario(scenario)
-            Dim arr As New List(Of Object)()
-            For Each r In list
-                arr.Add(New With {
-                    .id = r.Id,
-                    .templateName = r.TemplateName,
-                    .scenario = r.Scenario,
-                    .content = r.Content,
-                    .isSkill = r.IsSkill,
-                    .extraJson = r.ExtraJson,
-                    .sort = r.Sort
-                })
-            Next
-            Dim json = JsonConvert.SerializeObject(arr)
-            ExecuteJavaScriptAsyncJS($"setPromptTemplatesList({json});")
-        Catch ex As Exception
-            Debug.WriteLine("HandleGetPromptTemplates 失败: " & ex.Message)
-            ExecuteJavaScriptAsyncJS("setPromptTemplatesList([]);")
-        End Try
+        HistorySessionSvc.HandleGetPromptTemplates(jsonDoc)
     End Sub
 
     Protected Sub HandleSavePromptTemplate(jsonDoc As JObject)
-        Try
-            Dim id As Long = If(jsonDoc("id")?.Value(Of Long)(), 0)
-            Dim templateName As String = jsonDoc("templateName")?.ToString()
-            Dim scenario As String = jsonDoc("scenario")?.ToString()
-            Dim content As String = jsonDoc("content")?.ToString()
-            Dim isSkill As Integer = If(jsonDoc("isSkill")?.Value(Of Integer)(), 0)
-            Dim extraJson As String = jsonDoc("extraJson")?.ToString()
-            Dim sort As Integer = If(jsonDoc("sort")?.Value(Of Integer)(), 0)
-            Dim record As New PromptTemplateRecord With {
-                .Id = id,
-                .TemplateName = templateName,
-                .Scenario = If(String.IsNullOrEmpty(scenario), "common", scenario),
-                .Content = content,
-                .IsSkill = isSkill,
-                .ExtraJson = If(extraJson, ""),
-                .Sort = sort
-            }
-            If id > 0 Then
-                PromptTemplateRepository.Update(record)
-                GlobalStatusStrip.ShowInfo("已更新")
-            Else
-                PromptTemplateRepository.Insert(record)
-                GlobalStatusStrip.ShowInfo("已添加")
-            End If
-            HandleGetPromptTemplates(JObject.Parse("{""scenario"":""" & record.Scenario & """}"))
-        Catch ex As Exception
-            Debug.WriteLine("HandleSavePromptTemplate 失败: " & ex.Message)
-            GlobalStatusStrip.ShowWarning("保存失败: " & ex.Message)
-        End Try
+        HistorySessionSvc.HandleSavePromptTemplate(jsonDoc)
     End Sub
 
     Protected Sub HandleDeletePromptTemplate(jsonDoc As JObject)
-        Try
-            Dim id As Long = jsonDoc("id")?.Value(Of Long)()
-            If id <= 0 Then Return
-            PromptTemplateRepository.Delete(id)
-            GlobalStatusStrip.ShowInfo("已删除")
-            Dim scenario As String = jsonDoc("scenario")?.ToString()
-            If String.IsNullOrEmpty(scenario) Then scenario = "excel"
-            Dim jo As JObject = JObject.FromObject(New With {.scenario = scenario})
-            HandleGetPromptTemplates(jo)
-        Catch ex As Exception
-            Debug.WriteLine("HandleDeletePromptTemplate 失败: " & ex.Message)
-            GlobalStatusStrip.ShowWarning("删除失败: " & ex.Message)
-        End Try
+        HistorySessionSvc.HandleDeletePromptTemplate(jsonDoc)
     End Sub
 
     Protected Sub HandleGetAtomicMemories(jsonDoc As JObject)
-        Try
-            Dim limit As Integer = If(jsonDoc("limit")?.Value(Of Integer)(), 100)
-            Dim appType As String = jsonDoc("appType")?.ToString()
-            If String.IsNullOrEmpty(appType) Then appType = GetOfficeAppType()
-            Dim list = MemoryRepository.ListAtomicMemories(limit, 0, appType)
-            Dim arr As New List(Of Object)()
-            For Each r In list
-                arr.Add(New With {.id = r.Id, .content = r.Content, .createTime = r.CreateTime})
-            Next
-            Dim json = JsonConvert.SerializeObject(arr)
-            ExecuteJavaScriptAsyncJS($"setAtomicMemoriesList({json});")
-        Catch ex As Exception
-            Debug.WriteLine("HandleGetAtomicMemories 失败: " & ex.Message)
-            ExecuteJavaScriptAsyncJS("setAtomicMemoriesList([]);")
-        End Try
+        HistorySessionSvc.HandleGetAtomicMemories(jsonDoc)
     End Sub
 
     Protected Sub HandleDeleteAtomicMemory(jsonDoc As JObject)
-        Try
-            Dim id As Long = jsonDoc("id")?.Value(Of Long)()
-            If id <= 0 Then Return
-            MemoryRepository.DeleteAtomicMemory(id)
-            GlobalStatusStrip.ShowInfo("已删除")
-            Dim appType As String = jsonDoc("appType")?.ToString()
-            If String.IsNullOrEmpty(appType) Then appType = GetOfficeAppType()
-            Dim jo As JObject = JObject.FromObject(New With {.limit = 100, .appType = appType})
-            HandleGetAtomicMemories(jo)
-        Catch ex As Exception
-            Debug.WriteLine("HandleDeleteAtomicMemory 失败: " & ex.Message)
-            GlobalStatusStrip.ShowWarning("删除失败: " & ex.Message)
-        End Try
+        HistorySessionSvc.HandleDeleteAtomicMemory(jsonDoc)
     End Sub
 
     Protected Sub HandleGetUserProfile()
-        Try
-            Dim content As String = MemoryRepository.GetUserProfile()
-            Dim json As String = JsonConvert.SerializeObject(If(content, ""))
-            ExecuteJavaScriptAsyncJS("setUserProfileContent(" & json & ");")
-        Catch ex As Exception
-            Debug.WriteLine("HandleGetUserProfile 失败: " & ex.Message)
-            ExecuteJavaScriptAsyncJS("setUserProfileContent('');")
-        End Try
+        HistorySessionSvc.HandleGetUserProfile()
     End Sub
 
     Protected Sub HandleSaveUserProfile(jsonDoc As JObject)
-        Try
-            Dim content As String = jsonDoc("content")?.ToString()
-            MemoryRepository.UpdateUserProfile(content)
-            GlobalStatusStrip.ShowInfo("用户画像已保存")
-        Catch ex As Exception
-            Debug.WriteLine("HandleSaveUserProfile 失败: " & ex.Message)
-            GlobalStatusStrip.ShowWarning("保存失败: " & ex.Message)
-        End Try
+        HistorySessionSvc.HandleSaveUserProfile(jsonDoc)
     End Sub
 
-    ''' <summary>
-    ''' 从文件夹批量导入 Skill（.json/.md），与 SkillsConfigForm 的导入逻辑一致
-    ''' </summary>
     Protected Sub HandleImportSkillsFromFolder(jsonDoc As JObject)
-        If InvokeRequired Then
-            Me.Invoke(Sub() HandleImportSkillsFromFolder(jsonDoc))
-            Return
-        End If
-        Try
-            Dim scenario As String = jsonDoc("scenario")?.ToString()
-            If String.IsNullOrEmpty(scenario) Then scenario = "excel"
-            Using dlg As New FolderBrowserDialog()
-                dlg.Description = "选择包含 .json / .md Skill 文件的文件夹"
-                If dlg.ShowDialog() <> DialogResult.OK Then Return
-                Dim folder = dlg.SelectedPath
-                Dim files As New List(Of String)()
-                Try
-                    files.AddRange(Directory.GetFiles(folder, "*.json"))
-                    files.AddRange(Directory.GetFiles(folder, "*.md"))
-                Catch ex As Exception
-                    GlobalStatusStrip.ShowWarning("读取文件夹失败: " & ex.Message)
-                    Return
-                End Try
-                Dim sort = 0
-                Dim count = 0
-                For Each filePath In files
-                    Try
-                        Dim content = File.ReadAllText(filePath)
-                        Dim ext = Path.GetExtension(filePath).ToLowerInvariant()
-                        Dim name = Path.GetFileNameWithoutExtension(filePath)
-                        Dim record As PromptTemplateRecord = Nothing
-                        If ext = ".json" Then
-                            Dim jo = JObject.Parse(content)
-                            Dim pt = jo("promptTemplate")
-                            Dim ct = jo("content")
-                            Dim pm = jo("prompt")
-                            Dim promptTemplate = If(pt IsNot Nothing, pt.ToString(), If(ct IsNot Nothing, ct.ToString(), If(pm IsNot Nothing, pm.ToString(), "")))
-                            If String.IsNullOrWhiteSpace(promptTemplate) Then Continue For
-                            Dim sn = jo("skillName")
-                            Dim nm = jo("name")
-                            Dim skillName = If(sn IsNot Nothing, sn.ToString(), If(nm IsNot Nothing, nm.ToString(), name))
-                            Dim supportedApps = If(jo("supported_apps"), jo("supportedApps"))
-                            Dim extraJo As New JObject()
-                            If supportedApps IsNot Nothing AndAlso TypeOf supportedApps Is JArray Then
-                                extraJo("supported_apps") = supportedApps
-                            End If
-                            Dim params = If(jo("parameters"), jo("params"))
-                            If params IsNot Nothing Then extraJo("parameters") = params
-                            Dim extra = If(extraJo.Count > 0, extraJo.ToString(), "")
-                            record = New PromptTemplateRecord With {
-                                .TemplateName = skillName,
-                                .Content = promptTemplate,
-                                .IsSkill = 1,
-                                .ExtraJson = extra,
-                                .Scenario = scenario,
-                                .Sort = sort
-                            }
-                        Else
-                            record = New PromptTemplateRecord With {
-                                .TemplateName = name,
-                                .Content = content,
-                                .IsSkill = 1,
-                                .ExtraJson = "",
-                                .Scenario = scenario,
-                                .Sort = sort
-                            }
-                        End If
-                        PromptTemplateRepository.Insert(record)
-                        sort += 1
-                        count += 1
-                    Catch ex As Exception
-                        Debug.WriteLine($"导入 {filePath} 失败: {ex.Message}")
-                    End Try
-                Next
-                GlobalStatusStrip.ShowInfo($"已从文件夹导入 {count} 个 Skill")
-                Dim joRefresh As JObject = JObject.FromObject(New With {.scenario = scenario})
-                HandleGetPromptTemplates(joRefresh)
-            End Using
-        Catch ex As Exception
-            Debug.WriteLine("HandleImportSkillsFromFolder 失败: " & ex.Message)
-            GlobalStatusStrip.ShowWarning("导入失败: " & ex.Message)
-        End Try
+        HistorySessionSvc.HandleImportSkillsFromFolder(jsonDoc)
     End Sub
 
 #End Region
@@ -1804,7 +1565,7 @@ Public MustInherit Class BaseChatControl
                                  ' 更新进度
                                  Me.Invoke(Sub()
                                                GlobalStatusStrip.ShowInfo($"正在解析文件 ({processedFiles}/{totalFiles}): {Path.GetFileName(filePath)}")
-                                               ExecuteJavaScriptAsyncJS($"updateFileParsingProgress({processedFiles}, {totalFiles}, '{EscapeJsString(Path.GetFileName(filePath))}')")
+                                               ExecuteJavaScriptAsyncJS($"updateFileParsingProgress({processedFiles}, {totalFiles}, '{EscapeJavaScriptString(Path.GetFileName(filePath))}')")
                                            End Sub)
 
                                  ' 确定完整文件路径
@@ -1897,14 +1658,6 @@ Public MustInherit Class BaseChatControl
                      End Try
                  End Sub)
     End Sub
-
-    ''' <summary>
-    ''' 转义JS字符串中的特殊字符
-    ''' </summary>
-    Private Function EscapeJsString(s As String) As String
-        If String.IsNullOrEmpty(s) Then Return ""
-        Return s.Replace("\", "\\").Replace("'", "\'").Replace("""", "\""").Replace(vbCrLf, "\n").Replace(vbCr, "\n").Replace(vbLf, "\n")
-    End Function
 
     ''' <summary>
     ''' 处理消息发送的核心逻辑（文件解析完成后调用）
@@ -2543,7 +2296,7 @@ Public MustInherit Class BaseChatControl
                                  ' 更新进度
                                  Me.Invoke(Sub()
                                                GlobalStatusStrip.ShowInfo($"正在解析文件 ({processedFiles}/{totalFiles}): {Path.GetFileName(filePath)}")
-                                               ExecuteJavaScriptAsyncJS($"updateFileParsingProgress({processedFiles}, {totalFiles}, '{EscapeJsString(Path.GetFileName(filePath))}')")
+                                               ExecuteJavaScriptAsyncJS($"updateFileParsingProgress({processedFiles}, {totalFiles}, '{EscapeJavaScriptString(Path.GetFileName(filePath))}')")
                                            End Sub)
 
                                  ' 确定完整文件路径
@@ -3436,7 +3189,7 @@ Public MustInherit Class BaseChatControl
             If template IsNot Nothing Then
                 templateJson = JsonConvert.SerializeObject(template)
             End If
-            ExecuteJavaScriptAsyncJS($"enterAiTemplateEditor('{EscapeJsString(templateJson)}');")
+            ExecuteJavaScriptAsyncJS($"enterAiTemplateEditor('{EscapeJavaScriptString(templateJson)}');")
         Catch ex As Exception
             Debug.WriteLine($"EnterAiTemplateEditorMode 出错: {ex.Message}")
         End Try
@@ -3468,7 +3221,7 @@ Public MustInherit Class BaseChatControl
             End If
 
             ' 在聊天输入框中填充提示消息
-            Dim escapedPrompt = EscapeJsString(promptMessage)
+            Dim escapedPrompt = EscapeJavaScriptString(promptMessage)
             ExecuteJavaScriptAsyncJS($"document.getElementById('message-input').value = '{escapedPrompt}'; document.getElementById('message-input').focus();")
 
             GlobalStatusStrip.ShowInfo("请在聊天框中描述您需要的模板类型，AI将为您生成模板")
@@ -3668,10 +3421,6 @@ Public MustInherit Class BaseChatControl
 
     ' 测试方法已移除，如需调试请使用单独的测试类
 
-    Private Function TryExtractJsonArrayFromText(text As String) As JArray
-        Return UtilsService.TryExtractJsonArrayFromText(text)
-    End Function
-
     ' 存储调用Send时的请求参数（requestUuid/responseUuid -> JObject）
     Protected _savedRequestParams As New Dictionary(Of String, JObject)()
 
@@ -3769,7 +3518,7 @@ Public MustInherit Class BaseChatControl
                 ExecuteJavaScriptAsyncJS(js)
             End If
             Await SendHttpRequestStream(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody, question, requestUuid, addHistory, responseMode, responseUuid)
-            Await SaveFullWebPageAsync2()
+            Await SaveFullWebPageAsync()
         Catch ex As Exception
             MessageBox.Show("请求失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         Finally
@@ -3788,10 +3537,6 @@ Public MustInherit Class BaseChatControl
         End While
     End Sub
 
-
-    Private Function StripQuestion(question As String) As String
-        Return UtilsService.StripQuestion(question)
-    End Function
 
     Private Function CreateRequestBody(uuid As String, question As String, systemPrompt As String, addHistory As Boolean) As String
         Dim result As String = question
@@ -4775,10 +4520,6 @@ Public MustInherit Class BaseChatControl
         Debug.WriteLine($"[WaitForRendererMapAsync] 警告：等待超时，rendererMap[{uuid}] 可能未创建")
     End Function
 
-    Private Function DecodeBase64(base64 As String) As String
-        Return UtilsService.DecodeBase64(base64)
-    End Function
-
     Private Function EscapeJavaScriptString(input As String) As String
         Return UtilsService.EscapeJavaScriptString(input)
     End Function
@@ -4814,7 +4555,7 @@ Public MustInherit Class BaseChatControl
         End Try
     End Function
 
-    Public Async Function SaveFullWebPageAsync2() As Task
+    Public Async Function SaveFullWebPageAsync() As Task
         Try
             ' 1. 创建目录（同步操作，无需异步）
 
@@ -4857,7 +4598,7 @@ Public MustInherit Class BaseChatControl
                 })();"
 
                                         Dim rawResult As String = Await ChatBrowser.CoreWebView2.ExecuteScriptAsync(js)
-                                        Dim decodedHtml As String = UnescapeHtmlContent(rawResult)
+                                        Dim decodedHtml As String = UtilsService.UnescapeHtmlContent(rawResult)
                                         decodedHtml = decodedHtml.TrimStart("""").TrimEnd("""")
 
                                         ' 2. 使用正则表达式移除底部输入栏
@@ -4873,7 +4614,7 @@ Public MustInherit Class BaseChatControl
 
 
                                         ' 重新注入必要的JavaScript代码
-                                        Dim essentialScript As String = GetEssentialJavaScript()
+                                        Dim essentialScript As String = UtilsService.GetEssentialJavaScript()
 
                                         ' 在 </body> 标签前插入必要的脚本
                                         If decodedHtml.Contains("</body>") Then
@@ -4892,21 +4633,10 @@ Public MustInherit Class BaseChatControl
         Return Await tcs.Task
     End Function
 
-    Private Function GetEssentialJavaScript() As String
-        Return UtilsService.GetEssentialJavaScript()
-    End Function
-
     Private Async Function EnsureWebView2InitializedAsync() As Task
         If ChatBrowser.CoreWebView2 Is Nothing Then
             Await ChatBrowser.EnsureCoreWebView2Async()
         End If
-    End Function
-
-    Private Function UnescapeHtmlContent(htmlContent As String) As String
-        ' 处理转义字符（直接从 JSON 字符串中提取）
-        Return System.Text.RegularExpressions.Regex.Unescape(
-        htmlContent
-    )
     End Function
 
     ' HistoryMessage 类已移至 Controls/Models/HistoryMessage.vb
