@@ -40,6 +40,7 @@ Public Class HistorySessionService
     ''' 获取近期会话列表（来自 session_summary），供历史侧边栏展示
     ''' </summary>
     Public Async Sub HandleGetSessionList()
+        Dim errorScript As String = Nothing
         Try
             Dim limit As Integer = 50
             Dim summaries = MemoryRepository.GetRecentSessionSummaries(limit)
@@ -59,8 +60,11 @@ Public Class HistorySessionService
             Await _executeScript($"setHistoryFilesList({jsonResult});")
         Catch ex As Exception
             Debug.WriteLine("HandleGetSessionList 失败: " & ex.Message)
-            Await _executeScript("setHistoryFilesList([]);")
+            errorScript = "setHistoryFilesList([]);"
         End Try
+        If errorScript IsNot Nothing Then
+            Await _executeScript(errorScript)
+        End If
     End Sub
 
     ''' <summary>
@@ -99,6 +103,7 @@ Public Class HistorySessionService
     End Sub
 
     Public Async Sub HandleGetPromptTemplates(jsonDoc As JObject)
+        Dim errorScript As String = Nothing
         Try
             Dim scenario As String = jsonDoc("scenario")?.ToString()
             If String.IsNullOrEmpty(scenario) Then scenario = "excel"
@@ -119,8 +124,11 @@ Public Class HistorySessionService
             Await _executeScript($"setPromptTemplatesList({json});")
         Catch ex As Exception
             Debug.WriteLine("HandleGetPromptTemplates 失败: " & ex.Message)
-            Await _executeScript("setPromptTemplatesList([]);")
+            errorScript = "setPromptTemplatesList([]);"
         End Try
+        If errorScript IsNot Nothing Then
+            Await _executeScript(errorScript)
+        End If
     End Sub
 
     Public Sub HandleSavePromptTemplate(jsonDoc As JObject)
@@ -172,6 +180,7 @@ Public Class HistorySessionService
     End Sub
 
     Public Async Sub HandleGetAtomicMemories(jsonDoc As JObject)
+        Dim errorScript As String = Nothing
         Try
             Dim limit As Integer = If(jsonDoc("limit")?.Value(Of Integer)(), 100)
             Dim appType As String = jsonDoc("appType")?.ToString()
@@ -185,8 +194,11 @@ Public Class HistorySessionService
             Await _executeScript($"setAtomicMemoriesList({json});")
         Catch ex As Exception
             Debug.WriteLine("HandleGetAtomicMemories 失败: " & ex.Message)
-            Await _executeScript("setAtomicMemoriesList([]);")
+            errorScript = "setAtomicMemoriesList([]);"
         End Try
+        If errorScript IsNot Nothing Then
+            Await _executeScript(errorScript)
+        End If
     End Sub
 
     Public Sub HandleDeleteAtomicMemory(jsonDoc As JObject)
@@ -206,14 +218,18 @@ Public Class HistorySessionService
     End Sub
 
     Public Async Sub HandleGetUserProfile()
+        Dim errorScript As String = Nothing
         Try
             Dim content As String = MemoryRepository.GetUserProfile()
             Dim json As String = JsonConvert.SerializeObject(If(content, ""))
             Await _executeScript("setUserProfileContent(" & json & ");")
         Catch ex As Exception
             Debug.WriteLine("HandleGetUserProfile 失败: " & ex.Message)
-            Await _executeScript("setUserProfileContent('');")
+            errorScript = "setUserProfileContent('');"
         End Try
+        If errorScript IsNot Nothing Then
+            Await _executeScript(errorScript)
+        End If
     End Sub
 
     Public Sub HandleSaveUserProfile(jsonDoc As JObject)

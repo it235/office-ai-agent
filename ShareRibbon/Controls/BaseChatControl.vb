@@ -1165,11 +1165,7 @@ Public MustInherit Class BaseChatControl
                                   enableAutocomplete, 800, autocompleteShortcut)
     End Sub
 
-    Public Class SendMessageReferenceContentItem
-        Public Property id As String
-        Public Property sheetName As String
-        Public Property address As String
-    End Class
+    ' SendMessageReferenceContentItem 已移至 Controls/Models/HistoryMessage.vb
 
     ' FileContentResult 类已移至 Controls/Models/HistoryMessage.vb
 

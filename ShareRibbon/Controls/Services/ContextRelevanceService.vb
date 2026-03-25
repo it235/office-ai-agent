@@ -63,7 +63,7 @@ Public Class ContextRelevanceService
     ''' 判断话题是否已转移（新消息与历史相关性低于阈值）
     ''' </summary>
     Public Shared Function IsTopicShift(newMessage As String, historyMessages As List(Of HistoryMessage)) As Boolean
-        If historyMessages Is Nothing OrElse historyMessages.Count(Function(m) m.role <> "system") < 2 Then
+        If historyMessages Is Nothing OrElse historyMessages.Where(Function(m) m.role <> "system").Count() < 2 Then
             Return False ' 历史太短，不判断话题转移
         End If
         Dim score = EvaluateRelevance(newMessage, historyMessages)

@@ -68,12 +68,12 @@ Public Class ThisAddIn
     ''' </summary>
     Private Sub EnsureCoreServicesLoaded()
         Try
-            Dim _ = _lazyWebView2.Value
+            Dim webView2Init = _lazyWebView2.Value
         Catch ex As Exception
             MessageBox.Show($"WebView2 初始化失败: {ex.Message}")
         End Try
         Try
-            Dim _ = _lazySqlite.Value
+            Dim sqliteInit = _lazySqlite.Value
         Catch ex As Exception
             MessageBox.Show($"SQLite 原生库加载失败，Skills/记忆功能可能不可用: {ex.Message}")
         End Try

@@ -828,6 +828,9 @@ complexity 取值规则：
         OnStepStarted?.Invoke(stepIndex, currentStep.Description)
         OnStatusChanged?.Invoke($"正在执行步骤 {stepIndex + 1}: {currentStep.Description}")
 
+        Dim abortStepIdx As Integer = -1
+        Dim abortErrMsg As String = Nothing
+
         Try
             Dim code As String = currentStep.GeneratedCode
             Dim language As String = currentStep.CodeLanguage
@@ -860,20 +863,22 @@ complexity 取值规则：
                 currentStep.Status = StepStatus.Failed
                 OnStepCompleted?.Invoke(stepIndex, False, "无法生成执行代码")
                 ' 无代码视为失败，触发重试逻辑
-                Await AbortIfNoProgressAsync(stepIndex, "无法生成执行代码")
-                Return
+                abortStepIdx = stepIndex
+                abortErrMsg = "无法生成执行代码"
             End If
 
-            ' 准备下一步
-            _currentSession.CurrentStepIndex += 1
+            If abortStepIdx < 0 Then
+                ' 准备下一步
+                _currentSession.CurrentStepIndex += 1
 
-            ' 自动执行下一步（类似Cursor）
-            If _currentSession.CurrentStepIndex < _currentSession.Steps.Count Then
-                ' 短暂延迟后执行下一步，让用户看到进度
-                Await Task.Delay(500)
-                Await ExecuteNextStep()
-            Else
-                CompleteAgent(True)
+                ' 自动执行下一步（类似Cursor）
+                If _currentSession.CurrentStepIndex < _currentSession.Steps.Count Then
+                    ' 短暂延迟后执行下一步，让用户看到进度
+                    Await Task.Delay(500)
+                    Await ExecuteNextStep()
+                Else
+                    CompleteAgent(True)
+                End If
             End If
 
         Catch ex As Exception
@@ -881,10 +886,14 @@ complexity 取值规则：
             currentStep.ErrorMessage = ex.Message
             OnStepCompleted?.Invoke(stepIndex, False, ex.Message)
             OnStatusChanged?.Invoke($"步骤 {stepIndex + 1} 执行失败: {ex.Message}")
-
             ' AbortIfNoProgress：失败重试，超过 MaxStepRetries 则终止
-            Await AbortIfNoProgressAsync(stepIndex, ex.Message)
+            abortStepIdx = stepIndex
+            abortErrMsg = ex.Message
         End Try
+
+        If abortStepIdx >= 0 Then
+            Await AbortIfNoProgressAsync(abortStepIdx, abortErrMsg)
+        End If
     End Function
 
     ''' <summary>
