@@ -19,7 +19,8 @@ Public Class MemoryService
             If Not String.IsNullOrWhiteSpace(query) AndAlso EmbeddingService.IsEmbeddingAvailable() Then
                 Debug.WriteLine($"[MemoryService] 正在生成查询向量...")
                 Dim task = EmbeddingService.GetEmbeddingAsync(query)
-                task.Wait(TimeSpan.FromSeconds(10))
+                ' 向量检索超时设置为3秒，避免阻塞UI线程过久
+                task.Wait(TimeSpan.FromSeconds(3))
                 If task.IsCompleted Then
                     queryEmbedding = task.Result
                     If queryEmbedding IsNot Nothing Then
@@ -145,7 +146,8 @@ Public Class MemoryService
         Try
             If Not String.IsNullOrWhiteSpace(keyword) Then
                 Dim taskx = EmbeddingService.GetEmbeddingAsync(keyword)
-                taskx.Wait(TimeSpan.FromSeconds(10))
+                ' 向量检索超时设置为3秒，避免阻塞过久
+                taskx.Wait(TimeSpan.FromSeconds(3))
                 If taskx.IsCompleted Then
                     queryEmbedding = taskx.Result
                 End If

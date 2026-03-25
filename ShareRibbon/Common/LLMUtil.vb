@@ -1,10 +1,22 @@
-﻿Imports System.Net
+﻿Imports System.Diagnostics
+Imports System.Net
 Imports System.Net.Http
 Imports System.Text
 Imports System.Windows.Forms
 Imports Newtonsoft.Json
 
 Public Class LLMUtil
+
+    ''' <summary>
+    ''' 检查 WPS Office 是否正在运行
+    ''' </summary>
+    Public Shared Function IsWpsActive() As Boolean
+        Try
+            Return Process.GetProcessesByName("WPS").Length > 0
+        Catch
+            Return False
+        End Try
+    End Function
 
     ' 创建请求体
     Public Shared Function CreateRequestBody(question As String) As String

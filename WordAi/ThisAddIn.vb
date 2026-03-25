@@ -9,7 +9,8 @@ Public Class ThisAddIn
 
     Public Shared chatTaskPane As Microsoft.Office.Tools.CustomTaskPane
     Public Shared chatControl As ChatControl
-    Private translateService As WordTranslateService
+    ' 翻译服务：延迟初始化，首次使用时创建
+    Private _translateService As WordTranslateService
 
     Private captureTaskPane As Microsoft.Office.Tools.CustomTaskPane
     Public Shared dataCapturePane As WebDataCapturePane
@@ -19,95 +20,79 @@ Public Class ThisAddIn
     Private _deepseekTaskPane As Microsoft.Office.Tools.CustomTaskPane
     Private _doubaoControl As DoubaoChat
     Private _doubaoTaskPane As Microsoft.Office.Tools.CustomTaskPane
-    
+
     ' 模板编辑器
     Private _templateEditorControl As ReformatTemplateEditorControl
     Private _templateEditorTaskPane As Microsoft.Office.Tools.CustomTaskPane
-    
-    ' Word补全管理器
-    Private _completionManager As WordCompletionManager
+
+    ' 延迟初始化：WebView2 和 SQLite 仅在首次使用时加载
+    Private _lazyWebView2 As New Lazy(Of Boolean)(Function()
+        WebView2Loader.EnsureWebView2Loader()
+        Return True
+    End Function)
+
+    Private _lazySqlite As New Lazy(Of Boolean)(Function()
+        SqliteNativeLoader.EnsureLoaded()
+        Return True
+    End Function)
+
+    ' WPS 宽度修复定时器
+    Private widthTimer As Timer
+    Private widthTimer1 As Timer
 
     Private Sub WordAi_Startup() Handles Me.Startup
+        ' 仅注册程序集解析器（几乎无开销，必须最先执行）
         SqliteAssemblyResolver.EnsureRegistered()
+    End Sub
+
+    ''' <summary>
+    ''' 确保核心服务已加载（WebView2 + SQLite），首次调用时初始化
+    ''' </summary>
+    Private Sub EnsureCoreServicesLoaded()
         Try
-            WebView2Loader.EnsureWebView2Loader()
+            Dim _ = _lazyWebView2.Value
         Catch ex As Exception
             MessageBox.Show($"WebView2 初始化失败: {ex.Message}")
         End Try
         Try
-            SqliteNativeLoader.EnsureLoaded()
+            Dim _ = _lazySqlite.Value
         Catch ex As Exception
             MessageBox.Show($"SQLite 原生库加载失败，Skills/记忆功能可能不可用: {ex.Message}")
         End Try
-
-        ' 处理工作表和工作簿切换事件
-        Application_WorkbookActivate()
-        ' 初始化 Timer，用于WPS中扩大聊天区域的宽度
-        widthTimer = New Timer()
-        AddHandler widthTimer.Tick, AddressOf WidthTimer_Tick
-        widthTimer.Interval = 100 ' 设置延迟时间，单位为毫秒
-        ' 初始化 Timer，用于WPS中扩大聊天区域的宽度
-        widthTimer1 = New Timer()
-        AddHandler widthTimer1.Tick, AddressOf WidthTimer1_Tick
-        widthTimer1.Interval = 100 ' 设置延迟时间，单位为毫秒
-
-        translateService = New WordTranslateService()
-        
-        ' 预加载聊天设置（确保补全配置在CompletionManager初始化前已加载）
-        Dim chatSettings As New ChatSettings(New ApplicationInfo("Word", OfficeApplicationType.Word))
-        
-        ' 初始化Word补全管理器（已禁用 - 观察期）
-        ' InitializeCompletionManager()
-
     End Sub
-    
+
     ''' <summary>
-    ''' 初始化Word补全管理器（已禁用 - 观察期）
+    ''' 确保 WPS 宽度修复定时器已初始化（仅在需要时创建）
     ''' </summary>
-    Private Sub InitializeCompletionManager()
-        ' 补全功能已禁用，跳过初始化
-        Debug.WriteLine("[Word] 补全管理器已跳过初始化（观察期）")
-    End Sub
-    
-    ''' <summary>
-    ''' 启用/禁用Word补全功能
-    ''' </summary>
-    Public Sub SetCompletionEnabled(enabled As Boolean)
-        If _completionManager IsNot Nothing Then
-            _completionManager.Enabled = enabled
+    Private Sub EnsureWidthTimers()
+        If widthTimer Is Nothing Then
+            widthTimer = New Timer()
+            AddHandler widthTimer.Tick, AddressOf WidthTimer_Tick
+            widthTimer.Interval = 100
+        End If
+        If widthTimer1 Is Nothing Then
+            widthTimer1 = New Timer()
+            AddHandler widthTimer1.Tick, AddressOf WidthTimer1_Tick
+            widthTimer1.Interval = 100
         End If
     End Sub
-
-    ''' <summary>
-    ''' 自动补全设置保存事件处理
-    ''' </summary>
-    Private Sub OnAutocompleteSettingsSaved(sender As Object, e As AutocompleteSettingsSavedEventArgs)
-        Try
-            If _completionManager IsNot Nothing Then
-                _completionManager.Enabled = e.EnableAutocomplete
-                Debug.WriteLine($"[Word] 补全设置已同步: Enabled={e.EnableAutocomplete}")
-            End If
-        Catch ex As Exception
-            Debug.WriteLine($"[Word] 同步补全设置失败: {ex.Message}")
-        End Try
-    End Sub
-
-
-    Private Function IsWpsActive() As Boolean
-        Try
-            Return Process.GetProcessesByName("WPS").Length > 0
-        Catch
-            Return False
-        End Try
-    End Function
-
 
     Private Sub ThisAddIn_Shutdown() Handles Me.Shutdown
         ' 清理翻译服务资源（右键菜单按钮）
-        If translateService IsNot Nothing Then
-            translateService.Cleanup()
+        If _translateService IsNot Nothing Then
+            _translateService.Cleanup()
         End If
-        ' 补全功能已禁用，无需取消订阅
+        ' 清理定时器资源
+        If widthTimer IsNot Nothing Then
+            widthTimer.Stop()
+            widthTimer.Dispose()
+            widthTimer = Nothing
+        End If
+        If widthTimer1 IsNot Nothing Then
+            widthTimer1.Stop()
+            widthTimer1.Dispose()
+            widthTimer1 = Nothing
+        End If
     End Sub
 
 
@@ -124,31 +109,28 @@ Public Class ThisAddIn
         End Try
     End Sub
 
-    '    ' 切换工作表时重新
-
-    Private Sub Application_WorkbookActivate()
+    ''' <summary>
+    ''' 创建网页爬虫任务窗格（延迟初始化，仅在用户点击爬虫按钮时创建）
+    ''' </summary>
+    Private Sub EnsureDataCapturePaneCreated()
+        If dataCapturePane IsNot Nothing Then Return
         Try
-            ' 为新工作簿创建任务窗格
             dataCapturePane = New WebDataCapturePane()
             captureTaskPane = Me.CustomTaskPanes.Add(dataCapturePane, "Word爬虫")
             captureTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
             captureTaskPane.Width = 420
-            'AddHandler captureTaskPane.VisibleChanged, AddressOf ChatTaskPane_VisibleChanged
             captureTaskPane.Visible = False
-
-
         Catch ex As Exception
-            MessageBox.Show($"初始化 Word AI 任务窗格失败: {ex.Message}")
+            MessageBox.Show($"初始化 Word 爬虫任务窗格失败: {ex.Message}")
         End Try
     End Sub
 
-    Private widthTimer As Timer
-    Private widthTimer1 As Timer
     ' 解决WPS中无法显示正常宽度的问题
     Private Sub ChatTaskPane_VisibleChanged(sender As Object, e As EventArgs)
         Dim taskPane As Microsoft.Office.Tools.CustomTaskPane = CType(sender, Microsoft.Office.Tools.CustomTaskPane)
         If taskPane.Visible Then
-            If IsWpsActive() Then
+            If LLMUtil.IsWpsActive() Then
+                EnsureWidthTimers()
                 widthTimer.Start()
             End If
         End If
@@ -157,11 +139,13 @@ Public Class ThisAddIn
     Private Sub DeepseekTaskPane_VisibleChanged(sender As Object, e As EventArgs)
         Dim taskPane As Microsoft.Office.Tools.CustomTaskPane = CType(sender, Microsoft.Office.Tools.CustomTaskPane)
         If taskPane.Visible Then
-            If IsWpsActive() Then
+            If LLMUtil.IsWpsActive() Then
+                EnsureWidthTimers()
                 widthTimer1.Start()
             End If
         End If
     End Sub
+
     Private Sub CreateDeepseekTaskPane()
         Try
             If _deepseekControl Is Nothing Then
@@ -195,25 +179,22 @@ Public Class ThisAddIn
 
     Private Sub WidthTimer_Tick(sender As Object, e As EventArgs)
         widthTimer.Stop()
-        If IsWpsActive() AndAlso chatTaskPane IsNot Nothing Then
+        If LLMUtil.IsWpsActive() AndAlso chatTaskPane IsNot Nothing Then
             chatTaskPane.Width = 420
         End If
     End Sub
     Private Sub WidthTimer1_Tick(sender As Object, e As EventArgs)
         widthTimer1.Stop()
-        If IsWpsActive() AndAlso _deepseekTaskPane IsNot Nothing Then
+        If LLMUtil.IsWpsActive() AndAlso _deepseekTaskPane IsNot Nothing Then
             _deepseekTaskPane.Width = 420
         End If
-    End Sub
-    Private Sub AiHelper_Shutdown() Handles Me.Shutdown
-        ' 清理资源
-        'RemoveHandler Globals.ThisAddIn.Application.WorkbookActivate, AddressOf Me.Application_WorkbookActivate
     End Sub
 
     Dim loadChatHtml As Boolean = True
     Dim loadDataCaptureHtml As Boolean = True
 
     Public Async Sub ShowChatTaskPane()
+        EnsureCoreServicesLoaded()
         CreateChatTaskPane()
         If chatTaskPane Is Nothing Then Return
         chatTaskPane.Visible = True
@@ -224,22 +205,25 @@ Public Class ThisAddIn
     End Sub
 
     Public Async Sub ShowDataCaptureTaskPane()
+        EnsureDataCapturePaneCreated()
         If captureTaskPane Is Nothing Then Return
         captureTaskPane.Visible = True
     End Sub
 
     Public Async Sub ShowDeepseekTaskPane()
+        EnsureCoreServicesLoaded()
         CreateDeepseekTaskPane()
         If _deepseekTaskPane Is Nothing Then Return
         _deepseekTaskPane.Visible = True
     End Sub
 
     Public Async Sub ShowDoubaoTaskPane()
+        EnsureCoreServicesLoaded()
         Await CreateDoubaoTaskPane()
         If _doubaoTaskPane Is Nothing Then Return
         _doubaoTaskPane.Visible = True
     End Sub
-    
+
     ''' <summary>
     ''' 显示模板编辑器任务窗格
     ''' </summary>
@@ -254,19 +238,19 @@ Public Class ThisAddIn
                 _templateEditorTaskPane = Nothing
                 _templateEditorControl = Nothing
             End If
-            
+
             ' 创建预览回调（安全处理 chatControl 可能为 Nothing 的情况）
             Dim previewCallback As PreviewStyleCallback = Nothing
             If chatControl IsNot Nothing Then
                 previewCallback = AddressOf chatControl.ApplyStylePreviewToSelection
             End If
-            
+
             ' 创建占位符预览回调
             Dim placeholderPreviewCallback As TemplatePlaceholderPreviewCallback = AddressOf ApplyPlaceholderPreviewToDocument
-            
+
             ' 创建新的编辑器控件
             _templateEditorControl = New ReformatTemplateEditorControl(template, previewCallback, placeholderPreviewCallback)
-            
+
             ' 绑定事件
             AddHandler _templateEditorControl.TemplateSaved, Sub(s, t)
                 GlobalStatusStrip.ShowInfo($"模板「{t.Name}」已保存")
@@ -276,23 +260,23 @@ Public Class ThisAddIn
                     chatControl.RefreshReformatTemplates()
                 End If
             End Sub
-            
+
             AddHandler _templateEditorControl.EditorClosed, Sub(s, e)
                 HideTemplateEditorTaskPane()
             End Sub
-            
+
             ' 创建TaskPane
             _templateEditorTaskPane = Me.CustomTaskPanes.Add(_templateEditorControl, "排版模板编辑器")
             _templateEditorTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
             _templateEditorTaskPane.Width = 380
             _templateEditorTaskPane.Visible = True
-            
+
         Catch ex As Exception
             MessageBox.Show($"打开模板编辑器失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
             Debug.WriteLine($"ShowTemplateEditorTaskPane 错误: {ex.Message}")
         End Try
     End Sub
-    
+
     ''' <summary>
     ''' 隐藏模板编辑器任务窗格
     ''' </summary>

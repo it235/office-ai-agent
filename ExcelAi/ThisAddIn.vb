@@ -20,7 +20,26 @@ Public Class ThisAddIn
     Private chatTaskPane As Microsoft.Office.Tools.CustomTaskPane
     Public Shared chatControl As ChatControl
 
+    ' XLL 路径缓存：首次找到后不再重复搜索
+    Private Shared _cachedXllPath As String = Nothing
+
+    ' 延迟初始化：WebView2 和 SQLite 仅在首次使用时加载
+    Private _lazyWebView2 As New Lazy(Of Boolean)(Function()
+        WebView2Loader.EnsureWebView2Loader()
+        Return True
+    End Function)
+
+    Private _lazySqlite As New Lazy(Of Boolean)(Function()
+        SqliteNativeLoader.EnsureLoaded()
+        Return True
+    End Function)
+
+    ' WPS 宽度修复定时器
+    Private widthTimer As Timer
+    Private widthTimer1 As Timer
+
     Private Sub ExcelAi_Startup() Handles Me.Startup
+        ' SqliteAssemblyResolver 必须最先注册，确保后续加载 SQLite 程序集时能解析
         SqliteAssemblyResolver.EnsureRegistered()
         Try
             Debug.WriteLine("正在初始化GlobalStatusStrip...")
@@ -30,37 +49,11 @@ Public Class ThisAddIn
             Debug.WriteLine("初始化GlobalStatusStrip时出错: " & ex.Message)
             MessageBox.Show("初始化状态栏时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
-        Try
-            WebView2Loader.EnsureWebView2Loader()
-        Catch ex As Exception
-            MessageBox.Show($"WebView2 初始化失败: {ex.Message}")
-        End Try
-        Try
-            SqliteNativeLoader.EnsureLoaded()
-        Catch ex As Exception
-            MessageBox.Show($"SQLite 原生库加载失败，Skills/记忆功能可能不可用: {ex.Message}")
-        End Try
+        ' WebView2 延迟加载：推迟到首次打开任务窗格时初始化，减少启动耗时
+        ' SQLite 原生库延迟加载：首次访问数据库时由 OfficeAiDatabase.EnsureInitialized() 自动调用
+        ' 此处无需显式调用 SqliteNativeLoader.EnsureLoaded()
 
-        ' 初始化 Timer，用于WPS中扩大聊天区域的宽度
-        widthTimer = New Timer()
-        AddHandler widthTimer.Tick, AddressOf WidthTimer_Tick
-        widthTimer.Interval = 100 ' 设置延迟时间，单位为毫秒
-
-        widthTimer1 = New Timer()
-        AddHandler widthTimer1.Tick, AddressOf WidthTimer1_Tick
-        widthTimer1.Interval = 200 ' 设置延迟时间，单位为毫秒
-
-        ' 等待Excel完全启动
-        WaitForExcelReady()
-
-        ' 创建任务窗格
-        'CreateChatTaskPane()
-        'CreateDeepseekTaskPane()
-
-        ' 确保有可用的工作簿
-        'EnsureWorkbookAvailable()
-
-        ' 加载 Excel-DNA XLL (添加这部分)
+        ' 延迟加载 Excel-DNA XLL：仅在启动时执行一次路径搜索并缓存
         Try
             LoadExcelDnaAddIn()
         Catch ex As Exception
@@ -70,93 +63,61 @@ Public Class ThisAddIn
 
     End Sub
 
-    ' 添加这个方法来等待Excel启动
-    Private Sub WaitForExcelReady()
+    ''' <summary>
+    ''' 确保核心服务已加载（WebView2 + SQLite），首次调用时初始化
+    ''' </summary>
+    Private Sub EnsureCoreServicesLoaded()
         Try
-            Dim startTime As DateTime = DateTime.Now
-            While Not Application.Ready AndAlso DateTime.Now.Subtract(startTime).TotalSeconds < 10
-                System.Threading.Thread.Sleep(100)
-            End While
-            Debug.WriteLine("Excel准备就绪")
+            Dim _ = _lazyWebView2.Value
         Catch ex As Exception
-            Debug.WriteLine($"等待Excel准备就绪时出错: {ex.Message}")
+            MessageBox.Show($"WebView2 初始化失败: {ex.Message}")
+        End Try
+        Try
+            Dim _ = _lazySqlite.Value
+        Catch ex As Exception
+            MessageBox.Show($"SQLite 原生库加载失败，Skills/记忆功能可能不可用: {ex.Message}")
         End Try
     End Sub
 
-    ' 确保有可用的工作簿 - 增强版
-    Private Sub EnsureWorkbookAvailable()
-        Try
-            ' 记录所有当前工作簿
-            Debug.WriteLine($"当前工作簿数量: {Application.Workbooks.Count}")
-            If Application.Workbooks.Count > 0 Then
-                Debug.WriteLine("工作簿列表:")
-                For i As Integer = 1 To Application.Workbooks.Count
-                    Dim wb As Workbook = Application.Workbooks(i)
-                    Debug.WriteLine($"  [{i}] 名称: {wb.Name}, 路径: {If(String.IsNullOrEmpty(wb.Path), "(未保存)", wb.Path)}")
-                Next
-            End If
+    ''' <summary>
+    ''' 确保 WPS 宽度修复定时器已初始化（仅在需要时创建）
+    ''' </summary>
+    Private Sub EnsureWidthTimers()
+        If widthTimer Is Nothing Then
+            widthTimer = New Timer()
+            AddHandler widthTimer.Tick, AddressOf WidthTimer_Tick
+            widthTimer.Interval = 100
+        End If
+        If widthTimer1 Is Nothing Then
+            widthTimer1 = New Timer()
+            AddHandler widthTimer1.Tick, AddressOf WidthTimer1_Tick
+            widthTimer1.Interval = 200
+        End If
+    End Sub
 
-            ' 关键修改: 只有在没有任何实际工作簿时才创建
-            ' 检查是否有任何非临时工作簿
-            Dim hasRealWorkbook As Boolean = False
-
-            If Application.Workbooks.Count > 0 Then
-                ' 检查是否所有工作簿都是新建的空白工作簿
-                For i As Integer = 1 To Application.Workbooks.Count
-                    Dim wb As Workbook = Application.Workbooks(i)
-                    ' 只有同时满足：默认名称、未保存到磁盘、无修改内容，才视为临时空白工作簿
-                    Dim isDefaultName = wb.Name.StartsWith("Book") OrElse wb.Name.StartsWith("工作簿")
-                    Dim isUnsaved = String.IsNullOrEmpty(wb.Path)
-                    Dim isUnmodified = wb.Saved
-                    If Not (isDefaultName AndAlso isUnsaved AndAlso isUnmodified) Then
-                        hasRealWorkbook = True
-                        Debug.WriteLine($"找到有效工作簿: {wb.Name}")
-                        Exit For
-                    End If
-                Next
-            End If
-
-            ' 仅当没有工作簿或只有临时工作簿且数量=1时才创建新的
-            If Application.Workbooks.Count = 0 OrElse (Application.Workbooks.Count = 1 AndAlso Not hasRealWorkbook) Then
-                Debug.WriteLine("需要创建新工作簿...")
-
-                ' 如果已经有一个临时工作簿，先关闭它
-                If Application.Workbooks.Count = 1 AndAlso Not hasRealWorkbook Then
-                    Debug.WriteLine("关闭现有临时工作簿")
-                    ' 不保存关闭
-                    Application.DisplayAlerts = False
-                    Application.Workbooks(1).Close(SaveChanges:=False)
-                    Application.DisplayAlerts = True
-                End If
-
-                Application.Workbooks.Add()
-                Debug.WriteLine("已创建新工作簿")
-            Else
-                Debug.WriteLine("已存在有效工作簿，无需创建")
-            End If
-
-            ' 确保有活动工作簿
-            If Application.ActiveWorkbook Is Nothing AndAlso Application.Workbooks.Count > 0 Then
-                Application.Workbooks(1).Activate()
-                Debug.WriteLine("已激活第一个工作簿")
-            End If
-
-            ' 确保Excel是可见的
-            If Not Application.Visible Then
-                Application.Visible = True
-                Debug.WriteLine("已设置Excel为可见")
-            End If
-
-            Debug.WriteLine("工作簿状态检查完成")
-
-        Catch ex As Exception
-            Debug.WriteLine($"确保工作簿可用时出错: {ex.Message}")
-            MessageBox.Show($"初始化Excel工作簿时出错: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning)
-        End Try
+    Private Sub ThisAddIn_Shutdown() Handles Me.Shutdown
+        ' 清理定时器资源
+        If widthTimer IsNot Nothing Then
+            widthTimer.Stop()
+            widthTimer.Dispose()
+            widthTimer = Nothing
+        End If
+        If widthTimer1 IsNot Nothing Then
+            widthTimer1.Stop()
+            widthTimer1.Dispose()
+            widthTimer1 = Nothing
+        End If
     End Sub
 
     Private Sub LoadExcelDnaAddIn()
         Try
+            ' 使用缓存路径：若已找到 XLL，直接加载，跳过搜索
+            If Not String.IsNullOrEmpty(_cachedXllPath) Then
+                Debug.WriteLine($"[LoadExcelDnaAddIn] 使用缓存路径: {_cachedXllPath}")
+                Application.RegisterXLL(_cachedXllPath)
+                Return
+            End If
+
             Debug.WriteLine("开始查找 XLL 文件...")
 
             ' 获取当前程序集路径
@@ -166,92 +127,10 @@ Public Class ThisAddIn
             Debug.WriteLine($"当前程序集路径: {currentAssemblyPath}")
             Debug.WriteLine($"当前目录: {currentDir}")
 
-            ' 创建搜索路径列表
+            ' 创建搜索路径列表（按优先级排序）
             Dim searchPaths As New List(Of String)
 
-            ' 1. 开发环境：尝试找到真正的项目输出目录
-            If currentDir.Contains("AppData\Local\assembly") Then
-                ' 这是VSTO临时目录，尝试找到真正的项目目录
-                ' 根据您的项目结构：F:\ai\code\AiHelper\ExcelAi\bin\Debug
-                Dim possibleDevPaths As String() = {
-                "F:\ai\code\AiHelper\ExcelAi\bin\Debug",
-                "F:\ai\code\AiHelper\ExcelAi\bin\Release",
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "source", "repos", "AiHelper", "ExcelAi", "bin", "Debug"),
-                Path.Combine("C:\", "ai", "code", "AiHelper", "ExcelAi", "bin", "Debug")
-            }
-
-                For Each devPath In possibleDevPaths
-                    If Directory.Exists(devPath) Then
-                        searchPaths.Add(devPath)
-                        Debug.WriteLine($"添加开发路径: {devPath}")
-                    End If
-                Next
-            End If
-
-            ' 2. 当前目录及其相关目录
-            searchPaths.Add(currentDir)
-            searchPaths.Add(Path.Combine(currentDir, ".."))
-
-            ' 3. 安装环境：查找所有可能的安装路径
-            ' 首先尝试从当前路径向上查找OfficeAiAgent目录
-            Dim currentDirInfo As New DirectoryInfo(currentDir)
-            While currentDirInfo IsNot Nothing
-                ' 检查是否包含OfficeAiAgent
-                If currentDirInfo.Name.Equals("OfficeAiAgent", StringComparison.OrdinalIgnoreCase) OrElse
-               currentDirInfo.FullName.Contains("OfficeAiAgent") Then
-
-                    ' 找到OfficeAiAgent目录，检查ExcelAi子目录
-                    Dim excelAiPath As String = Path.Combine(currentDirInfo.FullName, "ExcelAi")
-                    If Directory.Exists(excelAiPath) Then
-                        searchPaths.Add(excelAiPath)
-                        Debug.WriteLine($"添加安装路径: {excelAiPath}")
-                    End If
-
-                    ' 也检查根目录
-                    searchPaths.Add(currentDirInfo.FullName)
-                    Exit While
-                End If
-                currentDirInfo = currentDirInfo.Parent
-            End While
-
-            ' 4. 标准安装路径
-            Dim standardInstallPaths As String() = {
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "it235", "OfficeAiAgent", "ExcelAi"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "it235", "OfficeAiAgent", "ExcelAi"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "OfficeAiAgent", "ExcelAi"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "OfficeAiAgent", "ExcelAi")
-        }
-
-            For Each installPath In standardInstallPaths
-                If Directory.Exists(installPath) Then
-                    searchPaths.Add(installPath)
-                    Debug.WriteLine($"添加标准安装路径: {installPath}")
-                End If
-            Next
-
-            ' 5. 用户自定义安装路径：搜索所有驱动器
-            Try
-                For Each drive In DriveInfo.GetDrives()
-                    If drive.IsReady AndAlso drive.DriveType = DriveType.Fixed Then
-                        Dim customPaths As String() = {
-                        Path.Combine(drive.Name, "OfficeAiAgent", "ExcelAi"),
-                        Path.Combine(drive.Name, "Program Files", "OfficeAiAgent", "ExcelAi"),
-                        Path.Combine(drive.Name, "Program Files (x86)", "OfficeAiAgent", "ExcelAi")
-                    }
-
-                        For Each customPath In customPaths
-                            If Directory.Exists(customPath) Then
-                                searchPaths.Add(customPath)
-                                Debug.WriteLine($"添加自定义路径: {customPath}")
-                            End If
-                        Next
-                    End If
-                Next
-            Catch ex As Exception
-                Debug.WriteLine($"搜索自定义路径时出错: {ex.Message}")
-            End Try
-
-            ' 6. 从注册表查找安装路径（如果MSI安装时写入了注册表）
+            ' 1. 注册表路径（安装时写入，最可靠）
             Try
                 Using key As RegistryKey = Registry.LocalMachine.OpenSubKey("SOFTWARE\it235\OfficeAiAgent")
                     If key IsNot Nothing Then
@@ -269,6 +148,77 @@ Public Class ThisAddIn
                 Debug.WriteLine($"从注册表读取安装路径时出错: {ex.Message}")
             End Try
 
+            ' 2. 标准安装路径
+            Dim standardInstallPaths As String() = {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "it235", "OfficeAiAgent", "ExcelAi"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "it235", "OfficeAiAgent", "ExcelAi"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "OfficeAiAgent", "ExcelAi"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "OfficeAiAgent", "ExcelAi")
+            }
+            For Each installPath In standardInstallPaths
+                If Directory.Exists(installPath) Then
+                    searchPaths.Add(installPath)
+                    Debug.WriteLine($"添加标准安装路径: {installPath}")
+                End If
+            Next
+
+            ' 3. 当前目录及其相关目录
+            searchPaths.Add(currentDir)
+            searchPaths.Add(Path.Combine(currentDir, ".."))
+
+            ' 4. 开发环境：VSTO 临时目录时尝试真正的项目输出目录
+            If currentDir.Contains("AppData\Local\assembly") Then
+                Dim possibleDevPaths As String() = {
+                    "F:\ai\code\AiHelper\ExcelAi\bin\Debug",
+                    "F:\ai\code\AiHelper\ExcelAi\bin\Release",
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "source", "repos", "AiHelper", "ExcelAi", "bin", "Debug"),
+                    Path.Combine("C:\", "ai", "code", "AiHelper", "ExcelAi", "bin", "Debug")
+                }
+                For Each devPath In possibleDevPaths
+                    If Directory.Exists(devPath) Then
+                        searchPaths.Add(devPath)
+                        Debug.WriteLine($"添加开发路径: {devPath}")
+                    End If
+                Next
+            End If
+
+            ' 5. 从当前路径向上查找 OfficeAiAgent 目录
+            Dim currentDirInfo As New DirectoryInfo(currentDir)
+            While currentDirInfo IsNot Nothing
+                If currentDirInfo.Name.Equals("OfficeAiAgent", StringComparison.OrdinalIgnoreCase) OrElse
+                   currentDirInfo.FullName.Contains("OfficeAiAgent") Then
+                    Dim excelAiPath As String = Path.Combine(currentDirInfo.FullName, "ExcelAi")
+                    If Directory.Exists(excelAiPath) Then
+                        searchPaths.Add(excelAiPath)
+                        Debug.WriteLine($"添加安装路径: {excelAiPath}")
+                    End If
+                    searchPaths.Add(currentDirInfo.FullName)
+                    Exit While
+                End If
+                currentDirInfo = currentDirInfo.Parent
+            End While
+
+            ' 6. 广泛搜索：遍历所有固定驱动器（最慢，最后执行）
+            Try
+                For Each drive In DriveInfo.GetDrives()
+                    If drive.IsReady AndAlso drive.DriveType = DriveType.Fixed Then
+                        Dim customPaths As String() = {
+                            Path.Combine(drive.Name, "OfficeAiAgent", "ExcelAi"),
+                            Path.Combine(drive.Name, "Program Files", "OfficeAiAgent", "ExcelAi"),
+                            Path.Combine(drive.Name, "Program Files (x86)", "OfficeAiAgent", "ExcelAi")
+                        }
+                        For Each customPath In customPaths
+                            If Directory.Exists(customPath) Then
+                                searchPaths.Add(customPath)
+                                Debug.WriteLine($"添加自定义路径: {customPath}")
+                            End If
+                        Next
+                    End If
+                Next
+            Catch ex As Exception
+                Debug.WriteLine($"搜索自定义路径时出错: {ex.Message}")
+            End Try
+
             ' 去除重复路径
             Dim uniquePaths As New HashSet(Of String)(searchPaths, StringComparer.OrdinalIgnoreCase)
 
@@ -277,11 +227,9 @@ Public Class ThisAddIn
             Dim foundXllPath As String = String.Empty
 
             Debug.WriteLine($"正在查找文件: {xllFileName}")
-            Debug.WriteLine("搜索路径列表:")
 
             For Each searchPath In uniquePaths
                 Debug.WriteLine($"  检查: {searchPath}")
-
                 If Directory.Exists(searchPath) Then
                     Dim xllPath As String = Path.Combine(searchPath, xllFileName)
                     If File.Exists(xllPath) Then
@@ -289,7 +237,6 @@ Public Class ThisAddIn
                         Debug.WriteLine($"找到XLL文件: {xllPath}")
                         Exit For
                     End If
-
                     ' 也检查未打包的版本
                     Dim unpackedXllFileName As String = If(IntPtr.Size = 8, "ExcelAi-AddIn64.xll", "ExcelAi-AddIn.xll")
                     Dim unpackedXllPath As String = Path.Combine(searchPath, unpackedXllFileName)
@@ -301,15 +248,21 @@ Public Class ThisAddIn
                 End If
             Next
 
-            ' 尝试加载XLL文件
+            ' 尝试加载XLL文件，成功后缓存路径供下次直接使用
             If Not String.IsNullOrEmpty(foundXllPath) Then
                 Try
                     Debug.WriteLine($"正在加载 Excel-DNA XLL: {foundXllPath}")
                     Dim result As Boolean = Application.RegisterXLL(foundXllPath)
+                    If result Then
+                        ' 缓存成功找到的路径，避免下次重复搜索
+                        _cachedXllPath = foundXllPath
+                        Debug.WriteLine($"[LoadExcelDnaAddIn] 路径已缓存: {foundXllPath}")
+                    End If
                 Catch ex As Exception
                     Debug.WriteLine($"加载 XLL 时出错: {ex.Message}")
                 End Try
             Else
+                Debug.WriteLine("未找到 XLL 文件，诊断信息:")
                 For Each searchPath In uniquePaths
                     If Directory.Exists(searchPath) Then
                         Debug.WriteLine($"路径 {searchPath} 包含的文件:")
@@ -380,42 +333,12 @@ Public Class ThisAddIn
         End Try
     End Function
 
-    ' 显示VBA信任中心设置说明
-    Private Sub ShowVbaTrustCenterInstructions()
-        MessageBox.Show(
-        "要使用 Excel AI 函数，请按以下步骤设置Excel安全选项:" & vbCrLf & vbCrLf &
-        "1. 点击'文件' > '选项'" & vbCrLf &
-        "2. 选择'信任中心' > '信任中心设置'" & vbCrLf &
-        "3. 选择'宏设置'" & vbCrLf &
-        "4. 勾选'信任访问 VBA 项目对象模型'" & vbCrLf &
-        "5. 点击'确定'并重启Excel",
-        "Excel AI 函数 - 安全设置",
-        MessageBoxButtons.OK,
-        MessageBoxIcon.Information)
-    End Sub
-
-
-    Private Function IsWpsActive() As Boolean
-        Try
-            Return Process.GetProcessesByName("WPS").Length > 0
-        Catch
-            Return False
-        End Try
-    End Function
-
-
-    Private Sub ThisAddIn_Shutdown() Handles Me.Shutdown
-    End Sub
-
-
-    Private widthTimer As Timer
-    Private widthTimer1 As Timer
-
     ' 解决WPS中无法显示正常宽度的问题
     Private Sub ChatTaskPane_VisibleChanged(sender As Object, e As EventArgs)
         Dim taskPane As Microsoft.Office.Tools.CustomTaskPane = CType(sender, Microsoft.Office.Tools.CustomTaskPane)
         If taskPane.Visible Then
-            If IsWpsActive() Then
+            If LLMUtil.IsWpsActive() Then
+                EnsureWidthTimers()
                 widthTimer.Start()
             End If
         End If
@@ -424,7 +347,8 @@ Public Class ThisAddIn
     Private Sub DeepseekTaskPane_VisibleChanged(sender As Object, e As EventArgs)
         Dim taskPane As Microsoft.Office.Tools.CustomTaskPane = CType(sender, Microsoft.Office.Tools.CustomTaskPane)
         If taskPane.Visible Then
-            If IsWpsActive() Then
+            If LLMUtil.IsWpsActive() Then
+                EnsureWidthTimers()
                 widthTimer1.Start()
             End If
         End If
@@ -432,7 +356,7 @@ Public Class ThisAddIn
 
     Private Sub WidthTimer_Tick(sender As Object, e As EventArgs)
         widthTimer.Stop()
-        If IsWpsActive() AndAlso chatTaskPane IsNot Nothing Then
+        If LLMUtil.IsWpsActive() AndAlso chatTaskPane IsNot Nothing Then
             chatTaskPane.Width = 420
         End If
     End Sub
@@ -440,18 +364,16 @@ Public Class ThisAddIn
     Private Sub WidthTimer1_Tick(sender As Object, e As EventArgs)
         widthTimer1.Stop()
         Debug.WriteLine($"Deepseek点击定时1")
-        If IsWpsActive() AndAlso _deepseekTaskPane IsNot Nothing Then
+        If LLMUtil.IsWpsActive() AndAlso _deepseekTaskPane IsNot Nothing Then
             Debug.WriteLine($"Deepseek点击定时2")
             _deepseekTaskPane.Width = 420
         End If
     End Sub
 
-    Private Sub AiHelper_Shutdown() Handles Me.Shutdown
-    End Sub
-
     Dim loadChatHtml As Boolean = True
 
     Public Async Sub ShowChatTaskPane()
+        EnsureCoreServicesLoaded()
         CreateChatTaskPane()
         If chatTaskPane Is Nothing Then Return
         chatTaskPane.Visible = True
@@ -463,12 +385,14 @@ Public Class ThisAddIn
 
     Public Async Sub ShowDeepseekTaskPane()
         Debug.WriteLine($"Deepseek点击事件")
+        EnsureCoreServicesLoaded()
         CreateDeepseekTaskPane()
         If _deepseekTaskPane Is Nothing Then Return
         _deepseekTaskPane.Visible = True
     End Sub
 
     Public Async Sub ShowDoubaoTaskPane()
+        EnsureCoreServicesLoaded()
         Await CreateDoubaoTaskPane()
         If _doubaoTaskPane Is Nothing Then Return
         _doubaoTaskPane.Visible = True
