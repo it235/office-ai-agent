@@ -148,6 +148,37 @@ Public MustInherit Class BaseChatControl
         End Get
     End Property
 
+    ' 延迟初始化的 HTTP 流服务
+    Private _httpStreamService As HttpStreamService = Nothing
+    Protected ReadOnly Property HttpStreamSvc As HttpStreamService
+        Get
+            If _httpStreamService Is Nothing Then
+                _httpStreamService = New HttpStreamService(
+                    _chatStateService,
+                    AddressOf GetApplication,
+                    AddressOf ExecuteJavaScriptAsyncJS,
+                    AddressOf WaitForRendererMapAsync,
+                    Sub(uuid, plainBuf) CheckAndCompleteProcessingHook(uuid, plainBuf),
+                    Sub(content)
+                        If RalphAgentSvc.AgentResponseBuffer IsNot Nothing Then
+                            RalphAgentSvc.AgentResponseBuffer.Append(content)
+                        End If
+                    End Sub,
+                    Sub() RalphAgentSvc.AgentResponseCompleted = True)
+            End If
+            Return _httpStreamService
+        End Get
+    End Property
+
+    ''' <summary>
+    ''' 当前流的最终响应 UUID（代理到 HttpStreamSvc，供子类访问）
+    ''' </summary>
+    Protected ReadOnly Property _finalUuid As String
+        Get
+            Return HttpStreamSvc.FinalUuid
+        End Get
+    End Property
+
     ''' <summary>
     ''' 执行JSON命令（由子类重写以提供具体实现）
     ''' </summary>
@@ -198,10 +229,26 @@ Public MustInherit Class BaseChatControl
 
     ' 选区对比相关字段
     Protected PendingSelectionInfo As SelectionInfo = Nothing
-    Protected _selectionPendingMap As New Dictionary(Of String, SelectionInfo)()
-    Private allPlainMarkdownBuffer As New StringBuilder()
 
-    Protected _responseToRequestMap As New Dictionary(Of String, String)()
+    ' 以下属性代理到 _chatStateService 的内部字典，保持子类兼容性
+    Protected ReadOnly Property _selectionPendingMap As Dictionary(Of String, SelectionInfo)
+        Get
+            Return _chatStateService.SelectionPendingMap
+        End Get
+    End Property
+
+    Private ReadOnly Property allPlainMarkdownBuffer As StringBuilder
+        Get
+            Return _chatStateService.PlainMarkdownBuffer
+        End Get
+    End Property
+
+    Protected ReadOnly Property _responseToRequestMap As Dictionary(Of String, String)
+        Get
+            Return _chatStateService.ResponseToRequestMap
+        End Get
+    End Property
+
     Protected _revisionsMap As New Dictionary(Of String, JArray)()
 
     Protected Async Function InitializeWebView2() As Task
@@ -1960,7 +2007,8 @@ Public MustInherit Class BaseChatControl
                 Dim requestBody = requestObj.ToString(Newtonsoft.Json.Formatting.None)
 
                 Debug.WriteLine($"[SendAndGetResponse] 包含 {historyMessages.Count} 条历史消息，总消息数: {messagesArray.Count}")
-                Await SendHttpRequestStream(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody, prompt, Guid.NewGuid().ToString(), False, "agent_planning", uuid)
+                HttpStreamSvc.FinalizeCallback = Nothing ' agent_planning 不需要保存历史
+                Await HttpStreamSvc.SendStreamRequestAsync(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody, prompt, Guid.NewGuid().ToString(), False, "agent_planning")
             Else
                 Await Send(prompt, systemPrompt, False, "agent_planning", Nothing, uuid)
             End If
@@ -2445,8 +2493,12 @@ Public MustInherit Class BaseChatControl
         Return True
     End Function
 
-    ' 在类字段区：新增 response mode 映射
-    Protected _responseModeMap As New Dictionary(Of String, String)() ' responseUuid -> mode (e.g. "reformat","proofread","revisions_only","comparison_only")
+    ' _responseModeMap 代理到 _chatStateService，子类通过此属性访问
+    Protected ReadOnly Property _responseModeMap As Dictionary(Of String, String)
+        Get
+            Return _chatStateService.ResponseModeMap
+        End Get
+    End Property
 
     ''' <summary>
     ''' 获取当前响应的模式（用于子类检查是否应该跳过某些操作）
@@ -2573,7 +2625,36 @@ Public MustInherit Class BaseChatControl
                 Dim js As String = $"showContextHints({{ ragCount: {ragCount}, intent: '{intentEscaped}' }});"
                 ExecuteJavaScriptAsyncJS(js)
             End If
-            Await SendHttpRequestStream(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody, question, requestUuid, addHistory, responseMode, responseUuid)
+            ' 设置历史保存回调（在 FinalizeStream ClearBuffers 前执行）
+            Dim capturedQuestion = question
+            Dim capturedAddHistory = addHistory
+            HttpStreamSvc.FinalizeCallback = Sub(ah, oq)
+                                                 Dim answerContent = _chatStateService.MarkdownBuffer.ToString()
+                                                 Dim answer = New HistoryMessage() With {
+                                                     .role = "assistant",
+                                                     .content = answerContent
+                                                 }
+                                                 If ah Then
+                                                     systemHistoryMessageData.Add(answer)
+                                                     ManageHistoryMessageSize()
+                                                     _chatStateService.AddMessage("assistant", answer.content)
+                                                     MemoryService.SaveConversationTurnAsync(oq, answer.content, _chatStateService.CurrentSessionId, GetOfficeAppType())
+                                                     If systemHistoryMessageData.Count = 3 Then
+                                                         Dim sid = _chatStateService.CurrentSessionId
+                                                         Dim title = If(oq?.Length > 80, oq.Substring(0, 80) & "...", If(oq, ""))
+                                                         Dim snippet = If(oq?.Length > 200, oq.Substring(0, 200) & "...", If(oq, ""))
+                                                         If Not String.IsNullOrWhiteSpace(sid) AndAlso Not String.IsNullOrWhiteSpace(title) Then
+                                                             Try
+                                                                 MemoryService.SaveSessionSummary(sid, title, snippet)
+                                                             Catch ex As Exception
+                                                                 Debug.WriteLine("SaveSessionSummary 失败: " & ex.Message)
+                                                             End Try
+                                                         End If
+                                                     End If
+                                                 End If
+                                             End Sub
+
+            Await HttpStreamSvc.SendStreamRequestAsync(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody, question, requestUuid, addHistory, responseMode, responseUuid)
             Await SaveFullWebPageAsync()
         Catch ex As Exception
             MessageBox.Show("请求失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
@@ -2753,293 +2834,14 @@ Public MustInherit Class BaseChatControl
     End Function
 
 
-    ' 添加处理MCP工具调用的方法
-    Private Async Function HandleMcpToolCall(toolName As String, arguments As JObject, mcpConnectionName As String) As Task(Of JObject)
-        Try
-            Debug.WriteLine($"开始处理MCP工具调用: 工具={toolName}, 连接={mcpConnectionName}")
+    ' MCP工具调用和流处理逻辑已移至 HttpStreamService
 
-            ' 加载MCP连接
-            Dim connections = MCPConnectionManager.LoadConnections()
-            ' 注意这里使用isActive而不是Enabled
-            Dim connection = connections.FirstOrDefault(Function(c) c.Name = mcpConnectionName AndAlso c.IsActive)
-
-            If connection Is Nothing Then
-                Return CreateErrorResponse($"MCP连接 '{mcpConnectionName}' 未找到或未启用。可用连接: {String.Join(", ", connections.Where(Function(c) c.IsActive).Select(Function(c) c.Name))}")
-            End If
-
-            Debug.WriteLine($"找到MCP连接: {connection.Name}, URL: {connection.Url}")
-
-            ' 创建MCP客户端
-            Using client As New StreamJsonRpcMCPClient()
-                Try
-                    ' 配置客户端
-                    Await client.ConfigureAsync(connection.Url)
-                    Debug.WriteLine("MCP客户端配置完成")
-
-                    ' 初始化连接
-                    Dim initResult = Await client.InitializeAsync()
-                    If Not initResult.Success Then
-                        Return CreateErrorResponse($"初始化MCP连接失败: {initResult.ErrorMessage}。连接URL: {connection.Url}")
-                    End If
-
-                    Debug.WriteLine("MCP连接初始化成功")
-
-                    ' 调用工具
-                    Debug.WriteLine($"开始调用工具: {toolName}, 参数: {arguments.ToString()}")
-                    Dim result = Await client.CallToolAsync(toolName, arguments)
-
-                    ' 处理结果
-                    If result.IsError Then
-                        Return CreateErrorResponse($"调用MCP工具 '{toolName}' 失败: {result.ErrorMessage}")
-                    End If
-
-                    Debug.WriteLine($"工具调用成功，返回内容数量: {result.Content?.Count}")
-
-                    ' 创建成功响应
-                    Dim responseObj = New JObject()
-
-                    ' 添加内容数组
-                    Dim contentArray = New JArray()
-                    If result.Content IsNot Nothing Then
-                        For Each content In result.Content
-                            Dim contentObj = New JObject()
-                            contentObj("type") = content.Type
-
-                            If Not String.IsNullOrEmpty(content.Text) Then
-                                contentObj("text") = content.Text
-                            End If
-
-                            If Not String.IsNullOrEmpty(content.Data) Then
-                                contentObj("data") = content.Data
-                            End If
-
-                            If Not String.IsNullOrEmpty(content.MimeType) Then
-                                contentObj("mimeType") = content.MimeType
-                            End If
-
-                            contentArray.Add(contentObj)
-                        Next
-                    End If
-
-                    responseObj("content") = contentArray
-                    Return responseObj
-
-                Catch clientEx As Exception
-                    Debug.WriteLine($"MCP客户端操作失败: {clientEx.Message}")
-                    Return CreateErrorResponse($"MCP客户端操作失败: {clientEx.Message}。详细信息: {clientEx.ToString()}")
-                End Try
-            End Using
-        Catch ex As Exception
-            Debug.WriteLine($"HandleMcpToolCall整体异常: {ex.Message}")
-            Return CreateErrorResponse($"MCP工具调用出现异常: {ex.Message}。工具: {toolName}, 连接: {mcpConnectionName}。堆栈跟踪: {ex.StackTrace}")
-        End Try
-    End Function
-
-    ' 创建错误响应
-    Private Function CreateErrorResponse(errorMessage As String) As JObject
-        Dim responseObj = New JObject()
-        responseObj("isError") = True
-        responseObj("errorMessage") = errorMessage
-        responseObj("timestamp") = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
-        Debug.WriteLine($"创建错误响应: {errorMessage}")
-        Return responseObj
-    End Function
-    ' 添加一个结构来存储token信息
-    Private Structure TokenInfo
-        Public PromptTokens As Integer
-        Public CompletionTokens As Integer
-        Public TotalTokens As Integer
-    End Structure
-
-    Private totalTokens As Integer = 0
-    Private lastTokenInfo As Nullable(Of TokenInfo)
-
-    ' 用于累加当前会话中所有API调用的token消耗（mcp多次消耗的情况）
-    Private currentSessionTotalTokens As Integer = 0
-
-    ' 用于跟踪待处理的异步任务
-    Private _pendingMcpTasks As Integer = 0
-    Private _mainStreamCompleted As Boolean = False
-    Private _finalUuid As String = String.Empty
-
-
-    ' 现在接收 requestUuid，内部生成 responseUuid（用于前端展示），并建立 response->request 映射
-    Private Async Function SendHttpRequestStream(apiUrl As String, apiKey As String, requestBody As String, originQuestion As String, requestUuid As String, addHistory As Boolean, responseMode As String, Optional responseUuid As String = Nothing) As Task
-
-        ' responseUuid 用于前端显示（与 requestUuid 分离）
-        Dim uuid As String = If(responseUuid, Guid.NewGuid().ToString())
-
-        ' 保存映射：response -> request
-        Try
-            _responseToRequestMap(uuid) = requestUuid
-            ' 保存 response -> mode 映射（用于决定 showComparison/showRevisions 行为）
-            If Not String.IsNullOrEmpty(responseMode) Then
-                _responseModeMap(uuid) = responseMode
-            End If
-
-            ' 如果之前在 request 级别有选区信息（旧逻辑可能把选区存到 _selectionPendingMap(requestUuid)），
-            ' 则立即把选区迁移到以 uuid 为键的映射，后续完成阶段直接用 uuid 查找。
-            If Not String.IsNullOrEmpty(requestUuid) AndAlso _selectionPendingMap.ContainsKey(requestUuid) Then
-                Try
-                    _responseSelectionMap(uuid) = _selectionPendingMap(requestUuid)
-                    ' 可选地从 request map 中移除，避免内存泄露
-                    _selectionPendingMap.Remove(requestUuid)
-                Catch ex As Exception
-                    Debug.WriteLine("迁移选区信息到 responseSelectionMap 失败: " & ex.Message)
-                End Try
-            End If
-        Catch ex As Exception
-            Debug.WriteLine($"保存 response->request/response->mode 映射失败: {ex.Message}")
-        End Try
-
-        ' 保持以前使用的 _finalUuid 用于现有完成逻辑（注意：这是 uuid）
-        _finalUuid = uuid
-        _mainStreamCompleted = False
-        _pendingMcpTasks = 0
-
-        ' 重置当前会话的token累加器
-        currentSessionTotalTokens = 0
-
-        Try
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
-
-            Using client As New HttpClient()
-                client.Timeout = Timeout.InfiniteTimeSpan
-
-                Dim request As New HttpRequestMessage(HttpMethod.Post, apiUrl)
-                request.Headers.Authorization = New AuthenticationHeaderValue("Bearer", apiKey)
-                request.Content = New StringContent(requestBody, Encoding.UTF8, "application/json")
-
-                Debug.WriteLine("[HTTP] 开始发送流式请求...")
-                Debug.WriteLine($"[HTTP] Request Body (for requestUuid={requestUuid}): {requestBody}")
-
-                Dim aiName As String = ConfigSettings.platform & " " & ConfigSettings.ModelName
-
-                Using response As HttpResponseMessage = Await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead)
-                    response.EnsureSuccessStatusCode()
-                    Debug.WriteLine($"[HTTP] 响应状态码: {response.StatusCode}")
-
-                    ' 创建前端聊天节（使用 uuid 作为显示 id）
-                    Dim jsCreate As String = $"createChatSection('{aiName}', formatDateTime(new Date()), '{uuid}');"
-                    Await ExecuteJavaScriptAndWaitAsync(jsCreate)
-
-                    ' 等待确认 rendererMap 已创建
-                    Await WaitForRendererMapAsync(uuid)
-
-                    ' 在前端 DOM 的 chat 节上设置 dataset.requestId，以便前端后续执行时可以把 requestUuid 发回
-                    Dim jsSetMapping As String = $"(function(){{ var el = document.getElementById('chat-{uuid}'); if(el) el.dataset.requestId = '{requestUuid}'; }})();"
-                    Await ExecuteJavaScriptAndWaitAsync(jsSetMapping)
-
-                    ' 处理流（后续逻辑不变，但使用 responseUuid 进行 flush 等操作）
-                    Dim stringBuilder As New StringBuilder()
-                    Using responseStream As Stream = Await response.Content.ReadAsStreamAsync()
-                        Using reader As New StreamReader(responseStream, Encoding.UTF8)
-                            Dim buffer(102300) As Char
-                            Dim readCount As Integer
-                            Dim chunkCount As Integer = 0
-                            Do
-                                If stopReaderStream Then
-                                    Debug.WriteLine("[Stream] 用户手动停止流读取")
-                                    _currentMarkdownBuffer.Clear()
-                                    allMarkdownBuffer.Clear()
-                                    Exit Do
-                                End If
-                                readCount = Await reader.ReadAsync(buffer, 0, buffer.Length)
-                                If readCount = 0 Then Exit Do
-                                chunkCount += 1
-                                Dim chunk As String = New String(buffer, 0, readCount)
-                                chunk = chunk.Replace("data:", "")
-                                stringBuilder.Append(chunk)
-
-                                ' 调试：记录每次读取的数据
-                                If chunkCount <= 3 Then
-                                    Debug.WriteLine($"[Stream] chunk#{chunkCount} 长度={readCount}, 原始内容: {chunk}")
-                                End If
-
-                                If stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}).EndsWith("}") Then
-                                    ProcessStreamChunk(stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}), uuid, originQuestion)
-                                    stringBuilder.Clear()
-                                End If
-                            Loop
-
-                            ' 调试：如果循环结束但stringBuilder不为空，说明有未处理的数据
-                            If stringBuilder.Length > 0 Then
-                                Debug.WriteLine($"[Stream] 警告：循环结束但stringBuilder还有未处理数据，长度={stringBuilder.Length}")
-                                Debug.WriteLine($"[Stream] 未处理数据内容: {stringBuilder.ToString().Substring(0, Math.Min(200, stringBuilder.Length))}")
-                                ' 尝试处理剩余数据
-                                ProcessStreamChunk(stringBuilder.ToString().Trim(), uuid, originQuestion)
-                            End If
-
-                            Debug.WriteLine($"[Stream] 流接收完成，共处理了 {chunkCount} 个chunk")
-                        End Using
-                    End Using
-                End Using
-            End Using
-        Catch ex As Exception
-            Debug.WriteLine($"[ERROR] 请求过程中出错: {ex.ToString()}")
-            MessageBox.Show("请求失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-        Finally
-            _mainStreamCompleted = True
-
-            Dim finalTokens As Integer = currentSessionTotalTokens
-            If lastTokenInfo.HasValue Then
-                finalTokens += lastTokenInfo.Value.TotalTokens
-                currentSessionTotalTokens += lastTokenInfo.Value.TotalTokens
-            End If
-
-            Debug.WriteLine($"finally 当前会话总tokens: {currentSessionTotalTokens}")
-
-            ' Check 完成：会使用 _finalUuid（即 responseUuid）
-            CheckAndCompleteProcessing()
-
-            Dim answer = New HistoryMessage() With {
-            .role = "assistant",
-            .content = allMarkdownBuffer.ToString()
-        }
-
-            If addHistory Then
-                systemHistoryMessageData.Add(answer)
-                ManageHistoryMessageSize()
-                _chatStateService.AddMessage("assistant", answer.content)
-
-                ' 异步保存对话双方记忆（user 用实际发送内容，assistant 用完整回复）
-                MemoryService.SaveConversationTurnAsync(originQuestion, answer.content, _chatStateService.CurrentSessionId, GetOfficeAppType())
-
-                ' 新会话首条回复后写入 session_summary（Task 9.2）
-                If systemHistoryMessageData.Count = 3 Then
-                    Dim sid = _chatStateService.CurrentSessionId
-                    Dim title = If(originQuestion?.Length > 80, originQuestion.Substring(0, 80) & "...", If(originQuestion, ""))
-                    Dim snippet = If(originQuestion?.Length > 200, originQuestion.Substring(0, 200) & "...", If(originQuestion, ""))
-                    If Not String.IsNullOrWhiteSpace(sid) AndAlso Not String.IsNullOrWhiteSpace(title) Then
-                        Try
-                            MemoryService.SaveSessionSummary(sid, title, snippet)
-                        Catch ex As Exception
-                            Debug.WriteLine("SaveSessionSummary 失败: " & ex.Message)
-                        End Try
-                    End If
-                End If
-            End If
-
-            allMarkdownBuffer.Clear()
-            lastTokenInfo = Nothing
-        End Try
-    End Function
-
-    ' 在类字段区：新增 response -> selection 映射（用于在 responseUuid 可用时快速查找选区）
-    Protected _responseSelectionMap As New Dictionary(Of String, SelectionInfo)() ' responseUuid -> SelectionInfo
-
-    ' 检查并完成处理
-    Private Sub CheckAndCompleteProcessing()
-        Debug.WriteLine($"CheckAndCompleteProcessing: 主流完成={_mainStreamCompleted}, 待处理MCP任务={_pendingMcpTasks}")
-
-        ' 只有在主流完成且没有待处理的MCP任务时才调用完成函数
-        If _mainStreamCompleted AndAlso _pendingMcpTasks = 0 Then
-            Debug.WriteLine("所有处理完成，调用 processStreamComplete")
-            ExecuteJavaScriptAsyncJS($"processStreamComplete('{_finalUuid}',{currentSessionTotalTokens});")
-            CheckAndCompleteProcessingHook(_finalUuid, allPlainMarkdownBuffer)
-        End If
-    End Sub
-
+    ' _responseSelectionMap 代理到 _chatStateService
+    Protected ReadOnly Property _responseSelectionMap As Dictionary(Of String, SelectionInfo)
+        Get
+            Return _chatStateService.ResponseSelectionMap
+        End Get
+    End Property
 
     ' 会话完成的钩子，可自行实现
     Protected Overridable Sub CheckAndCompleteProcessingHook(_finalUuid As String, allPlainMarkdownBuffer As StringBuilder)
@@ -3064,436 +2866,6 @@ Public MustInherit Class BaseChatControl
 
         ' Ralph Loop 完成检查
         CheckRalphLoopCompletion(allPlainMarkdownBuffer.ToString())
-    End Sub
-
-
-    Private ReadOnly markdownPipeline As MarkdownPipeline = New MarkdownPipelineBuilder() _
-    .UseAdvancedExtensions() _      ' 启用表格、代码块等扩展
-    .Build()                        ' 构建不可变管道
-
-    Private _currentMarkdownBuffer As New StringBuilder()
-    Private allMarkdownBuffer As New StringBuilder()
-
-    ' 用于收集工具调用参数的变量
-    Private _pendingToolCalls As New Dictionary(Of String, JObject) ' 按ID存储未完成的工具调用
-    Private _completedToolCalls As New List(Of JObject) ' 存储已完成的工具调用
-
-
-    Private Sub ProcessStreamChunk(rawChunk As String, uuid As String, originQuestion As String)
-        Try
-            'Debug.WriteLine($"[ProcessStreamChunk] 收到原始数据长度: {rawChunk.Length}")
-            Dim lines As String() = rawChunk.Split({vbCr, vbLf}, StringSplitOptions.RemoveEmptyEntries)
-            'Debug.WriteLine($"[ProcessStreamChunk] 分割后行数: {lines.Length}")
-
-            For Each line In lines
-                line = line.Trim()
-                If line = "[DONE]" Then
-                    Debug.WriteLine("[ProcessStreamChunk] 收到 [DONE] 标记")
-                    ' 在流结束时处理所有完成的工具调用
-                    If _pendingToolCalls.Count > 0 Then
-                        'Debug.WriteLine("[DONE] 时发现未处理的工具调用，开始处理")
-                        ProcessCompletedToolCalls(uuid, originQuestion)
-                    End If
-                    FlushBuffer("content", uuid) ' 最后刷新缓冲区
-
-                    ' 标记Agent响应完成
-                    RalphAgentSvc.AgentResponseCompleted = True
-                    Return
-                End If
-                If line = "" Then
-                    Continue For
-                End If
-                'Debug.Print(line)
-                Dim jsonObj As JObject = JObject.Parse(line)
-
-                ' 获取token信息 - 只保存最后一个响应块的usage信息
-                Dim usage = jsonObj("usage")
-                If usage IsNot Nothing AndAlso usage.Type = JTokenType.Object Then
-                    lastTokenInfo = New TokenInfo With {
-                    .PromptTokens = CInt(usage("prompt_tokens")),
-                    .CompletionTokens = CInt(usage("completion_tokens")),
-                    .TotalTokens = CInt(usage("total_tokens"))
-                }
-                End If
-
-                Dim reasoning_content As String = Nothing
-                If jsonObj("choices") IsNot Nothing AndAlso jsonObj("choices").Count > 0 Then
-                    reasoning_content = jsonObj("choices")(0)("delta")("reasoning_content")?.ToString()
-                End If
-
-                If Not String.IsNullOrEmpty(reasoning_content) Then
-                    _currentMarkdownBuffer.Append(reasoning_content)
-                    FlushBuffer("reasoning", uuid)
-                End If
-
-                Dim content As String = Nothing
-                If jsonObj("choices") IsNot Nothing AndAlso jsonObj("choices").Count > 0 Then
-                    content = jsonObj("choices")(0)("delta")("content")?.ToString()
-                End If
-                'Debug.Print(content)
-                If Not String.IsNullOrEmpty(content) Then
-                    'Debug.WriteLine($"[ProcessStreamChunk] 解析到content: {content.Substring(0, Math.Min(50, content.Length))}...")
-                    _currentMarkdownBuffer.Append(content)
-                    FlushBuffer("content", uuid)
-
-                    ' 如果是Agent规划请求，同时收集到缓冲区
-                    If RalphAgentSvc.AgentResponseBuffer IsNot Nothing Then
-                        RalphAgentSvc.AgentResponseBuffer.Append(content)
-                    End If
-                End If
-
-                ' 检查是否有工具调用
-                Dim choices = jsonObj("choices")
-                If choices IsNot Nothing AndAlso choices.Count > 0 Then
-                    Dim choice = choices(0)
-                    Dim delta = choice("delta")
-                    Dim finishReason = choice("finish_reason")?.ToString()
-
-                    ' 收集工具调用数据
-                    If delta IsNot Nothing Then
-                        Dim toolCalls = delta("tool_calls")
-                        If toolCalls IsNot Nothing AndAlso toolCalls.Count > 0 Then
-                            CollectToolCallData(toolCalls, originQuestion)
-                        End If
-                    End If
-
-                    ' 当finish_reason为tool_calls时，说明所有工具调用数据已接收完毕
-                    If finishReason = "tool_calls" Then
-                        Debug.WriteLine("检测到 finish_reason = tool_calls，开始处理工具调用")
-                        ProcessCompletedToolCalls(uuid, originQuestion)
-                    End If
-                End If
-            Next
-        Catch ex As Exception
-            Debug.WriteLine($"[ERROR] 数据处理失败: {ex.Message}")
-            MessageBox.Show("请求失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-        End Try
-    End Sub
-
-    ' 收集工具调用数据
-    Private Sub CollectToolCallData(toolCalls As JArray, originQuestion As String)
-        Try
-            For Each toolCall In toolCalls
-                Dim toolIndex = toolCall("index")?.Value(Of Integer)()
-                Dim toolId = toolCall("id")?.ToString()
-
-                ' 统一使用index作为主键，因为index是唯一且连续的
-                Dim toolKey As String = $"tool_{toolIndex}"
-
-                ' 如果是新的工具调用，创建新的条目
-                If Not _pendingToolCalls.ContainsKey(toolKey) Then
-                    _pendingToolCalls(toolKey) = New JObject()
-                    ' 保存真实的ID，但使用index作为内部键
-                    _pendingToolCalls(toolKey)("realId") = If(String.IsNullOrEmpty(toolId), toolKey, toolId)
-                    _pendingToolCalls(toolKey)("index") = toolIndex
-                    _pendingToolCalls(toolKey)("type") = toolCall("type")?.ToString()
-                    _pendingToolCalls(toolKey)("function") = New JObject()
-                    _pendingToolCalls(toolKey)("function")("name") = ""
-                    _pendingToolCalls(toolKey)("function")("arguments") = ""
-                    _pendingToolCalls(toolKey)("processed") = False
-                End If
-
-                Dim currentTool = _pendingToolCalls(toolKey)
-
-                ' 累积函数名称
-                Dim functionName = toolCall("function")("name")?.ToString()
-                If Not String.IsNullOrEmpty(functionName) Then
-                    currentTool("function")("name") = functionName
-                    Debug.WriteLine($"设置工具名称: Key={toolKey}, Name={functionName}")
-                End If
-
-                ' 累积参数
-                Dim arguments = toolCall("function")("arguments")?.ToString()
-                If Not String.IsNullOrEmpty(arguments) Then
-                    Dim currentArgs = currentTool("function")("arguments").ToString()
-                    currentTool("function")("arguments") = currentArgs & arguments
-                    Debug.WriteLine($"收集工具调用数据: Key={toolKey}, 本次参数片段='{arguments}', 累积后参数长度={currentTool("function")("arguments").ToString().Length}")
-                End If
-            Next
-        Catch ex As Exception
-            Debug.WriteLine($"收集工具调用数据时出错: {ex.Message}")
-        End Try
-    End Sub
-
-    ' 处理所有已完成的工具调用
-    Private Async Sub ProcessCompletedToolCalls(uuid As String, originQuestion As String)
-        Try
-            If _pendingToolCalls.Count = 0 Then Return
-
-            Debug.WriteLine($"开始处理 {_pendingToolCalls.Count} 个工具调用")
-
-            For Each kvp In _pendingToolCalls
-                Dim toolCall = kvp.Value
-                Dim toolKey = kvp.Key
-
-                ' 检查是否已经处理过
-                If CBool(toolCall("processed")) Then
-                    Debug.WriteLine($"工具调用 {toolKey} 已处理，跳过")
-                    Continue For
-                End If
-
-                Dim toolName = toolCall("function")("name").ToString()
-                Dim argumentsStr = toolCall("function")("arguments").ToString()
-
-                ' 验证工具调用是否完整 - 必须同时有名称和参数
-                If String.IsNullOrEmpty(toolName) Then
-                    Debug.WriteLine($"工具调用 {toolKey} 缺少名称，跳过处理")
-                    Continue For
-                End If
-
-                ' 如果参数为空，也跳过（除非某些工具真的不需要参数）
-                If String.IsNullOrEmpty(argumentsStr) Then
-                    Debug.WriteLine($"工具调用 {toolKey} 参数为空，使用空对象")
-                End If
-
-                Debug.WriteLine($"处理工具调用: Key={toolKey}, Name={toolName}, Arguments={argumentsStr}")
-
-                ' 标记为已处理，防止重复执行
-                toolCall("processed") = True
-
-                ' 验证参数是否为有效JSON
-                Dim argumentsObj As JObject = Nothing
-                Try
-                    If Not String.IsNullOrEmpty(argumentsStr) Then
-                        argumentsObj = JObject.Parse(argumentsStr)
-                        Debug.WriteLine($"成功解析参数JSON: {argumentsObj.ToString()}")
-                    Else
-                        argumentsObj = New JObject()
-                        Debug.WriteLine("参数为空，使用空对象")
-                    End If
-                Catch ex As Exception
-                    Debug.WriteLine($"工具 {toolName} 的参数格式错误: {ex.Message}, 原始参数: {argumentsStr}")
-
-                    ' 通过FlushBuffer向前端显示详细错误
-                    Dim errorMessage = $"<br/>**工具调用参数解析错误：**<br/>" &
-                                     $"工具名称: {toolName}<br/>" &
-                                     $"错误详情: {ex.Message}<br/>" &
-                                     $"原始参数: `{argumentsStr}`<br/>"
-                    _currentMarkdownBuffer.Append(errorMessage)
-                    FlushBuffer("content", uuid)
-
-                    Continue For ' 跳过这个有问题的工具调用
-                End Try
-
-                ' 添加消息到界面，说明正在调用工具
-                Dim toolCallMessage = $"<br/>**正在调用工具: {toolName}**<br/>参数: `{argumentsObj.ToString(Newtonsoft.Json.Formatting.None)}`<br/>"
-                _currentMarkdownBuffer.Append(toolCallMessage)
-                FlushBuffer("content", uuid)
-
-                ' 从设置中获取启用的MCP连接
-                Dim chatSettings As New ChatSettings(GetApplication())
-                Dim enabledMcpList = chatSettings.EnabledMcpList
-
-                If enabledMcpList IsNot Nothing AndAlso enabledMcpList.Count > 0 Then
-                    ' 使用第一个启用的MCP连接
-                    Dim mcpConnectionName = enabledMcpList(0)
-
-                    ' 调用工具
-                    Dim result = Await HandleMcpToolCall(toolName, argumentsObj, mcpConnectionName)
-
-                    ' 处理结果
-                    If result("isError") IsNot Nothing AndAlso CBool(result("isError")) Then
-                        ' 通过FlushBuffer显示详细错误信息
-                        Dim detailedError = result("content")?.ToString()
-                        Dim errorMessage = $"<br/>**工具调用失败：**<br/>" &
-                                         $"**工具名称:** {toolName}<br/>" &
-                                         $"**连接名称:** {mcpConnectionName}<br/>" &
-                                         $"**错误详情:** {detailedError}<br/>" &
-                                         $"**调用参数:**<br/>```json{vbCrLf}{argumentsObj.ToString(Newtonsoft.Json.Formatting.Indented)}{vbCrLf}```<br/>"
-
-                        _currentMarkdownBuffer.Append(errorMessage)
-                        FlushBuffer("content", uuid)
-                    Else
-                        ' 增加待处理任务计数
-                        _pendingMcpTasks += 1
-                        Debug.WriteLine($"增加MCP任务，当前待处理任务数: {_pendingMcpTasks}")
-
-                        ' 不直接显示结果，而是发送给大模型进行润色
-                        Await SendToolResultForFormatting(toolName, argumentsObj, result, uuid, originQuestion)
-                    End If
-                Else
-                    ' 没有启用的MCP连接
-                    Dim errorMessage = "<br/>**配置错误：**<br/>没有启用的MCP连接，无法调用工具。请在设置中启用MCP连接。<br/>"
-                    _currentMarkdownBuffer.Append(errorMessage)
-                    FlushBuffer("content", uuid)
-                End If
-            Next
-
-            ' 清空已处理的工具调用
-            _pendingToolCalls.Clear()
-            _completedToolCalls.Clear()
-
-        Catch ex As Exception
-            Debug.WriteLine($"处理完成的工具调用时出错: {ex.Message}")
-
-            ' 向前端显示处理错误
-            Dim errorMessage = $"<br/>**工具调用处理异常：**<br/>" &
-                             $"**错误详情:** {ex.Message}<br/>" &
-                             $"**堆栈跟踪:**<br/>```{vbCrLf}{ex.StackTrace}{vbCrLf}```<br/>"
-            _currentMarkdownBuffer.Append(errorMessage)
-            FlushBuffer("content", uuid)
-        End Try
-    End Sub
-
-    ' 新增方法：发送工具结果给大模型进行润色
-    Private Async Function SendToolResultForFormatting(toolName As String, arguments As JObject, result As JObject, uuid As String, originQuestion As String) As Task
-        Try
-            ' 准备发送给大模型的消息内容
-            Dim promptBuilder As New StringBuilder()
-            promptBuilder.AppendLine($"用户的原始问题：'{originQuestion}' ,但用户使用了 MCP 工具 '{toolName}'，参数为：")
-            promptBuilder.AppendLine("```json")
-            promptBuilder.AppendLine(arguments.ToString(Newtonsoft.Json.Formatting.Indented))
-            promptBuilder.AppendLine("```")
-            promptBuilder.AppendLine()
-            promptBuilder.AppendLine("工具执行结果为：")
-            promptBuilder.AppendLine("```json")
-            promptBuilder.AppendLine(result.ToString(Newtonsoft.Json.Formatting.Indented))
-            promptBuilder.AppendLine("```")
-            promptBuilder.AppendLine()
-            promptBuilder.AppendLine("请将上述结果结合用户的原始问题整理成易于理解的格式，并使用合适的Markdown格式化呈现，突出重要信息。不需要解释工具调用过程，只需要呈现结果。不要重复用户的请求内容。")
-
-            ' 构建请求体
-            Dim messagesArray = New JArray()
-            Dim systemMessage = New JObject()
-            systemMessage("role") = "system"
-            systemMessage("content") = "你是一个帮助解释API调用结果的助手。你的任务是将MCP工具返回的JSON结果转换为人类易读的格式，可适当根据用户原始问题作出取舍，并用Markdown呈现，且没有任何一句废话。"
-
-            Dim userMessage = New JObject()
-            userMessage("role") = "user"
-            userMessage("content") = promptBuilder.ToString()
-
-            messagesArray.Add(systemMessage)
-            messagesArray.Add(userMessage)
-
-            Dim requestObj = New JObject()
-            requestObj("model") = ConfigSettings.ModelName
-            requestObj("messages") = messagesArray
-            requestObj("stream") = True
-
-            Dim requestBody = requestObj.ToString(Newtonsoft.Json.Formatting.None)
-
-            ' 用于存储当前MCP润色调用的token信息
-            Dim mcpTokenInfo As Nullable(Of TokenInfo) = Nothing
-
-            ' 发送请求
-            Using client As New HttpClient()
-                client.Timeout = Timeout.InfiniteTimeSpan
-
-                Dim request As New HttpRequestMessage(HttpMethod.Post, ConfigSettings.ApiUrl)
-                request.Headers.Authorization = New AuthenticationHeaderValue("Bearer", ConfigSettings.ApiKey)
-                request.Content = New StringContent(requestBody, Encoding.UTF8, "application/json")
-
-                Using response As HttpResponseMessage = Await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead)
-                    response.EnsureSuccessStatusCode()
-
-                    ' 处理流响应
-                    Dim formattedBuilder As New StringBuilder()
-                    formattedBuilder.AppendLine("<br/>**工具调用结果：**<br/>")
-
-                    Using responseStream As Stream = Await response.Content.ReadAsStreamAsync()
-                        Using reader As New StreamReader(responseStream, Encoding.UTF8)
-                            Dim stringBuilder As New StringBuilder()
-                            Dim buffer(1023) As Char
-                            Dim readCount As Integer
-
-                            Do
-                                readCount = Await reader.ReadAsync(buffer, 0, buffer.Length)
-                                If readCount = 0 Then Exit Do
-
-                                Dim chunk As String = New String(buffer, 0, readCount)
-                                chunk = chunk.Replace("data:", "")
-                                stringBuilder.Append(chunk)
-
-                                If stringBuilder.ToString().TrimEnd({ControlChars.Cr, ControlChars.Lf, " "c}).EndsWith("}") Then
-                                    Dim lines As String() = stringBuilder.ToString().Split({vbCr, vbLf}, StringSplitOptions.RemoveEmptyEntries)
-
-                                    For Each line In lines
-                                        line = line.Trim()
-                                        If line = "[DONE]" Then
-                                            Continue For
-                                        End If
-                                        If line = "" Then
-                                            Continue For
-                                        End If
-
-                                        Try
-                                            Dim jsonObj As JObject = JObject.Parse(line)
-                                            ' 收集token信息
-                                            Dim usage = jsonObj("usage")
-                                            If usage IsNot Nothing Then
-                                                mcpTokenInfo = New TokenInfo With {
-                                                    .PromptTokens = CInt(usage("prompt_tokens")),
-                                                    .CompletionTokens = CInt(usage("completion_tokens")),
-                                                    .TotalTokens = CInt(usage("total_tokens"))
-                                                }
-                                                'Debug.WriteLine($"MCP润色调用tokens: {mcpTokenInfo.Value.TotalTokens}")
-                                            End If
-
-                                            Dim content As String = Nothing
-                                            If jsonObj("choices") IsNot Nothing AndAlso jsonObj("choices").Count > 0 Then
-                                                content = jsonObj("choices")(0)("delta")("content")?.ToString()
-                                            End If
-
-                                            If Not String.IsNullOrEmpty(content) Then
-                                                formattedBuilder.Append(content)
-                                            End If
-                                        Catch ex As Exception
-                                            ' 忽略解析错误
-                                            Debug.WriteLine($"解析工具结果润色响应出错: {ex.Message}")
-                                        End Try
-                                    Next
-
-                                    stringBuilder.Clear()
-                                End If
-                            Loop
-                        End Using
-                    End Using
-
-                    ' 显示格式化后的结果
-                    _currentMarkdownBuffer.Append(formattedBuilder.ToString())
-                    FlushBuffer("content", uuid)
-
-                    ' 累加MCP润色调用的token消耗
-                    If mcpTokenInfo.HasValue Then
-                        currentSessionTotalTokens += mcpTokenInfo.Value.TotalTokens
-                        Debug.WriteLine($"累加MCP润色tokens: {mcpTokenInfo.Value.TotalTokens}, 当前总tokens: {currentSessionTotalTokens}")
-                    End If
-                End Using
-            End Using
-        Catch ex As Exception
-            Debug.WriteLine($"格式化工具结果时出错: {ex.Message}")
-
-            ' 如果格式化失败，直接显示原始结果
-            _currentMarkdownBuffer.Append("\n\n**工具调用结果：**\n\n```json\n")
-            _currentMarkdownBuffer.Append(result.ToString(Newtonsoft.Json.Formatting.Indented))
-            _currentMarkdownBuffer.Append("\n```\n")
-            FlushBuffer("content", uuid)
-        Finally
-            ' 减少待处理任务计数
-            _pendingMcpTasks -= 1
-            Debug.WriteLine($"MCP任务完成，当前待处理任务数: {_pendingMcpTasks}")
-
-            ' 检查是否可以完成处理
-            CheckAndCompleteProcessing()
-        End Try
-    End Function
-
-    Private Async Sub FlushBuffer(contentType As String, uuid As String)
-        If _currentMarkdownBuffer.Length = 0 Then Return
-        Dim plainContent As String = _currentMarkdownBuffer.ToString()
-
-        Dim escapedContent = HttpUtility.JavaScriptStringEncode(_currentMarkdownBuffer.ToString())
-        _currentMarkdownBuffer.Clear()
-        Dim js As String
-        If contentType = "reasoning" Then
-            js = $"appendReasoning('{uuid}','{escapedContent}');"
-        Else
-            js = $"appendRenderer('{uuid}','{escapedContent}');"
-            allMarkdownBuffer.Append(escapedContent)
-            allPlainMarkdownBuffer.Append(plainContent)
-        End If
-        'Debug.Print(js)
-        Await ExecuteJavaScriptAsyncJS(js)
     End Sub
 
 

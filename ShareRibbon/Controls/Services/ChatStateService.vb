@@ -304,6 +304,40 @@ Public Class ChatStateService
         End Sub
 
         ''' <summary>
+        ''' 暴露内部字典供 BaseChatControl 做属性代理（只读引用，同一实例）
+        ''' </summary>
+        Public ReadOnly Property ResponseToRequestMap As Dictionary(Of String, String)
+            Get
+                Return _responseToRequestMap
+            End Get
+        End Property
+
+        Public ReadOnly Property ResponseModeMap As Dictionary(Of String, String)
+            Get
+                Return _responseModeMap
+            End Get
+        End Property
+
+        Public ReadOnly Property ResponseSelectionMap As Dictionary(Of String, SelectionInfo)
+            Get
+                Return _responseSelectionMap
+            End Get
+        End Property
+
+        Public ReadOnly Property SelectionPendingMap As Dictionary(Of String, SelectionInfo)
+            Get
+                Return _selectionPendingMap
+            End Get
+        End Property
+
+        ''' <summary>
+        ''' 设置待处理的选区信息（用于 BaseChatControl 在发送请求前绑定选区）
+        ''' </summary>
+        Public Sub SetPendingSelectionInfo(requestUuid As String, selInfo As SelectionInfo)
+            _selectionPendingMap(requestUuid) = selInfo
+        End Sub
+
+        ''' <summary>
         ''' 获取响应模式
         ''' </summary>
         Public Function GetResponseMode(responseUuid As String) As String

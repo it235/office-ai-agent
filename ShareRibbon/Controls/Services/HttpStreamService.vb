@@ -33,6 +33,25 @@ Public Class HttpStreamService
         ' 停止标志
         Public Property StopStream As Boolean = False
 
+        ' BaseChatControl 专用回调
+        Private ReadOnly _waitForRendererMap As Func(Of String, Task)
+        Private ReadOnly _onStreamComplete As Action(Of String, System.Text.StringBuilder)
+        Private ReadOnly _onAgentContent As Action(Of String)
+        Private ReadOnly _onAgentCompleted As Action
+
+        ''' <summary>
+        ''' 流完成后保存历史的回调（由调用方在每次 SendStreamRequestAsync 前设置）
+        ''' 参数：(addHistory As Boolean, originQuestion As String)
+        ''' </summary>
+        Public Property FinalizeCallback As Action(Of Boolean, String)
+
+        ''' <summary>最终响应 UUID（供 BaseChatControl 通过属性代理访问）</summary>
+        Public ReadOnly Property FinalUuid As String
+            Get
+                Return _finalUuid
+            End Get
+        End Property
+
         ''' <summary>
         ''' 流处理完成事件
         ''' </summary>
@@ -41,10 +60,20 @@ Public Class HttpStreamService
         ''' <summary>
         ''' 构造函数
         ''' </summary>
-        Public Sub New(stateService As ChatStateService, getApplication As Func(Of ApplicationInfo), executeScript As Func(Of String, Task))
+        Public Sub New(stateService As ChatStateService,
+                       getApplication As Func(Of ApplicationInfo),
+                       executeScript As Func(Of String, Task),
+                       Optional waitForRendererMap As Func(Of String, Task) = Nothing,
+                       Optional onStreamComplete As Action(Of String, System.Text.StringBuilder) = Nothing,
+                       Optional onAgentContent As Action(Of String) = Nothing,
+                       Optional onAgentCompleted As Action = Nothing)
             _stateService = stateService
             _getApplication = getApplication
             _executeScript = executeScript
+            _waitForRendererMap = waitForRendererMap
+            _onStreamComplete = onStreamComplete
+            _onAgentContent = onAgentContent
+            _onAgentCompleted = onAgentCompleted
         End Sub
 
 #Region "发送请求"
@@ -59,10 +88,13 @@ Public Class HttpStreamService
             originQuestion As String,
             requestUuid As String,
             addHistory As Boolean,
-            responseMode As String) As Task
+            responseMode As String,
+            Optional responseUuid As String = Nothing) As Task
 
-            ' 生成响应 UUID
-            Dim responseUuid As String = Guid.NewGuid().ToString()
+            ' 生成响应 UUID（若调用方未指定则自动生成）
+            If String.IsNullOrEmpty(responseUuid) Then
+                responseUuid = Guid.NewGuid().ToString()
+            End If
 
             ' 保存映射
             _stateService.MapResponseToRequest(responseUuid, requestUuid)
@@ -104,6 +136,11 @@ Public Class HttpStreamService
                         ' 创建前端聊天节
                         Dim jsCreate As String = $"createChatSection('{aiName}', formatDateTime(new Date()), '{responseUuid}');"
                         Await _executeScript(jsCreate)
+
+                        ' 等待 rendererMap 就绪（BaseChatControl 注入的回调）
+                        If _waitForRendererMap IsNot Nothing Then
+                            Await _waitForRendererMap(responseUuid)
+                        End If
 
                         ' 设置 requestId
                         Dim jsSetMapping As String = $"(function(){{ var el = document.getElementById('chat-{responseUuid}'); if(el) el.dataset.requestId = '{requestUuid}'; }})();"
@@ -150,7 +187,7 @@ Public Class HttpStreamService
                 Throw
             Finally
                 _mainStreamCompleted = True
-                FinalizeStream(addHistory)
+                FinalizeStream(addHistory, originQuestion)
             End Try
         End Function
 
@@ -281,16 +318,17 @@ Public Class HttpStreamService
         ''' <summary>
         ''' 完成流处理
         ''' </summary>
-        Private Sub FinalizeStream(addHistory As Boolean)
-            Dim finalTokens As Integer = _stateService.CurrentSessionTotalTokens
+        Private Sub FinalizeStream(addHistory As Boolean, Optional originQuestion As String = "")
             If _stateService.LastTokenInfo.HasValue Then
-                finalTokens += _stateService.LastTokenInfo.Value.TotalTokens
                 _stateService.AddTokens(_stateService.LastTokenInfo.Value.TotalTokens)
             End If
 
             CheckAndCompleteProcessing()
 
-            If addHistory Then
+            If FinalizeCallback IsNot Nothing Then
+                ' BaseChatControl 负责完整的历史保存逻辑
+                FinalizeCallback.Invoke(addHistory, originQuestion)
+            ElseIf addHistory Then
                 _stateService.AddMessage("assistant", $"这是大模型基于用户问题的答复作为历史参考：{_stateService.MarkdownBuffer.ToString()}")
             End If
 
@@ -304,6 +342,7 @@ Public Class HttpStreamService
         Private Sub CheckAndCompleteProcessing()
             If _mainStreamCompleted AndAlso _pendingMcpTasks = 0 Then
                 _executeScript($"processStreamComplete('{_finalUuid}',{_stateService.CurrentSessionTotalTokens});")
+                _onStreamComplete?.Invoke(_finalUuid, _stateService.PlainMarkdownBuffer)
                 RaiseEvent StreamCompleted(Me, _finalUuid)
             End If
         End Sub
@@ -327,6 +366,8 @@ Public Class HttpStreamService
                             Await ProcessCompletedToolCallsAsync(uuid, originQuestion)
                         End If
                         Await FlushBufferAsync("content", uuid)
+                        ' Agent 响应完成回调
+                        _onAgentCompleted?.Invoke()
                         Return
                     End If
 
@@ -363,6 +404,8 @@ Public Class HttpStreamService
                     If Not String.IsNullOrEmpty(content) Then
                         _currentMarkdownBuffer.Append(content)
                         Await FlushBufferAsync("content", uuid)
+                        ' Agent 响应收集回调
+                        _onAgentContent?.Invoke(content)
                     End If
 
                     ' 检查工具调用
