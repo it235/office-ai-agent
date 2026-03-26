@@ -40,6 +40,7 @@ Public Class ChatControl
     Private _reformatMapping As SemanticStyleMapping = Nothing ' 语义映射上下文
     Private _reformatRetryCount As Integer = 0 ' 重试计数器，防止死循环
     Private Const MAX_REFORMAT_RETRIES As Integer = 2 ' 最大重试次数
+    Private _mirrorFormatDocName As String = "" ' 格式克隆时记录源文档名
 
     ''' <summary>
     ''' 设置排版上下文，用于规则匹配后应用格式
@@ -272,10 +273,53 @@ Public Class ChatControl
     ''' <summary>
     ''' 共用语义排版流水线：收集段落 → 构建提示词 → 发送AI标注请求
     ''' </summary>
+    ''' <summary>
+    ''' 从当前 Word 选区收集段落信息，供语义排版使用（消除重复代码）
+    ''' </summary>
+    Private Function CollectParagraphsFromSelection(
+        selRange As Microsoft.Office.Interop.Word.Range,
+        ByRef paragraphs As List(Of Microsoft.Office.Interop.Word.Paragraph),
+        ByRef styles As List(Of String),
+        ByRef types As List(Of String),
+        ByRef texts As List(Of String)) As Boolean
+
+        paragraphs = New List(Of Microsoft.Office.Interop.Word.Paragraph)()
+        styles = New List(Of String)()
+        types = New List(Of String)()
+        texts = New List(Of String)()
+
+        For Each p As Microsoft.Office.Interop.Word.Paragraph In selRange.Paragraphs
+            Dim paraText As String = If(p.Range.Text IsNot Nothing, p.Range.Text.ToString().TrimEnd(vbCr, vbLf), String.Empty)
+            Dim paraType As String = "text"
+            Try
+                If p.Range.InlineShapes.Count > 0 Then
+                    paraType = "image"
+                ElseIf p.Range.Tables.Count > 0 Then
+                    paraType = "table"
+                ElseIf p.Range.OMaths.Count > 0 Then
+                    paraType = "formula"
+                End If
+            Catch
+            End Try
+            If Not String.IsNullOrWhiteSpace(paraText) OrElse paraType <> "text" Then
+                paragraphs.Add(p)
+                Dim styleName As String = ""
+                Try
+                    styleName = p.Style.NameLocal
+                Catch
+                    styleName = "正文"
+                End Try
+                styles.Add(styleName)
+                types.Add(paraType)
+                texts.Add(paraText)
+            End If
+        Next
+        Return paragraphs.Count > 0
+    End Function
+
     Private Async Function StartSemanticReformatPipeline(mapping As SemanticStyleMapping, displayName As String) As Task
         Dim wordApp = Globals.ThisAddIn.Application
         Dim selText As String = String.Empty
-
         Try
             If wordApp IsNot Nothing AndAlso wordApp.Selection IsNot Nothing Then
                 selText = If(wordApp.Selection.Range IsNot Nothing, wordApp.Selection.Range.Text, String.Empty)
@@ -289,64 +333,22 @@ Public Class ChatControl
             Return
         End If
 
-        Dim selRange = wordApp.Selection.Range
+        Dim allParagraphs As List(Of Microsoft.Office.Interop.Word.Paragraph) = Nothing
+        Dim paragraphStyles As List(Of String) = Nothing
+        Dim paragraphTypes As List(Of String) = Nothing
+        Dim paragraphTexts As List(Of String) = Nothing
 
-        ' 收集所有段落信息
-        Dim allParagraphs As New List(Of Microsoft.Office.Interop.Word.Paragraph)()
-        Dim paragraphStyles As New List(Of String)()
-        Dim paragraphTypes As New List(Of String)()
-        Dim paragraphTexts As New List(Of String)()
-
-        For Each p As Microsoft.Office.Interop.Word.Paragraph In selRange.Paragraphs
-            Dim paraText As String = If(p.Range.Text IsNot Nothing, p.Range.Text.ToString().TrimEnd(vbCr, vbLf), String.Empty)
-
-            Dim paraType As String = "text"
-            Try
-                If p.Range.InlineShapes.Count > 0 Then
-                    paraType = "image"
-                ElseIf p.Range.Tables.Count > 0 Then
-                    paraType = "table"
-                ElseIf p.Range.OMaths.Count > 0 Then
-                    paraType = "formula"
-                End If
-            Catch
-            End Try
-
-            If Not String.IsNullOrWhiteSpace(paraText) OrElse paraType <> "text" Then
-                allParagraphs.Add(p)
-
-                Dim styleName As String = ""
-                Try
-                    styleName = p.Style.NameLocal
-                Catch
-                    styleName = "正文"
-                End Try
-                paragraphStyles.Add(styleName)
-                paragraphTypes.Add(paraType)
-                paragraphTexts.Add(paraText)
-            End If
-        Next
-
-        If allParagraphs.Count = 0 Then
+        If Not CollectParagraphsFromSelection(wordApp.Selection.Range, allParagraphs, paragraphStyles, paragraphTypes, paragraphTexts) Then
             GlobalStatusStrip.ShowWarning("选中的内容没有有效段落。")
             Return
         End If
 
-        ' 显示排版模式吸顶提示
         Await ExecuteJavaScriptAsyncJS("showReformatModeIndicator();")
-
-        ' 退出模板选择模式（显示聊天区域供后续交互），但保留mapping上下文
         ExitReformatTemplateMode()
 
-        ' 构建语义标注提示词
         Dim systemPrompt = SemanticPromptBuilder.BuildSemanticTaggingPrompt(mapping, paragraphTexts)
-
-        ' 保存段落上下文
         SetReformatContext(allParagraphs.Cast(Of Object).ToList(), paragraphStyles, paragraphTypes, mapping)
-
-        ' 发送语义标注请求
         Await Send("请使用「" & displayName & "」对选中内容进行语义标注。", systemPrompt, False, "semantic_reformat")
-
         GlobalStatusStrip.ShowInfo("正在使用「" & displayName & "」排版...")
     End Function
 
@@ -357,7 +359,6 @@ Public Class ChatControl
         Try
             Dim wordApp = Globals.ThisAddIn.Application
             Dim selText As String = String.Empty
-
             Try
                 If wordApp IsNot Nothing AndAlso wordApp.Selection IsNot Nothing Then
                     selText = If(wordApp.Selection.Range IsNot Nothing, wordApp.Selection.Range.Text, String.Empty)
@@ -366,91 +367,40 @@ Public Class ChatControl
                 selText = String.Empty
             End Try
 
-            ' 必须先选中内容
             If String.IsNullOrWhiteSpace(selText) Then
                 GlobalStatusStrip.ShowWarning("请先选中需要排版的文本内容。")
                 Return
             End If
 
-            Dim selRange = wordApp.Selection.Range
-
-            ' 收集所有段落信息
-            Dim allParagraphs As New List(Of Microsoft.Office.Interop.Word.Paragraph)()
-            Dim paragraphStyles As New List(Of String)()
-            Dim paragraphTypes As New List(Of String)()
-            Dim paragraphTexts As New List(Of String)()
-
-            For Each p As Microsoft.Office.Interop.Word.Paragraph In selRange.Paragraphs
-                Dim paraText As String = If(p.Range.Text IsNot Nothing, p.Range.Text.ToString().TrimEnd(vbCr, vbLf), String.Empty)
-
-                Dim paraType As String = "text"
-                Try
-                    If p.Range.InlineShapes.Count > 0 Then
-                        paraType = "image"
-                    ElseIf p.Range.Tables.Count > 0 Then
-                        paraType = "table"
-                    ElseIf p.Range.OMaths.Count > 0 Then
-                        paraType = "formula"
-                    End If
-                Catch
-                End Try
-
-                If Not String.IsNullOrWhiteSpace(paraText) OrElse paraType <> "text" Then
-                    allParagraphs.Add(p)
-
-                    Dim styleName As String = ""
-                    Try
-                        styleName = p.Style.NameLocal
-                    Catch
-                        styleName = "正文"
-                    End Try
-                    paragraphStyles.Add(styleName)
-                    paragraphTypes.Add(paraType)
-                    paragraphTexts.Add(paraText)
-                End If
-            Next
-
-            If allParagraphs.Count = 0 Then
+            Dim allParagraphs As List(Of Microsoft.Office.Interop.Word.Paragraph) = Nothing
+            Dim paragraphStyles As List(Of String) = Nothing
+            Dim paragraphTypes As List(Of String) = Nothing
+            Dim paragraphTexts As List(Of String) = Nothing
+            If Not CollectParagraphsFromSelection(wordApp.Selection.Range, allParagraphs, paragraphStyles, paragraphTypes, paragraphTexts) Then
                 GlobalStatusStrip.ShowWarning("选中的内容没有有效段落。")
                 Return
             End If
 
-            ' 显示排版模式吸顶提示
             Await ExecuteJavaScriptAsyncJS("showReformatModeIndicator();")
-
-            ' 成功开始处理，退出模板选择模式
             ExitReformatTemplateMode()
 
-            ' 检查是否有缓存的SemanticStyleMapping
             Dim mapping = SemanticMappingManager.Instance.GetMappingBySourceId(guide.Id)
-
             If mapping IsNot Nothing Then
-                ' 使用缓存的映射，直接进行语义标注
                 Dim systemPrompt = SemanticPromptBuilder.BuildSemanticTaggingPrompt(mapping, paragraphTexts)
                 SetReformatContext(allParagraphs.Cast(Of Object).ToList(), paragraphStyles, paragraphTypes, mapping)
-
-                ' 开始Undo快照
                 Try
                     wordApp.UndoRecord.StartCustomRecord("AI排版")
                 Catch ex As Exception
                     Debug.WriteLine($"StartCustomRecord 失败: {ex.Message}")
                 End Try
-
                 Await Send("请使用「" & guide.Name & "」排版规范对选中内容进行语义标注。", systemPrompt, False, "semantic_reformat")
             Else
-                ' 没有缓存，需要先让AI将规范转为映射，再进行语义标注
-                ' 使用两步模式：先转换规范，再标注
                 Dim conversionPrompt = StyleGuideConverter.BuildConversionPrompt(guide.GuideContent)
-
-                ' 保存段落信息（mapping暂时为Nothing，在收到转换结果后设置）
                 SetReformatContext(allParagraphs.Cast(Of Object).ToList(), paragraphStyles, paragraphTypes, Nothing)
-
-                ' 发送规范转换请求（mode为styleguide_convert）
                 Await Send("请解析「" & guide.Name & "」排版规范并提取格式参数。", conversionPrompt, False, "styleguide_convert")
             End If
 
             GlobalStatusStrip.ShowInfo("正在使用「" & guide.Name & "」规范排版...")
-
         Catch ex As Exception
             Debug.WriteLine($"ApplyReformatWithStyleGuide 出错: {ex.Message}")
             GlobalStatusStrip.ShowWarning($"排版失败: {ex.Message}")
@@ -1194,6 +1144,18 @@ Public Class ChatControl
                 Return
             End If
 
+            ' 格式克隆模式：AI返回 SemanticStyleMapping JSON，直接保存并推送前端预览
+            If String.Equals(mode, "mirror_format", StringComparison.OrdinalIgnoreCase) Then
+                Try
+                    Dim aiText As String = allPlainMarkdownBuffer.ToString()
+                    HandleMirrorFormatResult(aiText)
+                Catch ex As Exception
+                    Debug.WriteLine("格式克隆处理失败: " & ex.Message)
+                End Try
+                MyBase.CheckAndCompleteProcessingHook(_finalUuid, allPlainMarkdownBuffer)
+                Return
+            End If
+
             ' 如果是排版重构动作，则触发 showComparison
             If _responseSelectionMap.ContainsKey(_finalUuid) AndAlso String.Equals(mode, "reformat", StringComparison.OrdinalIgnoreCase) Then
                 Try
@@ -1828,6 +1790,32 @@ Public Class ChatControl
         Catch ex As Exception
             Debug.WriteLine($"HandleStyleGuideConversionResult 出错: {ex.Message}")
             GlobalStatusStrip.ShowWarning($"规范转换后标注失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 处理格式克隆（mirror_format）的 AI 响应：解析 SemanticStyleMapping 并保存
+    ''' </summary>
+    Private Sub HandleMirrorFormatResult(aiResponseJson As String)
+        Try
+            Dim mapping = StyleGuideConverter.ParseAiResponse(aiResponseJson, _mirrorFormatDocName, "")
+            If mapping Is Nothing OrElse mapping.SemanticTags.Count = 0 Then
+                GlobalStatusStrip.ShowWarning("格式克隆结果解析失败，请重试")
+                Return
+            End If
+
+            mapping.Name = If(String.IsNullOrEmpty(_mirrorFormatDocName), "克隆格式", _mirrorFormatDocName)
+            mapping.SourceType = SemanticMappingSourceType.FromDocxTemplate
+
+            SemanticMappingManager.Instance.AddMapping(mapping)
+
+            Dim json = JsonConvert.SerializeObject(mapping, Formatting.None)
+            ExecuteJavaScriptAsyncJS($"showMappingPreview({json});")
+
+            GlobalStatusStrip.ShowInfo($"格式克隆完成，已提取 {mapping.SemanticTags.Count} 个语义标签")
+        Catch ex As Exception
+            Debug.WriteLine($"HandleMirrorFormatResult 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"格式克隆保存失败: {ex.Message}")
         End Try
     End Sub
 
@@ -2654,6 +2642,86 @@ Public Class ChatControl
             Debug.WriteLine($"HandleUploadDocxTemplateFromPath 出错: {ex.Message}")
             GlobalStatusStrip.ShowWarning($"模板解析失败: {ex.Message}")
         End Try
+    End Sub
+
+    ''' <summary>
+    ''' 将当前打开文档的格式提取后发送给 AI，生成 SemanticStyleMapping（格式克隆）
+    ''' </summary>
+    Protected Overrides Async Sub HandleSaveCurrentDocumentAsTemplate()
+        Try
+            Dim wordApp = Globals.ThisAddIn.Application
+            If wordApp Is Nothing OrElse wordApp.Documents.Count = 0 Then
+                GlobalStatusStrip.ShowWarning("没有打开的文档")
+                Return
+            End If
+
+            Dim extracted = FormatMirrorService.ExtractFormattingFromDocument(wordApp, False)
+            If extracted.Count = 0 Then
+                GlobalStatusStrip.ShowWarning("未能从文档中提取格式信息")
+                Return
+            End If
+
+            ' 记录文档名，供 mirror_format 响应时命名映射
+            _mirrorFormatDocName = Path.GetFileNameWithoutExtension(wordApp.ActiveDocument.Name)
+            If String.IsNullOrEmpty(_mirrorFormatDocName) Then _mirrorFormatDocName = "文档格式"
+
+            Dim prompt = FormatMirrorService.BuildClonePrompt(extracted)
+            GlobalStatusStrip.ShowInfo("正在分析文档格式，请稍候…")
+            Await Send("请根据以下格式信息生成 SemanticStyleMapping。", prompt, False, "mirror_format")
+        Catch ex As Exception
+            Debug.WriteLine($"HandleSaveCurrentDocumentAsTemplate 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"分析文档格式失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 上传 .docx 文件，用 AI 分析其格式生成 SemanticStyleMapping（AI辅助解析，区别于直接解析）
+    ''' </summary>
+    Protected Overrides Sub HandleUploadTemplateDocumentForAiAnalysis()
+        Dim act As Action = Sub()
+            Try
+                Using ofd As New OpenFileDialog With {
+                    .Filter = "Word文档 (*.docx;*.dotx)|*.docx;*.dotx|所有文件 (*.*)|*.*",
+                    .Title = "选择要分析格式的Word文档"
+                }
+                    If ofd.ShowDialog() <> DialogResult.OK Then Return
+
+                    Dim wordApp = Globals.ThisAddIn.Application
+                    Dim tempDoc As Microsoft.Office.Interop.Word.Document = Nothing
+                    Try
+                        ' 以只读方式临时打开文档以提取格式
+                        tempDoc = wordApp.Documents.Open(ofd.FileName, ReadOnly:=True, Visible:=False)
+                        Dim extracted = FormatMirrorService.ExtractFormattingFromDocument(wordApp, False)
+                        tempDoc.Close(SaveChanges:=False)
+                        tempDoc = Nothing
+
+                        If extracted.Count = 0 Then
+                            GlobalStatusStrip.ShowWarning("未能从文档中提取格式信息")
+                            Return
+                        End If
+
+                        _mirrorFormatDocName = Path.GetFileNameWithoutExtension(ofd.FileName)
+                        If String.IsNullOrEmpty(_mirrorFormatDocName) Then _mirrorFormatDocName = "上传文档格式"
+
+                        Dim prompt = FormatMirrorService.BuildClonePrompt(extracted)
+                        GlobalStatusStrip.ShowInfo($"正在分析「{_mirrorFormatDocName}」格式，请稍候…")
+                        Send("请根据以下格式信息生成 SemanticStyleMapping。", prompt, False, "mirror_format")
+                    Catch ex As Exception
+                        If tempDoc IsNot Nothing Then
+                            Try
+                                tempDoc.Close(SaveChanges:=False)
+                            Catch
+                            End Try
+                        End If
+                        Throw
+                    End Try
+                End Using
+            Catch ex As Exception
+                Debug.WriteLine($"HandleUploadTemplateDocumentForAiAnalysis 出错: {ex.Message}")
+                GlobalStatusStrip.ShowWarning($"文档格式分析失败: {ex.Message}")
+            End Try
+        End Sub
+        If InvokeRequired Then Me.Invoke(act) Else act()
     End Sub
 
 #End Region

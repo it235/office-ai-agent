@@ -138,9 +138,9 @@ Public Class FormatMirrorService
         sb.AppendLine("【要求】")
         sb.AppendLine("1. 将每种格式映射到最合适的语义标签（body.normal 必须有）")
         sb.AppendLine("2. 仅返回如下JSON结构，不要解释：")
-        sb.AppendLine("{""name"":""克隆格式"",""tags"":[{""tagId"":""title.1"",""font"":{""fontNameCN"":""...""")
-        sb.AppendLine(",""fontNameEN"":""..."",""fontSize"":16,""bold"":true},""paragraph"":{""alignment"":""center""}}]}")
-        sb.AppendLine("字段与 StyleGuideConverter 的输出格式完全相同。")
+        sb.AppendLine("{""name"":""克隆格式"",""semanticTags"":[{""tagId"":""title.1"",""font"":{""fontNameCN"":""..."",")
+        sb.AppendLine("""fontNameEN"":""..."",""fontSize"":16,""bold"":true},""paragraph"":{""alignment"":""center""}}]}")
+        sb.AppendLine("字段与 StyleGuideConverter 的输出格式完全相同（使用 semanticTags 字段）。")
 
         Return sb.ToString()
     End Function
