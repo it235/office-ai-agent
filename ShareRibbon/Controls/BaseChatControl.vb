@@ -2671,7 +2671,8 @@ Public MustInherit Class BaseChatControl
             Await HttpStreamSvc.SendStreamRequestAsync(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody, question, requestUuid, addHistory, responseMode, responseUuid)
             Await SaveFullWebPageAsync()
         Catch ex As Exception
-            MessageBox.Show("请求失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Debug.WriteLine("Send 请求失败: " & ex.Message & vbCrLf & ex.StackTrace)
+            GlobalStatusStrip.ShowWarning("请求失败: " & ex.Message)
         Finally
         End Try
 

@@ -115,7 +115,7 @@ Public MustInherit Class BaseTranslateService
                 Return Await response.Content.ReadAsStringAsync()
             End Using
         Catch ex As Exception
-            MessageBox.Show($"请求失败: {ex.Message}")
+            Debug.WriteLine($"翻译请求失败: {ex.Message}")
             Return String.Empty
         End Try
     End Function

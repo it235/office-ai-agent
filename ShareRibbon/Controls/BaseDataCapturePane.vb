@@ -152,11 +152,8 @@ Public MustInherit Class BaseDataCapturePane
                 ' 停止计时器并恢复按钮状态
                 SetNavigationState(False)
                 If Not args.IsSuccess Then
-                    ' 获取更详细的错误信息
-                    Dim errorStatus = ChatBrowser.CoreWebView2.GetDevToolsProtocolEventReceiver("Network.loadingFailed")
-                    Debug.WriteLine($"Navigation failed with status: {errorStatus}")
-                    MessageBox.Show("页面加载失败，请检查网络连接或重试", "警告",
-                                  MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                    Debug.WriteLine($"Navigation failed, source: {ChatBrowser.CoreWebView2.Source}")
+                    GlobalStatusStrip.ShowWarning("页面加载失败，请检查网络连接或 URL")
                 Else
                     Debug.WriteLine("页面加载成功")
                     ' 可以在这里添加成功加载的处理逻辑
