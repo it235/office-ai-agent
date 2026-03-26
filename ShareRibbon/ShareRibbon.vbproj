@@ -237,6 +237,7 @@
     <Compile Include="Config\SemanticMappingManager.vb" />
     <Compile Include="Services\Reformat\LegacyTemplateConverter.vb" />
     <Compile Include="Services\Reformat\SemanticRenderingEngine.vb" />
+    <Compile Include="Services\Reformat\FormatMirrorService.vb" />
     <Compile Include="Services\Reformat\SemanticPromptBuilder.vb" />
     <Compile Include="Services\Reformat\TaggingValidator.vb" />
     <Compile Include="Services\Reformat\StyleGuideConverter.vb" />

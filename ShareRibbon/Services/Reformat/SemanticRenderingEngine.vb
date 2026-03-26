@@ -38,12 +38,14 @@ Public Class SemanticRenderingEngine
     ''' <param name="wordParagraphs">Word段落对象列表</param>
     ''' <param name="paragraphTypes">段落类型列表（text/image/table/formula）</param>
     ''' <param name="wordApp">Word Application对象（用于页面设置）</param>
+    ''' <param name="onProgress">进度回调 (当前序号1-based, 总数, tagId)</param>
     Public Shared Function ApplySemanticFormatting(
         taggedParagraphs As List(Of TaggedParagraph),
         mapping As SemanticStyleMapping,
         wordParagraphs As List(Of Object),
         paragraphTypes As List(Of String),
-        Optional wordApp As Object = Nothing) As RenderResult
+        Optional wordApp As Object = Nothing,
+        Optional onProgress As Action(Of Integer, Integer, String) = Nothing) As RenderResult
 
         Dim result As New RenderResult()
 
@@ -56,9 +58,12 @@ Public Class SemanticRenderingEngine
         Next
 
         ' 遍历标注结果，逐段落应用格式
+        Dim i As Integer = 0
         For Each tagged In taggedParagraphs
             If tagged.ParaIndex < 0 OrElse tagged.ParaIndex >= wordParagraphs.Count Then
                 result.Errors.Add($"段落索引越界: {tagged.ParaIndex}")
+                onProgress?.Invoke(i + 1, taggedParagraphs.Count, tagged.TagId)
+                i += 1
                 Continue For
             End If
 
@@ -67,6 +72,8 @@ Public Class SemanticRenderingEngine
                 Dim pType = paragraphTypes(tagged.ParaIndex)
                 If pType <> "text" Then
                     result.SkippedCount += 1
+                    onProgress?.Invoke(i + 1, taggedParagraphs.Count, tagged.TagId)
+                    i += 1
                     Continue For
                 End If
             End If
@@ -76,6 +83,8 @@ Public Class SemanticRenderingEngine
             If semanticTag Is Nothing Then
                 result.Errors.Add($"未找到标签: {tagged.TagId}")
                 result.SkippedCount += 1
+                onProgress?.Invoke(i + 1, taggedParagraphs.Count, tagged.TagId)
+                i += 1
                 Continue For
             End If
 
@@ -95,6 +104,9 @@ Public Class SemanticRenderingEngine
             Catch ex As Exception
                 result.Errors.Add($"段落{tagged.ParaIndex}格式应用失败: {ex.Message}")
             End Try
+
+            onProgress?.Invoke(i + 1, taggedParagraphs.Count, tagged.TagId)
+            i += 1
         Next
 
         ' 应用页面设置（如果提供了Word应用对象）
