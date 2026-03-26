@@ -430,13 +430,12 @@ Public Class ChatControl
 
     Protected Overrides Function ParseFile(filePath As String) As FileContentResult
         Try
-            ' 创建一个新的PowerPoint应用程序实例
-            Dim pptApp As New Microsoft.Office.Interop.PowerPoint.Application()
-            pptApp.Visible = Microsoft.Office.Core.MsoTriState.msoFalse
+            ' 复用当前 PPT 进程，WithWindow=msoFalse 静默打开，避免创建第二个 PPT 实例
+            Dim pptApp = Globals.ThisAddIn.Application
 
             Dim presentation As Microsoft.Office.Interop.PowerPoint.Presentation = Nothing
             Try
-                presentation = pptApp.Presentations.Open(filePath, 
+                presentation = pptApp.Presentations.Open(filePath,
                     ReadOnly:=Microsoft.Office.Core.MsoTriState.msoTrue,
                     Untitled:=Microsoft.Office.Core.MsoTriState.msoFalse,
                     WithWindow:=Microsoft.Office.Core.MsoTriState.msoFalse)
@@ -521,11 +520,10 @@ Public Class ChatControl
                 If presentation IsNot Nothing Then
                     presentation.Close()
                     System.Runtime.InteropServices.Marshal.ReleaseComObject(presentation)
+                    GC.Collect()
+                    GC.WaitForPendingFinalizers()
                 End If
-                pptApp.Quit()
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(pptApp)
-                GC.Collect()
-                GC.WaitForPendingFinalizers()
+                ' 不调用 pptApp.Quit()，复用的是用户当前 PPT 进程
             End Try
         Catch ex As Exception
             Debug.WriteLine($"解析PowerPoint文件时出错: {ex.Message}")
