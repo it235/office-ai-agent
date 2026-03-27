@@ -174,7 +174,7 @@ Public Class Ribbon1
                     Await chatCtrl.ExecuteJavaScriptAsyncJS(jsCreate)
 
                     ' 转义特殊字符
-                    Dim escapedText = displayText.Replace("\", "\\").Replace("'", "\'").Replace(vbCr, "\n").Replace(vbLf, "")
+                    Dim escapedText = displayText.Replace("\", "\\").Replace("'", "\'").Replace("</script>", "<\/script>").Replace(vbCr, "").Replace(vbLf, "\n")
                     Dim js = $"appendRenderer('{responseUuid}','{escapedText}');"
                     Await chatCtrl.ExecuteJavaScriptAsyncJS(js)
                 End If
