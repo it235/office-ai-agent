@@ -276,11 +276,12 @@ Public Class ConfigApiForm
         AddHandler cloudSaveButton.Click, AddressOf CloudSaveButton_Click
         cloudTab.Controls.Add(cloudSaveButton)
 
-        ' 删除按钮
+        ' 删除按钮（初始禁用，选中非预置配置时启用）
         cloudDeleteButton = New Button()
         cloudDeleteButton.Text = "删除"
         cloudDeleteButton.Location = New Point(rightX + 460, 410)
         cloudDeleteButton.Size = New Size(130, 35)
+        cloudDeleteButton.Enabled = False
         AddHandler cloudDeleteButton.Click, AddressOf CloudDeleteButton_Click
         cloudTab.Controls.Add(cloudDeleteButton)
     End Sub
@@ -419,11 +420,12 @@ Public Class ConfigApiForm
         AddHandler localSaveButton.Click, AddressOf LocalSaveButton_Click
         localTab.Controls.Add(localSaveButton)
 
-        ' 删除按钮
+        ' 删除按钮（初始禁用，选中非预置配置时启用）
         localDeleteButton = New Button()
         localDeleteButton.Text = "删除"
         localDeleteButton.Location = New Point(rightX + 460, 410)
         localDeleteButton.Size = New Size(130, 35)
+        localDeleteButton.Enabled = False
         AddHandler localDeleteButton.Click, AddressOf LocalDeleteButton_Click
         localTab.Controls.Add(localDeleteButton)
     End Sub
@@ -1403,9 +1405,12 @@ Public Class ConfigApiForm
     End Sub
 
     Private Sub CloudDeleteButton_Click(sender As Object, e As EventArgs)
-        If currentCloudConfig Is Nothing Then Return
+        If currentCloudConfig Is Nothing Then
+            GlobalStatusStripAll.ShowWarning("请先在列表中选择要删除的配置")
+            Return
+        End If
         If currentCloudConfig.isPreset Then
-            MessageBox.Show("预置配置不可删除", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            GlobalStatusStripAll.ShowWarning("预置配置不可删除")
             Return
         End If
 
@@ -1450,7 +1455,7 @@ Public Class ConfigApiForm
 
         RefreshLocalModelLists()
 
-        localDeleteButton.Enabled = True
+        localDeleteButton.Enabled = Not currentLocalConfig.isPreset
         localPlatformTextBox.ReadOnly = currentLocalConfig.isPreset
     End Sub
 
@@ -1649,9 +1654,12 @@ Public Class ConfigApiForm
     End Sub
 
     Private Sub LocalDeleteButton_Click(sender As Object, e As EventArgs)
-        If currentLocalConfig Is Nothing Then Return
+        If currentLocalConfig Is Nothing Then
+            GlobalStatusStripAll.ShowWarning("请先在列表中选择要删除的配置")
+            Return
+        End If
         If currentLocalConfig.isPreset Then
-            MessageBox.Show("预置配置不可删除", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            GlobalStatusStripAll.ShowWarning("预置配置不可删除")
             Return
         End If
 
