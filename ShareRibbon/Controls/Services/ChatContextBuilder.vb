@@ -9,7 +9,7 @@ Imports System.Collections.Generic
 Public Class ChatContextBuilder
 
     ''' <summary>
-    ''' 构建分层消息列表
+    ''' 构建分层消息列表，各层之间以结构化标题隔开，便于 AI 理解上下文来源。
     ''' </summary>
     ''' <param name="scenario">excel/word/ppt/common</param>
     ''' <param name="appType">当前宿主类型</param>
@@ -19,6 +19,7 @@ Public Class ChatContextBuilder
     ''' <param name="baseSystemPrompt">已有 system 提示词（来自 PromptManager 等）</param>
     ''' <param name="variableValues">变量替换字典，如 {{选中内容}}</param>
     ''' <param name="enableMemory">是否启用 Memory（RAG、用户画像、会话摘要）</param>
+    ''' <param name="ragCountOut">输出：本次检索到的记忆条数（供 UI 显示，避免调用方再次查询）</param>
     ''' <returns>按 [0]～[6] 顺序的消息列表</returns>
     Public Shared Function BuildMessages(
         scenario As String,
@@ -28,164 +29,148 @@ Public Class ChatContextBuilder
         latestUserMessage As String,
         baseSystemPrompt As String,
         variableValues As Dictionary(Of String, String),
-        enableMemory As Boolean) As List(Of HistoryMessage)
+        enableMemory As Boolean,
+        Optional ByRef ragCountOut As Integer = 0) As List(Of HistoryMessage)
 
         Dim result As New List(Of HistoryMessage)()
+        ragCountOut = 0
         Dim scenarioNorm = If(String.IsNullOrEmpty(scenario), "common", scenario.ToLowerInvariant())
         Dim appNorm = If(String.IsNullOrEmpty(appType), "Excel", appType)
         Dim vars = If(variableValues, New Dictionary(Of String, String)())
 
-        ' [0] System 基础
+        ' 所有 system 层收集到 sysParts，最终合并为单一 system 消息，节之间用 --- 分隔
+        Dim sysParts As New List(Of String)()
+
+        ' [0] 角色与基础指令
         If Not String.IsNullOrWhiteSpace(baseSystemPrompt) Then
-            result.Add(New HistoryMessage With {.role = "system", .content = baseSystemPrompt})
+            sysParts.Add("### 角色与基础指令" & vbCrLf & baseSystemPrompt.Trim())
         End If
 
-        ' [1] 场景指令 + Skills渐进式披露
+        ' [1] 场景能力（数据库场景提示词）
         Dim systemPromptFromDb = PromptTemplateRepository.GetSystemPrompt(scenarioNorm)
-        Dim layer1Parts As New List(Of String)()
-
-        ' 场景系统提示词
         If Not String.IsNullOrWhiteSpace(systemPromptFromDb) Then
-            layer1Parts.Add(PromptTemplateRepository.ReplaceVariables(systemPromptFromDb, vars))
+            sysParts.Add("### 场景能力" & vbCrLf & PromptTemplateRepository.ReplaceVariables(systemPromptFromDb.Trim(), vars))
         End If
 
-        ' Skills渐进式披露：第一步 - 先提供Skills目录
+        ' [1b] 可用技能（Skills 渐进式披露）
         Dim skillsCatalog = SkillsService.GetSkillsCatalog()
         If skillsCatalog IsNot Nothing AndAlso skillsCatalog.Count > 0 Then
-            ' 首先进行智能匹配
+            Dim skillParts As New List(Of String)()
+            skillParts.Add("### 可用技能")
+
+            Dim catalogMessage = SkillsService.BuildSkillsCatalogMessage(skillsCatalog)
+            If Not String.IsNullOrWhiteSpace(catalogMessage) Then
+                skillParts.Add(catalogMessage)
+            End If
+
             Dim matchedSkills = SkillsService.MatchSkills(currentQuery, 5)
-
             If matchedSkills.Count > 0 Then
-                ' 有匹配的Skills，先披露目录，再披露匹配的详细内容
-                Dim catalogMessage = SkillsService.BuildSkillsCatalogMessage(skillsCatalog)
-                If Not String.IsNullOrWhiteSpace(catalogMessage) Then
-                    layer1Parts.Add(catalogMessage)
-                End If
-
-                ' 披露匹配度最高的Skill详细内容
                 Dim topSkill = matchedSkills.First()
                 If topSkill.MatchScore >= 10 Then
                     Dim detailMessage = SkillsService.BuildSkillDetailMessage(topSkill.Skill)
                     If Not String.IsNullOrWhiteSpace(detailMessage) Then
-                        layer1Parts.Add("---")
-                        layer1Parts.Add("## 推荐使用的Skill（基于你的查询）")
-                        layer1Parts.Add(detailMessage)
+                        skillParts.Add("#### 推荐技能（基于当前查询）")
+                        skillParts.Add(detailMessage)
                     End If
 
-                    ' 注入 Skill 元信息提示：帮助模型正确选择和处理 Skill
                     Dim metaHints As New List(Of String)()
-                    metaHints.Add($"[当前推荐Skill: {topSkill.Skill.Name}]")
+                    metaHints.Add($"当前推荐: {topSkill.Skill.Name}")
                     If topSkill.Skill.Tags IsNot Nothing AndAlso topSkill.Skill.Tags.Count > 0 Then
                         metaHints.Add($"标签: {String.Join(", ", topSkill.Skill.Tags)}")
                     End If
                     If Not String.IsNullOrWhiteSpace(topSkill.Skill.Compatibility) Then
                         metaHints.Add($"兼容性: {topSkill.Skill.Compatibility}")
                     End If
-                    If topSkill.Skill.UsageCount > 0 Then
-                        metaHints.Add($"历史使用: {topSkill.Skill.UsageCount} 次")
-                    End If
                     If topSkill.MatchedKeywords.Count > 0 Then
                         metaHints.Add($"匹配关键词: {String.Join(", ", topSkill.MatchedKeywords)}")
                     End If
-                    layer1Parts.Add(String.Join(" | ", metaHints))
+                    skillParts.Add("> " & String.Join(" | ", metaHints))
 
                     Debug.WriteLine($"[ChatContextBuilder] 匹配到Skill: {topSkill.Skill.Name}, 分数: {topSkill.MatchScore:F1}, 关键词: {String.Join(", ", topSkill.MatchedKeywords)}")
-
-                    ' 记录 Skill 使用统计
                     SkillsService.RecordSkillUsage(topSkill.Skill.Name)
                 End If
             Else
-                ' 没有匹配的Skills，只提供目录让模型选择
-                Dim catalogMessage = SkillsService.BuildSkillsCatalogMessage(skillsCatalog)
-                If Not String.IsNullOrWhiteSpace(catalogMessage) Then
-                    layer1Parts.Add(catalogMessage)
-                End If
                 Debug.WriteLine($"[ChatContextBuilder] 未匹配到Skills，提供 {skillsCatalog.Count} 个Skill目录")
             End If
+
+            sysParts.Add(String.Join(vbCrLf & vbCrLf, skillParts))
         End If
 
-        If layer1Parts.Count > 0 Then
-            Dim layer1 = String.Join(vbCrLf & vbCrLf, layer1Parts)
-            If result.Count > 0 AndAlso result(0).role = "system" Then
-                result(0).content = result(0).content & vbCrLf & vbCrLf & layer1
-            Else
-                result.Insert(0, New HistoryMessage With {.role = "system", .content = layer1})
-            End If
-        End If
-
-        ' [2] Session Metadata 可选：当前时间等
-        ' 暂不注入，可后续扩展
-
-        ' [3][4] 用户记忆 RAG + 近期会话摘要
+        ' [3][4] 用户上下文：画像 + RAG 记忆 + 近期会话摘要（仅一次检索）
         If enableMemory Then
-            Debug.WriteLine($"[ChatContextBuilder] 启用记忆，开始检索...")
-            Dim memoryParts As New List(Of String)()
+            Debug.WriteLine("[ChatContextBuilder] 启用记忆，开始检索...")
+            Dim memParts As New List(Of String)()
+            memParts.Add("### 用户上下文")
+
             Dim userProfile = MemoryService.GetUserProfile()
             If Not String.IsNullOrWhiteSpace(userProfile) Then
-                Debug.WriteLine($"[ChatContextBuilder] 找到用户画像")
-                memoryParts.Add("[用户画像]" & vbCrLf & userProfile)
-            Else
-                Debug.WriteLine($"[ChatContextBuilder] 没有用户画像")
+                Debug.WriteLine("[ChatContextBuilder] 找到用户画像")
+                memParts.Add("#### 用户画像" & vbCrLf & userProfile.Trim())
             End If
+
             Dim memories = MemoryService.GetRelevantMemories(currentQuery, Nothing, Nothing, Nothing, appNorm)
             If memories IsNot Nothing AndAlso memories.Count > 0 Then
+                ragCountOut = memories.Count
                 Debug.WriteLine($"[ChatContextBuilder] 找到 {memories.Count} 条相关记忆")
-                memoryParts.Add("[相关记忆]")
+                Dim memLines As New List(Of String)()
+                memLines.Add("#### 相关记忆")
                 For Each m In memories
-                    Debug.WriteLine($"[ChatContextBuilder]   - {m.Content.Substring(0, Math.Min(50, m.Content.Length))}...")
-                    memoryParts.Add("- " & m.Content)
+                    memLines.Add("- " & m.Content)
                 Next
+                memParts.Add(String.Join(vbCrLf, memLines))
             Else
-                Debug.WriteLine($"[ChatContextBuilder] 没有找到相关记忆，查询内容: {currentQuery.Substring(0, Math.Min(100, currentQuery.Length))}...")
+                Debug.WriteLine($"[ChatContextBuilder] 没有找到相关记忆，查询: {currentQuery.Substring(0, Math.Min(100, currentQuery.Length))}...")
             End If
+
             Dim summaries = MemoryService.GetRecentSessionSummaries(Nothing)
             If summaries IsNot Nothing AndAlso summaries.Count > 0 Then
                 Debug.WriteLine($"[ChatContextBuilder] 找到 {summaries.Count} 条近期会话")
-                memoryParts.Add("[近期会话]")
+                Dim sumLines As New List(Of String)()
+                sumLines.Add("#### 近期会话")
                 For Each s In summaries
-                    memoryParts.Add($"- {s.Title}: {s.Snippet}")
+                    sumLines.Add($"- {s.Title}: {s.Snippet}")
                 Next
-            Else
-                Debug.WriteLine($"[ChatContextBuilder] 没有近期会话")
+                memParts.Add(String.Join(vbCrLf, sumLines))
             End If
-            If memoryParts.Count > 0 Then
-                Debug.WriteLine($"[ChatContextBuilder] 组装记忆块，共 {memoryParts.Count} 部分")
-                Dim memoryBlock = String.Join(vbCrLf, memoryParts)
-                If result.Count > 0 AndAlso result(0).role = "system" Then
-                    result(0).content = result(0).content & vbCrLf & vbCrLf & memoryBlock
-                Else
-                    result.Insert(0, New HistoryMessage With {.role = "system", .content = memoryBlock})
-                End If
+
+            ' 只有有实质内容（>1 表示除标题外至少有一项）时才注入
+            If memParts.Count > 1 Then
+                Debug.WriteLine($"[ChatContextBuilder] 组装记忆块，共 {memParts.Count - 1} 项")
+                sysParts.Add(String.Join(vbCrLf & vbCrLf, memParts))
             Else
-                Debug.WriteLine($"[ChatContextBuilder] 没有记忆内容可注入")
+                Debug.WriteLine("[ChatContextBuilder] 没有记忆内容可注入")
             End If
         Else
-            Debug.WriteLine($"[ChatContextBuilder] 记忆被禁用")
+            Debug.WriteLine("[ChatContextBuilder] 记忆被禁用")
         End If
 
-        ' [5] 当前会话滚动窗口（不含 system，只 user/assistant）
+        ' 将所有 system 层合并为单一消息，节之间用 --- 分隔
+        If sysParts.Count > 0 Then
+            Dim sep = vbCrLf & vbCrLf & "---" & vbCrLf & vbCrLf
+            result.Insert(0, New HistoryMessage With {
+                .role = "system",
+                .content = String.Join(sep, sysParts)
+            })
+        End If
+
+        ' [5] 当前会话滚动窗口（只含 user/assistant）
         If sessionMessages IsNot Nothing Then
-            Debug.WriteLine($"[ChatContextBuilder] 添加当前会话滚动窗口，共 {sessionMessages.Count} 条原始消息")
             Dim addedCount = 0
             For Each msg In sessionMessages
                 If msg.role <> "system" AndAlso Not String.IsNullOrEmpty(msg.content) Then
                     result.Add(New HistoryMessage With {.role = msg.role, .content = msg.content})
                     addedCount += 1
-                    Debug.WriteLine($"[ChatContextBuilder]   - 添加 {msg.role} 消息: {msg.content.Substring(0, Math.Min(30, msg.content.Length))}...")
                 End If
             Next
-            Debug.WriteLine($"[ChatContextBuilder] 会话滚动窗口处理完成，共添加 {addedCount} 条消息")
-        Else
-            Debug.WriteLine($"[ChatContextBuilder] 没有会话消息")
+            Debug.WriteLine($"[ChatContextBuilder] 会话窗口添加 {addedCount} 条消息")
         End If
 
         ' [6] 本条 user 消息
         If Not String.IsNullOrWhiteSpace(latestUserMessage) Then
-            Debug.WriteLine($"[ChatContextBuilder] 添加本条 user 消息: {latestUserMessage.Substring(0, Math.Min(50, latestUserMessage.Length))}...")
             result.Add(New HistoryMessage With {.role = "user", .content = latestUserMessage})
         End If
 
-        Debug.WriteLine($"[ChatContextBuilder] 构建完成，最终消息数: {result.Count}")
+        Debug.WriteLine($"[ChatContextBuilder] 构建完成，消息数: {result.Count}，RAG命中: {ragCountOut}")
         Return result
     End Function
 

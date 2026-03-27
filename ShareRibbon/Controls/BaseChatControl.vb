@@ -2616,24 +2616,15 @@ Public MustInherit Class BaseChatControl
 
                 ' 如果PromptManager返回空（没有配置），使用基础提示词
                 If String.IsNullOrWhiteSpace(systemPrompt) Then
-                    systemPrompt =
-                    "系统指令（必读）：" & vbCrLf & ConfigSettings.propmtContent & vbCrLf & vbCrLf &
-                    "1) 首先输出一个名为 'Plan' 的简短计划，按步骤列出解决路径（要点式，最多6条）。" & vbCrLf &
-                    "2) 然后输出名为 'Answer' 的部分，给出最终可执行的解决方案或操作步骤，使用 Markdown，必要时给出代码/示例或差异说明。" & vbCrLf &
-                    "3) 如果信息不足，请不要猜测；在最后输出名为 'Clarifying Questions' 的部分，列出需要用户回答的问题并暂停执行。" & vbCrLf &
-                    "4) 对于用户请求的改进（用户标记当前回答为不接受），在回复开头先写明 '改进点'（1-3 行），然后给出修正的 Plan 与 Answer。" & vbCrLf &
-                    "5) 保持回答简洁、有条理，优先提供可直接执行的结论和示例。"
+                    systemPrompt = If(Not String.IsNullOrWhiteSpace(ConfigSettings.propmtContent),
+                                      ConfigSettings.propmtContent,
+                                      "你是一个 Office AI 助手，请根据用户需求提供简洁、准确的回答。")
                 End If
             End If
 
-
-            Dim requestBody As String = CreateRequestBody(requestUuid, question, systemPrompt, addHistory)
-            ' 阶段三：若使用 RAG 或带意图，在 Chat 中显示简短提示
+            ' ragCount 由 CreateRequestBody 通过 ByRef 返回，无需再次查询记忆
             Dim ragCount As Integer = 0
-            If addHistory AndAlso MemoryConfig.UseContextBuilder AndAlso (MemoryConfig.EnableUserProfile OrElse MemoryConfig.RagTopN > 0) Then
-                Dim mems = MemoryService.GetRelevantMemories(question, MemoryConfig.RagTopN, Nothing, Nothing, GetOfficeAppType())
-                ragCount = If(mems IsNot Nothing, mems.Count, 0)
-            End If
+            Dim requestBody As String = CreateRequestBody(requestUuid, question, systemPrompt, addHistory, ragCount)
             If ragCount > 0 OrElse Not String.IsNullOrEmpty(intentDescription) Then
                 Dim intentEscaped As String = If(intentDescription, "").Replace("\", "\\").Replace("'", "\'").Replace(vbCr, " ").Replace(vbLf, " ")
                 Dim js As String = $"showContextHints({{ ragCount: {ragCount}, intent: '{intentEscaped}' }});"
@@ -2690,7 +2681,7 @@ Public MustInherit Class BaseChatControl
     End Sub
 
 
-    Private Function CreateRequestBody(uuid As String, question As String, systemPrompt As String, addHistory As Boolean) As String
+    Private Function CreateRequestBody(uuid As String, question As String, systemPrompt As String, addHistory As Boolean, Optional ByRef ragCountOut As Integer = 0) As String
         Dim result As String = question
 
         ' 构建 messages 数组
@@ -2721,7 +2712,7 @@ Public MustInherit Class BaseChatControl
                 Debug.WriteLine($"[CreateRequestBody] 尝试使用 ContextBuilder，UseContextBuilder={MemoryConfig.UseContextBuilder}, enableMem={enableMem}")
                 Debug.WriteLine($"[CreateRequestBody] 当前会话消息数: {sessionMsgs.Count}")
 
-                Dim built = ChatContextBuilder.BuildMessages(scenario, appType, result, sessionMsgs, result, systemPrompt, vars, enableMem)
+                Dim built = ChatContextBuilder.BuildMessages(scenario, appType, result, sessionMsgs, result, systemPrompt, vars, enableMem, ragCountOut)
                 messagesArray = New JArray()
                 For Each msg In built
                     Dim msgObj = New JObject()
