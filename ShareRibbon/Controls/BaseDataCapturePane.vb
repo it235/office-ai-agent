@@ -160,14 +160,18 @@ Public MustInherit Class BaseDataCapturePane
                 End If
             End Sub
 
-        ' 处理新窗口打开请求，重定向到当前窗口
+        ' 处理新窗口打开请求，重定向到当前窗口（校验 URI 有效性，避免空 URI 导航丢失当前页）
         AddHandler ChatBrowser.CoreWebView2.NewWindowRequested,
             Sub(s, args)
-                ' 取消新窗口打开
                 args.Handled = True
-                ' 在当前窗口导航到目标URL
-                ChatBrowser.CoreWebView2.Navigate(args.Uri)
-                Debug.WriteLine($"拦截到新窗口请求，已重定向到当前窗口: {args.Uri}")
+                Dim targetUri = args.Uri
+                If Not String.IsNullOrWhiteSpace(targetUri) AndAlso
+                   (targetUri.StartsWith("http://") OrElse targetUri.StartsWith("https://")) Then
+                    ChatBrowser.CoreWebView2.Navigate(targetUri)
+                    Debug.WriteLine($"[DataCapturePane] 新窗口重定向: {targetUri}")
+                Else
+                    Debug.WriteLine($"[DataCapturePane] 忽略无效新窗口 URI: '{targetUri}'")
+                End If
             End Sub
 
         ' WebMessage事件
