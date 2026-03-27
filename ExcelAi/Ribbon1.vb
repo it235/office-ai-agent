@@ -207,19 +207,80 @@ Public Class Ribbon1
     End Sub
 
     ' 批量数据生成按钮点击事件实现
-    Protected Overrides Sub BatchDataGenButton_Click(sender As Object, e As RibbonControlEventArgs)
-        ' 创建并显示批量数据生成配置表单
-        Dim batchDataForm As New BatchDataGenerationForm()
-        If batchDataForm.ShowDialog() = DialogResult.OK Then
-            ' 在Excel中生成数据的代码
-            ' 获取当前工作簿和活动工作表
-            Dim excelApp As Excel.Application = Globals.ThisAddIn.Application
-            Dim activeWorksheet As Excel.Worksheet = excelApp.ActiveSheet
+    Protected Overrides Async Sub BatchDataGenButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Using batchDataForm As New BatchDataGenerationForm()
+            If batchDataForm.ShowDialog() <> DialogResult.OK Then Return
 
-            ' 这里实现数据生成逻辑
-            ' ...
-        End If
+            Dim fields = batchDataForm.Fields
+            Dim rowCount = batchDataForm.RowCount
+
+            Dim excelApp As Excel.Application = Globals.ThisAddIn.Application
+            Dim activeSheet As Excel.Worksheet = TryCast(excelApp.ActiveSheet, Excel.Worksheet)
+            If activeSheet Is Nothing Then
+                GlobalStatusStripAll.ShowWarning("无法获取当前工作表")
+                Return
+            End If
+
+            Try
+                GlobalStatusStripAll.ShowWarning($"正在生成 {rowCount} 条数据，请稍候...")
+                Dim svc As New BatchDataService()
+                Dim jsonText = Await svc.GenerateBatchDataAsync(fields, rowCount)
+
+                If String.IsNullOrEmpty(jsonText) Then
+                    GlobalStatusStripAll.ShowWarning("数据生成失败，请检查 AI 配置")
+                    Return
+                End If
+
+                ' 提取 JSON 数组（去掉可能的 Markdown 代码块）
+                Dim cleanJson = jsonText.Trim()
+                Dim startIdx = cleanJson.IndexOf("[")
+                Dim endIdx = cleanJson.LastIndexOf("]")
+                If startIdx < 0 OrElse endIdx <= startIdx Then
+                    GlobalStatusStripAll.ShowWarning("AI 返回格式异常，未能解析 JSON 数组")
+                    Return
+                End If
+                cleanJson = cleanJson.Substring(startIdx, endIdx - startIdx + 1)
+
+                Dim rows = Newtonsoft.Json.Linq.JArray.Parse(cleanJson)
+
+                ' 写入表头（第1行）
+                Dim headerRow = 1
+                For Each field In fields
+                    Dim col = ColumnLetterToIndex(field.CellColumn)
+                    If col > 0 Then activeSheet.Cells(headerRow, col).Value = field.FieldName
+                Next
+
+                ' 写入数据（从第2行开始）
+                For i = 0 To rows.Count - 1
+                    Dim rowObj = TryCast(rows(i), Newtonsoft.Json.Linq.JObject)
+                    If rowObj Is Nothing Then Continue For
+                    For Each field In fields
+                        Dim col = ColumnLetterToIndex(field.CellColumn)
+                        If col > 0 Then
+                            activeSheet.Cells(headerRow + 1 + i, col).Value = rowObj(field.FieldName)?.ToString()
+                        End If
+                    Next
+                Next
+
+                GlobalStatusStripAll.ShowWarning($"成功生成 {rows.Count} 条数据")
+            Catch ex As Exception
+                GlobalStatusStripAll.ShowWarning($"数据生成失败: {ex.Message}")
+                Debug.WriteLine($"[BatchDataGen] 错误: {ex}")
+            End Try
+        End Using
     End Sub
+
+    ''' <summary>将列字母转换为列索引（A→1，B→2，AA→27）</summary>
+    Private Function ColumnLetterToIndex(col As String) As Integer
+        If String.IsNullOrWhiteSpace(col) Then Return 0
+        col = col.Trim().ToUpper()
+        Dim result As Integer = 0
+        For Each ch As Char In col
+            If ch < "A"c OrElse ch > "Z"c Then Return 0
+            result = result * 26 + (AscW(ch) - AscW("A"c) + 1)
+        Next
+        Return result
+    End Function
 
     ' MCP按钮点击事件实现
     Protected Overrides Sub MCPButton_Click(sender As Object, e As RibbonControlEventArgs)

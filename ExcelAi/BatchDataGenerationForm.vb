@@ -1,6 +1,13 @@
-﻿Imports System.Drawing
+Imports System.Drawing
 Imports System.Windows.Forms
 Imports ShareRibbon
+
+''' <summary>字段定义（用于批量数据生成）</summary>
+Public Class FieldDefinition
+    Public Property FieldName As String
+    Public Property CellColumn As String
+    Public Property FieldDescription As String
+End Class
 
 Public Class BatchDataGenerationForm
     Inherits Form
@@ -10,6 +17,27 @@ Public Class BatchDataGenerationForm
     Private _removeButton As Button
     Private _generateButton As Button
     Private _cancelButton As Button
+    Private _rowCountInput As NumericUpDown
+
+    Public ReadOnly Property Fields As List(Of FieldDefinition)
+        Get
+            Dim list As New List(Of FieldDefinition)()
+            For Each item As ListViewItem In _fieldListView.Items
+                list.Add(New FieldDefinition With {
+                    .FieldName = item.Text,
+                    .CellColumn = item.SubItems(1).Text,
+                    .FieldDescription = item.SubItems(2).Text
+                })
+            Next
+            Return list
+        End Get
+    End Property
+
+    Public ReadOnly Property RowCount As Integer
+        Get
+            Return CInt(_rowCountInput.Value)
+        End Get
+    End Property
 
     Public Sub New()
         InitializeComponent()
@@ -17,61 +45,88 @@ Public Class BatchDataGenerationForm
 
     Private Sub InitializeComponent()
         Me.Text = "批量数据生成"
-        Me.Size = New Size(600, 400)
+        Me.Size = New Size(620, 450)
         Me.StartPosition = FormStartPosition.CenterScreen
+        Me.MinimizeBox = False
+        Me.MaximizeBox = False
+        Me.FormBorderStyle = FormBorderStyle.FixedDialog
 
-        ' 初始化ListView
+        ' 字段列表
         _fieldListView = New ListView()
         _fieldListView.Dock = DockStyle.Top
-        _fieldListView.Height = 250
+        _fieldListView.Height = 270
         _fieldListView.View = View.Details
         _fieldListView.FullRowSelect = True
-        _fieldListView.Columns.Add("字段名", 100)
-        _fieldListView.Columns.Add("单元格列", 100)
-        _fieldListView.Columns.Add("字段描述", 350)
+        _fieldListView.GridLines = True
+        _fieldListView.Columns.Add("字段名", 120)
+        _fieldListView.Columns.Add("目标列（如A）", 110)
+        _fieldListView.Columns.Add("字段描述", 360)
         Me.Controls.Add(_fieldListView)
 
-        ' 创建按钮面板
+        ' 行数设置面板
+        Dim rowCountPanel As New Panel()
+        rowCountPanel.Dock = DockStyle.Top
+        rowCountPanel.Height = 40
+        Me.Controls.Add(rowCountPanel)
+
+        Dim rowCountLabel As New Label()
+        rowCountLabel.Text = "生成行数："
+        rowCountLabel.Location = New Point(10, 12)
+        rowCountLabel.Width = 70
+        rowCountPanel.Controls.Add(rowCountLabel)
+
+        _rowCountInput = New NumericUpDown()
+        _rowCountInput.Location = New Point(85, 10)
+        _rowCountInput.Width = 80
+        _rowCountInput.Minimum = 1
+        _rowCountInput.Maximum = 500
+        _rowCountInput.Value = 10
+        rowCountPanel.Controls.Add(_rowCountInput)
+
+        ' 添加一个提示标签
+        Dim hintLabel As New Label()
+        hintLabel.Text = "提示：目标列填写Excel列字母（如A、B、C），AI将按字段描述生成对应内容"
+        hintLabel.Location = New Point(180, 12)
+        hintLabel.Width = 420
+        hintLabel.ForeColor = Drawing.Color.Gray
+        rowCountPanel.Controls.Add(hintLabel)
+
+        ' 操作按钮面板
         Dim buttonPanel As New Panel()
         buttonPanel.Dock = DockStyle.Bottom
         buttonPanel.Height = 50
         Me.Controls.Add(buttonPanel)
 
-        ' 添加按钮
         _addButton = New Button()
         _addButton.Text = "添加字段"
-        _addButton.Location = New Point(10, 10)
+        _addButton.Location = New Point(10, 12)
         _addButton.Width = 100
         AddHandler _addButton.Click, AddressOf AddButton_Click
         buttonPanel.Controls.Add(_addButton)
 
-        ' 移除按钮
         _removeButton = New Button()
         _removeButton.Text = "移除字段"
-        _removeButton.Location = New Point(120, 10)
+        _removeButton.Location = New Point(120, 12)
         _removeButton.Width = 100
         AddHandler _removeButton.Click, AddressOf RemoveButton_Click
         buttonPanel.Controls.Add(_removeButton)
 
-        ' 生成按钮
         _generateButton = New Button()
         _generateButton.Text = "生成数据"
-        _generateButton.Location = New Point(380, 10)
+        _generateButton.Location = New Point(390, 12)
         _generateButton.Width = 100
         AddHandler _generateButton.Click, AddressOf GenerateButton_Click
         buttonPanel.Controls.Add(_generateButton)
 
-        ' 取消按钮
         _cancelButton = New Button()
         _cancelButton.Text = "取消"
-        _cancelButton.Location = New Point(490, 10)
+        _cancelButton.Location = New Point(500, 12)
         _cancelButton.Width = 100
         AddHandler _cancelButton.Click, AddressOf CancelButton_Click
         buttonPanel.Controls.Add(_cancelButton)
     End Sub
 
     Private Sub AddButton_Click(sender As Object, e As EventArgs)
-        ' 创建字段输入对话框
         Using inputForm As New FieldInputForm()
             If inputForm.ShowDialog() = DialogResult.OK Then
                 Dim item As New ListViewItem(inputForm.FieldName)
@@ -89,9 +144,10 @@ Public Class BatchDataGenerationForm
     End Sub
 
     Private Sub GenerateButton_Click(sender As Object, e As EventArgs)
-        ' 实现数据生成逻辑
-        ' 这里将根据Excel应用程序的上下文生成数据
-        GlobalStatusStripAll.ShowWarning("数据生成功能将在Excel环境中实现")
+        If _fieldListView.Items.Count = 0 Then
+            MessageBox.Show("请先添加至少一个字段。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
         Me.DialogResult = DialogResult.OK
         Me.Close()
     End Sub
@@ -122,13 +178,12 @@ Public Class FieldInputForm
 
     Private Sub InitializeComponent()
         Me.Text = "添加字段"
-        Me.Size = New Size(400, 220)
+        Me.Size = New Size(400, 230)
         Me.StartPosition = FormStartPosition.CenterParent
         Me.FormBorderStyle = FormBorderStyle.FixedDialog
         Me.MaximizeBox = False
         Me.MinimizeBox = False
 
-        ' 字段名称
         Dim fieldNameLabel As New Label()
         fieldNameLabel.Text = "字段名称:"
         fieldNameLabel.Location = New Point(10, 15)
@@ -140,19 +195,25 @@ Public Class FieldInputForm
         _fieldNameTextBox.Width = 280
         Me.Controls.Add(_fieldNameTextBox)
 
-        ' 单元格列
         Dim cellColumnLabel As New Label()
-        cellColumnLabel.Text = "单元格列:"
+        cellColumnLabel.Text = "目标列:"
         cellColumnLabel.Location = New Point(10, 45)
         cellColumnLabel.Width = 80
         Me.Controls.Add(cellColumnLabel)
 
         _cellColumnTextBox = New TextBox()
         _cellColumnTextBox.Location = New Point(100, 42)
-        _cellColumnTextBox.Width = 280
+        _cellColumnTextBox.Width = 80
+        _cellColumnTextBox.MaxLength = 3
         Me.Controls.Add(_cellColumnTextBox)
 
-        ' 字段描述
+        Dim colHint As New Label()
+        colHint.Text = "（Excel列字母，如 A、B、AA）"
+        colHint.Location = New Point(190, 45)
+        colHint.Width = 200
+        colHint.ForeColor = Drawing.Color.Gray
+        Me.Controls.Add(colHint)
+
         Dim fieldDescLabel As New Label()
         fieldDescLabel.Text = "字段描述:"
         fieldDescLabel.Location = New Point(10, 75)
@@ -166,27 +227,33 @@ Public Class FieldInputForm
         _fieldDescTextBox.Multiline = True
         Me.Controls.Add(_fieldDescTextBox)
 
-        ' 确定按钮
         _okButton = New Button()
         _okButton.Text = "确定"
-        _okButton.Location = New Point(210, 150)
+        _okButton.Location = New Point(210, 155)
         _okButton.Width = 80
         AddHandler _okButton.Click, AddressOf OkButton_Click
         Me.Controls.Add(_okButton)
 
-        ' 取消按钮
         _cancelButton = New Button()
         _cancelButton.Text = "取消"
-        _cancelButton.Location = New Point(300, 150)
+        _cancelButton.Location = New Point(300, 155)
         _cancelButton.Width = 80
         AddHandler _cancelButton.Click, AddressOf CancelButton_Click
         Me.Controls.Add(_cancelButton)
     End Sub
 
     Private Sub OkButton_Click(sender As Object, e As EventArgs)
-        FieldName = _fieldNameTextBox.Text
-        CellColumn = _cellColumnTextBox.Text
-        FieldDescription = _fieldDescTextBox.Text
+        If String.IsNullOrWhiteSpace(_fieldNameTextBox.Text) Then
+            MessageBox.Show("请输入字段名称。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+        If String.IsNullOrWhiteSpace(_cellColumnTextBox.Text) Then
+            MessageBox.Show("请输入目标列（如 A、B）。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+        FieldName = _fieldNameTextBox.Text.Trim()
+        CellColumn = _cellColumnTextBox.Text.Trim().ToUpper()
+        FieldDescription = _fieldDescTextBox.Text.Trim()
         Me.DialogResult = DialogResult.OK
         Me.Close()
     End Sub

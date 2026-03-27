@@ -277,6 +277,7 @@
     <Compile Include="BatchDataGenerationForm.vb">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="BatchDataService.vb" />
     <Compile Include="ChatControl.Designer.vb">
       <DependentUpon>ChatControl.vb</DependentUpon>
     </Compile>
