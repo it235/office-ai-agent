@@ -1,4 +1,4 @@
-' WordAi\Ribbon1.vb
+' ExcelAi\Ribbon1.vb
 Imports System.Diagnostics
 Imports System.Text.RegularExpressions
 Imports System.Windows.Forms
