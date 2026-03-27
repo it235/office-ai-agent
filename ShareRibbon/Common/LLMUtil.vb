@@ -8,11 +8,13 @@ Imports Newtonsoft.Json
 Public Class LLMUtil
 
     ''' <summary>
-    ''' 检查 WPS Office 是否正在运行
+    ''' 检查 WPS Office 是否正在运行。
+    ''' WPS 各组件进程名：wps(Writer)、et(表格)、wpp(演示)、wpspdf(PDF)
     ''' </summary>
     Public Shared Function IsWpsActive() As Boolean
         Try
-            Return Process.GetProcessesByName("WPS").Length > 0
+            Dim wpsProcessNames = {"wps", "et", "wpp", "wpspdf", "WPS", "ET", "WPP"}
+            Return wpsProcessNames.Any(Function(n) Process.GetProcessesByName(n).Length > 0)
         Catch
             Return False
         End Try
