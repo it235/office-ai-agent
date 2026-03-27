@@ -49,18 +49,45 @@ Public Class ThisAddIn
             Debug.WriteLine("初始化GlobalStatusStrip时出错: " & ex.Message)
             MessageBox.Show("初始化状态栏时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
-        ' WebView2 延迟加载：推迟到首次打开任务窗格时初始化，减少启动耗时
+        ' WebView2 延迟加载：推迟到首次打开任务窗格时初始化
         ' SQLite 原生库延迟加载：首次访问数据库时由 OfficeAiDatabase.EnsureInitialized() 自动调用
-        ' 此处无需显式调用 SqliteNativeLoader.EnsureLoaded()
 
-        ' 延迟加载 Excel-DNA XLL：仅在启动时执行一次路径搜索并缓存
-        Try
-            LoadExcelDnaAddIn()
-        Catch ex As Exception
-            Debug.WriteLine($"加载 Excel-DNA 失败: {ex.Message}")
-            ' 继续执行，不要因为这个错误而中断启动
-        End Try
-
+        ' XLL 注册策略：
+        '   - 已缓存路径 → 直接在主线程注册（无磁盘 I/O，极快）
+        '   - 首次搜索  → 路径搜索（含磁盘扫描）放到后台线程，
+        '                 RegisterXLL（COM 调用）通过 SynchronizationContext 回到 STA 主线程执行
+        '                 这样 Office 启动不再被磁盘扫描阻塞
+        If Not String.IsNullOrEmpty(_cachedXllPath) Then
+            Try
+                Application.RegisterXLL(_cachedXllPath)
+            Catch ex As Exception
+                Debug.WriteLine($"[XLL] 注册缓存路径失败: {ex.Message}")
+            End Try
+        Else
+            Dim syncCtx = System.Threading.SynchronizationContext.Current
+            Dim excelApp = Me.Application
+            Task.Run(Sub()
+                Try
+                    Dim xllPath = FindXllPath()
+                    If Not String.IsNullOrEmpty(xllPath) Then
+                        ' RegisterXLL 是 COM 调用，必须回到 STA 主线程
+                        syncCtx.Post(Sub(state)
+                            Try
+                                excelApp.RegisterXLL(CStr(state))
+                                _cachedXllPath = CStr(state)
+                                Debug.WriteLine($"[XLL] 已注册: {state}")
+                            Catch regEx As Exception
+                                Debug.WriteLine($"[XLL] RegisterXLL 失败: {regEx.Message}")
+                            End Try
+                        End Sub, xllPath)
+                    Else
+                        Debug.WriteLine("[XLL] 未找到 XLL 文件，跳过注册")
+                    End If
+                Catch ex As Exception
+                    Debug.WriteLine($"[XLL] 后台搜索失败: {ex.Message}")
+                End Try
+            End Sub)
+        End If
     End Sub
 
     ''' <summary>
@@ -109,46 +136,33 @@ Public Class ThisAddIn
         End If
     End Sub
 
-    Private Sub LoadExcelDnaAddIn()
+    ''' <summary>
+    ''' 在后台线程中搜索 XLL 文件路径，不包含任何 COM 调用，可安全在非 STA 线程执行。
+    ''' 搜索优先级：注册表安装路径 → 标准安装目录 → 当前目录 → 向上遍历 → 全盘扫描（最慢，最后执行）。
+    ''' 返回找到的 XLL 路径，未找到则返回 Nothing。
+    ''' </summary>
+    Private Shared Function FindXllPath() As String
         Try
-            ' 使用缓存路径：若已找到 XLL，直接加载，跳过搜索
-            If Not String.IsNullOrEmpty(_cachedXllPath) Then
-                Debug.WriteLine($"[LoadExcelDnaAddIn] 使用缓存路径: {_cachedXllPath}")
-                Application.RegisterXLL(_cachedXllPath)
-                Return
-            End If
-
-            Debug.WriteLine("开始查找 XLL 文件...")
-
-            ' 获取当前程序集路径
             Dim currentAssemblyPath As String = System.Reflection.Assembly.GetExecutingAssembly().Location
             Dim currentDir As String = Path.GetDirectoryName(currentAssemblyPath)
-
-            Debug.WriteLine($"当前程序集路径: {currentAssemblyPath}")
-            Debug.WriteLine($"当前目录: {currentDir}")
-
-            ' 创建搜索路径列表（按优先级排序）
             Dim searchPaths As New List(Of String)
 
-            ' 1. 注册表路径（安装时写入，最可靠）
+            ' 1. 注册表路径（安装时写入，最可靠，几乎零开销）
             Try
                 Using key As RegistryKey = Registry.LocalMachine.OpenSubKey("SOFTWARE\it235\OfficeAiAgent")
                     If key IsNot Nothing Then
                         Dim installPath As String = key.GetValue("InstallPath")?.ToString()
                         If Not String.IsNullOrEmpty(installPath) Then
                             Dim excelAiPath As String = Path.Combine(installPath, "ExcelAi")
-                            If Directory.Exists(excelAiPath) Then
-                                searchPaths.Add(excelAiPath)
-                                Debug.WriteLine($"从注册表添加路径: {excelAiPath}")
-                            End If
+                            If Directory.Exists(excelAiPath) Then searchPaths.Add(excelAiPath)
                         End If
                     End If
                 End Using
             Catch ex As Exception
-                Debug.WriteLine($"从注册表读取安装路径时出错: {ex.Message}")
+                Debug.WriteLine($"[XLL] 读取注册表失败: {ex.Message}")
             End Try
 
-            ' 2. 标准安装路径
+            ' 2. 标准安装路径（固定路径，Directory.Exists 开销极低）
             Dim standardInstallPaths As String() = {
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "it235", "OfficeAiAgent", "ExcelAi"),
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "it235", "OfficeAiAgent", "ExcelAi"),
@@ -156,17 +170,14 @@ Public Class ThisAddIn
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "OfficeAiAgent", "ExcelAi")
             }
             For Each installPath In standardInstallPaths
-                If Directory.Exists(installPath) Then
-                    searchPaths.Add(installPath)
-                    Debug.WriteLine($"添加标准安装路径: {installPath}")
-                End If
+                If Directory.Exists(installPath) Then searchPaths.Add(installPath)
             Next
 
-            ' 3. 当前目录及其相关目录
+            ' 3. 当前目录及父目录
             searchPaths.Add(currentDir)
             searchPaths.Add(Path.Combine(currentDir, ".."))
 
-            ' 4. 开发环境：VSTO 临时目录时尝试真正的项目输出目录
+            ' 4. 开发环境：VSTO 影子复制目录时，尝试真实项目输出目录
             If currentDir.Contains("AppData\Local\assembly") Then
                 Dim possibleDevPaths As String() = {
                     "F:\ai\code\AiHelper\ExcelAi\bin\Debug",
@@ -175,30 +186,24 @@ Public Class ThisAddIn
                     Path.Combine("C:\", "ai", "code", "AiHelper", "ExcelAi", "bin", "Debug")
                 }
                 For Each devPath In possibleDevPaths
-                    If Directory.Exists(devPath) Then
-                        searchPaths.Add(devPath)
-                        Debug.WriteLine($"添加开发路径: {devPath}")
-                    End If
+                    If Directory.Exists(devPath) Then searchPaths.Add(devPath)
                 Next
             End If
 
-            ' 5. 从当前路径向上查找 OfficeAiAgent 目录
+            ' 5. 向上遍历目录树，查找 OfficeAiAgent 安装目录
             Dim currentDirInfo As New DirectoryInfo(currentDir)
             While currentDirInfo IsNot Nothing
                 If currentDirInfo.Name.Equals("OfficeAiAgent", StringComparison.OrdinalIgnoreCase) OrElse
                    currentDirInfo.FullName.Contains("OfficeAiAgent") Then
                     Dim excelAiPath As String = Path.Combine(currentDirInfo.FullName, "ExcelAi")
-                    If Directory.Exists(excelAiPath) Then
-                        searchPaths.Add(excelAiPath)
-                        Debug.WriteLine($"添加安装路径: {excelAiPath}")
-                    End If
+                    If Directory.Exists(excelAiPath) Then searchPaths.Add(excelAiPath)
                     searchPaths.Add(currentDirInfo.FullName)
                     Exit While
                 End If
                 currentDirInfo = currentDirInfo.Parent
             End While
 
-            ' 6. 广泛搜索：遍历所有固定驱动器（最慢，最后执行）
+            ' 6. 全盘扫描（最慢，仅在前几步都找不到时才执行；后台线程中不阻塞 Office UI）
             Try
                 For Each drive In DriveInfo.GetDrives()
                     If drive.IsReady AndAlso drive.DriveType = DriveType.Fixed Then
@@ -208,85 +213,44 @@ Public Class ThisAddIn
                             Path.Combine(drive.Name, "Program Files (x86)", "OfficeAiAgent", "ExcelAi")
                         }
                         For Each customPath In customPaths
-                            If Directory.Exists(customPath) Then
-                                searchPaths.Add(customPath)
-                                Debug.WriteLine($"添加自定义路径: {customPath}")
-                            End If
+                            If Directory.Exists(customPath) Then searchPaths.Add(customPath)
                         Next
                     End If
                 Next
             Catch ex As Exception
-                Debug.WriteLine($"搜索自定义路径时出错: {ex.Message}")
+                Debug.WriteLine($"[XLL] 全盘扫描出错: {ex.Message}")
             End Try
 
-            ' 去除重复路径
-            Dim uniquePaths As New HashSet(Of String)(searchPaths, StringComparer.OrdinalIgnoreCase)
-
-            ' 查找XLL文件
+            ' 按优先级逐路径检查，找到即返回
             Dim xllFileName As String = If(IntPtr.Size = 8, "ExcelAi-AddIn64-packed.xll", "ExcelAi-AddIn-packed.xll")
-            Dim foundXllPath As String = String.Empty
+            Dim unpackedFileName As String = If(IntPtr.Size = 8, "ExcelAi-AddIn64.xll", "ExcelAi-AddIn.xll")
+            Dim seen As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
 
-            Debug.WriteLine($"正在查找文件: {xllFileName}")
+            For Each searchPath In searchPaths
+                If String.IsNullOrEmpty(searchPath) OrElse Not seen.Add(searchPath) Then Continue For
+                If Not Directory.Exists(searchPath) Then Continue For
 
-            For Each searchPath In uniquePaths
-                Debug.WriteLine($"  检查: {searchPath}")
-                If Directory.Exists(searchPath) Then
-                    Dim xllPath As String = Path.Combine(searchPath, xllFileName)
-                    If File.Exists(xllPath) Then
-                        foundXllPath = xllPath
-                        Debug.WriteLine($"找到XLL文件: {xllPath}")
-                        Exit For
-                    End If
-                    ' 也检查未打包的版本
-                    Dim unpackedXllFileName As String = If(IntPtr.Size = 8, "ExcelAi-AddIn64.xll", "ExcelAi-AddIn.xll")
-                    Dim unpackedXllPath As String = Path.Combine(searchPath, unpackedXllFileName)
-                    If File.Exists(unpackedXllPath) Then
-                        foundXllPath = unpackedXllPath
-                        Debug.WriteLine($"找到未打包XLL文件: {unpackedXllPath}")
-                        Exit For
-                    End If
+                Dim packed = Path.Combine(searchPath, xllFileName)
+                If File.Exists(packed) Then
+                    Debug.WriteLine($"[XLL] 找到: {packed}")
+                    Return packed
+                End If
+
+                Dim unpacked = Path.Combine(searchPath, unpackedFileName)
+                If File.Exists(unpacked) Then
+                    Debug.WriteLine($"[XLL] 找到（未打包）: {unpacked}")
+                    Return unpacked
                 End If
             Next
 
-            ' 尝试加载XLL文件，成功后缓存路径供下次直接使用
-            If Not String.IsNullOrEmpty(foundXllPath) Then
-                Try
-                    Debug.WriteLine($"正在加载 Excel-DNA XLL: {foundXllPath}")
-                    Dim result As Boolean = Application.RegisterXLL(foundXllPath)
-                    If result Then
-                        ' 缓存成功找到的路径，避免下次重复搜索
-                        _cachedXllPath = foundXllPath
-                        Debug.WriteLine($"[LoadExcelDnaAddIn] 路径已缓存: {foundXllPath}")
-                    End If
-                Catch ex As Exception
-                    Debug.WriteLine($"加载 XLL 时出错: {ex.Message}")
-                End Try
-            Else
-                Debug.WriteLine("未找到 XLL 文件，诊断信息:")
-                For Each searchPath In uniquePaths
-                    If Directory.Exists(searchPath) Then
-                        Debug.WriteLine($"路径 {searchPath} 包含的文件:")
-                        Try
-                            For Each file In Directory.GetFiles(searchPath, "*.xll")
-                                Debug.WriteLine($"  XLL文件: {Path.GetFileName(file)}")
-                            Next
-                            For Each file In Directory.GetFiles(searchPath, "ExcelAi*.*")
-                                Debug.WriteLine($"  ExcelAi文件: {Path.GetFileName(file)}")
-                            Next
-                        Catch ex As Exception
-                            Debug.WriteLine($"  无法读取目录内容: {ex.Message}")
-                        End Try
-                    Else
-                        Debug.WriteLine($"路径不存在: {searchPath}")
-                    End If
-                Next
-            End If
+            Debug.WriteLine("[XLL] 所有路径均未找到 XLL 文件")
+            Return Nothing
 
         Catch ex As Exception
-            Debug.WriteLine($"LoadExcelDnaAddIn 出错: {ex.Message}")
-            Debug.WriteLine($"堆栈跟踪: {ex.StackTrace}")
+            Debug.WriteLine($"[XLL] FindXllPath 出错: {ex.Message}")
+            Return Nothing
         End Try
-    End Sub
+    End Function
 
     ' 创建聊天任务窗格
     Private Sub CreateChatTaskPane()

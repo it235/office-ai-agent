@@ -1,6 +1,7 @@
 ﻿' ShareRibbon\Ribbon\BaseOfficeRibbon.vb
 Imports System.IO
 Imports System.Net
+Imports System.Threading.Tasks
 Imports System.Net.Http
 Imports System.Text
 Imports System.Text.RegularExpressions
@@ -13,11 +14,19 @@ Imports Newtonsoft.Json.Linq
 Public MustInherit Class BaseOfficeRibbon
     Inherits Microsoft.Office.Tools.Ribbon.RibbonBase
 
-    Private Sub Ribbon1_Load(ByVal sender As System.Object, ByVal e As RibbonUIEventArgs) Handles MyBase.Load
-        Dim apiConfig As New ConfigManager()
-        apiConfig.LoadConfig()
-        Dim promptConfig As New ConfigPromptForm(GetApplication())
-        promptConfig.LoadConfig()
+    Private Async Sub Ribbon1_Load(ByVal sender As System.Object, ByVal e As RibbonUIEventArgs) Handles MyBase.Load
+        ' GetApplication() 涉及 COM 对象访问，必须在 UI 线程（STA）调用，提前捕获
+        Dim appInfo = GetApplication()
+        ' 将文件 I/O 密集的配置加载推迟到后台线程：
+        '   ConfigManager.LoadConfig()     读取 API 配置 JSON
+        '   ConfigPromptForm.LoadConfig()  读取提示词模板 JSON
+        ' 两者均为纯文件操作，不涉及 COM/UI，在后台线程执行安全，可避免阻塞 Ribbon 渲染
+        Await Task.Run(Sub()
+            Dim apiConfig As New ConfigManager()
+            apiConfig.LoadConfig()
+            Dim promptConfig As New ConfigPromptForm(appInfo)
+            promptConfig.LoadConfig()
+        End Sub)
         InitializeBaseRibbon()
     End Sub
 
