@@ -247,12 +247,19 @@ Public Class FieldInputForm
             MessageBox.Show("请输入字段名称。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
         End If
-        If String.IsNullOrWhiteSpace(_cellColumnTextBox.Text) Then
+        Dim colText = _cellColumnTextBox.Text.Trim().ToUpper()
+        If String.IsNullOrWhiteSpace(colText) Then
             MessageBox.Show("请输入目标列（如 A、B）。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
         End If
+        ' 只允许 1~3 个大写字母（对应 Excel 最大列 XFD=16384）；
+        ' 不校验会导致 ColumnLetterToIndex 返回 0，数据静默写入失败，用户不知道哪里错了
+        If colText.Length > 3 OrElse colText.Any(Function(ch) ch < "A"c OrElse ch > "Z"c) Then
+            MessageBox.Show("目标列只能是 1~3 个英文字母（如 A、B、AA、XFD）。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End If
         FieldName = _fieldNameTextBox.Text.Trim()
-        CellColumn = _cellColumnTextBox.Text.Trim().ToUpper()
+        CellColumn = colText
         FieldDescription = _fieldDescTextBox.Text.Trim()
         Me.DialogResult = DialogResult.OK
         Me.Close()

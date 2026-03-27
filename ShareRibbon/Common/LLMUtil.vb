@@ -9,12 +9,21 @@ Public Class LLMUtil
 
     ''' <summary>
     ''' 检查 WPS Office 是否正在运行。
-    ''' WPS 各组件进程名：wps(Writer)、et(表格)、wpp(演示)、wpspdf(PDF)
+    ''' WPS 各组件进程名：wps(Writer)、et(表格)、wpp(演示)、wpspdf(PDF)。
+    ''' 注：GetProcessesByName 在 Windows 上大小写不敏感，无需重复传入大写变体。
     ''' </summary>
     Public Shared Function IsWpsActive() As Boolean
         Try
-            Dim wpsProcessNames = {"wps", "et", "wpp", "wpspdf", "WPS", "ET", "WPP"}
-            Return wpsProcessNames.Any(Function(n) Process.GetProcessesByName(n).Length > 0)
+            ' Process.GetProcessesByName 返回持有 OS 句柄的 Process 对象，必须 Dispose 避免句柄泄漏
+            For Each name In {"wps", "et", "wpp", "wpspdf"}
+                Dim procs = Process.GetProcessesByName(name)
+                Dim found = procs.Length > 0
+                For Each p In procs
+                    p.Dispose()
+                Next
+                If found Then Return True
+            Next
+            Return False
         Catch
             Return False
         End Try

@@ -61,8 +61,10 @@ OfficeAgent/Release
 /Debug/
 /Release/
 
-# 不提交 docs 目录
+# 不提交 docs 目录（设计文档除外）
 docs/
+!docs/design/
+!docs/design/**
 
 # 不提交 IDE/CI 配置目录
 .github/

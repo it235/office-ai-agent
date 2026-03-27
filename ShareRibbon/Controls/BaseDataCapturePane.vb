@@ -138,41 +138,12 @@ Public MustInherit Class BaseDataCapturePane
         Debug.WriteLine("Adding event handlers...")
 
         ' 导航事件
-        AddHandler ChatBrowser.CoreWebView2.NavigationStarting,
-            Sub(s, args)
-                Debug.WriteLine($"Navigation starting to: {args.Uri}")
-                UrlTextBox.Text = args.Uri
-                ' 禁用导航按钮并启动超时计时器
-                SetNavigationState(True)
-            End Sub
-
-        AddHandler ChatBrowser.CoreWebView2.NavigationCompleted,
-            Sub(s, args)
-                Debug.WriteLine($"Navigation completed: {args.IsSuccess}")
-                ' 停止计时器并恢复按钮状态
-                SetNavigationState(False)
-                If Not args.IsSuccess Then
-                    Debug.WriteLine($"Navigation failed, source: {ChatBrowser.CoreWebView2.Source}")
-                    GlobalStatusStrip.ShowWarning("页面加载失败，请检查网络连接或 URL")
-                Else
-                    Debug.WriteLine("页面加载成功")
-                    ' 可以在这里添加成功加载的处理逻辑
-                End If
-            End Sub
-
-        ' 处理新窗口打开请求，重定向到当前窗口（校验 URI 有效性，避免空 URI 导航丢失当前页）
-        AddHandler ChatBrowser.CoreWebView2.NewWindowRequested,
-            Sub(s, args)
-                args.Handled = True
-                Dim targetUri = args.Uri
-                If Not String.IsNullOrWhiteSpace(targetUri) AndAlso
-                   (targetUri.StartsWith("http://") OrElse targetUri.StartsWith("https://")) Then
-                    ChatBrowser.CoreWebView2.Navigate(targetUri)
-                    Debug.WriteLine($"[DataCapturePane] 新窗口重定向: {targetUri}")
-                Else
-                    Debug.WriteLine($"[DataCapturePane] 忽略无效新窗口 URI: '{targetUri}'")
-                End If
-            End Sub
+        ' 使用命名方法而非匿名 Sub：每个匿名 Sub 都创建新的委托实例，
+        ' 导致 RemoveHandler 无法通过引用相等性定位到原来注册的处理程序（相当于 RemoveHandler 是空操作），
+        ' 每次 AddEventHandlers → RemoveEventHandlers 循环都会累积泄漏的事件订阅。
+        AddHandler ChatBrowser.CoreWebView2.NavigationStarting, AddressOf OnNavigationStarting
+        AddHandler ChatBrowser.CoreWebView2.NavigationCompleted, AddressOf OnNavigationCompleted
+        AddHandler ChatBrowser.CoreWebView2.NewWindowRequested, AddressOf OnNewWindowRequested
 
         ' WebMessage事件
         AddHandler ChatBrowser.CoreWebView2.WebMessageReceived,
@@ -189,10 +160,7 @@ Public MustInherit Class BaseDataCapturePane
         AddHandler ForwardButton.Click, AddressOf ForwardButton_Click
 
         ' 监听历史记录状态变化
-        AddHandler ChatBrowser.CoreWebView2.HistoryChanged,
-        Sub(s, args)
-            UpdateNavigationButtons()
-        End Sub
+        AddHandler ChatBrowser.CoreWebView2.HistoryChanged, AddressOf OnHistoryChanged
 
         Debug.WriteLine("Event handlers added successfully")
     End Sub
@@ -204,15 +172,11 @@ Public MustInherit Class BaseDataCapturePane
                 RemoveHandler ChatBrowser.CoreWebView2.PermissionRequested, AddressOf OnPermissionRequested
                 RemoveHandler ChatBrowser.CoreWebView2.WebMessageReceived,
                 AddressOf WebView2_MessageReceived
-                RemoveHandler ChatBrowser.CoreWebView2.NewWindowRequested,
-                Sub(s, args)
-                    args.Handled = True
-                    ChatBrowser.CoreWebView2.Navigate(args.Uri)
-                End Sub
-                RemoveHandler ChatBrowser.CoreWebView2.HistoryChanged,
-                Sub(s, args)
-                    UpdateNavigationButtons()
-                End Sub
+                ' 必须与 AddHandler 使用相同的命名方法引用，匿名 Sub 每次求值都是新委托实例，永远移除不掉
+                RemoveHandler ChatBrowser.CoreWebView2.NavigationStarting, AddressOf OnNavigationStarting
+                RemoveHandler ChatBrowser.CoreWebView2.NavigationCompleted, AddressOf OnNavigationCompleted
+                RemoveHandler ChatBrowser.CoreWebView2.NewWindowRequested, AddressOf OnNewWindowRequested
+                RemoveHandler ChatBrowser.CoreWebView2.HistoryChanged, AddressOf OnHistoryChanged
             End If
 
             RemoveHandler NavigateButton.Click, AddressOf NavigateButton_Click
@@ -225,6 +189,53 @@ Public MustInherit Class BaseDataCapturePane
             Debug.WriteLine($"Error removing event handlers: {ex.Message}")
         End Try
     End Sub
+
+    ' ── WebView2 命名事件处理程序 ──────────────────────────────────────────────
+    ' 为什么用命名方法而非匿名 Sub：
+    '   VB.NET 中 AddHandler ... Sub(s,args) ... End Sub 每次执行都产生一个新的委托实例。
+    '   RemoveHandler 依赖引用相等性来定位要移除的订阅，传入新实例永远匹配不到原来注册的，
+    '   相当于 RemoveHandler 是空操作，每次 Init/Teardown 循环都会累积无法释放的事件订阅。
+
+    Private Sub OnNavigationStarting(s As Object, args As CoreWebView2NavigationStartingEventArgs)
+        Debug.WriteLine($"Navigation starting to: {args.Uri}")
+        UrlTextBox.Text = args.Uri
+        SetNavigationState(True)   ' 禁用导航按钮并启动超时计时器
+    End Sub
+
+    Private Sub OnNavigationCompleted(s As Object, args As CoreWebView2NavigationCompletedEventArgs)
+        Debug.WriteLine($"Navigation completed: {args.IsSuccess}")
+        SetNavigationState(False)  ' 停止计时器并恢复按钮状态
+        If Not args.IsSuccess Then
+            Debug.WriteLine($"Navigation failed, source: {ChatBrowser.CoreWebView2.Source}")
+            GlobalStatusStrip.ShowWarning("页面加载失败，请检查网络连接或 URL")
+        Else
+            Debug.WriteLine("页面加载成功")
+        End If
+    End Sub
+
+    ''' <summary>
+    ''' 拦截新窗口请求，在当前面板内导航而非打开外部浏览器。
+    ''' 只处理 http/https，排除 javascript:/data: 等可能执行任意脚本的 scheme。
+    ''' </summary>
+    Private Sub OnNewWindowRequested(s As Object, args As CoreWebView2NewWindowRequestedEventArgs)
+        args.Handled = True   ' 告知 WebView2 本地已处理，不弹出系统浏览器
+        Dim targetUri = args.Uri
+        If Not String.IsNullOrWhiteSpace(targetUri) AndAlso
+           (targetUri.StartsWith("http://") OrElse targetUri.StartsWith("https://")) Then
+            ChatBrowser.CoreWebView2.Navigate(targetUri)
+            Debug.WriteLine($"[DataCapturePane] 新窗口重定向: {targetUri}")
+        Else
+            ' 空 URI（window.open() 无参数）或非 http(s) URI 直接忽略，
+            ' 避免 Navigate("") 覆盖当前爬取页面
+            Debug.WriteLine($"[DataCapturePane] 忽略无效新窗口 URI: '{targetUri}'")
+        End If
+    End Sub
+
+    Private Sub OnHistoryChanged(s As Object, args As Object)
+        UpdateNavigationButtons()  ' 根据前进/后退历史刷新按钮可用状态
+    End Sub
+
+    ' ────────────────────────────────────────────────────────────────────────
 
     ' 添加前进后退按钮点击事件处理
     Private Sub BackButton_Click(sender As Object, e As EventArgs)
