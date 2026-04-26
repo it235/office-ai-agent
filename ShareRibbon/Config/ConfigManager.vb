@@ -1,5 +1,4 @@
 ﻿Imports System.IO
-Imports Newtonsoft.Json﻿
 
 
 Public Class ConfigManager

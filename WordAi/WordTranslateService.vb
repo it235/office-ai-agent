@@ -2,7 +2,6 @@
 Imports System.Windows.Forms
 Imports Microsoft.Office.Interop.Word
 Imports ShareRibbon
-Imports ShareRibbon.Controls
 
 Public Class WordTranslateService
     Inherits BaseTranslateService

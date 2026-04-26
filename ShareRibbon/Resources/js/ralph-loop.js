@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ralph-loop.js - Ralph Loop 前端控制
  * 管理循环任务的UI展示和用户交互
  */
@@ -90,8 +90,7 @@ function startLoopFromDialog() {
         type: 'startLoop',
         goal: goal
     });
-    console.log('[RalphLoop] 启动循环，目标:', goal);
-}
+    }
 
 /**
  * 显示循环规划卡片 - 固定在顶部

@@ -166,7 +166,7 @@ Public MustInherit Class BaseChat
                                                   End Sub))
                 Else
                     ' 已经在UI线程，直接执行
-                    Task.Run(Async Function()
+                    Await Task.Run(Async Function()
                                  Try
                                      ' 延迟一些时间，确保页面完全加载
                                      Await Task.Delay(GetScriptInjectionDelay())
@@ -325,8 +325,9 @@ Public MustInherit Class BaseChat
     Protected MustOverride Async Function InjectExecuteButtonsSafe() As Task
 
     ' 线程安全的登录观察器注入方法 - 子类可以覆盖
-    Protected Overridable Async Function InjectLoginObserverSafe() As Task
+    Protected Overridable Function InjectLoginObserverSafe() As Task
         ' 默认实现为空，子类可以覆盖
+        Return Task.CompletedTask
     End Function
 
     ' WebView2消息接收处理
@@ -436,6 +437,8 @@ Public MustInherit Class BaseChat
                 ' 忽略清理错误
             End Try
         End Try
+
+        Return True
     End Function
 
     ' 执行JavaScript代码 - 子类必须实现  

@@ -12,7 +12,8 @@ Public Class WebDataCapturePane
 
     Private isViewInitialized As Boolean = False
     Public Sub New()
-        MyBase.New()
+        ' 此调用是设计师所必需的。
+        InitializeComponent()
         ' 创建 ChatControl 实例
         ' 订阅AI聊天请求事件
         AddHandler AiChatRequested, AddressOf HandleAiChatRequest
@@ -38,7 +39,7 @@ Public Class WebDataCapturePane
         ' 显示聊天窗口
         Globals.ThisAddIn.ShowChatTaskPane()
         ' 添加选中的内容到引用区
-        Globals.ThisAddIn.chatControl.AddSelectedContentItem(
+        ThisAddIn.chatControl.AddSelectedContentItem(
                 "来自网页",  ' 使用文档名称作为标识
                    content.Substring(0, Math.Min(content.Length, 50)) & If(content.Length > 50, "...", ""))
     End Sub

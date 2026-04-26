@@ -901,13 +901,24 @@ complexity 取值规则：
 
             If Not String.IsNullOrEmpty(code) Then
                 Debug.WriteLine($"[RalphAgent] 执行步骤 {stepIndex + 1} 代码: {code.Substring(0, Math.Min(100, code.Length))}...")
-
-                ' 执行代码 - 不使用预览模式
-                ExecuteCode?.Invoke(code, language, False)
+                
+                ' 执行代码 - 不使用预览模式，添加异常捕获
+                Try
+                    If ExecuteCode IsNot Nothing Then
+                        ExecuteCode.Invoke(code, language, False)
+                        Debug.WriteLine($"[RalphAgent] 步骤 {stepIndex + 1} 代码执行完成")
+                    Else
+                        Debug.WriteLine($"[RalphAgent] 警告: ExecuteCode回调未设置")
+                    End If
+                Catch codeEx As Exception
+                    Debug.WriteLine($"[RalphAgent] 步骤 {stepIndex + 1} 代码执行异常: {codeEx.Message}")
+                    Throw
+                End Try
 
                 currentStep.Status = StepStatus.Completed
                 OnStepCompleted?.Invoke(stepIndex, True, "执行成功")
             Else
+                Debug.WriteLine($"[RalphAgent] 步骤 {stepIndex + 1} 无法生成执行代码")
                 currentStep.Status = StepStatus.Failed
                 OnStepCompleted?.Invoke(stepIndex, False, "无法生成执行代码")
                 ' 无代码视为失败，触发重试逻辑

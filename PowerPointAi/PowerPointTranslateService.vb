@@ -1,6 +1,5 @@
 ﻿Imports Microsoft.Office.Interop.PowerPoint
 Imports ShareRibbon
-Imports ShareRibbon.Controls
 
 Public Class PowerPointTranslateService
     Inherits BaseTranslateService

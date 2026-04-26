@@ -4,7 +4,7 @@
 Imports System.Collections.Generic
 Imports System.Linq
 Imports System.Text
-Imports Microsoft.Office.Interop.Word
+' 注意：此服务专门用于 Word，使用 Object 类型和后期绑定以避免 ShareRibbon 直接依赖 Word Interop
 
 ''' <summary>从文档段落提取的格式信息</summary>
 Public Class ExtractedParagraphFormat
@@ -31,38 +31,44 @@ Public Class FormatMirrorService
     ''' <summary>
     ''' 从 Word 文档中提取段落格式信息（全文或当前选区）
     ''' </summary>
+    ''' <param name="wordApp">Word Application 对象（使用 Object 类型避免直接依赖 Word Interop）</param>
+    ''' <param name="selectionOnly">是否仅处理选区</param>
     Public Shared Function ExtractFormattingFromDocument(
-        wordApp As Application,
+        wordApp As Object,
         selectionOnly As Boolean) As List(Of ExtractedParagraphFormat)
 
         Dim result As New List(Of ExtractedParagraphFormat)()
         Dim styleMap As New Dictionary(Of String, ExtractedParagraphFormat)()
 
-        If wordApp Is Nothing OrElse wordApp.Documents.Count = 0 Then Return result
+        If wordApp Is Nothing Then Return result
 
         Try
-            Dim doc = wordApp.ActiveDocument
-            Dim paragraphsToScan As IEnumerable(Of Paragraph)
+            ' 使用动态绑定访问 Word 对象模型
+            Dim documents As Object = wordApp.[GetType]().InvokeMember("Documents", Reflection.BindingFlags.GetProperty, Nothing, wordApp, Nothing)
+            Dim docCount As Integer = CInt(documents.[GetType]().InvokeMember("Count", Reflection.BindingFlags.GetProperty, Nothing, documents, Nothing))
+            If docCount = 0 Then Return result
 
-            If selectionOnly AndAlso wordApp.Selection IsNot Nothing AndAlso
-               wordApp.Selection.Range.Text.Trim().Length > 0 Then
-                paragraphsToScan = wordApp.Selection.Range.Paragraphs.Cast(Of Paragraph)()
-            Else
-                paragraphsToScan = doc.Paragraphs.Cast(Of Paragraph)()
-            End If
+            Dim doc As Object = wordApp.[GetType]().InvokeMember("ActiveDocument", Reflection.BindingFlags.GetProperty, Nothing, wordApp, Nothing)
+            Dim paragraphs As Object = doc.[GetType]().InvokeMember("Paragraphs", Reflection.BindingFlags.GetProperty, Nothing, doc, Nothing)
+            Dim paraCount As Integer = CInt(paragraphs.[GetType]().InvokeMember("Count", Reflection.BindingFlags.GetProperty, Nothing, paragraphs, Nothing))
 
             Dim count As Integer = 0
-            For Each p As Paragraph In paragraphsToScan
-                If count >= MaxSamplesToExtract Then Exit For
-                Dim txt = p.Range.Text.Replace(Chr(13), "").Replace(Chr(7), "").Trim()
+            For i As Integer = 1 To Math.Min(paraCount, MaxSamplesToExtract)
+                Dim p As Object = paragraphs.[GetType]().InvokeMember("Item", Reflection.BindingFlags.GetProperty, Nothing, paragraphs, New Object() {i})
+                Dim rangeObj As Object = p.[GetType]().InvokeMember("Range", Reflection.BindingFlags.GetProperty, Nothing, p, Nothing)
+                Dim txt As String = CStr(rangeObj.[GetType]().InvokeMember("Text", Reflection.BindingFlags.GetProperty, Nothing, rangeObj, Nothing))
+                txt = txt.Replace(Chr(13), "").Replace(Chr(7), "").Trim()
                 If String.IsNullOrWhiteSpace(txt) Then Continue For
 
                 count += 1
-                Dim styleName = p.Style.ToString()
-                Dim key = styleName & "|" &
-                          p.Range.Font.Size.ToString("F1") & "|" &
-                          p.Range.Font.Bold.ToString() & "|" &
-                          p.Alignment.ToString()
+                Dim styleObj As Object = p.[GetType]().InvokeMember("Style", Reflection.BindingFlags.GetProperty, Nothing, p, Nothing)
+                Dim styleName As String = styleObj.ToString()
+                Dim fontObj As Object = rangeObj.[GetType]().InvokeMember("Font", Reflection.BindingFlags.GetProperty, Nothing, rangeObj, Nothing)
+                Dim fontSize As Object = fontObj.[GetType]().InvokeMember("Size", Reflection.BindingFlags.GetProperty, Nothing, fontObj, Nothing)
+                Dim fontBold As Object = fontObj.[GetType]().InvokeMember("Bold", Reflection.BindingFlags.GetProperty, Nothing, fontObj, Nothing)
+                Dim alignment As Object = p.[GetType]().InvokeMember("Alignment", Reflection.BindingFlags.GetProperty, Nothing, p, Nothing)
+
+                Dim key As String = styleName & "|" & fontSize.ToString() & "|" & fontBold.ToString() & "|" & alignment.ToString()
 
                 If styleMap.ContainsKey(key) Then
                     styleMap(key).OccurrenceCount += 1
@@ -73,30 +79,38 @@ Public Class FormatMirrorService
                 fmt.StyleName = styleName
                 fmt.SampleText = If(txt.Length > 60, txt.Substring(0, 60) & "…", txt)
 
-                ' 字体
+                ' 字体信息
                 Try
-                    fmt.FontNameCN = If(String.IsNullOrEmpty(p.Range.Font.NameFarEast), "", p.Range.Font.NameFarEast)
-                    fmt.FontNameEN = If(String.IsNullOrEmpty(p.Range.Font.Name), "", p.Range.Font.Name)
-                    Dim sz = p.Range.Font.Size
-                    fmt.FontSize = If(sz <= 0, 12, sz)
-                    fmt.Bold = (p.Range.Font.Bold = CInt(True)) OrElse p.Range.Font.Bold = -1
-                    fmt.Italic = (p.Range.Font.Italic = CInt(True)) OrElse p.Range.Font.Italic = -1
+                    Dim nameFarEast As Object = fontObj.[GetType]().InvokeMember("NameFarEast", Reflection.BindingFlags.GetProperty, Nothing, fontObj, Nothing)
+                    Dim fontName As Object = fontObj.[GetType]().InvokeMember("Name", Reflection.BindingFlags.GetProperty, Nothing, fontObj, Nothing)
+                    fmt.FontNameCN = If(nameFarEast Is Nothing, "", nameFarEast.ToString())
+                    fmt.FontNameEN = If(fontName Is Nothing, "", fontName.ToString())
+                    fmt.FontSize = If(fontSize Is Nothing, 12, Convert.ToDouble(fontSize))
+                    fmt.Bold = Convert.ToInt32(fontBold) = -1 OrElse Convert.ToInt32(fontBold) = 1
+                    Dim fontItalic As Object = fontObj.[GetType]().InvokeMember("Italic", Reflection.BindingFlags.GetProperty, Nothing, fontObj, Nothing)
+                    fmt.Italic = Convert.ToInt32(fontItalic) = -1 OrElse Convert.ToInt32(fontItalic) = 1
                 Catch
                 End Try
 
-                ' 段落
+                ' 段落信息
                 Try
-                    Select Case p.Alignment
-                        Case WdParagraphAlignment.wdAlignParagraphCenter : fmt.AlignmentStr = "center"
-                        Case WdParagraphAlignment.wdAlignParagraphRight : fmt.AlignmentStr = "right"
-                        Case WdParagraphAlignment.wdAlignParagraphJustify : fmt.AlignmentStr = "justify"
+                    Dim alignVal As Integer = Convert.ToInt32(alignment)
+                    ' WdParagraphAlignment: 0=left, 1=center, 2=right, 3=justify
+                    Select Case alignVal
+                        Case 1 : fmt.AlignmentStr = "center"
+                        Case 2 : fmt.AlignmentStr = "right"
+                        Case 3 : fmt.AlignmentStr = "justify"
                         Case Else : fmt.AlignmentStr = "left"
                     End Select
-                    Dim fi = p.FirstLineIndent
-                    fmt.FirstLineIndentCm = If(fi > 0, Math.Round(fi / PointsPerCm, 2), 0)
-                    fmt.LineSpacingPt = Math.Round(p.LineSpacing, 1)
-                    fmt.SpaceBeforePt = Math.Round(p.SpaceBefore, 1)
-                    fmt.SpaceAfterPt = Math.Round(p.SpaceAfter, 1)
+                    Dim firstLineIndent As Object = p.[GetType]().InvokeMember("FirstLineIndent", Reflection.BindingFlags.GetProperty, Nothing, p, Nothing)
+                    Dim lineSpacing As Object = p.[GetType]().InvokeMember("LineSpacing", Reflection.BindingFlags.GetProperty, Nothing, p, Nothing)
+                    Dim spaceBefore As Object = p.[GetType]().InvokeMember("SpaceBefore", Reflection.BindingFlags.GetProperty, Nothing, p, Nothing)
+                    Dim spaceAfter As Object = p.[GetType]().InvokeMember("SpaceAfter", Reflection.BindingFlags.GetProperty, Nothing, p, Nothing)
+
+                    fmt.FirstLineIndentCm = If(firstLineIndent IsNot Nothing, Math.Round(Convert.ToDouble(firstLineIndent) / PointsPerCm, 2), 0)
+                    fmt.LineSpacingPt = If(lineSpacing IsNot Nothing, Math.Round(Convert.ToDouble(lineSpacing), 1), 0)
+                    fmt.SpaceBeforePt = If(spaceBefore IsNot Nothing, Math.Round(Convert.ToDouble(spaceBefore), 1), 0)
+                    fmt.SpaceAfterPt = If(spaceAfter IsNot Nothing, Math.Round(Convert.ToDouble(spaceAfter), 1), 0)
                 Catch
                 End Try
 

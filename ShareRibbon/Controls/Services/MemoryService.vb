@@ -49,6 +49,27 @@ Public Class MemoryService
     End Function
 
     ''' <summary>
+    ''' 被动 RAG 异步版本：避免 UI 线程阻塞
+    ''' </summary>
+    Public Shared Async Function GetRelevantMemoriesAsync(query As String, Optional topN As Integer? = Nothing, Optional startTime As DateTime? = Nothing, Optional endTime As DateTime? = Nothing, Optional appType As String = Nothing) As Task(Of List(Of AtomicMemoryRecord))
+        Dim n = If(topN.HasValue, topN.Value, MemoryConfig.RagTopN)
+
+        Dim queryEmbedding As Single() = Nothing
+        Try
+            If Not String.IsNullOrWhiteSpace(query) AndAlso EmbeddingService.IsEmbeddingAvailable() AndAlso
+               MemoryRepository.HasMemoriesWithEmbedding(appType) Then
+                queryEmbedding = Await Task.Run(Async Function()
+                    Return Await EmbeddingService.GetEmbeddingAsync(query)
+                End Function)
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"[MemoryService] 异步生成查询向量失败: {ex.Message}")
+        End Try
+
+        Return Await Task.Run(Function() MemoryRepository.GetRelevantMemories(query, n, queryEmbedding, startTime, endTime, appType))
+    End Function
+
+    ''' <summary>
     ''' 获取用户画像
     ''' </summary>
     Public Shared Function GetUserProfile() As String

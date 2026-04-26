@@ -10,10 +10,10 @@ Imports Microsoft.Office.Interop.Excel
 Public Class Ribbon1
     Inherits BaseOfficeRibbon
 
-    Protected Overrides Async Sub ChatButton_Click(sender As Object, e As RibbonControlEventArgs)
+    Protected Overrides Sub ChatButton_Click(sender As Object, e As RibbonControlEventArgs)
         Globals.ThisAddIn.ShowChatTaskPane()
     End Sub
-    Protected Overrides Async Sub WebResearchButton_Click(sender As Object, e As RibbonControlEventArgs)
+    Protected Overrides Sub WebResearchButton_Click(sender As Object, e As RibbonControlEventArgs)
         Globals.ThisAddIn.ShowChatTaskPane()
     End Sub ' 修改 SpotlightButton_Click 方法处理单击和双击
     Protected Overrides Sub SpotlightButton_Click(sender As Object, e As RibbonControlEventArgs)

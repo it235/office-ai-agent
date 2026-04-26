@@ -1451,7 +1451,7 @@ Public Class MCPConfigForm
     End Sub
 
     ' 改进 ToolsListView_DoubleClick 方法
-    Private Async Sub ToolsListView_DoubleClick(sender As Object, e As EventArgs)
+    Private Sub ToolsListView_DoubleClick(sender As Object, e As EventArgs)
         If _toolsListView.SelectedItems.Count = 0 Then Return
 
         Dim selectedTool = CType(_toolsListView.SelectedItems(0).Tag, MCPToolInfo)

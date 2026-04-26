@@ -1,4 +1,4 @@
-/**
+﻿/**
  * core.js - Core initialization for OfficeAI Chat
  * Marked.js configuration and renderer setup
  */
@@ -116,8 +116,7 @@ window.predefinedPrompts = [
 function updateQuickQuestions(questions) {
     if (Array.isArray(questions) && questions.length > 0) {
         window.predefinedPrompts = questions;
-        console.log('Quick questions updated:', questions.length);
-    }
+        }
 }
 
 // ========== 等待动画指示器 ==========
@@ -197,6 +196,5 @@ document.addEventListener('DOMContentLoaded', function () {
 
 // MCP connection check interval (every 3 seconds)
 setInterval(function () {
-    console.log('检测');
     requestMcpConnections();
 }, 3000);

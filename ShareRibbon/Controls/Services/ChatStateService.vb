@@ -155,12 +155,21 @@ Public Class ChatStateService
             })
             ManageHistorySize()
 
-            ' 持久化到 conversation 表
+            ' 持久化到 conversation 表（后台线程，避免阻塞UI）
             If role = "user" OrElse role = "assistant" Then
                 Try
-                    ConversationRepository.InsertMessage(CurrentSessionId, role, content, False)
+                    Dim sid = CurrentSessionId
+                    Dim r = role
+                    Dim c = content
+                    Task.Run(Sub()
+                                 Try
+                                     ConversationRepository.InsertMessage(sid, r, c, False)
+                                 Catch ex As Exception
+                                     Debug.WriteLine("ConversationRepository.InsertMessage 后台写入失败: " & ex.Message)
+                                 End Try
+                             End Sub)
                 Catch ex As Exception
-                    Debug.WriteLine("ConversationRepository.InsertMessage 失败: " & ex.Message)
+                    Debug.WriteLine("ConversationRepository.InsertMessage 调度失败: " & ex.Message)
                 End Try
             End If
         End Sub

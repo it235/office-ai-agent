@@ -42,6 +42,12 @@ Public Class SkillFileDefinition
     ''' <summary>最后使用时间</summary>
     Public Property LastUsedAt As DateTime? = Nothing
 
+    ''' <summary>成功率</summary>
+    Public Property SuccessRate As Double? = Nothing
+
+    ''' <summary>应用类型（用于分类）</summary>
+    Public Property Application As String = ""
+
     Public ReadOnly Property AllowedToolsText As String
         Get
             If AllowedTools Is Nothing OrElse AllowedTools.Count = 0 Then Return ""

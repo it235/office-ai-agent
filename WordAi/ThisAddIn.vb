@@ -43,6 +43,13 @@ Public Class ThisAddIn
     Private Sub WordAi_Startup() Handles Me.Startup
         ' 仅注册程序集解析器（几乎无开销，必须最先执行）
         SqliteAssemblyResolver.EnsureRegistered()
+
+        ' 初始化全局状态栏，确保 GlobalStatusStripAll 的 Office 状态栏提示可用
+        Try
+            GlobalStatusStripAll.InitializeApplication(Me.Application)
+        Catch ex As Exception
+            Debug.WriteLine($"[WordAi] InitializeApplication failed: {ex.Message}")
+        End Try
     End Sub
 
     ''' <summary>
@@ -204,13 +211,13 @@ Public Class ThisAddIn
         End If
     End Sub
 
-    Public Async Sub ShowDataCaptureTaskPane()
+    Public Sub ShowDataCaptureTaskPane()
         EnsureDataCapturePaneCreated()
         If captureTaskPane Is Nothing Then Return
         captureTaskPane.Visible = True
     End Sub
 
-    Public Async Sub ShowDeepseekTaskPane()
+    Public Sub ShowDeepseekTaskPane()
         EnsureCoreServicesLoaded()
         CreateDeepseekTaskPane()
         If _deepseekTaskPane Is Nothing Then Return

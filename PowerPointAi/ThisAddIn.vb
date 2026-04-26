@@ -176,7 +176,7 @@ Public Class ThisAddIn
         End If
     End Sub
 
-    Public Async Sub ShowDeepseekTaskPane()
+    Public Sub ShowDeepseekTaskPane()
         EnsureCoreServicesLoaded()
         CreateDeepseekTaskPane()
         If _deepseekTaskPane Is Nothing Then Return

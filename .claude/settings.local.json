@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe *)",
+      "Bash(cmd.exe *)",
+      "Bash(\"C:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe\" ExcelAi/ExcelAi.vbproj //p:Configuration=Debug //p:Platform=AnyCPU //t:Rebuild //v:minimal)"
+    ]
+  }
+}

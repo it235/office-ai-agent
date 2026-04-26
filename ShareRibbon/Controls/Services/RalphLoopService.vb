@@ -74,11 +74,11 @@ Public Class RalphLoopService
     ''' <summary>
     ''' 处理前端 startLoop 消息
     ''' </summary>
-    Public Sub HandleStartLoop(jsonDoc As JObject)
+    Public Async Sub HandleStartLoop(jsonDoc As JObject)
         Try
             Dim goal = jsonDoc("goal")?.ToString()
             If Not String.IsNullOrEmpty(goal) Then
-                StartRalphLoop(goal)
+                Await StartRalphLoop(goal)
             End If
         Catch ex As Exception
             Debug.WriteLine($"HandleStartLoop 出错: {ex.Message}")

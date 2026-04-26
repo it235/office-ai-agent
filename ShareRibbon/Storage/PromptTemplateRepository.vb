@@ -68,21 +68,39 @@ End Class
 ''' </summary>
 Public Class PromptTemplateRepository
 
+    ' 系统提示词内存缓存，避免每次发消息都查库
+    Private Shared _systemPromptCache As New Dictionary(Of String, String)()
+    Private Shared _cacheLock As New Object()
+
     ''' <summary>
-    ''' 按 scenario 获取系统提示词（is_skill=0）
+    ''' 按 scenario 获取系统提示词（is_skill=0），带内存缓存
     ''' </summary>
     Public Shared Function GetSystemPrompt(scenario As String) As String
-        OfficeAiDatabase.EnsureInitialized()
         Dim scenarioNorm = If(String.IsNullOrEmpty(scenario), "common", scenario.ToLowerInvariant())
+
+        SyncLock _cacheLock
+            If _systemPromptCache.ContainsKey(scenarioNorm) Then
+                Return _systemPromptCache(scenarioNorm)
+            End If
+        End SyncLock
+
+        OfficeAiDatabase.EnsureInitialized()
+        Dim result As String = ""
         Using conn As New SQLiteConnection(OfficeAiDatabase.GetConnectionString())
             conn.Open()
             Dim sql = "SELECT content FROM prompt_template WHERE scenario=@s AND is_skill=0 ORDER BY sort, id LIMIT 1"
             Using cmd As New SQLiteCommand(sql, conn)
                 cmd.Parameters.AddWithValue("@s", scenarioNorm)
                 Dim obj = cmd.ExecuteScalar()
-                Return If(obj Is Nothing OrElse obj Is DBNull.Value, "", obj.ToString())
+                result = If(obj Is Nothing OrElse obj Is DBNull.Value, "", obj.ToString())
             End Using
         End Using
+
+        SyncLock _cacheLock
+            _systemPromptCache(scenarioNorm) = result
+        End SyncLock
+
+        Return result
     End Function
 
     ''' <summary>
@@ -189,6 +207,9 @@ Public Class PromptTemplateRepository
     ''' 插入新记录
     ''' </summary>
     Public Shared Function Insert(record As PromptTemplateRecord) As Long
+        SyncLock _cacheLock
+            _systemPromptCache.Clear()
+        End SyncLock
         OfficeAiDatabase.EnsureInitialized()
         Using conn As New SQLiteConnection(OfficeAiDatabase.GetConnectionString())
             conn.Open()
@@ -215,6 +236,9 @@ Public Class PromptTemplateRepository
     ''' 更新记录
     ''' </summary>
     Public Shared Sub Update(record As PromptTemplateRecord)
+        SyncLock _cacheLock
+            _systemPromptCache.Clear()
+        End SyncLock
         OfficeAiDatabase.EnsureInitialized()
         Using conn As New SQLiteConnection(OfficeAiDatabase.GetConnectionString())
             conn.Open()
@@ -242,6 +266,9 @@ Public Class PromptTemplateRepository
     ''' 删除记录
     ''' </summary>
     Public Shared Sub Delete(id As Long)
+        SyncLock _cacheLock
+            _systemPromptCache.Clear()
+        End SyncLock
         OfficeAiDatabase.EnsureInitialized()
         Using conn As New SQLiteConnection(OfficeAiDatabase.GetConnectionString())
             conn.Open()

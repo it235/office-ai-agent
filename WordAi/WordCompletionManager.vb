@@ -4,7 +4,6 @@ Imports System.Runtime.InteropServices
 Imports System.Threading
 Imports System.Windows.Forms
 Imports ShareRibbon
-Imports WordAi.Services
 
 ''' <summary>
 ''' Word文档补全管理器 - 提供实时AI补全功能（使用内联灰色文本）

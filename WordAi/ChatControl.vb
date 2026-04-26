@@ -14,7 +14,6 @@ Imports System.Text.RegularExpressions
 Imports System.Threading
 Imports System.Threading.Tasks
 Imports System.Web
-Imports System.Web.UI.WebControls
 Imports System.Windows.Forms
 Imports System.Windows.Forms.ListBox
 Imports System.Windows.Forms.VisualStyles.VisualStyleElement.Tab
@@ -25,7 +24,6 @@ Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 Imports ShareRibbon
 Imports DocumentFormat.OpenXml.Packaging
-Imports HtmlToOpenXml
 
 Public Class ChatControl
     Inherits BaseChatControl
@@ -270,9 +268,6 @@ Public Class ChatControl
         End Try
     End Sub
 
-    ''' <summary>
-    ''' 共用语义排版流水线：收集段落 → 构建提示词 → 发送AI标注请求
-    ''' </summary>
     ''' <summary>
     ''' 从当前 Word 选区收集段落信息，供语义排版使用（消除重复代码）
     ''' </summary>
@@ -2678,7 +2673,7 @@ Public Class ChatControl
     ''' 上传 .docx 文件，用 AI 分析其格式生成 SemanticStyleMapping（AI辅助解析，区别于直接解析）
     ''' </summary>
     Protected Overrides Sub HandleUploadTemplateDocumentForAiAnalysis()
-        Dim act As Action = Sub()
+        Dim act As System.Action = Sub()
             Try
                 Using ofd As New OpenFileDialog With {
                     .Filter = "Word文档 (*.docx;*.dotx)|*.docx;*.dotx|所有文件 (*.*)|*.*",

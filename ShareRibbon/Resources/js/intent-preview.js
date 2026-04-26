@@ -1,4 +1,4 @@
-/**
+﻿/**
  * intent-preview.js - 意图预览组件
  * 显示"我理解您想要..."的预览卡片，用户确认后再发送
  */
@@ -47,15 +47,15 @@ function showIntentPreview(intentData) {
         // 滚动到可见区域
         previewCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
-        // Agent模式下自动确认
+        // Agent模式下自动确认（不在前端显示意图确认框）
         if (window.intentPreviewState.autoConfirm) {
+            // 直接调用确认，不显示卡片
             setTimeout(function() {
                 confirmIntent();
-            }, 500);
+            }, 100);
         }
 
-        console.log('显示意图预览:', intentData.description);
-    } catch (err) {
+        } catch (err) {
         console.error('showIntentPreview error:', err);
     }
 }
@@ -150,7 +150,6 @@ let confirmInProgress = false;
 function confirmIntent() {
     // 防抖检查
     if (confirmInProgress) {
-        console.log('确认操作正在进行中，忽略重复点击');
         return;
     }
     confirmInProgress = true;
@@ -167,8 +166,7 @@ function confirmIntent() {
             intentData: intentData
         });
 
-        console.log('用户确认意图');
-    } catch (err) {
+        } catch (err) {
         console.error('confirmIntent error:', err);
     } finally {
         // 300ms后解除防抖锁定
@@ -201,8 +199,7 @@ function editIntent() {
         // 隐藏预览卡片
         hideIntentPreview();
 
-        console.log('用户选择修改需求');
-    } catch (err) {
+        } catch (err) {
         console.error('editIntent error:', err);
     }
 }
@@ -234,8 +231,7 @@ function cancelIntent() {
         // 恢复发送按钮状态
         changeSendButton();
 
-        console.log('用户取消意图');
-    } catch (err) {
+        } catch (err) {
         console.error('cancelIntent error:', err);
     }
 }
@@ -249,25 +245,82 @@ function isIntentPreviewActive() {
 }
 
 /**
- * 更新意图预览状态指示器
- * @param {boolean} isProcessing - 是否正在处理
+ * 显示"识别中"状态（Agent模式专用）
  */
-function updateIntentPreviewStatus(isProcessing) {
-    const card = document.getElementById('intent-preview-card');
-    if (!card) return;
-
-    if (isProcessing) {
-        card.classList.add('processing');
-        const header = card.querySelector('.intent-preview-header');
-        if (header) {
-            header.innerHTML = `
-                <span class="intent-preview-icon spinning">⏳</span>
-                <span class="intent-preview-title">正在分析您的意图...</span>
-            `;
+function showIdentifyingStatus() {
+    try {
+        // 移除已存在的状态卡片
+        const existingCard = document.getElementById('identifying-status-card');
+        if (existingCard) existingCard.remove();
+        
+        const card = document.createElement('div');
+        card.id = 'identifying-status-card';
+        card.className = 'identifying-status-card';
+        card.innerHTML = `
+            <div class="identifying-content">
+                <div class="identifying-spinner"></div>
+                <span class="identifying-text">正在识别您的意图...</span>
+            </div>
+        `;
+        
+        // 插入到输入区域上方
+        const chatInputCard = document.getElementById('chat-input-card');
+        if (chatInputCard && chatInputCard.parentNode) {
+            chatInputCard.parentNode.insertBefore(card, chatInputCard);
         }
-    } else {
-        card.classList.remove('processing');
+        
+        // 滚动到可见区域
+        card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        
+        } catch (err) {
+        console.error('showIdentifyingStatus error:', err);
     }
+}
+
+/**
+ * 显示Agent规划状态（替换识别中状态）
+ * @param {string} goal - 任务目标
+ */
+function showAgentPlanningStatus(goal) {
+    try {
+        // 移除识别中状态
+        const identifyingCard = document.getElementById('identifying-status-card');
+        if (identifyingCard) identifyingCard.remove();
+        
+        // 显示规划中状态
+        const card = document.createElement('div');
+        card.id = 'planning-status-card';
+        card.className = 'planning-status-card';
+        card.innerHTML = `
+            <div class="planning-content">
+                <div class="planning-spinner"></div>
+                <span class="planning-text">正在规划任务...</span>
+                <div class="planning-goal">${escapeHtml(goal)}</div>
+            </div>
+        `;
+        
+        // 插入到输入区域上方
+        const chatInputCard = document.getElementById('chat-input-card');
+        if (chatInputCard && chatInputCard.parentNode) {
+            chatInputCard.parentNode.insertBefore(card, chatInputCard);
+        }
+        
+        card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        
+        } catch (err) {
+        console.error('showAgentPlanningStatus error:', err);
+    }
+}
+
+/**
+ * 隐藏状态卡片
+ */
+function hideStatusCards() {
+    const identifyingCard = document.getElementById('identifying-status-card');
+    if (identifyingCard) identifyingCard.remove();
+    
+    const planningCard = document.getElementById('planning-status-card');
+    if (planningCard) planningCard.remove();
 }
 
 // 导出函数供全局使用
@@ -277,3 +330,6 @@ window.confirmIntent = confirmIntent;
 window.editIntent = editIntent;
 window.cancelIntent = cancelIntent;
 window.isIntentPreviewActive = isIntentPreviewActive;
+window.showIdentifyingStatus = showIdentifyingStatus;
+window.showAgentPlanningStatus = showAgentPlanningStatus;
+window.hideStatusCards = hideStatusCards;

@@ -22,6 +22,32 @@ Public Module GlobalStatusStripAll
         ShowWarning(message) ' 简化代码，使用同一个方法
     End Sub
 
+    ''' <summary>
+    ''' 显示进度信息（只更新状态栏，不弹窗）
+    ''' </summary>
+    Public Sub ShowProgress(message As String)
+        Try
+            Debug.WriteLine("[Progress] " & message)
+
+            If _application IsNot Nothing Then
+                Try
+                    Dim app = TryCast(_application, Object)
+                    app.StatusBar = "AI: " & message
+
+                    ' 进度状态10秒后清除（比警告长，避免翻译过程中过早消失）
+                    _messagePending = True
+                    StatusTimer.Stop()
+                    StatusTimer.Interval = 10000
+                    StatusTimer.Start()
+                Catch ex As Exception
+                    Debug.WriteLine($"设置进度状态栏失败: {ex.Message}")
+                End Try
+            End If
+        Catch ex As Exception
+            Debug.WriteLine("显示进度失败: " & ex.Message)
+        End Try
+    End Sub
+
     Public Sub ShowWarning(message As String)
         Try
             Debug.WriteLine("显示警告通知: " & message)
@@ -36,6 +62,7 @@ Public Module GlobalStatusStripAll
                     ' 启动定时器，5秒后清除状态栏
                     _messagePending = True
                     StatusTimer.Stop() ' 确保先停止之前的计时器
+                    StatusTimer.Interval = 5000
                     StatusTimer.Start()
 
                     Debug.WriteLine("状态栏消息设置成功")
@@ -55,16 +82,93 @@ Public Module GlobalStatusStripAll
         End Try
     End Sub
 
+    ''' <summary>
+    ''' 显示实时进度Toast（单实例，可更新内容）
+    ''' </summary>
+    Public Sub ShowToast(message As String)
+        Try
+            Debug.WriteLine("[Toast] " & message)
+
+            ' 更新 Office 状态栏
+            If _application IsNot Nothing Then
+                Try
+                    Dim app = TryCast(_application, Object)
+                    app.StatusBar = "AI: " & message
+                    _messagePending = True
+                    StatusTimer.Stop()
+                    StatusTimer.Interval = 10000
+                    StatusTimer.Start()
+                Catch ex As Exception
+                End Try
+            End If
+
+            ' 更新或创建 Toast 弹框
+            If notificationForm IsNot Nothing AndAlso Not notificationForm.IsDisposed Then
+                Try
+                    If notificationForm.InvokeRequired Then
+                        notificationForm.Invoke(Sub()
+                                                    notificationForm.UpdateMessage(message)
+                                                    notificationForm.ResetTimer()
+                                                End Sub)
+                    Else
+                        notificationForm.UpdateMessage(message)
+                        notificationForm.ResetTimer()
+                    End If
+                Catch ex As Exception
+                    notificationForm = Nothing
+                    ShowNotificationForm(message)
+                End Try
+            Else
+                ShowNotificationForm(message)
+            End If
+        Catch ex As Exception
+            Debug.WriteLine("ShowToast failed: " & ex.Message)
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 关闭当前 Toast 弹框
+    ''' </summary>
+    Public Sub CloseToast()
+        Try
+            If notificationForm IsNot Nothing AndAlso Not notificationForm.IsDisposed Then
+                Try
+                    If notificationForm.InvokeRequired Then
+                        notificationForm.Invoke(Sub() notificationForm.Close())
+                    Else
+                        notificationForm.Close()
+                    End If
+                Catch ex As Exception
+                End Try
+                notificationForm = Nothing
+            End If
+        Catch ex As Exception
+            Debug.WriteLine("CloseToast failed: " & ex.Message)
+        End Try
+    End Sub
+
     ' 显示自定义通知窗口
     Private Sub ShowNotificationForm(message As String)
         Try
+            ' 如果已有通知窗体，先关闭
+            If notificationForm IsNot Nothing AndAlso Not notificationForm.IsDisposed Then
+                Try
+                    notificationForm.Invoke(Sub()
+                                                notificationForm.Close()
+                                                notificationForm = Nothing
+                                            End Sub)
+                Catch
+                    notificationForm = Nothing
+                End Try
+            End If
+
             ' 创建并显示通知窗口
             Dim thread As New System.Threading.Thread(
                 Sub()
                     Try
-                        ' 创建通知窗体
-                        Dim form As New NotificationForm(message)
-                        form.ShowDialog() ' 使用ShowDialog以保持线程运行直到窗体关闭
+                        notificationForm = New NotificationForm(message)
+                        AddHandler notificationForm.FormClosed, Sub() notificationForm = Nothing
+                        notificationForm.ShowDialog() ' 使用ShowDialog以保持线程运行直到窗体关闭
                     Catch ex As Exception
                         Debug.WriteLine($"显示通知窗口失败: {ex.Message}")
                     End Try
@@ -111,6 +215,7 @@ Public Class NotificationForm : Inherits Form
     Private WithEvents closeTimer As New System.Windows.Forms.Timer()
     Private fadeTimer As New System.Windows.Forms.Timer()
     Private _opacity As Double = 1.0
+    Private _lblMessage As Label
 
     Public Sub New(message As String)
         ' 设置窗体属性
@@ -131,28 +236,48 @@ Public Class NotificationForm : Inherits Form
         Me.Region = New Region(path)
 
         ' 添加消息标签
-        Dim lblMessage As New Label()
-        lblMessage.Text = message
-        lblMessage.ForeColor = Color.White
-        lblMessage.Font = New Font("Microsoft YaHei UI", 9.0F, FontStyle.Regular)
-        lblMessage.AutoSize = False
-        lblMessage.Size = New Size(280, 60)
-        lblMessage.Location = New Point(10, 10)
-        lblMessage.TextAlign = ContentAlignment.MiddleCenter
-        Me.Controls.Add(lblMessage)
+        _lblMessage = New Label()
+        _lblMessage.Text = message
+        _lblMessage.ForeColor = Color.White
+        _lblMessage.Font = New Font("Microsoft YaHei UI", 9.0F, FontStyle.Regular)
+        _lblMessage.AutoSize = False
+        _lblMessage.Size = New Size(280, 60)
+        _lblMessage.Location = New Point(10, 10)
+        _lblMessage.TextAlign = ContentAlignment.MiddleCenter
+        Me.Controls.Add(_lblMessage)
 
         ' 设置窗体位置 - 右下角
         Dim screenWidth As Integer = Screen.PrimaryScreen.WorkingArea.Width
         Dim screenHeight As Integer = Screen.PrimaryScreen.WorkingArea.Height
         Me.Location = New Point(screenWidth - Me.Width - 20, screenHeight - Me.Height - 20)
 
-        ' 设置自动关闭定时器
-        closeTimer.Interval = 3000 ' 3秒后开始渐隐
+        ' 设置自动关闭定时器（延长到8秒，给进度更新留出时间）
+        closeTimer.Interval = 8000
         closeTimer.Start()
 
         ' 设置渐隐效果定时器
         fadeTimer.Interval = 50 ' 每50毫秒更新一次透明度
         AddHandler fadeTimer.Tick, AddressOf FadeTimer_Tick
+    End Sub
+
+    ''' <summary>
+    ''' 更新弹框消息文本
+    ''' </summary>
+    Public Sub UpdateMessage(newMessage As String)
+        If _lblMessage IsNot Nothing AndAlso Not _lblMessage.IsDisposed Then
+            _lblMessage.Text = newMessage
+        End If
+    End Sub
+
+    ''' <summary>
+    ''' 重置关闭计时器（用于进度更新时延长显示）
+    ''' </summary>
+    Public Sub ResetTimer()
+        closeTimer.Stop()
+        fadeTimer.Stop()
+        _opacity = 1.0
+        Me.Opacity = 0.9
+        closeTimer.Start()
     End Sub
 
     Private Sub CloseTimer_Tick(sender As Object, e As EventArgs) Handles closeTimer.Tick

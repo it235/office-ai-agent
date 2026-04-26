@@ -24,12 +24,12 @@ Public Class MemoryConfigForm
         Me.Font = New Font("Microsoft YaHei UI", 9)
         Me.FormBorderStyle = FormBorderStyle.FixedDialog
         Me.MaximizeBox = False
-        AddHandler Me.FormClosing, AddressOf OnFormClosing
+        AddHandler Me.FormClosing, AddressOf HandleFormClosing
         InitializeUI()
         LoadValues()
     End Sub
 
-    Private Sub OnFormClosing(sender As Object, e As FormClosingEventArgs)
+    Private Sub HandleFormClosing(sender As Object, e As FormClosingEventArgs)
         ' 关闭前移出共享 StatusStrip，避免随窗体被释放
         If Me.Controls.Contains(GlobalStatusStrip.StatusStrip) Then
             Me.Controls.Remove(GlobalStatusStrip.StatusStrip)

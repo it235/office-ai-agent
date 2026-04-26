@@ -12,9 +12,6 @@ Imports System.Windows.Forms
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 Imports ShareRibbon.ConfigManager
-Imports Services.SkillsService
-Imports Services.SkillsDirectoryService
-Imports Services.SkillsFileDefinition
 Imports Markdig
 Imports Microsoft.Web.WebView2.WinForms
 Imports Microsoft.Web.WebView2.Core

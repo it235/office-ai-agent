@@ -1,4 +1,4 @@
-/**
+﻿/**
  * message-sender.js - Message Sending Logic
  * Handles sending messages to backend and managing input UI
  */
@@ -50,7 +50,6 @@ function sendChatMessage() {
                 type: 'startLoop',
                 goal: loopGoal
             });
-            console.log('[RalphLoop] 启动循环，目标:', loopGoal);
             return;
         }
     }
@@ -119,7 +118,6 @@ function sendChatMessage() {
                 filePaths: attachedFileObjects.map(file => (file && typeof file.path === 'string' && file.path) ? file.path : file.name),
                 selectedContent: selectedSheetContent
             });
-            console.log('[RalphAgent] 启动Agent，需求:', userTypedText, '文件数:', attachedFileObjects.length, '选中内容数:', selectedSheetContent.length);
             return;
         }
     }
@@ -514,7 +512,6 @@ function renderReferences() {
                 existingFile => existingFile.name === file.name && existingFile.size === file.size
             );
             if (isDuplicate) {
-                console.log(`文件已添加: ${file.name}`);
                 continue;
             }
             window.attachedFiles.push({
@@ -562,7 +559,6 @@ function addFilesFromDialog(files) {
 
             // 检查文件类型
             if (!allowedExtensions.exec(file.name)) {
-                console.log(`文件类型不支持: ${file.name}`);
                 return;
             }
 
@@ -571,7 +567,6 @@ function addFilesFromDialog(files) {
                 existingFile => existingFile.name === file.name && existingFile.path === file.path
             );
             if (isDuplicate) {
-                console.log(`文件已添加: ${file.name}`);
                 return;
             }
 
@@ -584,8 +579,7 @@ function addFilesFromDialog(files) {
         });
 
         renderReferences();
-        console.log(`通过对话框添加了 ${files.length} 个文件`);
-    } catch (err) {
+        } catch (err) {
         console.error('addFilesFromDialog error:', err);
     }
 }
@@ -630,7 +624,6 @@ function initDragDrop() {
 
             // 检查文件类型
             if (!allowedExtensions.exec(file.name)) {
-                console.log(`文件类型不支持: ${file.name}`);
                 continue;
             }
 
@@ -639,7 +632,6 @@ function initDragDrop() {
                 existingFile => existingFile.name === file.name
             );
             if (isDuplicate) {
-                console.log(`文件已添加: ${file.name}`);
                 continue;
             }
 
@@ -653,11 +645,9 @@ function initDragDrop() {
         }
 
         renderReferences();
-        console.log(`通过拖拽添加了 ${files.length} 个文件`);
-    });
+        });
 
-    console.log('拖拽功能已初始化');
-}
+    }
 
 // 在页面加载后初始化拖拽功能
 if (document.readyState === 'loading') {
@@ -772,8 +762,7 @@ function showDetectedIntent(intentType) {
             indicator.style.transform = 'translateY(-10px)';
         }, 3000);
 
-        console.log('显示意图: ' + label);
-    } catch (err) {
+        } catch (err) {
         console.error('showDetectedIntent error:', err);
     }
 }

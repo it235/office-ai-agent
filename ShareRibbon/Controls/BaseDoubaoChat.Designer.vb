@@ -56,5 +56,5 @@ Partial Class BaseDoubaoChat
 
     End Sub
 
-    Protected WithEvents ChatBrowser As Microsoft.Web.WebView2.WinForms.WebView2
+    Protected Shadows WithEvents ChatBrowser As Microsoft.Web.WebView2.WinForms.WebView2
 End Class

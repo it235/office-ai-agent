@@ -101,7 +101,7 @@
     <DocumentationFile>WordAi.xml</DocumentationFile>
     <RegisterForComInterop>false</RegisterForComInterop>
     <RemoveIntegerChecks>false</RemoveIntegerChecks>
-    <NoWarn>42016,41999,42017,42018,42019,42032,42036,42020,42021,42022</NoWarn>
+    <NoWarn>42016,41999,42017,42018,42019,42032,42036,42020,42021,42022,42358,42356</NoWarn>
   </PropertyGroup>
   <!--
     This section defines properties that are set when the "Release" configuration is selected.
@@ -129,7 +129,7 @@
     <DocumentationFile>WordAi.xml</DocumentationFile>
     <RegisterForComInterop>false</RegisterForComInterop>
     <RemoveIntegerChecks>false</RemoveIntegerChecks>
-    <NoWarn>42016,41999,42017,42018,42019,42032,42036,42020,42021,42022</NoWarn>
+    <NoWarn>42016,41999,42017,42018,42019,42032,42036,42020,42021,42022,42358,42356</NoWarn>
   </PropertyGroup>
   <!--
     This section specifies references for the project.
@@ -325,6 +325,7 @@
       <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="WordTranslateService.vb" />
+    <Compile Include="OpenXmlWordTranslator.vb" />
     <Compile Include="WordDocumentTranslateService.vb" />
     <Compile Include="WordContinuationService.vb" />
     <Compile Include="WordCompletionManager.vb" />
@@ -368,10 +369,7 @@
     <None Include="WordAi_TemporaryKey.pfx" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="..\packages\Markdig.0.41.1\lib\net462\Markdig.dll">
-      <Link>Markdig.dll</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <!-- Markdig.dll 通过 PostBuild 复制，避免 VSTO 清单签名验证失败 (MSB3178) -->
     <Content Include="..\packages\SQLitePCLRaw.lib.e_sqlite3.2.1.11\runtimes\win-x64\native\e_sqlite3.dll">
       <Link>runtimes\win-x64\native\e_sqlite3.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -409,10 +407,15 @@
   <PropertyGroup>
     <ManifestCertificateThumbprint>4FD4775958129CB89DEE0E74E97DBA2A6D6D2D01</ManifestCertificateThumbprint>
   </PropertyGroup>
+  <!-- PostBuild: copy unsigned Markdig.dll to output (avoids VSTO manifest signing error MSB3178) -->
+  <Target Name="CopyUnsignedDllsAfterBuild" AfterTargets="Build">
+    <Copy SourceFiles="..\packages\Markdig.0.41.1\lib\net462\Markdig.dll" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="Exists('..\packages\Markdig.0.41.1\lib\net462\Markdig.dll')" />
+  </Target>
   <!-- Include the build rules for a Visual Basic project. -->
   <Import Project="$(MSBuildToolsPath)\Microsoft.VisualBasic.targets" />
   <!-- Include additional build rules for an Office application add-in. -->
-  <Import Project="$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v18.0\OfficeTools\Microsoft.VisualStudio.Tools.Office.targets" Condition="Exists('$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v18.0\OfficeTools\Microsoft.VisualStudio.Tools.Office.targets')" />
+  <!-- 使用 VisualStudioVersion 变量替代硬编码版本号，兼容 VS 2022/2025/2026 -->
+  <Import Project="$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v$(VisualStudioVersion)\OfficeTools\Microsoft.VisualStudio.Tools.Office.targets" Condition="Exists('$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v$(VisualStudioVersion)\OfficeTools\Microsoft.VisualStudio.Tools.Office.targets')" />
   <!-- This section defines VSTO properties that describe the host-changeable project properties. -->
   <ProjectExtensions>
     <VisualStudio>
@@ -433,11 +436,47 @@
     <Error Condition="!Exists('..\packages\Microsoft.Extensions.Logging.Abstractions.6.0.0\build\Microsoft.Extensions.Logging.Abstractions.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Extensions.Logging.Abstractions.6.0.0\build\Microsoft.Extensions.Logging.Abstractions.targets'))" />
   </Target>
   <Import Project="..\packages\Microsoft.Extensions.Logging.Abstractions.6.0.0\build\Microsoft.Extensions.Logging.Abstractions.targets" Condition="Exists('..\packages\Microsoft.Extensions.Logging.Abstractions.6.0.0\build\Microsoft.Extensions.Logging.Abstractions.targets')" />
-  <!-- Exclude unsigned Markdig.dll from VSTO manifest generation by matching resolved paths -->
+  <!-- Exclude unsigned assemblies from VSTO manifest generation -->
   <Target Name="ExcludeUnsignedAssembliesFromManifest" AfterTargets="ResolveAssemblyReferences" BeforeTargets="VisualStudioForApplicationsBuild">
     <ItemGroup>
+      <!-- List of unsigned third-party assemblies to exclude from manifest -->
       <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'Markdig'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'HtmlAgilityPack'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'AngleSharp'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'DocumentFormat.OpenXml'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'DocumentFormat.OpenXml.Framework'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'Microsoft.Extensions.Logging.Abstractions'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'Newtonsoft.Json'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.Buffers'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.Data.SQLite'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.Memory'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.Numerics.Vectors'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.Runtime.CompilerServices.Unsafe'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.Text.Encoding.CodePages'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.Text.Json'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.Text.Encodings.Web'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.Threading.Tasks.Extensions'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.ValueTuple'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'Office'" />
+      <!-- Also exclude from final deployment references -->
       <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'Markdig'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'HtmlAgilityPack'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'AngleSharp'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'DocumentFormat.OpenXml'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'DocumentFormat.OpenXml.Framework'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'Microsoft.Extensions.Logging.Abstractions'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'Newtonsoft.Json'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.Buffers'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.Data.SQLite'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.Memory'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.Numerics.Vectors'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.Runtime.CompilerServices.Unsafe'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.Text.Encoding.CodePages'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.Text.Json'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.Text.Encodings.Web'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.Threading.Tasks.Extensions'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.ValueTuple'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'Office'" />
     </ItemGroup>
   </Target>
   <!-- Register add-in directly in registry for debugging -->

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * reformat-template.js - 排版模板选择模块
  * 处理模板列表显示、预览、选择和管理
  */
@@ -54,8 +54,7 @@ window.enterReformatTemplateMode = function() {
     // 请求规范列表（模板列表由VB端自动发送）
     sendMessageToVB({ type: 'getStyleGuides' });
     
-    console.log('[ReformatTemplate] 进入模板选择模式');
-};
+    };
 
 /**
  * 退出模板选择模式
@@ -64,7 +63,6 @@ window.enterReformatTemplateMode = function() {
 window.exitReformatTemplateMode = function(force = false) {
     // 如果不是强制退出，检查是否真的处于模板模式
     if (!force && !window.reformatTemplateActive) {
-        console.log('[ReformatTemplate] 未处于模板模式，跳过退出');
         return;
     }
     
@@ -92,8 +90,7 @@ window.exitReformatTemplateMode = function(force = false) {
     // 关闭预览对话框
     closeTemplatePreview();
     
-    console.log('[ReformatTemplate] 退出模板选择模式');
-};
+    };
 
 /**
  * 加载模板列表（由VB.NET调用）
@@ -102,8 +99,7 @@ window.exitReformatTemplateMode = function(force = false) {
 window.loadReformatTemplateList = function(templates) {
     currentTemplates = templates || [];
     renderResourceList();
-    console.log('[ReformatTemplate] 加载模板列表:', currentTemplates.length, '个模板');
-};
+    };
 
 /**
  * 加载规范列表（由VB.NET调用）
@@ -112,8 +108,7 @@ window.loadReformatTemplateList = function(templates) {
 window.loadStyleGuideList = function(guides) {
     currentStyleGuides = guides || [];
     renderResourceList();
-    console.log('[ReformatTemplate] 加载规范列表:', currentStyleGuides.length, '个规范');
-};
+    };
 
 /**
  * Tab切换
@@ -132,8 +127,7 @@ window.switchResourceTab = function(tabType) {
     }
     
     renderResourceList();
-    console.log('[ReformatTemplate] 切换资源类型:', tabType);
-};
+    };
 
 /**
  * 更新资源Tab UI
@@ -415,8 +409,7 @@ window.previewStyleGuide = function(guideId) {
         editBtn.style.display = guide.IsPreset ? 'none' : '';
     }
     
-    console.log('[ReformatTemplate] 预览规范:', guide.Name);
-};
+    };
 
 /**
  * 关闭规范预览（同时重置编辑模式）
@@ -490,8 +483,7 @@ window.enterStyleGuideEditMode = function() {
     // 切换按钮可见性
     toggleEditButtons(true);
 
-    console.log('[ReformatTemplate] 进入编辑模式:', guide.Name);
-};
+    };
 
 /**
  * 保存规范编辑
@@ -528,16 +520,14 @@ window.saveStyleGuideEdit = function() {
         }
     }
 
-    console.log('[ReformatTemplate] 规范已保存:', guide.Name);
-};
+    };
 
 /**
  * 取消编辑模式（回到预览）
  */
 window.cancelStyleGuideEditMode = function() {
     resetStyleGuideEditUI();
-    console.log('[ReformatTemplate] 取消编辑');
-};
+    };
 
 /**
  * 重置编辑模式UI到预览状态
@@ -605,8 +595,7 @@ window.useStyleGuide = function(guideId) {
         guideId: guideId
     });
     
-    console.log('[ReformatTemplate] 使用规范:', guide.Name);
-};
+    };
 
 /**
  * 从预览对话框使用规范
@@ -625,8 +614,7 @@ window.uploadStyleGuideDocument = function() {
     sendMessageToVB({
         type: 'uploadStyleGuideDocument'
     });
-    console.log('[ReformatTemplate] 请求上传规范文档');
-};
+    };
 
 /**
  * 删除规范
@@ -650,8 +638,7 @@ window.deleteStyleGuide = function(guideId) {
         guideId: guideId
     });
     
-    console.log('[ReformatTemplate] 删除规范:', guideId);
-};
+    };
 
 /**
  * 复制规范
@@ -670,8 +657,7 @@ window.duplicateStyleGuide = function(guideId) {
         newName: newName
     });
     
-    console.log('[ReformatTemplate] 复制规范:', guideId, '新名称:', newName);
-};
+    };
 
 /**
  * 导出规范
@@ -682,8 +668,7 @@ window.exportStyleGuide = function(guideId) {
         type: 'exportStyleGuide',
         guideId: guideId
     });
-    console.log('[ReformatTemplate] 导出规范:', guideId);
-};
+    };
 
 /**
  * 渲染模板卡片 - 分系统模板和自定义模板两组显示
@@ -872,7 +857,6 @@ window.previewTemplate = function(templateId) {
         previewContent.innerHTML = buildDocxMappingPreviewHtml(template);
         const dialog = document.getElementById('template-preview-dialog');
         if (dialog) dialog.style.display = 'flex';
-        console.log('[ReformatTemplate] 预览文档映射:', template.Name);
         return;
     }
     
@@ -958,8 +942,7 @@ window.previewTemplate = function(templateId) {
         dialog.style.display = 'flex';
     }
     
-    console.log('[ReformatTemplate] 预览模板:', template.Name);
-};
+    };
 
 /**
  * 获取对齐方式文本
@@ -1008,7 +991,6 @@ window.previewTemplateInWord = function() {
             // 暂时假设为Word，直到收到响应
             currentAppName = 'Word';
         } catch(e) {
-            console.log('[ReformatTemplate] 获取应用信息失败，假设为Word');
             currentAppName = 'Word';
         }
     }
@@ -1024,12 +1006,10 @@ window.previewTemplateInWord = function() {
             templateId: selectedTemplateId
         });
         
-        console.log('[ReformatTemplate] 请求在Word中预览模板:', selectedTemplateId);
-    } else {
+        } else {
         // 如果不是Word，显示提示信息
         alert(`${currentAppName}不支持模板预览功能，此功能仅适用于Word应用。`);
-        console.log(`[ReformatTemplate] ${currentAppName}不支持模板预览功能`);
-    }
+        }
 };
 
 /**
@@ -1053,8 +1033,7 @@ window.useTemplate = function(templateId) {
         template: template
     });
     
-    console.log('[ReformatTemplate] 使用模板:', template.Name);
-};
+    };
 
 /**
  * 从预览对话框使用模板
@@ -1081,8 +1060,7 @@ window.filterTemplatesByCategory = function(category) {
     // 重新渲染卡片
     renderTemplateCards(currentTemplates, category);
     
-    console.log('[ReformatTemplate] 筛选分类:', category);
-};
+    };
 
 /**
  * 切换管理模式
@@ -1092,8 +1070,7 @@ window.toggleManageMode = function() {
     updateManageModeUI();
     renderResourceList();
     
-    console.log('[ReformatTemplate] 管理模式:', isManageMode ? '开启' : '关闭');
-};
+    };
 
 /**
  * 更新管理模式UI
@@ -1117,8 +1094,7 @@ window.editTemplate = function(templateId) {
         templateId: templateId
     });
     
-    console.log('[ReformatTemplate] 编辑模板:', templateId);
-};
+    };
 
 /**
  * 复制模板
@@ -1137,8 +1113,7 @@ window.duplicateTemplate = function(templateId) {
         newName: newName
     });
     
-    console.log('[ReformatTemplate] 复制模板:', templateId, '新名称:', newName);
-};
+    };
 
 /**
  * 删除模板
@@ -1162,8 +1137,7 @@ window.deleteTemplate = function(templateId) {
         templateId: templateId
     });
     
-    console.log('[ReformatTemplate] 删除模板:', templateId);
-};
+    };
 
 /**
  * 删除docx映射卡片
@@ -1182,8 +1156,7 @@ window.deleteDocxMapping = function(cardId) {
         mappingId: template.MappingId || cardId.replace('docx_', '')
     });
     
-    console.log('[ReformatTemplate] 删除docx映射:', cardId);
-};
+    };
 
 /**
  * 导出模板
@@ -1195,8 +1168,7 @@ window.exportTemplate = function(templateId) {
         templateId: templateId
     });
     
-    console.log('[ReformatTemplate] 导出模板:', templateId);
-};
+    };
 
 /**
  * 保存当前文档为模板
@@ -1206,8 +1178,7 @@ window.saveCurrentDocumentAsTemplate = function() {
         type: 'saveCurrentDocumentAsTemplate'
     });
     
-    console.log('[ReformatTemplate] 请求保存当前文档为模板');
-};
+    };
 
 /**
  * 导入资源（根据当前Tab类型自动切换导入行为）
@@ -1215,11 +1186,9 @@ window.saveCurrentDocumentAsTemplate = function() {
 window.importTemplate = function() {
     if (currentResourceType === 'styleguide') {
         sendMessageToVB({ type: 'uploadStyleGuideDocument' });
-        console.log('[ReformatTemplate] 请求导入排版规范');
-    } else {
+        } else {
         sendMessageToVB({ type: 'importTemplate' });
-        console.log('[ReformatTemplate] 请求导入排版模板');
-    }
+        }
 };
 
 /**
@@ -1231,8 +1200,7 @@ window.createNewTemplate = function() {
         templateId: '' // 空ID表示新建
     });
     
-    console.log('[ReformatTemplate] 请求创建新模板');
-};
+    };
 
 /**
  * 使用AI助手创建模板
@@ -1245,8 +1213,7 @@ window.createAiTemplate = function() {
             type: 'startAiTemplateChat',
             mode: 'create'
         });
-        console.log('[ReformatTemplate] 请求开始AI模板创建对话');
-    } else {
+        } else {
         console.error('[ReformatTemplate] WebView2 不可用');
         alert('请在Office插件中使用此功能');
     }
@@ -1263,8 +1230,7 @@ window.createAiTemplateFromSelection = function() {
             type: 'startAiTemplateChat',
             mode: 'fromSelection'
         });
-        console.log('[ReformatTemplate] 请求从选区创建AI模板');
-    } else {
+        } else {
         console.error('[ReformatTemplate] WebView2 不可用');
         alert('请在Office插件中使用此功能');
     }
@@ -1278,8 +1244,7 @@ window.refreshReformatTemplates = function() {
         type: 'getReformatTemplates'
     });
     
-    console.log('[ReformatTemplate] 请求刷新模板列表');
-};
+    };
 
 /**
  * 发送消息到VB.NET后端
@@ -1349,8 +1314,7 @@ document.addEventListener('DOMContentLoaded', function() {
         previewInWordBtn.addEventListener('click', previewTemplateInWord);
     }
     
-    console.log('[ReformatTemplate] 模块初始化完成');
-});
+    });
 
 /**
  * 检查是否处于排版模板模式

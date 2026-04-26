@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ralph-agent.js - Ralph Agent 前端控制
  * 类似Cursor的自动化Agent，嵌入聊天流，自动执行步骤
  */
@@ -159,8 +159,7 @@ function showAgentPlanCard(planData) {
         chatContainer.scrollIntoView({ behavior: 'smooth', block: 'end' });
 
         window.ralphAgentState.session.uuid = uuid;
-        console.log('[RalphAgent] 显示规划卡片, uuid=' + uuid);
-    } catch (err) {
+        } catch (err) {
         console.error('showAgentPlanCard error:', err);
         unlockChatInput();
     }
@@ -196,6 +195,15 @@ function confirmAgentExecution(uuid) {
  */
 function abortAgent(uuid) {
     updateAgentStatus(uuid, 'aborted', '已终止');
+    
+    // 更新操作按钮区域
+    const actions = document.getElementById('agent-actions-' + uuid);
+    if (actions) {
+        actions.innerHTML = `
+            <span class="agent-complete-text">⏹ 已终止</span>
+        `;
+    }
+    
     unlockChatInput();
     window.ralphAgentState.active = false;
     
@@ -409,8 +417,7 @@ function startAgentFromDialog() {
         type: 'startAgent',
         request: request
     });
-    console.log('[RalphAgent] 启动Agent，需求:', request);
-}
+    }
 
 // 导出函数
 window.showAgentInputDialog = showAgentInputDialog;

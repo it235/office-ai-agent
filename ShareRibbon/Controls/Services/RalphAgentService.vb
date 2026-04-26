@@ -24,6 +24,7 @@ Public Class RalphAgentService
     Public Property AgentThinkingUuid As String = Nothing
     Public Property AgentOriginalUserRequest As String = Nothing
     Public Property AgentFullUserMessage As String = Nothing
+    Public Property CurrentAgentSessionId As String = Nothing
 
     ' Agent 响应收集（供 BaseChatControl 的 SendAndGetResponse 访问）
     Public Property AgentResponseBuffer As StringBuilder = Nothing
@@ -72,12 +73,12 @@ Public Class RalphAgentService
                                                     End Sub
 
             _ralphAgentController.OnStepStarted = Sub(stepIndex, desc)
-                                                      _executeScript($"updateAgentStep('{_ralphAgentController.GetCurrentSession()?.Id}', {stepIndex}, 'running', '')")
+                                                      _executeScript($"updateAgentStep('{CurrentAgentSessionId}', {stepIndex}, 'running', '')")
                                                   End Sub
 
             _ralphAgentController.OnStepCompleted = Sub(stepIndex, success, msg)
                                                         Dim stepStatus = If(success, "completed", "failed")
-                                                        _executeScript($"updateAgentStep('{_ralphAgentController.GetCurrentSession()?.Id}', {stepIndex}, '{stepStatus}', '{_escapeJs(msg)}')")
+                                                        _executeScript($"updateAgentStep('{CurrentAgentSessionId}', {stepIndex}, '{stepStatus}', '{_escapeJs(msg)}')")
                                                     End Sub
 
             _ralphAgentController.OnAgentCompleted = Sub(success)
@@ -113,7 +114,9 @@ Public Class RalphAgentService
                                                          AgentOriginalUserRequest = Nothing
                                                          AgentFullUserMessage = Nothing
 
-                                                         _executeScript($"completeAgent('{_ralphAgentController.GetCurrentSession()?.Id}', {success.ToString().ToLower()}, '')")
+                                                         ' 使用保存的 sessionId 确保一致性
+                                                         _executeScript($"completeAgent('{CurrentAgentSessionId}', {success.ToString().ToLower()}, '')")
+                                                         CurrentAgentSessionId = Nothing
                                                      End Sub
 
             _ralphAgentController.SendAIRequest = Async Function(prompt, sysPrompt, historyMsgs)
@@ -131,6 +134,9 @@ Public Class RalphAgentService
     ''' </summary>
     Public Sub ShowAgentPlanCard(session As RalphAgentSession)
         Try
+            ' 保存 sessionId 以供后续回调使用
+            CurrentAgentSessionId = session.Id
+
             Dim stepsJson As New StringBuilder()
             stepsJson.Append("[")
             For i = 0 To session.Steps.Count - 1

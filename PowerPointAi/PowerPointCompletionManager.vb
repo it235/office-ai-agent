@@ -5,7 +5,6 @@ Imports System.Threading
 Imports System.Windows.Forms
 Imports Microsoft.Office.Interop.PowerPoint
 Imports ShareRibbon
-Imports PowerPointAi.Services
 
 ''' <summary>
 ''' PowerPoint演示文稿补全管理器 - 提供实时AI补全功能（使用内联灰色文本）

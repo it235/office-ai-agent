@@ -4,7 +4,6 @@
 Imports System.Drawing
 Imports System.IO
 Imports System.Windows.Forms
-Imports ShareRibbon.Services
 
 ''' <summary>
 ''' Skills配置窗口：展示Claude规范的Skills（只读列表）
@@ -31,7 +30,7 @@ Public Class SkillsConfigForm
         Me.MinimumSize = New Size(700, 450)
         Me.StartPosition = FormStartPosition.CenterScreen
         Me.Font = New Font("Microsoft YaHei UI", 9)
-        AddHandler Me.FormClosing, AddressOf OnFormClosing
+        AddHandler Me.FormClosing, AddressOf HandleFormClosing
         AddHandler Me.Shown, AddressOf OnFormShown
         InitializeUI()
     End Sub
@@ -40,7 +39,7 @@ Public Class SkillsConfigForm
         LoadSkills()
     End Sub
 
-    Private Sub OnFormClosing(sender As Object, e As FormClosingEventArgs)
+    Private Sub HandleFormClosing(sender As Object, e As FormClosingEventArgs)
         If Me.Controls.Contains(GlobalStatusStrip.StatusStrip) Then
             Me.Controls.Remove(GlobalStatusStrip.StatusStrip)
         End If

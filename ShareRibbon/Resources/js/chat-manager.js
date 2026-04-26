@@ -1,16 +1,13 @@
-/**
+﻿﻿/**
  * chat-manager.js - Chat Section Management
  * Functions for creating and managing chat message sections
  */
 
 // Create chat section with sender info and content area
 window.createChatSection = function (sender, timestamp, uuid) {
-    console.log('[createChatSection] 被调用, sender=' + sender + ', uuid=' + uuid);
-    
     // Check if chat container already exists for this uuid
     const existingChatContainer = document.getElementById('chat-' + uuid);
     if (existingChatContainer) {
-        console.log('[createChatSection] UUID为' + uuid + '的聊天容器已存在，直接返回');
         return uuid;
     }
     
@@ -166,8 +163,6 @@ window.createReasoningContainer = function (uuid) {
 
 // Append content to renderer
 window.appendRenderer = function (uuid, text) {
-    console.log('[appendRenderer] 被调用, uuid=' + uuid + ', text长度=' + (text ? text.length : 0));
-    
     if (!uuid) {
         console.error('[appendRenderer] uuid为空');
         return false;
@@ -180,8 +175,6 @@ window.appendRenderer = function (uuid, text) {
     }
 
     const renderer = window.rendererMap[uuid];
-    console.log('[appendRenderer] rendererMap中是否存在该uuid:', !!renderer);
-    console.log('[appendRenderer] 当前rendererMap keys:', Object.keys(window.rendererMap || {}));
     
     if (renderer) {
         renderer.append(text);
@@ -258,7 +251,6 @@ window.clearAllChats = function () {
         window.rendererMap = {};
         window.reasoningRendererMap = {};
         window.autoScrollEnabled = true;
-        console.log('已清空所有聊天内容');
         return true;
     } else {
         console.error('找不到聊天容器');
@@ -351,7 +343,6 @@ window.rebuildRendererMaps = function () {
         }
     });
 
-    console.log('已重建渲染器映射');
     return true;
 };
 

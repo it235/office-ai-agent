@@ -1,4 +1,4 @@
-/**
+﻿/**
  * markdown-renderer.js - Markdown Stream Renderer
  * Handles incremental markdown rendering for streaming responses
  * Includes ReformatTemplate card rendering for AI-generated templates
@@ -6,20 +6,11 @@
 
 class MarkdownStreamRenderer {
     constructor(element) {
-        console.log('[MarkdownStreamRenderer] 构造函数, element=', element);
         this.output = element instanceof HTMLElement ? element : document.getElementById(element);
         this.fullContent = '';
-        console.log('[MarkdownStreamRenderer] output元素:', this.output ? 'OK (id=' + (this.output.id || 'no-id') + ')' : 'NULL');
-        
-        // 调试：设置可见的背景色来确认元素存在
-        if (this.output) {
-            console.log('[MarkdownStreamRenderer] output元素位置:', this.output.getBoundingClientRect());
-            console.log('[MarkdownStreamRenderer] output父元素:', this.output.parentElement ? this.output.parentElement.id : 'no-parent');
-        }
     }
 
     append(text) {
-        console.log('[MarkdownStreamRenderer.append] text长度=' + (text ? text.length : 0) + ', text内容="' + text + '"');
         
         // 收到第一个内容时隐藏等待动画
         if (this.fullContent === '' && text) {
@@ -29,8 +20,6 @@ class MarkdownStreamRenderer {
         }
         
         this.fullContent += text + '';
-        console.log('[MarkdownStreamRenderer.append] fullContent累计="' + this.fullContent + '"');
-
         if (!this.output) {
             console.error('[MarkdownStreamRenderer.append] output元素为null，无法渲染');
             return;
@@ -52,10 +41,7 @@ class MarkdownStreamRenderer {
         // Use full content render
         try {
             const parsed = marked.parse(this.fullContent);
-            console.log('[MarkdownStreamRenderer.append] marked.parse结果="' + parsed + '"');
             this.output.innerHTML = parsed;
-            console.log('[MarkdownStreamRenderer.append] innerHTML设置完成, 实际innerHTML="' + this.output.innerHTML + '"');
-            
             // Process template JSON code blocks and render as cards
             this._processTemplateCards();
         } catch (e) {
@@ -92,8 +78,6 @@ class MarkdownStreamRenderer {
             if (!this._isReformatTemplate(template)) {
                 return;
             }
-            
-            console.log('[MarkdownStreamRenderer] 检测到模板JSON，渲染为卡片:', template.Name || '未命名模板');
             
             // 创建卡片HTML
             const cardHtml = this._createTemplateCard(template, index);
@@ -262,8 +246,6 @@ const TemplateCardActions = {
     save(templateJson) {
         try {
             const template = JSON.parse(templateJson.replace(/&quot;/g, '"'));
-            console.log('[TemplateCardActions.save] 保存模板:', template.Name);
-            
             // 发送消息到VB端保存
             if (window.chrome && window.chrome.webview) {
                 window.chrome.webview.postMessage({
@@ -286,8 +268,6 @@ const TemplateCardActions = {
     preview(templateJson) {
         try {
             const template = JSON.parse(templateJson.replace(/&quot;/g, '"'));
-            console.log('[TemplateCardActions.preview] 预览模板:', template.Name);
-            
             // 发送消息到VB端预览
             if (window.chrome && window.chrome.webview) {
                 window.chrome.webview.postMessage({

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * autocomplete.js - 智能输入框自动补全模块
  * 实现类似Cursor/Qoder的Tab键补全功能
  */
@@ -60,8 +60,7 @@ function initSmartInput() {
         document.execCommand('insertText', false, text);
     });
     
-    console.log('Smart input initialized');
-}
+    }
 
 /**
  * 处理输入变化（防抖）

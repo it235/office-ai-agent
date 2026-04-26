@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Office AI Agent 是一个基于 **Visual Studio Community 2022 + Visual Basic.NET + VSTO** 开发的智能办公自动化工具，为 Microsoft Excel、Word、PowerPoint 提供 AI 驱动的辅助功能。
+我在windows10上面开发，使用的开发工具是Visual Studio Community 2022 + Visual Basic.NET + VSTO，使用的语言是Visual Basic.NET，使用的框架是.NET Framework 4.7.2，使用的Office插件是VSTO，使用的Office版本是Office 2016+ / WPS。
 
 - **官网**: https://www.officeso.cn
 - **License**: Apache 2.0

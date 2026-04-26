@@ -1,4 +1,4 @@
-/**
+﻿/**
  * revision-manager.js - Revision Display and Application
  * Handles document formatting preview and revision suggestions
  */
@@ -63,7 +63,7 @@
         try {
             return JSON.parse(str);
         } catch (e1) {
-            console.log('JSON parse attempt 1 failed:', e1.message);
+
         }
         
         // 第二次尝试：清理后解析
@@ -71,8 +71,7 @@
         try {
             return JSON.parse(cleaned);
         } catch (e2) {
-            console.log('JSON parse attempt 2 failed:', e2.message);
-        }
+            }
         
         // 第三次尝试：提取JSON部分
         try {
@@ -92,17 +91,13 @@
                 }
             }
         } catch (e3) {
-            console.log('JSON parse attempt 3 failed:', e3.message);
-        }
+            }
         
         return null;
     }
 
     // Format preview (支持新的rules格式和旧的array格式)
     window.showComparison = function (uuid, originalText, aiPreviewOrPlan) {
-        console.log('[showComparison] uuid:', uuid);
-        console.log('[showComparison] aiPreviewOrPlan:', aiPreviewOrPlan);
-        
         try {
             const container = document.getElementById('content-' + uuid);
             if (!container) return;

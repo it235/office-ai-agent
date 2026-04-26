@@ -3,7 +3,6 @@ Imports System.IO
 Imports System.Runtime.InteropServices
 Imports System.Threading.Tasks
 Imports System.Windows.Forms
-Imports ExcelAi.ExcelAiFunctions
 Imports Microsoft.Office.Core
 Imports Microsoft.Office.Interop.Excel
 Imports Microsoft.Win32
@@ -66,27 +65,44 @@ Public Class ThisAddIn
         Else
             Dim syncCtx = System.Threading.SynchronizationContext.Current
             Dim excelApp = Me.Application
-            Task.Run(Sub()
+
+            ' 如果 SynchronizationContext 未设置（VS 2026 中可能出现），直接在主线程同步执行
+            If syncCtx Is Nothing Then
                 Try
                     Dim xllPath = FindXllPath()
                     If Not String.IsNullOrEmpty(xllPath) Then
-                        ' RegisterXLL 是 COM 调用，必须回到 STA 主线程
-                        syncCtx.Post(Sub(state)
-                            Try
-                                excelApp.RegisterXLL(CStr(state))
-                                _cachedXllPath = CStr(state)
-                                Debug.WriteLine($"[XLL] 已注册: {state}")
-                            Catch regEx As Exception
-                                Debug.WriteLine($"[XLL] RegisterXLL 失败: {regEx.Message}")
-                            End Try
-                        End Sub, xllPath)
+                        excelApp.RegisterXLL(xllPath)
+                        _cachedXllPath = xllPath
+                        Debug.WriteLine($"[XLL] 已注册: {xllPath}")
                     Else
                         Debug.WriteLine("[XLL] 未找到 XLL 文件，跳过注册")
                     End If
                 Catch ex As Exception
-                    Debug.WriteLine($"[XLL] 后台搜索失败: {ex.Message}")
+                    Debug.WriteLine($"[XLL] 注册失败: {ex.Message}")
                 End Try
-            End Sub)
+            Else
+                Task.Run(Sub()
+                             Try
+                                 Dim xllPath = FindXllPath()
+                                 If Not String.IsNullOrEmpty(xllPath) Then
+                                     ' RegisterXLL 是 COM 调用，必须回到 STA 主线程
+                                     syncCtx.Post(Sub(state)
+                                                      Try
+                                                          excelApp.RegisterXLL(CStr(state))
+                                                          _cachedXllPath = CStr(state)
+                                                          Debug.WriteLine($"[XLL] 已注册: {state}")
+                                                      Catch regEx As Exception
+                                                          Debug.WriteLine($"[XLL] RegisterXLL 失败: {regEx.Message}")
+                                                      End Try
+                                                  End Sub, xllPath)
+                                 Else
+                                     Debug.WriteLine("[XLL] 未找到 XLL 文件，跳过注册")
+                                 End If
+                             Catch ex As Exception
+                                 Debug.WriteLine($"[XLL] 后台搜索失败: {ex.Message}")
+                             End Try
+                         End Sub)
+            End If
         End If
     End Sub
 
@@ -347,7 +363,7 @@ Public Class ThisAddIn
         End If
     End Sub
 
-    Public Async Sub ShowDeepseekTaskPane()
+    Public Sub ShowDeepseekTaskPane()
         Debug.WriteLine($"Deepseek点击事件")
         EnsureCoreServicesLoaded()
         CreateDeepseekTaskPane()

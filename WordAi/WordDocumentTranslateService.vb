@@ -19,7 +19,8 @@ End Enum
 Public Class TranslationUnit
     Public Property UnitType As TranslationUnitType
     Public Property Text As String                  ' 文本内容（表格以tab和\n格式化）
-    Public Property Range As Range                  ' 原始范围
+    Public Property ParagraphIndex As Integer       ' 文档中的段落索引（1-based）
+    Public Property StartPos As Integer             ' 收集时的文档开始位置
     Public Property TableRef As Table               ' 如果是表格，保存表格引用
     Public Property RowCount As Integer             ' 表格行数
     Public Property ColumnCount As Integer          ' 表格列数
@@ -33,8 +34,12 @@ Public Class WordDocumentTranslateService
 
     Private _wordApp As Word.Application
     Private _document As Document
-    Private _selectionRanges As List(Of Range)
-    Private _translationUnits As List(Of TranslationUnit)  ' 新增：翻译单元列表
+    Private _selectionParagraphIndices As List(Of Integer)  ' 选中区域段落的文档索引（1-based）
+    Private _translationUnits As List(Of TranslationUnit)  ' 翻译单元列表
+
+    ' OpenXML 级翻译器（新版）
+    Private _openXmlTranslator As OpenXmlWordTranslator
+    Private _translationBlocks As List(Of OpenXmlWordTranslator.TranslationBlock)
 
     Public Sub New(wordApp As Word.Application)
         MyBase.New()
@@ -43,86 +48,30 @@ Public Class WordDocumentTranslateService
     End Sub
 
     ''' <summary>
-    ''' 获取文档所有段落（支持表格切分）
+    ''' 获取文档所有段落（使用 OpenXML 级扫描）
     ''' </summary>
     Public Overrides Function GetAllParagraphs() As List(Of String)
-        Dim paragraphs As New List(Of String)()
+        _openXmlTranslator = New OpenXmlWordTranslator()
+        _translationBlocks = _openXmlTranslator.ScanDocument(_document)
+
+        ' 同时保留旧的 TranslationUnit 结构（兼容性）
         _translationUnits = New List(Of TranslationUnit)()
-
-        If _document Is Nothing Then Return paragraphs
-
-        ' 遍历文档的Story Ranges（包括主文档、表格等）
-        Dim mainStory = _document.StoryRanges(WdStoryType.wdMainTextStory)
-
-        ' 先收集所有表格的位置
-        Dim tablePositions As New Dictionary(Of Integer, Table)()
-        For Each tbl As Table In _document.Tables
-            tablePositions(tbl.Range.Start) = tbl
+        For Each block In _translationBlocks
+            _translationUnits.Add(New TranslationUnit With {
+                .UnitType = If(block.IsTableCell, TranslationUnitType.TableContent, TranslationUnitType.NormalText),
+                .Text = block.OriginalText,
+                .ParagraphIndex = block.ParagraphIndex,
+                .StartPos = block.BlockIndex
+            })
         Next
 
-        ' 遍历段落，检测表格
-        For Each para As Paragraph In _document.Paragraphs
-            Try
-                ' 检查该段落是否在表格内
-                Dim isInTable As Boolean = False
-                Dim tableRef As Table = Nothing
-
-                Try
-                    If para.Range.Tables.Count > 0 Then
-                        isInTable = True
-                        tableRef = para.Range.Tables(1)
-                    End If
-                Catch
-                End Try
-
-                If isInTable AndAlso tableRef IsNot Nothing Then
-                    ' 该段落在表格内，检查是否已经处理过这个表格
-                    Dim tableKey = tableRef.Range.Start
-                    If tablePositions.ContainsKey(tableKey) Then
-                        ' 第一次遇到这个表格，提取表格内容
-                        Dim tableUnit = ExtractTableContent(tableRef)
-                        _translationUnits.Add(tableUnit)
-                        paragraphs.Add(tableUnit.Text)
-
-                        ' 标记为已处理
-                        tablePositions.Remove(tableKey)
-                    End If
-                    ' 跳过表格内的其他段落
-                Else
-                    ' 普通段落
-                    Dim text = para.Range.Text
-                    If text Is Nothing Then text = ""
-
-                    text = text.TrimEnd(ChrW(13), ChrW(10), ChrW(7))
-
-                    Dim unit As New TranslationUnit With {
-                        .UnitType = TranslationUnitType.NormalText,
-                        .Text = If(String.IsNullOrWhiteSpace(text), "", text),
-                        .Range = para.Range
-                    }
-
-                    _translationUnits.Add(unit)
-                    paragraphs.Add(unit.Text)
-                End If
-
-            Catch ex As Exception
-                Debug.WriteLine($"Process paragraph error: {ex.Message}")
-                ' 出错时添加空段落
-                paragraphs.Add("")
-                _translationUnits.Add(New TranslationUnit With {
-                    .UnitType = TranslationUnitType.NormalText,
-                    .Text = ""
-                })
-            End Try
-        Next
-
-        Return paragraphs
+        Return _translationBlocks.Select(Function(b) b.OriginalText).ToList()
     End Function
 
     ''' <summary>
     ''' 提取表格内容为格式化文本（行\n列\t）
     ''' </summary>
-    Private Function ExtractTableContent(table As Table) As TranslationUnit
+    Private Function ExtractTableContent(table As Table, paraIndex As Integer) As TranslationUnit
         Dim sb As New StringBuilder()
         Dim rowCount = table.Rows.Count
         Dim colCount = table.Columns.Count
@@ -164,84 +113,66 @@ Public Class WordDocumentTranslateService
             .TableRef = table,
             .RowCount = rowCount,
             .ColumnCount = colCount,
-            .Range = table.Range
+            .ParagraphIndex = paraIndex,
+            .StartPos = table.Range.Start
         }
     End Function
 
     ''' <summary>
-    ''' 获取选中的段落
+    ''' 获取选中的段落（使用 OpenXML 级扫描）
     ''' </summary>
     Public Overrides Function GetSelectedParagraphs() As List(Of String)
-        Dim paragraphs As New List(Of String)()
-        _selectionRanges = New List(Of Range)()
+        _openXmlTranslator = New OpenXmlWordTranslator()
+        _translationBlocks = _openXmlTranslator.ScanSelection(_document, _wordApp.Selection)
 
-        If _wordApp.Selection Is Nothing Then Return paragraphs
+        ' 构建选中段落索引列表（兼容性）
+        _selectionParagraphIndices = _translationBlocks.Select(Function(b) b.ParagraphIndex).Distinct().ToList()
 
-        Dim selRange = _wordApp.Selection.Range
-
-        ' 检查selRange是否为Nothing或其Text属性为Nothing
-        If selRange Is Nothing Then Return paragraphs
-
-        Dim selText = selRange.Text
-        If selText Is Nothing OrElse String.IsNullOrWhiteSpace(selText) Then
-            Return paragraphs
-        End If
-
-        For Each para As Paragraph In selRange.Paragraphs
-            Dim text = para.Range.Text
-
-            ' 防止text为Nothing
-            If text Is Nothing Then
-                text = ""
-            End If
-
-            text = text.TrimEnd(ChrW(13), ChrW(10), ChrW(7))
-            If Not String.IsNullOrWhiteSpace(text) Then
-                paragraphs.Add(text)
-                _selectionRanges.Add(para.Range)
-            Else
-                paragraphs.Add("")
-                _selectionRanges.Add(para.Range)
-            End If
-        Next
-
-        Return paragraphs
+        Return _translationBlocks.Select(Function(b) b.OriginalText).ToList()
     End Function
 
     ''' <summary>
-    ''' 应用翻译结果到整个文档
+    ''' 应用翻译结果到整个文档（使用 OpenXML 级写入）
     ''' </summary>
     Public Overrides Sub ApplyTranslation(results As List(Of TranslateParagraphResult), outputMode As TranslateOutputMode)
         If results Is Nothing OrElse results.Count = 0 Then Return
 
-        Select Case outputMode
-            Case TranslateOutputMode.Replace
-                ApplyReplaceMode(results, False)
-            Case TranslateOutputMode.Immersive
-                ApplyImmersiveMode(results, False)
-            Case TranslateOutputMode.NewDocument
-                ApplyToNewDocument(results)
-            Case TranslateOutputMode.SidePanel
-                ' 侧栏模式由调用者处理
-        End Select
+        If outputMode = TranslateOutputMode.NewDocument Then
+            ApplyToNewDocument(results)
+            Return
+        End If
+
+        If outputMode = TranslateOutputMode.SidePanel Then
+            ' 侧栏模式由调用方处理
+            Return
+        End If
+
+        If _openXmlTranslator IsNot Nothing AndAlso _translationBlocks IsNot Nothing Then
+            Dim settings = TranslateSettings.Load()
+            _openXmlTranslator.ApplyTranslation(_document, _translationBlocks, results, outputMode, settings)
+        End If
     End Sub
 
     ''' <summary>
-    ''' 应用翻译结果到选中区域
+    ''' 应用翻译结果到选中区域（使用 OpenXML 级写入）
     ''' </summary>
     Public Overrides Sub ApplyTranslationToSelection(results As List(Of TranslateParagraphResult), outputMode As TranslateOutputMode)
         If results Is Nothing OrElse results.Count = 0 Then Return
 
-        Select Case outputMode
-            Case TranslateOutputMode.Replace
-                ApplyReplaceMode(results, True)
-            Case TranslateOutputMode.Immersive
-                ApplyImmersiveMode(results, True)
-            Case TranslateOutputMode.NewDocument
-                ApplyToNewDocument(results)
-            Case TranslateOutputMode.SidePanel
-                ' 侧栏模式由调用者处理
-        End Select
+        If outputMode = TranslateOutputMode.NewDocument Then
+            ApplyToNewDocument(results)
+            Return
+        End If
+
+        If outputMode = TranslateOutputMode.SidePanel Then
+            ' 侧栏模式由调用方处理
+            Return
+        End If
+
+        If _openXmlTranslator IsNot Nothing AndAlso _translationBlocks IsNot Nothing Then
+            Dim settings = TranslateSettings.Load()
+            _openXmlTranslator.ApplyTranslation(_document, _translationBlocks, results, outputMode, settings)
+        End If
     End Sub
 
     ''' <summary>
@@ -252,19 +183,25 @@ Public Class WordDocumentTranslateService
             _document.Application.ScreenUpdating = False
             _document.Application.UndoRecord.StartCustomRecord("AI翻译")
 
-            If isSelection AndAlso _selectionRanges IsNot Nothing Then
-                ' 替换选中区域
-                For i = results.Count - 1 To 0 Step -1
+            If isSelection AndAlso _selectionParagraphIndices IsNot Nothing Then
+                ' 替换选中区域 - 通过段落索引重新获取Range
+                For i = Math.Min(results.Count, _selectionParagraphIndices.Count) - 1 To 0 Step -1
                     Dim result = results(i)
-                    If result.Success AndAlso i < _selectionRanges.Count Then
-                        Dim range = _selectionRanges(i)
-                        If Not String.IsNullOrEmpty(result.TranslatedText) Then
-                            ReplaceRangeTextPreservingObjects(range, result.TranslatedText)
+                    If result.Success AndAlso Not String.IsNullOrEmpty(result.TranslatedText) Then
+                        Dim paraIndex = _selectionParagraphIndices(i)
+                        If paraIndex > 0 AndAlso paraIndex <= _document.Paragraphs.Count Then
+                            Try
+                                Dim para = _document.Paragraphs(paraIndex)
+                                Dim cleanText = SanitizeParagraphText(result.TranslatedText)
+                                ReplaceRangeTextPreservingObjects(para.Range, cleanText)
+                            Catch ex As Exception
+                                Debug.WriteLine($"[WordTranslate] Apply replace to selected paragraph {paraIndex} failed: {ex.Message}")
+                            End Try
                         End If
                     End If
                 Next
             Else
-                ' 替换整个文档 - 使用翻译单元
+                ' 替换整个文档 - 使用翻译单元，通过索引重新获取Range
                 If _translationUnits IsNot Nothing AndAlso _translationUnits.Count > 0 Then
                     For i = Math.Min(results.Count, _translationUnits.Count) - 1 To 0 Step -1
                         Dim result = results(i)
@@ -272,12 +209,18 @@ Public Class WordDocumentTranslateService
                             Dim unit = _translationUnits(i)
 
                             If unit.UnitType = TranslationUnitType.TableContent Then
-                                ' 表格翻译 - 直接替换单元格内容
+                                ' 表格翻译 - TableRef COM引用仍然有效
                                 ApplyTableTranslation(unit.TableRef, result.TranslatedText, False)
                             Else
-                                ' 普通文本翻译
-                                If unit.Range IsNot Nothing Then
-                                    ReplaceRangeTextPreservingObjects(unit.Range, result.TranslatedText)
+                                ' 普通文本翻译 - 通过段落索引重新获取Range
+                                If unit.ParagraphIndex > 0 AndAlso unit.ParagraphIndex <= _document.Paragraphs.Count Then
+                                    Try
+                                        Dim para = _document.Paragraphs(unit.ParagraphIndex)
+                                        Dim cleanText = SanitizeParagraphText(result.TranslatedText)
+                                        ReplaceRangeTextPreservingObjects(para.Range, cleanText)
+                                    Catch ex As Exception
+                                        Debug.WriteLine($"[WordTranslate] Apply replace to paragraph {unit.ParagraphIndex} failed: {ex.Message}")
+                                    End Try
                                 End If
                             End If
                         End If
@@ -289,7 +232,8 @@ Public Class WordDocumentTranslateService
                         Dim result = results(i)
                         If result.Success AndAlso Not String.IsNullOrEmpty(result.TranslatedText) Then
                             Dim para = paras(i + 1)
-                            ReplaceRangeTextPreservingObjects(para.Range, result.TranslatedText)
+                            Dim cleanText = SanitizeParagraphText(result.TranslatedText)
+                            ReplaceRangeTextPreservingObjects(para.Range, cleanText)
                         End If
                     Next
                 End If
@@ -522,75 +466,123 @@ Public Class WordDocumentTranslateService
     End Sub
 
     ''' <summary>
-    ''' 替换范围中的文本，保留内嵌对象（图片、表格、公式）
-    ''' 注意：表格会在GetAllParagraphs中被切分，所以这里不应该遇到表格
+    ''' 替换范围中的文本，保留内嵌对象（图片、公式）
+    ''' 采用分段删除法：从后往前删除对象之间的文本，然后插入译文
     ''' </summary>
     Private Sub ReplaceRangeTextPreservingObjects(range As Range, translatedText As String)
         Try
-            ' 获取原始文本（排除段落符）
-            Dim originalText = range.Text
+            If range Is Nothing Then Return
 
-            ' 检查originalText是否为Nothing或空
-            If originalText Is Nothing Then
-                originalText = ""
-            End If
+            ' 保存原始位置（后续操作会改变range的位置）
+            Dim rangeStart = range.Start
+            Dim rangeEnd = range.End
 
-            If originalText.EndsWith(vbCr) Then
-                originalText = originalText.Substring(0, originalText.Length - 1)
-            End If
-            If originalText.EndsWith(vbLf) Then
-                originalText = originalText.Substring(0, originalText.Length - 1)
-            End If
+            ' 检查是否在表格单元格内（单元格结束符是Chr(7)，不能添加vbCr）
+            Dim isInCell = False
+            Try
+                isInCell = range.Information(WdInformation.wdWithInTable)
+            Catch
+                isInCell = False
+            End Try
 
-            ' 检查是否有内嵌对象：图片、公式
-            Dim hasObjects As Boolean = False
+            ' 检查是否有内嵌对象
+            Dim hasObjects = False
             Try
                 hasObjects = range.InlineShapes.Count > 0 OrElse range.OMaths.Count > 0
             Catch
-                ' 如果检查失败，假设有对象（保守处理）
-                hasObjects = True
+                hasObjects = False
             End Try
 
-            ' 如果没有内嵌对象，直接替换（更快）
+            ' 没有对象：直接替换
             If Not hasObjects Then
-                range.Text = translatedText & vbCr
+                If isInCell Then
+                    range.Text = translatedText
+                Else
+                    range.Text = translatedText & vbCr
+                End If
                 Return
             End If
 
-            ' 有对象时，使用Find.Execute替换文本部分
-            If Not String.IsNullOrWhiteSpace(originalText) Then
-                With range.Find
-                    .ClearFormatting()
-                    .Replacement.ClearFormatting()
-                    .Text = originalText
-                    .Replacement.Text = translatedText
-                    .Forward = True
-                    .Wrap = WdFindWrap.wdFindStop
-                    .Format = False
-                    .MatchCase = False
-                    .MatchWholeWord = False
-                    .MatchWildcards = False
-                    .MatchSoundsLike = False
-                    .MatchAllWordForms = False
-
-                    ' 执行替换
-                    Dim replaced = .Execute(Replace:=WdReplace.wdReplaceOne)
-
-                    ' 如果Find替换失败（可能因为文本不匹配），使用后备方案
-                    If Not replaced Then
-                        Debug.WriteLine($"Find.Replace failed, using fallback method")
-                        ' 备用方案：手动替换文本节点
-                        ReplaceTextNodesOnly(range, translatedText)
+            ' 有对象：收集所有对象在文档中的绝对位置
+            Dim objRanges As New List(Of Tuple(Of Integer, Integer))()
+            Try
+                For Each shape As InlineShape In range.InlineShapes
+                    If shape.Range.Start >= rangeStart AndAlso shape.Range.End <= rangeEnd Then
+                        objRanges.Add(Tuple.Create(shape.Range.Start, shape.Range.End))
                     End If
-                End With
-            Else
-                ' 原文为空，直接在开头插入译文
-                range.InsertBefore(translatedText)
+                Next
+            Catch
+            End Try
+            Try
+                For Each omath As OMath In range.OMaths
+                    If omath.Range.Start >= rangeStart AndAlso omath.Range.End <= rangeEnd Then
+                        objRanges.Add(Tuple.Create(omath.Range.Start, omath.Range.End))
+                    End If
+                Next
+            Catch
+            End Try
+
+            ' 去重并排序
+            objRanges = objRanges _
+                .Where(Function(r) r.Item2 > r.Item1) _
+                .Distinct() _
+                .OrderBy(Function(r) r.Item1) _
+                .ToList()
+
+            If objRanges.Count = 0 Then
+                ' 实际上没有有效对象
+                If isInCell Then
+                    range.Text = translatedText
+                Else
+                    range.Text = translatedText & vbCr
+                End If
+                Return
             End If
 
+            ' 确定内容结束位置（排除段落标记Chr(13)或单元格结束符Chr(7)）
+            Dim contentEnd = rangeEnd
+            If Not isInCell Then
+                contentEnd = Math.Max(rangeStart, rangeEnd - 1)
+            End If
+
+            ' 从后往前删除对象之间的文本（这样前面的位置不会偏移）
+            Dim textEnd = contentEnd
+            For i = objRanges.Count - 1 To 0 Step -1
+                Dim objStart = objRanges(i).Item1
+                Dim objEnd = objRanges(i).Item2
+
+                If textEnd > objEnd Then
+                    Try
+                        Dim delRange = _document.Range(objEnd, textEnd)
+                        delRange.Text = ""
+                    Catch delEx As Exception
+                        Debug.WriteLine($"[WordTranslate] Delete text after object failed: {delEx.Message}")
+                    End Try
+                End If
+                textEnd = objStart
+            Next
+
+            ' 删除第一个对象之前的文本
+            If textEnd > rangeStart Then
+                Try
+                    Dim delRange = _document.Range(rangeStart, textEnd)
+                    delRange.Text = ""
+                Catch delEx As Exception
+                    Debug.WriteLine($"[WordTranslate] Delete text before first object failed: {delEx.Message}")
+                End Try
+            End If
+
+            ' 在段落开头插入译文
+            Try
+                Dim insertRange = _document.Range(rangeStart, rangeStart)
+                insertRange.InsertBefore(translatedText)
+            Catch insertEx As Exception
+                Debug.WriteLine($"[WordTranslate] Insert translation failed: {insertEx.Message}")
+            End Try
+
         Catch ex As Exception
-            Debug.WriteLine($"ReplaceRangeTextPreservingObjects error: {ex.Message}")
-            ' 如果所有方法都失败，最后的后备方案
+            Debug.WriteLine($"[WordTranslate] ReplaceRangeTextPreservingObjects error: {ex.Message}")
+            ' 最后的后备方案
             Try
                 range.Text = translatedText & vbCr
             Catch
@@ -599,97 +591,154 @@ Public Class WordDocumentTranslateService
     End Sub
 
     ''' <summary>
-    ''' 处理包含表格的范围翻译
-    ''' 策略：将表格内容提取为单独的翻译单元，逐个翻译
-    ''' </summary>
-
-    ''' <summary>
     ''' 替换单元格文本，保留内嵌对象（图片、公式）
+    ''' 采用与ReplaceRangeTextPreservingObjects相同的分段删除法
     ''' </summary>
     Private Sub ReplaceCellTextPreservingObjects(cellRange As Range, translatedText As String)
         Try
-            ' 获取单元格文本
+            If cellRange Is Nothing Then Return
+
+            ' 保存原始位置
+            Dim rangeStart = cellRange.Start
+            Dim rangeEnd = cellRange.End
+
+            ' 获取单元格文本（用于调试）
             Dim originalText = cellRange.Text
             If originalText Is Nothing Then originalText = ""
-
-            ' 移除单元格结束符 (Chr(7) 是单元格结束符, Chr(13) 是段落符)
             originalText = originalText.TrimEnd(ChrW(7), ChrW(13), ChrW(10))
 
             ' 检查单元格是否有对象
-            Dim hasObjects As Boolean = False
+            Dim hasObjects = False
             Try
                 hasObjects = cellRange.InlineShapes.Count > 0 OrElse cellRange.OMaths.Count > 0
             Catch
                 hasObjects = False
             End Try
 
-            ' 调整cellRange以排除单元格结束符
-            Dim adjustedRange As Range = Nothing
+            ' 调整范围以排除单元格结束符 Chr(7)
+            Dim contentEnd = rangeEnd
             Try
                 If cellRange.End > cellRange.Start Then
-                    adjustedRange = _document.Range(cellRange.Start, cellRange.End - 1)
-                    ' 再次检查是否还有结束符
-                    While adjustedRange.End > adjustedRange.Start AndAlso
-                          (adjustedRange.Characters.Last.Text = ChrW(7) OrElse
-                           adjustedRange.Characters.Last.Text = ChrW(13))
-                        adjustedRange.End = adjustedRange.End - 1
+                    contentEnd = cellRange.End - 1
+                    ' 如果末尾还有结束符，继续排除
+                    While contentEnd > rangeStart
+                        Dim lastChar = _document.Range(contentEnd - 1, contentEnd).Text
+                        If lastChar = ChrW(7).ToString() OrElse lastChar = ChrW(13).ToString() Then
+                            contentEnd -= 1
+                        Else
+                            Exit While
+                        End If
                     End While
-                Else
-                    adjustedRange = cellRange
                 End If
             Catch
-                adjustedRange = cellRange
             End Try
 
-            Debug.WriteLine($"Cell replacement - HasObjects: {hasObjects}, Original: '{originalText}', New: '{translatedText}'")
+            Debug.WriteLine($"[WordTranslate] Cell replacement - HasObjects: {hasObjects}, Original: '{originalText}', New: '{translatedText}'")
 
+            ' 没有对象：直接替换
             If Not hasObjects Then
-                ' 没有对象，直接替换
-                adjustedRange.Text = translatedText
+                If contentEnd < rangeEnd Then
+                    Dim adjustedRange = _document.Range(rangeStart, contentEnd)
+                    adjustedRange.Text = translatedText
+                Else
+                    cellRange.Text = translatedText
+                End If
                 Return
             End If
 
-            ' 有对象，使用Find替换
-            If Not String.IsNullOrWhiteSpace(originalText) Then
-                Try
-                    With adjustedRange.Find
-                        .ClearFormatting()
-                        .Replacement.ClearFormatting()
-                        .Text = originalText
-                        .Replacement.Text = translatedText
-                        .Forward = True
-                        .Wrap = WdFindWrap.wdFindStop
-                        .Format = False
-                        .MatchCase = False
-                        .MatchWholeWord = False
-                        .MatchWildcards = False
-                        .MatchSoundsLike = False
-                        .MatchAllWordForms = False
+            ' 有对象：收集对象位置
+            Dim objRanges As New List(Of Tuple(Of Integer, Integer))()
+            Try
+                For Each shape As InlineShape In cellRange.InlineShapes
+                    If shape.Range.Start >= rangeStart AndAlso shape.Range.End <= rangeEnd Then
+                        objRanges.Add(Tuple.Create(shape.Range.Start, shape.Range.End))
+                    End If
+                Next
+            Catch
+            End Try
+            Try
+                For Each omath As OMath In cellRange.OMaths
+                    If omath.Range.Start >= rangeStart AndAlso omath.Range.End <= rangeEnd Then
+                        objRanges.Add(Tuple.Create(omath.Range.Start, omath.Range.End))
+                    End If
+                Next
+            Catch
+            End Try
 
-                        ' 执行替换
-                        Dim replaced = .Execute(Replace:=WdReplace.wdReplaceOne)
-                        Debug.WriteLine($"Find.Execute result: {replaced}")
-                    End With
-                Catch findEx As Exception
-                    Debug.WriteLine($"Find.Execute failed: {findEx.Message}")
-                    ' 备用方案
+            objRanges = objRanges _
+                .Where(Function(r) r.Item2 > r.Item1) _
+                .Distinct() _
+                .OrderBy(Function(r) r.Item1) _
+                .ToList()
+
+            If objRanges.Count = 0 Then
+                If contentEnd < rangeEnd Then
+                    Dim adjustedRange = _document.Range(rangeStart, contentEnd)
                     adjustedRange.Text = translatedText
-                End Try
-            Else
-                ' 原文为空，直接设置译文
-                adjustedRange.Text = translatedText
+                Else
+                    cellRange.Text = translatedText
+                End If
+                Return
             End If
 
-        Catch ex As Exception
-            Debug.WriteLine($"ReplaceCellTextPreservingObjects error: {ex.Message}")
-            ' 最后的后备方案
+            ' 从后往前删除对象之间的文本
+            Dim textEnd = contentEnd
+            For i = objRanges.Count - 1 To 0 Step -1
+                Dim objStart = objRanges(i).Item1
+                Dim objEnd = objRanges(i).Item2
+
+                If textEnd > objEnd Then
+                    Try
+                        Dim delRange = _document.Range(objEnd, textEnd)
+                        delRange.Text = ""
+                    Catch delEx As Exception
+                        Debug.WriteLine($"[WordTranslate] Cell delete text after object failed: {delEx.Message}")
+                    End Try
+                End If
+                textEnd = objStart
+            Next
+
+            ' 删除第一个对象之前的文本
+            If textEnd > rangeStart Then
+                Try
+                    Dim delRange = _document.Range(rangeStart, textEnd)
+                    delRange.Text = ""
+                Catch delEx As Exception
+                    Debug.WriteLine($"[WordTranslate] Cell delete text before first object failed: {delEx.Message}")
+                End Try
+            End If
+
+            ' 在单元格开头插入译文
             Try
-                ' 尝试直接替换，但这可能会丢失对象
+                Dim insertRange = _document.Range(rangeStart, rangeStart)
+                insertRange.InsertBefore(translatedText)
+            Catch insertEx As Exception
+                Debug.WriteLine($"[WordTranslate] Cell insert translation failed: {insertEx.Message}")
+            End Try
+
+        Catch ex As Exception
+            Debug.WriteLine($"[WordTranslate] ReplaceCellTextPreservingObjects error: {ex.Message}")
+            Try
                 cellRange.Text = translatedText
             Catch
             End Try
         End Try
     End Sub
+
+    ''' <summary>
+    ''' 清理段落翻译结果中的换行符，防止Word创建新段落导致索引错乱
+    ''' 表格单元格内的文本不调用此方法，保留多行能力
+    ''' </summary>
+    Private Function SanitizeParagraphText(text As String) As String
+        If String.IsNullOrEmpty(text) Then Return text
+        ' 将所有换行符替换为空格，避免创建新段落
+        text = text.Replace(vbCrLf, " ").Replace(vbCr, " ").Replace(vbLf, " ")
+        ' 合并多个连续空格
+        While text.Contains("  ")
+            text = text.Replace("  ", " ")
+        End While
+        Return text.Trim()
+    End Function
 
     ''' <summary>
     ''' 后备方案：手动替换文本节点，保留对象
@@ -806,19 +855,26 @@ Public Class WordDocumentTranslateService
 
             Dim settings = TranslateSettings.Load()
 
-            If isSelection AndAlso _selectionRanges IsNot Nothing Then
-                ' 在选中区域后插入译文
-                For i = results.Count - 1 To 0 Step -1
+            If isSelection AndAlso _selectionParagraphIndices IsNot Nothing Then
+                ' 在选中区域后插入译文 - 通过索引重新获取Range
+                For i = Math.Min(results.Count, _selectionParagraphIndices.Count) - 1 To 0 Step -1
                     Dim result = results(i)
-                    If result.Success AndAlso i < _selectionRanges.Count AndAlso Not String.IsNullOrWhiteSpace(result.TranslatedText) Then
-                        Dim originalRange = _selectionRanges(i)
-                        InsertImmersiveTranslation(originalRange, result.TranslatedText, settings)
+                    If result.Success AndAlso Not String.IsNullOrWhiteSpace(result.TranslatedText) Then
+                        Dim paraIndex = _selectionParagraphIndices(i)
+                        If paraIndex > 0 AndAlso paraIndex <= _document.Paragraphs.Count Then
+                            Try
+                                Dim para = _document.Paragraphs(paraIndex)
+                                InsertImmersiveTranslation(para.Range, result.TranslatedText, settings)
+                            Catch ex As Exception
+                                Debug.WriteLine($"[WordTranslate] Immersive mode selected paragraph {paraIndex} error: {ex.Message}")
+                            End Try
+                        End If
                     End If
                 Next
             Else
                 ' 使用翻译单元处理整个文档
                 If _translationUnits IsNot Nothing AndAlso _translationUnits.Count > 0 Then
-                    ' 收集所有需要处理的单元
+                    ' 收集所有需要处理的单元（从前向后处理，因为沉浸式模式是在原文后插入）
                     Dim unitsToProcess As New List(Of Tuple(Of Integer, TranslationUnit, TranslateParagraphResult))
 
                     For i = 0 To Math.Min(results.Count, _translationUnits.Count) - 1
@@ -828,9 +884,10 @@ Public Class WordDocumentTranslateService
                         End If
                     Next
 
-                    ' 从前向后处理，避免Range失效
-                    For Each item In unitsToProcess
+                    ' 从后向前处理，避免前面插入新段落导致后续段落索引偏移
+                    For idx = unitsToProcess.Count - 1 To 0 Step -1
                         Try
+                            Dim item = unitsToProcess(idx)
                             Dim index = item.Item1
                             Dim unit = item.Item2
                             Dim result = item.Item3
@@ -846,10 +903,11 @@ Public Class WordDocumentTranslateService
                                     End Try
                                 End If
                             Else
-                                ' 普通文本翻译
-                                If unit.Range IsNot Nothing Then
+                                ' 普通文本翻译 - 通过段落索引重新获取Range
+                                If unit.ParagraphIndex > 0 AndAlso unit.ParagraphIndex <= _document.Paragraphs.Count Then
                                     Try
-                                        InsertImmersiveTranslation(unit.Range, result.TranslatedText, settings)
+                                        Dim para = _document.Paragraphs(unit.ParagraphIndex)
+                                        InsertImmersiveTranslation(para.Range, result.TranslatedText, settings)
                                     Catch rangeEx As Exception
                                         Debug.WriteLine($"Range translation error at index {index}: {rangeEx.Message}")
                                     End Try
@@ -882,6 +940,7 @@ Public Class WordDocumentTranslateService
 
     ''' <summary>
     ''' 插入沉浸式翻译（在原文段落后插入译文）
+    ''' 采用 InsertParagraphAfter + 格式复制，避免 Copy+Paste 的剪贴板依赖和 COM 异常
     ''' </summary>
     Private Sub InsertImmersiveTranslation(originalRange As Range, translatedText As String, settings As TranslateSettings)
         Try
@@ -898,101 +957,82 @@ Public Class WordDocumentTranslateService
                 Debug.WriteLine($"InsertImmersiveTranslation: Range is invalid - {ex.Message}")
                 Return
             End Try
-            ' 获取原段落的末尾位置
+
+            ' 保存原文格式信息（用于后续复制）
+            Dim origFontName As String = ""
+            Dim origFontSize As Single = 0
+            Dim origFontBold As Integer = 0
+            Dim origFontItalic As Integer = 0
+            Dim origLeftIndent As Single = 0
+            Dim origRightIndent As Single = 0
+            Dim origFirstLineIndent As Single = 0
+            Dim origAlignment As WdParagraphAlignment = WdParagraphAlignment.wdAlignParagraphLeft
+            Dim origLineSpacing As Single = 0
+
+            Try
+                origFontName = originalRange.Font.Name
+                origFontSize = originalRange.Font.Size
+                origFontBold = originalRange.Font.Bold
+                origFontItalic = originalRange.Font.Italic
+                origLeftIndent = originalRange.ParagraphFormat.LeftIndent
+                origRightIndent = originalRange.ParagraphFormat.RightIndent
+                origFirstLineIndent = originalRange.ParagraphFormat.FirstLineIndent
+                origAlignment = originalRange.ParagraphFormat.Alignment
+                origLineSpacing = originalRange.ParagraphFormat.LineSpacing
+            Catch fmtEx As Exception
+                Debug.WriteLine($"[WordTranslate] 保存原文格式失败: {fmtEx.Message}")
+            End Try
+
+            ' 在原文段落后插入新段落（不依赖剪贴板）
             Dim paraEnd = originalRange.End
+            Dim insertRange = _document.Range(paraEnd, paraEnd)
+            insertRange.InsertParagraphAfter()
 
-            ' 复制原段落到其后面（保留所有内容和格式）
-            Try
-                originalRange.Copy()
-            Catch copyEx As Exception
-                Debug.WriteLine($"InsertImmersiveTranslation: Copy failed - {copyEx.Message}")
-                Return
-            End Try
+            ' 获取新插入的段落
+            ' InsertParagraphAfter 在 paraEnd 处创建新段落，直接按位置获取即可
+            Dim newPara = _document.Range(paraEnd, paraEnd).Paragraphs(1)
+            If newPara Is Nothing Then Return
 
-            Dim insertPoint = _document.Range(paraEnd, paraEnd)
-            Try
-                insertPoint.Paste()
-            Catch pasteEx As Exception
-                Debug.WriteLine($"InsertImmersiveTranslation: Paste failed - {pasteEx.Message}")
-                Return
-            End Try
-            ' 获取新粘贴的段落范围
-            Dim translatedStart = paraEnd
-            Dim newParagraph = _document.Range(translatedStart, translatedStart).Paragraphs(1)
-            If newParagraph Is Nothing Then Return
-
-            Dim translatedRange = newParagraph.Range
+            Dim translatedRange = newPara.Range
             If translatedRange Is Nothing Then Return
 
-            ' 使用Find.Execute来替换文本，保留内嵌对象
-            ' 获取原始文本（排除段落符）
-            Dim originalText = ""
+            ' 移除新段落自带的段落结束符，写入翻译文本
             Try
-                originalText = originalRange.Text
-
-                ' 检查originalText是否为Nothing或空
-                If originalText Is Nothing Then
-                    originalText = ""
+                Dim contentEnd = translatedRange.End
+                If translatedRange.End > translatedRange.Start Then
+                    contentEnd = translatedRange.End - 1
                 End If
-
-                If originalText.EndsWith(vbCr) Then
-                    originalText = originalText.Substring(0, originalText.Length - 1)
-                End If
-                If originalText.EndsWith(vbLf) Then
-                    originalText = originalText.Substring(0, originalText.Length - 1)
-                End If
-            Catch rangeEx As Exception
-                Debug.WriteLine($"InsertImmersiveTranslation: Failed to get original text - {rangeEx.Message}")
-                originalText = ""
+                Dim textRange = _document.Range(translatedRange.Start, contentEnd)
+                textRange.Text = translatedText
+            Catch txtEx As Exception
+                Debug.WriteLine($"[WordTranslate] 设置译文文本失败: {txtEx.Message}")
+                translatedRange.Text = translatedText
             End Try
 
-            ' 如果原文本为空，直接设置译文
-            If String.IsNullOrWhiteSpace(originalText) Then
-                ' 删除段落符之前的内容
-                Dim textEnd = translatedRange.End - 1
-                If textEnd > translatedRange.Start Then
-                    Dim textRange = _document.Range(translatedRange.Start, textEnd)
-                    textRange.Text = translatedText
-                End If
-            Else
-                ' 使用Find替换文本部分，保留对象
-                Try
-                    With translatedRange.Find
-                        .ClearFormatting()
-                        .Replacement.ClearFormatting()
-                        .Text = originalText
-                        .Replacement.Text = translatedText
-                        .Forward = True
-                        .Wrap = WdFindWrap.wdFindStop
-                        .Format = False
-                        .MatchCase = False
-                        .MatchWholeWord = False
-                        .MatchWildcards = False
-                        .MatchSoundsLike = False
-                        .MatchAllWordForms = False
+            ' 重新获取范围（文本修改后 Range 会变化）
+            translatedRange = newPara.Range
 
-                        ' 执行替换
-                        .Execute(Replace:=WdReplace.wdReplaceOne)
-                    End With
-                Catch findEx As Exception
-                    Debug.WriteLine($"InsertImmersiveTranslation: Find.Execute failed - {findEx.Message}")
-                    ' 备用方案：直接设置文本
-                    Try
-                        translatedRange.Text = translatedText & vbCr
-                    Catch directEx As Exception
-                        Debug.WriteLine($"InsertImmersiveTranslation: Direct text set failed - {directEx.Message}")
-                    End Try
-                End Try
-            End If
+            ' 复制原文格式到新段落
+            Try
+                If Not String.IsNullOrEmpty(origFontName) Then translatedRange.Font.Name = origFontName
+                If origFontSize > 0 Then translatedRange.Font.Size = origFontSize
+                translatedRange.Font.Bold = origFontBold
+                translatedRange.Font.Italic = origFontItalic
+                translatedRange.ParagraphFormat.LeftIndent = origLeftIndent
+                translatedRange.ParagraphFormat.RightIndent = origRightIndent
+                translatedRange.ParagraphFormat.FirstLineIndent = origFirstLineIndent
+                translatedRange.ParagraphFormat.Alignment = origAlignment
+                If origLineSpacing > 0 Then translatedRange.ParagraphFormat.LineSpacing = origLineSpacing
+            Catch fmtEx As Exception
+                Debug.WriteLine($"[WordTranslate] 复制格式失败: {fmtEx.Message}")
+            End Try
 
-            ' 重新获取段落范围（因为文本可能变化）
-            newParagraph = _document.Range(translatedStart, translatedStart).Paragraphs(1)
-            If newParagraph Is Nothing Then Return
-            translatedRange = newParagraph.Range
+            ' 重新获取范围（格式修改后 Range 会变化）
+            translatedRange = newPara.Range
 
-            ' 只有在不保持原文格式时才设置样式
+            ' 只有在不保持原文格式时才设置沉浸式样式
             If Not settings.PreserveFormatting Then
-                ' 对整个段落应用样式（不影响对象）
+                ' 对整个段落应用样式
                 Try
                     With translatedRange.Font
                         ' 设置颜色
@@ -1015,9 +1055,8 @@ Public Class WordDocumentTranslateService
 
                         ' 设置字号比例
                         If settings.ImmersiveTranslationFontScale <> 1.0 AndAlso settings.ImmersiveTranslationFontScale > 0 Then
-                            Dim originalSize = originalRange.Font.Size
-                            If originalSize > 0 Then
-                                .Size = CSng(originalSize * settings.ImmersiveTranslationFontScale)
+                            If origFontSize > 0 Then
+                                .Size = CSng(origFontSize * settings.ImmersiveTranslationFontScale)
                             End If
                         End If
                     End With
@@ -1025,9 +1064,9 @@ Public Class WordDocumentTranslateService
                     Debug.WriteLine($"Apply font style error: {fontEx.Message}")
                 End Try
 
-                ' 设置段落缩进
+                ' 设置段落缩进（在原文缩进基础上额外缩进）
                 Try
-                    translatedRange.ParagraphFormat.LeftIndent = originalRange.ParagraphFormat.LeftIndent + _wordApp.InchesToPoints(0.25)
+                    translatedRange.ParagraphFormat.LeftIndent = origLeftIndent + _wordApp.InchesToPoints(0.25)
                 Catch indentEx As Exception
                     Debug.WriteLine($"Apply indent error: {indentEx.Message}")
                 End Try
@@ -1040,7 +1079,7 @@ Public Class WordDocumentTranslateService
             Try
                 Dim endPos = originalRange.End
                 Dim insertRange = _document.Range(endPos, endPos)
-                insertRange.InsertAfter(translatedText & vbCrLf)
+                insertRange.InsertAfter(vbCrLf & translatedText & vbCrLf)
             Catch finalEx As Exception
                 Debug.WriteLine($"InsertImmersiveTranslation final fallback failed: {finalEx.Message}")
             End Try

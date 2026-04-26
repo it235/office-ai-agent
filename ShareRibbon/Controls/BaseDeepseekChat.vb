@@ -29,7 +29,7 @@ Public MustInherit Class BaseDeepseekChat
     Inherits BaseChat
 
 
-Protected Async Function InitializeWebView2() As Task
+Protected Overloads Async Function InitializeWebView2() As Task
         Try
             ' 使用固定的用户数据目录而不是临时目录，以保持会话持久化
             Dim userDataFolder As String = Path.Combine(
@@ -1119,18 +1119,17 @@ Protected Async Function InitializeWebView2() As Task
 
 
     ' 抽象方法 - 获取Office应用程序对象
-    Protected MustOverride Function GetOfficeApplicationObject() As Object
-
-
-    ' 检查代码是否包含过程声明
-    Public Function ContainsProcedureDeclaration(code As String) As Boolean
+    Protected Overrides Function GetOfficeApplicationObject() As Object
+        Return MyBase.GetOfficeApplicationObject()
+    End Function
+    Public Overloads Function ContainsProcedureDeclaration(code As String) As Boolean
         ' 使用简单的正则表达式检查是否包含 Sub 或 Function 声明
         Return Regex.IsMatch(code, "^\s*(Sub|Function)\s+\w+", RegexOptions.Multiline Or RegexOptions.IgnoreCase)
     End Function
 
 
     ' 查找模块中的第一个过程名
-    Public Function FindFirstProcedureName(comp As VBComponent) As String
+    Public Overloads Function FindFirstProcedureName(comp As VBComponent) As String
         Try
             Dim codeModule As CodeModule = comp.CodeModule
             Dim lineCount As Integer = codeModule.CountOfLines
@@ -1183,7 +1182,7 @@ Protected Async Function InitializeWebView2() As Task
     End Function
 
 
-    Protected Shared Sub VBAxceptionHandle(ex As Runtime.InteropServices.COMException)
+    Protected Shared Overloads Sub VBAxceptionHandle(ex As Runtime.InteropServices.COMException)
         ' 处理信任中心权限问题
         If ex.Message.Contains("程序访问不被信任") OrElse
        ex.Message.Contains("Programmatic access to Visual Basic Project is not trusted") Then

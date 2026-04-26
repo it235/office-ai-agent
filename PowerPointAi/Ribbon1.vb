@@ -10,11 +10,11 @@ Imports ShareRibbon  ' 添加此引用
 Public Class Ribbon1
     Inherits BaseOfficeRibbon
 
-    Protected Overrides Async Sub ChatButton_Click(sender As Object, e As RibbonControlEventArgs)
+    Protected Overrides Sub ChatButton_Click(sender As Object, e As RibbonControlEventArgs)
         Globals.ThisAddIn.ShowChatTaskPane()
     End Sub
 
-    Protected Overrides Async Sub WebResearchButton_Click(sender As Object, e As RibbonControlEventArgs)
+    Protected Overrides Sub WebResearchButton_Click(sender As Object, e As RibbonControlEventArgs)
         Globals.ThisAddIn.ShowChatTaskPane()
     End Sub
 
@@ -76,7 +76,7 @@ Public Class Ribbon1
             Globals.ThisAddIn.ShowChatTaskPane()
             Await Task.Delay(250)
 
-            Dim chatCtrl = Globals.ThisAddIn.chatControl
+            Dim chatCtrl = ThisAddIn.chatControl
             If chatCtrl Is Nothing Then
                 MessageBox.Show("无法获取聊天控件实例，请确认 Chat 面板已打开。", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
                 Return
@@ -145,11 +145,11 @@ Public Class Ribbon1
             settings.Save()
 
             ' 显示进度
-            ShareRibbon.GlobalStatusStripAll.ShowWarning("正在准备翻译... " & translateService.GetStatistics())
+            ShareRibbon.GlobalStatusStripAll.ShowProgress("正在准备翻译... " & translateService.GetStatistics())
 
-            ' 绑定进度事件
+            ' 绑定进度事件 - 使用ShowProgress避免翻译过程中频繁弹窗
             AddHandler translateService.ProgressChanged, Sub(s, args)
-                                                             ShareRibbon.GlobalStatusStripAll.ShowWarning(args.Message)
+                                                             ShareRibbon.GlobalStatusStripAll.ShowProgress(args.Message)
                                                          End Sub
 
             ' 执行翻译
@@ -166,7 +166,7 @@ Public Class Ribbon1
                 Globals.ThisAddIn.ShowChatTaskPane()
                 Await Task.Delay(250)
 
-                Dim chatCtrl = Globals.ThisAddIn.chatControl
+                Dim chatCtrl = ThisAddIn.chatControl
                 If chatCtrl IsNot Nothing Then
                     Dim displayText = translateService.FormatResultsForDisplay(results, True)
                     Dim responseUuid As String = Guid.NewGuid().ToString()
@@ -188,7 +188,7 @@ Public Class Ribbon1
                 End If
             End If
 
-            ShareRibbon.GlobalStatusStripAll.ShowWarning($"翻译完成，共处理 {results.Count} 个文本块")
+            ShareRibbon.GlobalStatusStripAll.ShowProgress($"翻译完成，共处理 {results.Count} 个文本块")
 
         Catch ex As Exception
             MessageBox.Show("翻译过程出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
@@ -202,7 +202,7 @@ Public Class Ribbon1
             Globals.ThisAddIn.ShowChatTaskPane()
 
             ' 获取ChatControl并触发续写（自动模式，显示对话框）
-            Dim chatCtrl = Globals.ThisAddIn.chatControl
+            Dim chatCtrl = ThisAddIn.chatControl
             If chatCtrl IsNot Nothing Then
                 ' 稍等一下让WebView2加载完成，然后显示续写按钮并触发续写对话框
                 Task.Run(Async Function()
@@ -273,7 +273,7 @@ Public Class Ribbon1
 
                 ' 3. 打开Chat面板并进入模板渲染模式
                 Globals.ThisAddIn.ShowChatTaskPane()
-                Dim chatCtrl = Globals.ThisAddIn.chatControl
+                Dim chatCtrl = ThisAddIn.chatControl
                 If chatCtrl IsNot Nothing Then
                     ' 将JSON转为字符串传递给JS
                     Dim templateContent = templateJson.ToString(Formatting.Indented)

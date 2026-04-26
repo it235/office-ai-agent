@@ -56,10 +56,13 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="..\packages\Markdig.0.41.1\lib\net462\Markdig.dll">
-      <Link>Markdig.dll</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <!-- Markdig.dll 通过 PostBuild 复制，避免 VSTO 清单签名验证失败 (MSB3178) -->
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ShareRibbon\ShareRibbon.vbproj">
+      <Project>{006508c7-fb9f-4484-a22a-9aa9487acd0b}</Project>
+      <Name>ShareRibbon</Name>
+    </ProjectReference>
   </ItemGroup>
   <PropertyGroup>
     <!--
@@ -98,7 +101,7 @@
     <DocumentationFile>PowerPointAi.xml</DocumentationFile>
     <RegisterForComInterop>false</RegisterForComInterop>
     <RemoveIntegerChecks>false</RemoveIntegerChecks>
-    <NoWarn>42016,41999,42017,42018,42019,42032,42036,42020,42021,42022</NoWarn>
+    <NoWarn>42016,41999,42017,42018,42019,42032,42036,42020,42021,42022,42358,42356</NoWarn>
   </PropertyGroup>
   <!--
     This section defines properties that are set when the "Release" configuration is selected.
@@ -126,7 +129,7 @@
     <DocumentationFile>PowerPointAi.xml</DocumentationFile>
     <RegisterForComInterop>false</RegisterForComInterop>
     <RemoveIntegerChecks>false</RemoveIntegerChecks>
-    <NoWarn>42016,41999,42017,42018,42019,42032,42036,42020,42021,42022</NoWarn>
+    <NoWarn>42016,41999,42017,42018,42019,42032,42036,42020,42021,42022,42358,42356</NoWarn>
   </PropertyGroup>
   <!--
     This section specifies references for the project.
@@ -336,10 +339,15 @@
   <PropertyGroup>
     <ManifestCertificateThumbprint>3EDA84195BFB8FB2A33799B91C6CF89077184134</ManifestCertificateThumbprint>
   </PropertyGroup>
+  <!-- PostBuild: copy unsigned Markdig.dll to output (avoids VSTO manifest signing error MSB3178) -->
+  <Target Name="CopyUnsignedDllsAfterBuild" AfterTargets="Build">
+    <Copy SourceFiles="..\packages\Markdig.0.41.1\lib\net462\Markdig.dll" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="Exists('..\packages\Markdig.0.41.1\lib\net462\Markdig.dll')" />
+  </Target>
   <!-- Include the build rules for a Visual Basic project. -->
   <Import Project="$(MSBuildToolsPath)\Microsoft.VisualBasic.targets" />
   <!-- Include additional build rules for an Office application add-in. -->
-  <Import Project="$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v18.0\OfficeTools\Microsoft.VisualStudio.Tools.Office.targets" Condition="Exists('$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v18.0\OfficeTools\Microsoft.VisualStudio.Tools.Office.targets')" />
+  <!-- 使用 VisualStudioVersion 变量替代硬编码版本号，兼容 VS 2022/2025/2026 -->
+  <Import Project="$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v$(VisualStudioVersion)\OfficeTools\Microsoft.VisualStudio.Tools.Office.targets" Condition="Exists('$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v$(VisualStudioVersion)\OfficeTools\Microsoft.VisualStudio.Tools.Office.targets')" />
   <!-- This section defines VSTO properties that describe the host-changeable project properties. -->
   <ProjectExtensions>
     <VisualStudio>
@@ -358,11 +366,67 @@
     </PropertyGroup>
     <Error Condition="!Exists('..\packages\Microsoft.Web.WebView2.1.0.3240.44\build\Microsoft.Web.WebView2.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Web.WebView2.1.0.3240.44\build\Microsoft.Web.WebView2.targets'))" />
   </Target>
-  <!-- Exclude unsigned Markdig.dll from VSTO manifest generation by matching resolved paths -->
+  <!-- Exclude unsigned assemblies from VSTO manifest generation -->
   <Target Name="ExcludeUnsignedAssembliesFromManifest" AfterTargets="ResolveAssemblyReferences" BeforeTargets="VisualStudioForApplicationsBuild">
     <ItemGroup>
+      <!-- List of unsigned third-party assemblies to exclude from manifest -->
       <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'Markdig'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'HtmlAgilityPack'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'MessagePack'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'MessagePack.Annotations'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'Microsoft.Bcl.AsyncInterfaces'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'Microsoft.NET.StringTools'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'Microsoft.VisualStudio.Threading'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'Microsoft.VisualStudio.Validation'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'Nerdbank.Streams'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'Newtonsoft.Json'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'StreamJsonRpc'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.Buffers'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.Collections.Immutable'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.Data.SQLite'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.Diagnostics.DiagnosticSource'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.IO.Pipelines'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.Memory'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.Numerics.Vectors'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.Runtime.CompilerServices.Unsafe'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.Text.Encodings.Web'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.Text.Json'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.Threading.Tasks.Dataflow'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.Threading.Tasks.Extensions'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'System.ValueTuple'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'Office'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Core'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.WinForms'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(ReferenceDependencyPaths)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+      <!-- Also exclude from final deployment references -->
       <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'Markdig'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'HtmlAgilityPack'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'MessagePack'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'MessagePack.Annotations'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'Microsoft.Bcl.AsyncInterfaces'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'Microsoft.NET.StringTools'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'Microsoft.VisualStudio.Threading'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'Microsoft.VisualStudio.Validation'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'Nerdbank.Streams'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'Newtonsoft.Json'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'StreamJsonRpc'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.Buffers'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.Collections.Immutable'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.Data.SQLite'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.Diagnostics.DiagnosticSource'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.IO.Pipelines'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.Memory'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.Numerics.Vectors'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.Runtime.CompilerServices.Unsafe'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.Text.Encodings.Web'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.Text.Json'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.Threading.Tasks.Dataflow'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.Threading.Tasks.Extensions'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'System.ValueTuple'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'Office'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Core'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.WinForms'" />
+      <_ExcludedAssembliesFromManifestGeneration Include="@(_FinalDeploymentReferencePaths)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
     </ItemGroup>
   </Target>
 </Project>

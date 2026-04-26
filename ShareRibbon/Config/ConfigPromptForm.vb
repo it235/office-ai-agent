@@ -68,11 +68,11 @@ Public Class ConfigPromptForm
     Public Sub New(applicationInfo As ApplicationInfo)
         _applicationInfo = applicationInfo
         LoadConfig()
-        AddHandler Me.FormClosing, AddressOf OnFormClosing
+        AddHandler Me.FormClosing, AddressOf HandleFormClosing
         InitializeUI()
     End Sub
 
-    Private Sub OnFormClosing(sender As Object, e As FormClosingEventArgs)
+    Private Sub HandleFormClosing(sender As Object, e As FormClosingEventArgs)
         If Me.Controls.Contains(GlobalStatusStrip.StatusStrip) Then
             Me.Controls.Remove(GlobalStatusStrip.StatusStrip)
         End If

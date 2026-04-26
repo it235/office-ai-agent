@@ -1,4 +1,4 @@
-/**
+﻿/**
  * code-handler.js - Code Block Handling
  * Functions for copying, executing, and editing code blocks
  */
@@ -101,8 +101,7 @@ function executeCode(button) {
             try {
                 JSON.parse(trimmedCode);
                 language = 'json';
-                console.log('Auto-detected JSON format');
-            } catch (e) {
+                } catch (e) {
                 // 不是有效的JSON，保持原语言
             }
         }
@@ -261,39 +260,9 @@ function processStreamComplete(uuid, totalTokens) {
             }
         });
     }
-
-    // Auto-execute in agent mode
-    if (document.getElementById("chatMode").value === 'agent') {
-        // 在Agent模式下，查找执行计划按钮或代码执行按钮
-        const contentDiv = document.getElementById("content-" + uuid);
-        if (contentDiv) {
-            // 优先查找执行计划按钮（JSON命令转换后的）
-            let planBtn = contentDiv.querySelector(".execute-plan-btn");
-            if (planBtn) {
-                console.log('Agent模式：自动执行执行计划');
-                // 直接调用执行函数，跳过预览
-                executePlanFromRendererAutoMode(uuid);
-            } else {
-                // 查找普通执行按钮
-                let executeBtns = contentDiv.querySelector(".execute-button");
-                if (executeBtns) {
-                    console.log('Agent模式：自动执行代码');
-                    // 在Agent模式下强制跳过预览
-                    executeCodeAutoMode(executeBtns);
-                }
-            }
-        }
-    }
-
-    // Render accept/reject buttons for AI messages
-    try {
-        renderAcceptRejectButtons(uuid);
-    } catch (err) {
-        console.error('renderAcceptRejectButtons error:', err);
-    }
 }
 
-// Render accept/reject buttons (only for AI messages)
+// Render accept button (only for AI messages) - 移除了reject按钮
 function renderAcceptRejectButtons(uuid) {
     try {
         const chatDiv = document.getElementById('chat-' + uuid);
@@ -301,29 +270,21 @@ function renderAcceptRejectButtons(uuid) {
         
         const sender = chatDiv.dataset && chatDiv.dataset.sender ? chatDiv.dataset.sender : (chatDiv.querySelector('.sender-name') ? chatDiv.querySelector('.sender-name').textContent : '');
 
-        // Only show buttons for AI messages
+        // Only show button for AI messages
         if (!sender || sender === 'Me') return;
 
         const footer = document.getElementById('footer-' + uuid);
         if (!footer) return;
 
-        // Skip if buttons already exist
-        if (footer.querySelector('.accept-btn') || footer.querySelector('.reject-btn')) return;
+        // Skip if button already exists
+        if (footer.querySelector('.accept-btn')) return;
 
         const btnAccept = document.createElement('button');
         btnAccept.className = 'code-button accept-btn';
         btnAccept.style.backgroundColor = '#4CAF50';
-        btnAccept.style.marginRight = '8px';
-        btnAccept.textContent = '接受该答案';
         btnAccept.onclick = function () { acceptAnswer(uuid); };
 
-        const btnReject = document.createElement('button');
-        btnReject.className = 'code-button reject-btn';
-        btnReject.style.backgroundColor = '#E9525F';
-        btnReject.textContent = '不接受，继续改进';
-        btnReject.onclick = function () { rejectAnswer(uuid); };
-
-        footer.insertBefore(btnReject, footer.firstChild);
+        footer.appendChild(btnAccept);
     } catch (err) {
         console.error('renderAcceptRejectButtons error:', err);
     }
@@ -361,7 +322,6 @@ let rejectInProgress = false;
 function rejectAnswer(uuid) {
     // 防抖检查
     if (rejectInProgress) {
-        console.log('拒绝操作正在进行中，忽略重复点击');
         return;
     }
     rejectInProgress = true;
@@ -552,8 +512,6 @@ function showContinuationPreview(uuid) {
             </div>
         `;
         contentEl.insertAdjacentHTML('afterend', actionsHtml);
-        console.log('showContinuationPreview: 续写操作按钮已添加, uuid=' + uuid);
-        
         // 停止续写按钮的闪烁动画
         stopContinuationHint();
     } catch (err) {
@@ -673,8 +631,7 @@ function enterContinuationMode() {
     // 更新UI
     updateContinuationModeUI(true);
     
-    console.log('已进入续写模式');
-}
+    }
 
 /**
  * 退出续写模式
@@ -686,8 +643,7 @@ function exitContinuationMode() {
     // 恢复UI
     updateContinuationModeUI(false);
     
-    console.log('已退出续写模式');
-}
+    }
 
 /**
  * 更新续写模式的UI状态
@@ -1088,8 +1044,7 @@ function enterTemplateMode(templateContext, templateName) {
     // 显示模式指示器
     showTemplateModeIndicator(window.currentTemplateName);
     
-    console.log('已进入模板渲染模式:', templateName);
-}
+    }
 
 /**
  * 退出模板渲染模式
@@ -1102,8 +1057,7 @@ function exitTemplateMode() {
     // 隐藏模式指示器
     hideTemplateModeIndicator();
     
-    console.log('已退出模板渲染模式');
-}
+    }
 
 /**
  * 显示模板模式指示器
@@ -1221,9 +1175,7 @@ function showTemplatePreview(uuid) {
             </div>
         `;
         contentEl.insertAdjacentHTML('afterend', actionsHtml);
-        console.log('showTemplatePreview: 模板操作按钮已添加, uuid=' + uuid);
-        
-    } catch (err) {
+        } catch (err) {
         console.error('showTemplatePreview error:', err);
     }
 }
@@ -1365,8 +1317,6 @@ function executePlanFromRendererAutoMode(uuid) {
             autoMode: true
         };
 
-        console.log('Agent模式执行JSON命令（弹出预览框确认）');
-
         if (window.chrome && window.chrome.webview) {
             window.chrome.webview.postMessage(payload);
         } else if (window.vsto) {
@@ -1429,8 +1379,6 @@ function executeCodeAutoMode(button) {
             responseUuid: responseUuid,
             autoMode: true
         };
-
-        console.log('Agent模式执行代码（弹出预览框确认）, 语言:', language);
 
         if (window.chrome && window.chrome.webview) {
             window.chrome.webview.postMessage(payload);
@@ -1830,8 +1778,6 @@ window.toggleCodeViewFromRenderer = toggleCodeViewFromRenderer;
  */
 function handleExecutionSuccess(uuid) {
     try {
-        console.log('执行成功:', uuid);
-        
         // 清空引用区
         clearAllReferences();
         
@@ -1849,8 +1795,6 @@ function handleExecutionSuccess(uuid) {
  */
 function handleExecutionError(uuid, errorMsg) {
     try {
-        console.log('执行失败:', uuid, errorMsg);
-        
         // 恢复执行按钮状态（可再次点击）
         restoreExecuteButtons(uuid, false);
     } catch (err) {
@@ -1864,8 +1808,6 @@ function handleExecutionError(uuid, errorMsg) {
  */
 function handleExecutionCancelled(uuid) {
     try {
-        console.log('用户取消执行:', uuid);
-        
         // 恢复执行按钮状态
         restoreExecuteButtons(uuid, false);
     } catch (err) {
@@ -1964,8 +1906,7 @@ function clearAllReferences() {
             renderReferences();
         }
         
-        console.log('引用区已清空');
-    } catch (err) {
+        } catch (err) {
         console.error('clearAllReferences error:', err);
     }
 }

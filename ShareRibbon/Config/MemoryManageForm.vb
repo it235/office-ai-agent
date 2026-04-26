@@ -25,7 +25,7 @@ Public Class MemoryManageForm
         Me.MinimumSize = New Size(450, 380)
         Me.StartPosition = FormStartPosition.CenterScreen
         Me.Font = New Font("Microsoft YaHei UI", 9)
-        AddHandler Me.FormClosing, AddressOf OnFormClosing
+        AddHandler Me.FormClosing, AddressOf HandleFormClosing
         AddHandler Me.Load, AddressOf OnFormLoad
         InitializeUI()
         LoadAtomicMemories()
@@ -45,7 +45,7 @@ Public Class MemoryManageForm
         End Try
     End Sub
 
-    Private Sub OnFormClosing(sender As Object, e As FormClosingEventArgs)
+    Private Sub HandleFormClosing(sender As Object, e As FormClosingEventArgs)
         If Me.Controls.Contains(GlobalStatusStrip.StatusStrip) Then
             Me.Controls.Remove(GlobalStatusStrip.StatusStrip)
         End If

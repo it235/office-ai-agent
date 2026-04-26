@@ -12,7 +12,7 @@ Public Class CommandPreviewForm
     Private listView As ListView
     Private detailTextBox As TextBox
     Private confirmButton As Button
-    Private cancelButton As Button
+    Private Shadows cancelButton As Button
     Private splitContainer As SplitContainer
 
     Public Property IsConfirmed As Boolean = False

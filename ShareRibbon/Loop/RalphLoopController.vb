@@ -96,22 +96,18 @@ Public Class RalphLoopController
     ''' <summary>
     ''' 开始新的循环 - 规划阶段
     ''' </summary>
-    Public Async Function StartNewLoop(userGoal As String, applicationType As String) As Task(Of RalphLoopSession)
-        ' 创建新的循环会话
-        Dim loopSession As New RalphLoopSession() With {
+    Public Function StartNewLoop(userGoal As String, applicationType As String) As Task(Of RalphLoopSession)
+        Dim session As New RalphLoopSession() With {
             .OriginalGoal = userGoal,
             .ApplicationType = applicationType,
             .Status = RalphLoopStatus.Planning
         }
-
-        ' 保存到记忆
-        _memory.SetActiveLoop(loopSession)
-
-        Return loopSession
+        _memory.SetActiveLoop(session)
+        Return Task.FromResult(session)
     End Function
 
     ''' <summary>
-    ''' 解析规划结果
+    ''' 解析规划结果（增强版，支持更多字段）
     ''' </summary>
     Public Function ParsePlanningResult(jsonResult As String) As Boolean
         Try
@@ -132,12 +128,30 @@ Public Class RalphLoopController
                 loopSession.Steps.Clear()
                 Dim stepNum = 1
                 For Each stepItem In stepsArray
-                    loopSession.Steps.Add(New RalphLoopStep() With {
+                    Dim loopStep As New RalphLoopStep() With {
                         .StepNumber = stepNum,
                         .Description = stepItem("description")?.ToString(),
                         .Intent = stepItem("intent")?.ToString(),
                         .Status = RalphStepStatus.Pending
-                    })
+                    }
+
+                    ' 解析增强字段
+                    If stepItem("risk_level") IsNot Nothing Then
+                        loopStep.RiskLevel = stepItem("risk_level").ToString()
+                    End If
+                    If stepItem("estimated_time") IsNot Nothing Then
+                        loopStep.EstimatedTime = stepItem("estimated_time").ToString()
+                    End If
+                    If stepItem("rollback_hint") IsNot Nothing Then
+                        loopStep.RollbackHint = stepItem("rollback_hint").ToString()
+                    End If
+                    If stepItem("depends_on") IsNot Nothing AndAlso stepItem("depends_on").Type = JTokenType.Array Then
+                        For Each dep In stepItem("depends_on")
+                            loopStep.DependsOn.Add(dep.ToObject(Of Integer))
+                        Next
+                    End If
+
+                    loopSession.Steps.Add(loopStep)
                     stepNum += 1
                 Next
                 loopSession.TotalSteps = loopSession.Steps.Count
@@ -152,7 +166,7 @@ Public Class RalphLoopController
     End Function
 
     ''' <summary>
-    ''' 执行下一步
+    ''' 执行下一步（支持依赖检查）
     ''' </summary>
     Public Function ExecuteNextStep() As RalphLoopStep
         Dim loopSession = _memory.GetActiveLoop()
@@ -160,12 +174,21 @@ Public Class RalphLoopController
             Return Nothing
         End If
 
-        ' 找到下一个待执行的步骤
-        Dim nextStep = loopSession.Steps.FirstOrDefault(Function(s) s.Status = RalphStepStatus.Pending)
+        ' 找到下一个待执行且依赖已满足的步骤
+        Dim nextStep = FindNextRunnableStep(loopSession)
         If nextStep Is Nothing Then
-            ' 所有步骤已完成
-            loopSession.Status = RalphLoopStatus.Completed
-            _memory.Save()
+            ' 检查是否所有步骤都完成了
+            Dim allCompleted = loopSession.Steps.All(Function(s) s.Status = RalphStepStatus.Completed)
+            If allCompleted Then
+                loopSession.Status = RalphLoopStatus.Completed
+                _memory.Save()
+            Else
+                ' 可能有步骤失败了
+                Dim hasFailed = loopSession.Steps.Any(Function(s) s.Status = RalphStepStatus.Failed)
+                If hasFailed Then
+                    loopSession.Status = RalphLoopStatus.Paused
+                End If
+            End If
             Return Nothing
         End If
 
@@ -180,20 +203,96 @@ Public Class RalphLoopController
     End Function
 
     ''' <summary>
-    ''' 标记当前步骤完成
+    ''' 查找下一个可执行的步骤（检查依赖关系）
     ''' </summary>
-    Public Sub CompleteCurrentStep(result As String, success As Boolean)
+    Private Function FindNextRunnableStep(session As RalphLoopSession) As RalphLoopStep
+        For Each loopStep In session.Steps.OrderBy(Function(s) s.StepNumber)
+            If loopStep.Status = RalphStepStatus.Pending Then
+                ' 检查依赖
+                If loopStep.DependsOn Is Nothing OrElse loopStep.DependsOn.Count = 0 Then
+                    Return loopStep
+                End If
+
+                ' 检查所有依赖步骤是否已完成
+                Dim allDepsCompleted = loopStep.DependsOn.All(Function(depNo)
+                                                              Dim depStep = session.Steps.FirstOrDefault(Function(s) s.StepNumber = depNo)
+                                                              Return depStep IsNot Nothing AndAlso depStep.Status = RalphStepStatus.Completed
+                                                          End Function)
+                If allDepsCompleted Then
+                    Return loopStep
+                End If
+            End If
+        Next
+        Return Nothing
+    End Function
+
+    ''' <summary>
+    ''' 获取可以并行执行的步骤
+    ''' </summary>
+    Public Function GetParallelSteps() As List(Of RalphLoopStep)
         Dim loopSession = _memory.GetActiveLoop()
-        If loopSession Is Nothing Then Return
+        If loopSession Is Nothing Then
+            Return New List(Of RalphLoopStep)()
+        End If
+
+        Dim parallelSteps As New List(Of RalphLoopStep)()
+
+        ' 找到所有没有依赖且待执行的步骤
+        For Each loopStep In loopSession.Steps
+            If loopStep.Status = RalphStepStatus.Pending Then
+                If loopStep.DependsOn Is Nothing OrElse loopStep.DependsOn.Count = 0 Then
+                    parallelSteps.Add(loopStep)
+                Else
+                    ' 检查依赖是否都完成
+                    Dim allDepsCompleted = loopStep.DependsOn.All(Function(depNo)
+                                                                  Dim depStep = loopSession.Steps.FirstOrDefault(Function(s) s.StepNumber = depNo)
+                                                                  Return depStep IsNot Nothing AndAlso depStep.Status = RalphStepStatus.Completed
+                                                              End Function)
+                    If allDepsCompleted Then
+                        parallelSteps.Add(loopStep)
+                    End If
+                End If
+            End If
+        Next
+
+        Return parallelSteps
+    End Function
+
+    ''' <summary>
+    ''' 标记当前步骤完成（增强版，支持错误处理和重试）
+    ''' </summary>
+    Public Function CompleteCurrentStep(result As String, success As Boolean, Optional errorMessage As String = "") As Boolean
+        Dim loopSession = _memory.GetActiveLoop()
+        If loopSession Is Nothing Then Return False
 
         Dim currentStep = loopSession.Steps.FirstOrDefault(Function(s) s.Status = RalphStepStatus.Running)
         If currentStep IsNot Nothing Then
-            currentStep.Status = If(success, RalphStepStatus.Completed, RalphStepStatus.Failed)
-            currentStep.Result = result
+            If success Then
+                currentStep.Status = RalphStepStatus.Completed
+                currentStep.Result = result
+                currentStep.CompletedAt = DateTime.Now
+                currentStep.ErrorMessage = ""
+            Else
+                currentStep.RetryCount += 1
+                currentStep.ErrorMessage = errorMessage
+
+                ' 检查是否可以重试
+                If currentStep.RetryCount < currentStep.MaxRetries Then
+                    currentStep.Status = RalphStepStatus.Pending
+                    Debug.WriteLine($"[RalphLoop] 步骤 {currentStep.StepNumber} 失败，准备第 {currentStep.RetryCount} 次重试")
+                Else
+                    currentStep.Status = RalphStepStatus.Failed
+                    Debug.WriteLine($"[RalphLoop] 步骤 {currentStep.StepNumber} 失败，已达到最大重试次数")
+                End If
+            End If
 
             ' 检查是否还有待执行步骤
             Dim hasMoreSteps = loopSession.Steps.Any(Function(s) s.Status = RalphStepStatus.Pending)
-            If hasMoreSteps Then
+            Dim hasFailedSteps = loopSession.Steps.Any(Function(s) s.Status = RalphStepStatus.Failed)
+
+            If hasFailedSteps Then
+                loopSession.Status = RalphLoopStatus.Paused
+            ElseIf hasMoreSteps Then
                 loopSession.Status = RalphLoopStatus.Paused ' 暂停等待用户确认继续
             Else
                 loopSession.Status = RalphLoopStatus.Completed
@@ -203,16 +302,81 @@ Public Class RalphLoopController
                     .Intent = "multi_step_task",
                     .Plan = String.Join(" -> ", loopSession.Steps.Select(Function(s) s.Description)),
                     .Result = result,
-                    .Success = success,
+                    .Success = True,
                     .ApplicationType = loopSession.ApplicationType
                 })
             End If
+            _memory.Save()
+
+            Return success OrElse currentStep.Status = RalphStepStatus.Pending
+        End If
+
+        Return False
+    End Function
+
+    ''' <summary>
+    ''' 回滚到指定步骤
+    ''' </summary>
+    Public Function RollbackToStep(stepNumber As Integer) As Boolean
+        Dim loopSession = _memory.GetActiveLoop()
+        If loopSession Is Nothing Then Return False
+
+        loopSession.Status = RalphLoopStatus.RollingBack
+
+        Try
+            ' 回滚该步骤之后的所有步骤
+            For Each loopStep In loopSession.Steps.Where(Function(s) s.StepNumber >= stepNumber).OrderByDescending(Function(s) s.StepNumber)
+                If loopStep.Status = RalphStepStatus.Completed Then
+                    loopStep.Status = RalphStepStatus.RolledBack
+                    Debug.WriteLine($"[RalphLoop] 已回滚步骤 {loopStep.StepNumber}")
+                End If
+            Next
+
+            loopSession.Status = RalphLoopStatus.Paused
+            _memory.Save()
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine($"[RalphLoop] 回滚失败: {ex.Message}")
+            loopSession.Status = RalphLoopStatus.Paused
+            _memory.Save()
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 重试失败的步骤
+    ''' </summary>
+    Public Function RetryFailedStep(stepNumber As Integer) As RalphLoopStep
+        Dim loopSession = _memory.GetActiveLoop()
+        If loopSession Is Nothing Then Return Nothing
+
+        Dim loopStep = loopSession.Steps.FirstOrDefault(Function(s) s.StepNumber = stepNumber AndAlso s.Status = RalphStepStatus.Failed)
+        If loopStep IsNot Nothing Then
+            loopStep.Status = RalphStepStatus.Pending
+            loopStep.ErrorMessage = ""
+            _memory.Save()
+            Return loopStep
+        End If
+
+        Return Nothing
+    End Function
+
+    ''' <summary>
+    ''' 跳过某个步骤
+    ''' </summary>
+    Public Sub SkipStep(stepNumber As Integer)
+        Dim loopSession = _memory.GetActiveLoop()
+        If loopSession Is Nothing Then Return
+
+        Dim loopStep = loopSession.Steps.FirstOrDefault(Function(s) s.StepNumber = stepNumber)
+        If loopStep IsNot Nothing Then
+            loopStep.Status = RalphStepStatus.Skipped
             _memory.Save()
         End If
     End Sub
 
     ''' <summary>
-    ''' 获取当前循环状态摘要
+    ''' 获取当前循环状态摘要（增强版）
     ''' </summary>
     Public Function GetLoopStatusSummary() As String
         Dim loopSession = _memory.GetActiveLoop()
@@ -221,14 +385,29 @@ Public Class RalphLoopController
         End If
 
         Dim sb As New StringBuilder()
-        sb.AppendLine($"目标: {loopSession.OriginalGoal}")
-        sb.AppendLine($"状态: {GetStatusText(loopSession.Status)}")
-        sb.AppendLine($"进度: {loopSession.CurrentStep}/{loopSession.TotalSteps}")
-        sb.AppendLine("步骤:")
-        
+        sb.AppendLine($"目标：{loopSession.OriginalGoal}")
+        sb.AppendLine($"状态：{GetStatusText(loopSession.Status)}")
+
+        Dim completedCount = loopSession.Steps.Where(Function(s) s.Status = RalphStepStatus.Completed).Count
+        sb.AppendLine($"进度：{completedCount}/{loopSession.TotalSteps}")
+        sb.AppendLine("步骤：")
+
         For Each loopStep In loopSession.Steps
             Dim statusIcon = GetStepStatusIcon(loopStep.Status)
-            sb.AppendLine($"  {statusIcon} {loopStep.StepNumber}. {loopStep.Description}")
+            Dim riskInfo = If(loopStep.RiskLevel = "medium", " ⚠️", If(loopStep.RiskLevel = "risky", " 🚨", ""))
+            sb.AppendLine($"  {statusIcon} {loopStep.StepNumber}. {loopStep.Description}{riskInfo}")
+
+            If loopStep.Status = RalphStepStatus.Failed AndAlso Not String.IsNullOrWhiteSpace(loopStep.ErrorMessage) Then
+                sb.AppendLine($"      ❌ 错误：{loopStep.ErrorMessage}")
+            End If
+
+            If Not String.IsNullOrWhiteSpace(loopStep.RollbackHint) AndAlso loopStep.Status = RalphStepStatus.Completed Then
+                sb.AppendLine($"      💡 回滚提示：{loopStep.RollbackHint}")
+            End If
+
+            If loopStep.DependsOn IsNot Nothing AndAlso loopStep.DependsOn.Count > 0 Then
+                sb.AppendLine($"      🔗 依赖：{String.Join(", ", loopStep.DependsOn)}")
+            End If
         Next
 
         Return sb.ToString()
@@ -242,25 +421,60 @@ Public Class RalphLoopController
     End Sub
 
     ''' <summary>
+    ''' 保存当前会话（断点续传）
+    ''' </summary>
+    Public Sub SaveCurrentSession()
+        _memory.SaveSession()
+    End Sub
+
+    ''' <summary>
     ''' 获取增强版规划提示词 - 支持记忆上下文和意图信息
     ''' </summary>
     Public Function GetEnhancedPlanningPrompt(userGoal As String, applicationType As String, Optional intent As IntentResult = Nothing, Optional memoryContext As String = Nothing, Optional officeContext As String = Nothing) As String
+        Dim sb As New StringBuilder()
+
+        ' 添加相似历史任务
+        Dim similarTasks = _memory.FindSimilarTasks(userGoal, applicationType, 3)
+        If similarTasks.Count > 0 Then
+            sb.AppendLine("【历史参考】")
+            sb.AppendLine("以下是之前完成的类似任务，供参考：")
+            For Each task In similarTasks
+                sb.AppendLine($"- {task.Timestamp:yyyy-MM-dd}: {task.UserInput}")
+                If task.Success Then
+                    sb.AppendLine($"  ✅ 成功：{Left(task.Result, 50)}...")
+                Else
+                    sb.AppendLine($"  ❌ 失败")
+                End If
+            Next
+            sb.AppendLine()
+        End If
+
+        ' 添加相关知识
+        Dim knowledge = _memory.GetRelevantKnowledge(userGoal)
+        If knowledge.Count > 0 Then
+            sb.AppendLine("【相关知识】")
+            For Each k In knowledge
+                sb.AppendLine($"- {k}")
+            Next
+            sb.AppendLine()
+        End If
+
         Dim memoryInfo As String = ""
-        If Not String.IsNullOrEmpty(memoryContext) Then
+        If Not String.IsNullOrWhiteSpace(memoryContext) Then
             memoryInfo = "- 相关记忆：" & vbCrLf & memoryContext
         End If
 
         Dim officeInfo As String = ""
-        If Not String.IsNullOrEmpty(officeContext) Then
+        If Not String.IsNullOrWhiteSpace(officeContext) Then
             officeInfo = "- Office上下文：" & vbCrLf & officeContext
         End If
 
-        Dim basePrompt = String.Format(ENHANCED_PLANNING_PROMPT, userGoal, applicationType, memoryInfo & vbCrLf & officeInfo)
-        
-        If intent IsNot Nothing AndAlso Not String.IsNullOrEmpty(intent.UserFriendlyDescription) Then
+        Dim basePrompt = String.Format(ENHANCED_PLANNING_PROMPT, userGoal, applicationType, sb.ToString() & memoryInfo & vbCrLf & officeInfo)
+
+        If intent IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(intent.UserFriendlyDescription) Then
             basePrompt &= vbCrLf & vbCrLf & "【已识别意图】" & intent.UserFriendlyDescription & "（类型：" & intent.IntentType.ToString() & "）。请基于此制定执行计划。"
         End If
-        
+
         Return basePrompt
     End Function
 
@@ -269,7 +483,7 @@ Public Class RalphLoopController
     ''' </summary>
     Public Function GetPlanningPrompt(userGoal As String, Optional intent As IntentResult = Nothing) As String
         Dim basePrompt = String.Format(PLANNING_PROMPT, userGoal)
-        If intent IsNot Nothing AndAlso Not String.IsNullOrEmpty(intent.UserFriendlyDescription) Then
+        If intent IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(intent.UserFriendlyDescription) Then
             basePrompt &= vbCrLf & vbCrLf & "已识别意图：" & intent.UserFriendlyDescription & "（类型：" & intent.IntentType.ToString() & "）。请基于此制定执行计划。"
         End If
         Return basePrompt
@@ -289,6 +503,17 @@ Public Class RalphLoopController
         Return _memory.GetActiveLoop()
     End Function
 
+    ''' <summary>
+    ''' 获取历史任务记录
+    ''' </summary>
+    Public Function GetTaskHistory(Optional appType As String = "", Optional maxCount As Integer = 10) As List(Of RalphTaskRecord)
+        Dim tasks = _memory.MemoryData.TaskHistory.AsEnumerable()
+        If Not String.IsNullOrWhiteSpace(appType) Then
+            tasks = tasks.Where(Function(t) t.ApplicationType = appType)
+        End If
+        Return tasks.OrderByDescending(Function(t) t.Timestamp).Take(maxCount).ToList()
+    End Function
+
     Private Function GetStatusText(status As RalphLoopStatus) As String
         Select Case status
             Case RalphLoopStatus.Planning : Return "规划中"
@@ -297,6 +522,7 @@ Public Class RalphLoopController
             Case RalphLoopStatus.Paused : Return "等待继续"
             Case RalphLoopStatus.Completed : Return "已完成"
             Case RalphLoopStatus.Failed : Return "失败"
+            Case RalphLoopStatus.RollingBack : Return "回滚中"
             Case Else : Return "未知"
         End Select
     End Function
@@ -308,6 +534,7 @@ Public Class RalphLoopController
             Case RalphStepStatus.Completed : Return "✅"
             Case RalphStepStatus.Failed : Return "❌"
             Case RalphStepStatus.Skipped : Return "⏭️"
+            Case RalphStepStatus.RolledBack : Return "↩️"
             Case Else : Return "❓"
         End Select
     End Function
