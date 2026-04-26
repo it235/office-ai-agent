@@ -13,7 +13,7 @@
 
 </div>
 
-> **Note**: This project is developed with 80%+ code using Cursor + Copilot + Qoder programming tools
+> **Note**: This project is developed with 90%+ code using Cursor + Copilot + Qoder + Claude programming tools
 >
 > Source code local running tutorial：https://www.bilibili.com/cheese/play/ep2098181
 >

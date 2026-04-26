@@ -1,11 +1,5 @@
 # Office AI 智能体
 
-> 从0到现在1年了，2025年之前没写过VB.net，连visual studio都几乎没用过，写`java/js/python`轻轻松松，突然写这玩意还是挺生疏的。
->
-> 持续开源真的艰难，佩服那帮老外，随随便便就写个爆火的开源项目。当插件功能越来越多，代码越来越庞大时就感觉到力不从心，不光开发/验证人力耗费大、现在AI写代码还需要额外投入**dollar**，纯手写效果不好还要投入更多时间成本。
->
-> 继续战斗...  争取在`2026`能破`1000 star`，趁着这块还属于蓝海，希望有更多有实力、有想法的老铁加入。
-
 <div align="center">
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
@@ -19,7 +13,7 @@
 </div>
 
 
-> **注意**: 本项目80%以上代码基于Cursor + Copilot + Qoder编程工具开发
+> **注意**: 本项目90%以上代码基于Cursor + Copilot + Qoder + Claude编程工具开发
 >
 > 帮助文档官网：https://www.officeso.cn
 >
