@@ -41,21 +41,16 @@ Public Class ThisAddIn
     Private widthTimer1 As Timer
 
     Private Sub WordAi_Startup() Handles Me.Startup
-        ' 仅注册程序集解析器（几乎无开销，必须最先执行）
-        SqliteAssemblyResolver.EnsureRegistered()
-
-        ' 初始化全局状态栏，确保 GlobalStatusStripAll 的 Office 状态栏提示可用
-        Try
-            GlobalStatusStripAll.InitializeApplication(Me.Application)
-        Catch ex As Exception
-            Debug.WriteLine($"[WordAi] InitializeApplication failed: {ex.Message}")
-        End Try
+        ' Phase 0: 仅注册事件处理器 + 状态栏初始化（微秒级，不阻塞启动）
+        PhaseStartupManager.Instance.RunCriticalPhase(Me.Application)
     End Sub
 
     ''' <summary>
     ''' 确保核心服务已加载（WebView2 + SQLite），首次调用时初始化
+    ''' 如果 Phase 2 后台预加载已完成，则直接跳过
     ''' </summary>
     Private Sub EnsureCoreServicesLoaded()
+        If PhaseStartupManager.Instance.IsBackgroundReady Then Return
         Try
             Dim webView2Init = _lazyWebView2.Value
         Catch ex As Exception

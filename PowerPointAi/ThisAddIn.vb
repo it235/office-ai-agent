@@ -34,14 +34,15 @@ Public Class ThisAddIn
     Private widthTimer1 As Timer
 
     Private Sub PowerPointAi_Startup() Handles Me.Startup
-        ' 仅注册程序集解析器（几乎无开销，必须最先执行）
-        SqliteAssemblyResolver.EnsureRegistered()
+        ' Phase 0: 仅注册事件处理器（微秒级，不阻塞启动）
+        PhaseStartupManager.Instance.RunCriticalPhase(Me.Application)
     End Sub
 
     ''' <summary>
     ''' 确保核心服务已加载（WebView2 + SQLite），首次调用时初始化
     ''' </summary>
     Private Sub EnsureCoreServicesLoaded()
+        If PhaseStartupManager.Instance.IsBackgroundReady Then Return
         Try
             Dim webView2Init = _lazyWebView2.Value
         Catch ex As Exception

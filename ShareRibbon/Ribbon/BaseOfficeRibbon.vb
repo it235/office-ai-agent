@@ -17,6 +17,10 @@ Public MustInherit Class BaseOfficeRibbon
     Private Async Sub Ribbon1_Load(ByVal sender As System.Object, ByVal e As RibbonUIEventArgs) Handles MyBase.Load
         ' GetApplication() 涉及 COM 对象访问，必须在 UI 线程（STA）调用，提前捕获
         Dim appInfo = GetApplication()
+
+        ' Phase 1: 后台预加载程序集（与配置加载并行）
+        PhaseStartupManager.Instance.StartRequiredPhase()
+
         ' 将文件 I/O 密集的配置加载推迟到后台线程：
         '   ConfigManager.LoadConfig()     读取 API 配置 JSON
         '   ConfigPromptForm.LoadConfig()  读取提示词模板 JSON
@@ -27,6 +31,10 @@ Public MustInherit Class BaseOfficeRibbon
             Dim promptConfig As New ConfigPromptForm(appInfo)
             promptConfig.LoadConfig()
         End Sub)
+
+        ' Phase 2: 后台预加载 WebView2/SQLite/Resource（fire-and-forget，不阻塞）
+        PhaseStartupManager.Instance.StartBackgroundPhase()
+
         InitializeBaseRibbon()
     End Sub
 

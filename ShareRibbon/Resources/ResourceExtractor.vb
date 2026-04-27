@@ -3,7 +3,12 @@ Imports System.Diagnostics
 
 Public Class ResourceExtractor
     Private Shared _lastError As String = String.Empty
-    
+
+    ''' <summary>
+    ''' 资源版本号 — 更新此值可强制刷新所有前端资源文件
+    ''' </summary>
+    Private Shared _resourceVersion As String = "2026.04"
+
     ''' <summary>
     ''' 获取最后一次错误信息
     ''' </summary>
@@ -12,10 +17,14 @@ Public Class ResourceExtractor
             Return _lastError
         End Get
     End Property
-    
+
     Public Shared Function ExtractResources() As String
         _lastError = String.Empty
+
+#If DEBUG Then
         DebugListResources()
+#End If
+
         Try
             ' 获取用户本地应用程序数据目录
             Dim appDataPath As String = Path.Combine(
@@ -23,6 +32,20 @@ Public Class ResourceExtractor
                 "OfficeAI",
                 "www"
             )
+
+            ' 检查版本标记文件，匹配则跳过提取
+            Dim versionFile = Path.Combine(appDataPath, ".version")
+            If File.Exists(versionFile) Then
+                Try
+                    Dim savedVersion = File.ReadAllText(versionFile).Trim()
+                    If savedVersion = _resourceVersion Then
+                        Debug.WriteLine("[ResourceExtractor] 资源版本匹配，跳过提取")
+                        Return appDataPath
+                    End If
+                Catch
+                    ' 读取失败，继续执行提取
+                End Try
+            End If
 
             ' 确保目录存在
             Directory.CreateDirectory(appDataPath)
@@ -96,6 +119,14 @@ Public Class ResourceExtractor
                 _lastError = String.Join(Environment.NewLine, extractErrors)
                 Debug.WriteLine($"资源提取部分失败: {_lastError}")
             End If
+
+            ' 写入版本标记文件，下次启动时跳过提取
+            Try
+                Directory.CreateDirectory(appDataPath)
+                File.WriteAllText(Path.Combine(appDataPath, ".version"), _resourceVersion)
+            Catch
+                ' 写入失败不影响功能
+            End Try
 
             Return appDataPath
         Catch ex As Exception

@@ -273,6 +273,7 @@
     <Compile Include="Loop\RalphAgentController.vb" />
     <Compile Include="Config\WebView2Loader.vb" />
     <Compile Include="Config\SqliteAssemblyResolver.vb" />
+    <Compile Include="Config\PhaseStartupManager.vb" />
     <Compile Include="Config\SqliteNativeLoader.vb" />
     <Compile Include="Controls\BaseChatControl.Designer.vb">
       <DependentUpon>BaseChatControl.vb</DependentUpon>

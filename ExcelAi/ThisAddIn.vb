@@ -38,16 +38,8 @@ Public Class ThisAddIn
     Private widthTimer1 As Timer
 
     Private Sub ExcelAi_Startup() Handles Me.Startup
-        ' SqliteAssemblyResolver 必须最先注册，确保后续加载 SQLite 程序集时能解析
-        SqliteAssemblyResolver.EnsureRegistered()
-        Try
-            Debug.WriteLine("正在初始化GlobalStatusStrip...")
-            GlobalStatusStripAll.InitializeApplication(Me.Application)
-            Debug.WriteLine("GlobalStatusStrip初始化完成")
-        Catch ex As Exception
-            Debug.WriteLine("初始化GlobalStatusStrip时出错: " & ex.Message)
-            MessageBox.Show("初始化状态栏时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-        End Try
+        ' Phase 0: 仅注册事件处理器 + 状态栏初始化（微秒级，不阻塞启动）
+        PhaseStartupManager.Instance.RunCriticalPhase(Me.Application)
         ' WebView2 延迟加载：推迟到首次打开任务窗格时初始化
         ' SQLite 原生库延迟加载：首次访问数据库时由 OfficeAiDatabase.EnsureInitialized() 自动调用
 
@@ -110,6 +102,7 @@ Public Class ThisAddIn
     ''' 确保核心服务已加载（WebView2 + SQLite），首次调用时初始化
     ''' </summary>
     Private Sub EnsureCoreServicesLoaded()
+        If PhaseStartupManager.Instance.IsBackgroundReady Then Return
         Try
             Dim webView2Init = _lazyWebView2.Value
         Catch ex As Exception

@@ -192,6 +192,77 @@ Public Class PresetProviders
         grok.model.Add(CreateModel("grok-beta", "grok-beta", False, False, False))
         providers.Add(grok)
 
+        ' 火山方舟 (VolcEngine Ark)
+        Dim volcark As New ConfigItem()
+        volcark.pltform = "火山方舟 (VolcEngine)"
+        volcark.url = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
+        volcark.registerUrl = "https://www.volcengine.com/product/ark"
+        volcark.providerType = ProviderType.Cloud
+        volcark.isPreset = True
+        volcark.key = ""
+        volcark.selected = False
+        volcark.model = New List(Of ConfigItemModel)()
+        volcark.model.Add(CreateModel("doubao-seed-2-0-pro", "doubao-seed-2-0-pro", True, False, False))
+        volcark.model.Add(CreateModel("Doubao-Seed-2.0-Code", "Doubao-Seed-2.0-Code", False, False, False))
+        volcark.model.Add(CreateModel("Doubao-Seed-2.0-lite", "Doubao-Seed-2.0-lite", False, False, False))
+        providers.Add(volcark)
+
+        ' 科大讯飞 (iFlytek Spark)
+        Dim iflytek As New ConfigItem()
+        iflytek.pltform = "科大讯飞 (Spark)"
+        iflytek.url = "https://spark-api-open.xf-yun.com/v1/chat/completions"
+        iflytek.registerUrl = "https://xinghuo.xfyun.cn/sparkapi"
+        iflytek.providerType = ProviderType.Cloud
+        iflytek.isPreset = True
+        iflytek.key = ""
+        iflytek.selected = False
+        iflytek.model = New List(Of ConfigItemModel)()
+        iflytek.model.Add(CreateModel("generalv4", "Spark4.0-Ultra", True, False, False))
+        iflytek.model.Add(CreateModel("generalv3.5", "Spark3.5-Max", False, False, False))
+        iflytek.model.Add(CreateModel("pro-128k", "Spark-Pro-128K", False, False, False))
+        iflytek.model.Add(CreateModel("max-32k", "Spark-Max-32K", False, False, False))
+        providers.Add(iflytek)
+
+        ' 京东云 (JDCloud)
+        Dim jdcloud As New ConfigItem()
+        jdcloud.pltform = "京东云 (JDCloud)"
+        jdcloud.url = "https://modelservice.jdcloud.com/coding/openai/v1"
+        jdcloud.registerUrl = "https://joybuilder-console.jdcloud.com/overview"
+        jdcloud.providerType = ProviderType.Cloud
+        jdcloud.isPreset = True
+        jdcloud.key = ""
+        jdcloud.selected = False
+        jdcloud.model = New List(Of ConfigItemModel)()
+        jdcloud.model.Add(CreateModel("chatjd-large", "ChatJD-Large", True, False, False))
+        jdcloud.model.Add(CreateModel("chatjd-standard", "ChatJD-Standard", False, False, False))
+        providers.Add(jdcloud)
+
+        ' 小米大模型 (MiLM)
+        Dim xiaomi As New ConfigItem()
+        xiaomi.pltform = "小米大模型 (MiLM)"
+        xiaomi.url = "https://api.xiaomimimo.com/v1/chat/completions"
+        xiaomi.registerUrl = "https://platform.xiaomimimo.com/#/console/api-keys"
+        xiaomi.providerType = ProviderType.Cloud
+        xiaomi.isPreset = True
+        xiaomi.key = ""
+        xiaomi.selected = False
+        xiaomi.model = New List(Of ConfigItemModel)()
+        xiaomi.model.Add(CreateModel("milm-pro", "MiLM-Pro", True, False, False))
+        xiaomi.model.Add(CreateModel("milm-standard", "MiLM-Standard", False, False, False))
+        providers.Add(xiaomi)
+
+        ' LiteLLM (LLM网关代理)
+        Dim litellm As New ConfigItem()
+        litellm.pltform = "LiteLLM"
+        litellm.url = "http://localhost:4000/v1/chat/completions"
+        litellm.registerUrl = "https://docs.litellm.ai/"
+        litellm.providerType = ProviderType.Cloud
+        litellm.isPreset = True
+        litellm.key = ""
+        litellm.selected = False
+        litellm.model = New List(Of ConfigItemModel)()
+        providers.Add(litellm)
+
         ' Anthropic Claude
         Dim anthropic As New ConfigItem()
         anthropic.pltform = "Anthropic Claude"

@@ -8,24 +8,52 @@ Imports System.Linq
 
     ''' <summary>
     ''' AssemblyResolve：从 WordAi、根目录等目录加载 System.Data.SQLite 或 Markdig
+    ''' 启动优化：EnsureRegistered() 仅注册事件处理器（微秒级），PreloadAssemblies() 可在后台线程调用
     ''' </summary>
     Public Class SqliteAssemblyResolver
 
     Private Shared _registered As Boolean = False
+    Private Shared _preloaded As Boolean = False
     Private Shared ReadOnly _lockObj As New Object()
+    Private Shared ReadOnly _preloadLock As New Object()
 
+    ''' <summary>
+    ''' 仅注册 AssemblyResolve 事件处理器，不做预加载（微秒级，可在 VSTO Startup 中同步调用）
+    ''' </summary>
     Public Shared Sub EnsureRegistered()
         If _registered Then Return
         SyncLock _lockObj
             If _registered Then Return
             AddHandler AppDomain.CurrentDomain.AssemblyResolve, AddressOf OnAssemblyResolve
             _registered = True
-            TryPreloadSqlite()
-            TryPreloadMarkdig()
         End SyncLock
     End Sub
 
+    ''' <summary>
+    ''' 后台预加载 SQLite 和 Markdig 程序集（可在后台线程调用，不阻塞主线程）
+    ''' 即使不调用此方法，OnAssemblyResolve 也能在首次需要时按需加载
+    ''' </summary>
+    Public Shared Sub PreloadAssemblies()
+        If _preloaded Then Return
+        SyncLock _preloadLock
+            If _preloaded Then Return
+            TryPreloadSqlite()
+            TryPreloadMarkdig()
+            _preloaded = True
+        End SyncLock
+    End Sub
+
+    ''' <summary>
+    ''' 缓存探测目录列表，避免每次调用重复计算和 Directory.Exists 检查
+    ''' </summary>
+    Private Shared _cachedProbeDirs As Lazy(Of IEnumerable(Of String)) =
+        New Lazy(Of IEnumerable(Of String))(Function() ComputeProbeDirs())
+
     Private Shared Function GetProbeDirs() As IEnumerable(Of String)
+        Return _cachedProbeDirs.Value
+    End Function
+
+    Private Shared Function ComputeProbeDirs() As IEnumerable(Of String)
         Dim our = GetType(SqliteAssemblyResolver).Assembly
         Dim locDir = GetDir(our.Location)
         Dim cbDir = GetDirFromCodeBase(our)
