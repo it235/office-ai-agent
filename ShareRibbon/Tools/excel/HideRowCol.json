@@ -1,0 +1,30 @@
+{
+  "id": "HideRowCol",
+  "name": "隐藏行列",
+  "description": "隐藏或取消隐藏行或列",
+  "appType": "excel",
+  "category": "高级功能",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "type",
+      "type": "string",
+      "required": true,
+      "description": "类型：row/column"
+    },
+    {
+      "name": "position",
+      "type": "string",
+      "required": true,
+      "description": "位置"
+    },
+    {
+      "name": "unhide",
+      "type": "boolean",
+      "required": false,
+      "description": "是否取消隐藏",
+      "defaultValue": false
+    }
+  ]
+}

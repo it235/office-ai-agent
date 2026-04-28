@@ -207,6 +207,7 @@ pre.collapsible.collapsed {
 
 .message-content {
     margin-left: 42px;
+    font-size: 14px;
     line-height: 1.6;
 }
 
@@ -1246,7 +1247,7 @@ input:checked + .mcp-toggle-slider:before {
     color: #555;
 }
 
-#ai_model_select, #chatMode {
+#ai_model_select {
     border: 1px solid #e0e0e0;
     border-radius: 4px;
     padding: 4px 8px;
@@ -1255,14 +1256,6 @@ input:checked + .mcp-toggle-slider:before {
     color: #555;
     cursor: pointer;
     outline: none;
-}
-
-#chatMode:hover, #chatMode:focus {
-    border-color: #4a6fa5;
-}
-
-#chatMode:focus {
-    box-shadow: 0 0 0 2px rgba(74, 111, 165, 0.1);
 }
 
 /* ====== 空状态样式 ====== */
@@ -4968,3 +4961,103 @@ input:checked + .mcp-toggle-slider:before {
 #config-memory-profile-clear { margin-top: 8px; margin-right: 8px; padding: 6px 12px; border-radius: 6px; border: 1px solid #ccc; background: #f5f5f5; cursor: pointer; }
 #config-memory-atomic-delete { background: #e9525f; color: white; border-color: #e9525f; }
 #config-memory-profile-save { background: #4a6fa5; color: white; border-color: #4a6fa5; }
+
+/* ====== AgentCard ReAct 迭代与审批样式 ====== */
+.react-iteration {
+    margin: 8px 0;
+    padding: 10px 12px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 3px solid #4a6fa5;
+    font-size: 12px;
+}
+
+.iteration-thought,
+.iteration-action,
+.iteration-observation {
+    margin-bottom: 6px;
+}
+
+.iteration-thought:last-child,
+.iteration-action:last-child,
+.iteration-observation:last-child {
+    margin-bottom: 0;
+}
+
+.iteration-label {
+    display: inline-block;
+    font-weight: 600;
+    color: #4a6fa5;
+    margin-bottom: 2px;
+}
+
+.iteration-content {
+    color: #374151;
+    line-height: 1.5;
+    word-break: break-word;
+}
+
+.iteration-content code {
+    background: #eef2f7;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+}
+
+.agent-approval-request {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 10px;
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+    border-radius: 8px;
+    margin-top: 8px;
+}
+
+.approval-msg {
+    flex: 1 1 100%;
+    color: #92400e;
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+
+.step-message {
+    padding: 6px 10px;
+    margin-top: 6px;
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.step-msg-completed {
+    background: #ecfdf5;
+    color: #065f46;
+    border-left: 3px solid #10b981;
+}
+
+.step-msg-failed {
+    background: #fef2f2;
+    color: #991b1b;
+    border-left: 3px solid #ef4444;
+}
+
+.agent-terminated {
+    color: #6b7280;
+    font-size: 13px;
+    font-style: italic;
+}
+
+.agent-finished {
+    color: #065f46;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* Agent 模式指示器动画 */
+@keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.2); }
+}

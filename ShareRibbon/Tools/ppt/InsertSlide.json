@@ -1,0 +1,36 @@
+{
+  "id": "InsertSlide",
+  "name": "插入幻灯片",
+  "description": "在指定位置插入新幻灯片",
+  "appType": "ppt",
+  "category": "幻灯片操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "position",
+      "type": "string",
+      "required": false,
+      "description": "插入位置：current/end",
+      "defaultValue": "end"
+    },
+    {
+      "name": "layout",
+      "type": "string",
+      "required": false,
+      "description": "幻灯片布局"
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "required": false,
+      "description": "幻灯片标题"
+    },
+    {
+      "name": "content",
+      "type": "string",
+      "required": false,
+      "description": "幻灯片内容"
+    }
+  ]
+}

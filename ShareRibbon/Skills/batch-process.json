@@ -1,0 +1,10 @@
+{
+  "id": "batch-process",
+  "name": "批量处理",
+  "description": "对多个工作表、多个文件或多个区域进行批量操作",
+  "triggerPatterns": ["批量", "多个", "所有sheet", "全部工作表", "多文件", "统一处理", "循环", "遍历", "批量修改", "批量删除"],
+  "requiredTools": ["CreateSheet", "DeleteSheet", "RenameSheet", "CopySheet", "ApplyFormula", "WriteData", "FormatRange", "FindReplace"],
+  "promptTemplate": "你是一个批量处理专家。请按照以下策略处理批量操作需求：\n1. 明确需要处理的范围（哪些工作表/文件/区域）\n2. 确定批量操作的具体内容\n3. 检查是否有需要跳过或特殊处理的项\n4. 批量操作前建议先在一个样本上测试\n5. 完成后给出处理结果的汇总报告",
+  "maxSteps": 12,
+  "autoApprove": false
+}

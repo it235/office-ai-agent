@@ -1,0 +1,25 @@
+{
+  "id": "InsertParagraph",
+  "name": "插入段落",
+  "description": "插入新段落",
+  "appType": "word",
+  "category": "段落和样式",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "count",
+      "type": "integer",
+      "required": false,
+      "description": "插入段落数",
+      "defaultValue": 1
+    },
+    {
+      "name": "pageBreak",
+      "type": "boolean",
+      "required": false,
+      "description": "是否分页",
+      "defaultValue": false
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "id": "CreateSlides",
+  "name": "批量创建幻灯片",
+  "description": "批量创建多个幻灯片",
+  "appType": "ppt",
+  "category": "幻灯片操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "slides",
+      "type": "array",
+      "required": true,
+      "description": "幻灯片数组，每项含title/content/layout"
+    }
+  ]
+}

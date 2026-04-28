@@ -1,0 +1,10 @@
+{
+  "id": "document-format",
+  "name": "文档排版",
+  "description": "对Word文档进行格式调整、样式应用、段落排版和页面设置",
+  "triggerPatterns": ["排版", "格式", "样式", "字体", "段落", "间距", "缩进", "对齐", "页边距", "目录", "页眉", "页脚", "页码", "美化"],
+  "requiredTools": ["ApplyStyle", "SetParagraphFormat", "SetLineSpacing", "SetIndent", "InsertHeader", "InsertFooter", "InsertPageNumber", "SetPageMargins", "BeautifyDocument"],
+  "promptTemplate": "你是一个专业的文档排版专家。请按照以下策略处理排版需求：\n1. 先分析当前文档结构和格式问题\n2. 统一应用Word内置样式（标题1-9、正文、引用等）\n3. 调整段落格式（缩进、行距、段前段后间距）\n4. 设置页面布局（页边距、纸张方向）\n5. 如需目录，确保所有标题应用了正确的标题样式",
+  "maxSteps": 8,
+  "autoApprove": false
+}

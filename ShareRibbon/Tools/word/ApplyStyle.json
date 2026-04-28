@@ -1,0 +1,24 @@
+{
+  "id": "ApplyStyle",
+  "name": "应用样式",
+  "description": "应用Word预设样式",
+  "appType": "word",
+  "category": "段落和样式",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "styleName",
+      "type": "string",
+      "required": true,
+      "description": "样式名称，如 \"标题 1\""
+    },
+    {
+      "name": "range",
+      "type": "string",
+      "required": false,
+      "description": "范围：selection/paragraph",
+      "defaultValue": "selection"
+    }
+  ]
+}

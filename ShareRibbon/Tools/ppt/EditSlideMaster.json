@@ -1,0 +1,29 @@
+{
+  "id": "EditSlideMaster",
+  "name": "编辑母版",
+  "description": "编辑幻灯片母版",
+  "appType": "ppt",
+  "category": "母版和主题",
+  "riskLevel": "medium",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "background",
+      "type": "string",
+      "required": false,
+      "description": "背景设置"
+    },
+    {
+      "name": "titleFont",
+      "type": "string",
+      "required": false,
+      "description": "标题字体"
+    },
+    {
+      "name": "bodyFont",
+      "type": "string",
+      "required": false,
+      "description": "正文字体"
+    }
+  ]
+}

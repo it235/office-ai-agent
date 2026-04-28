@@ -1,0 +1,23 @@
+{
+  "id": "InsertVideo",
+  "name": "插入视频",
+  "description": "在幻灯片中插入视频",
+  "appType": "ppt",
+  "category": "高级功能",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "videoPath",
+      "type": "string",
+      "required": true,
+      "description": "视频文件路径"
+    },
+    {
+      "name": "autoPlay",
+      "type": "boolean",
+      "required": false,
+      "description": "是否自动播放"
+    }
+  ]
+}

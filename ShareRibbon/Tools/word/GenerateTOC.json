@@ -1,0 +1,25 @@
+{
+  "id": "GenerateTOC",
+  "name": "生成目录",
+  "description": "自动生成文档目录",
+  "appType": "word",
+  "category": "文档结构",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "position",
+      "type": "string",
+      "required": false,
+      "description": "目录位置：start/cursor",
+      "defaultValue": "cursor"
+    },
+    {
+      "name": "levels",
+      "type": "integer",
+      "required": false,
+      "description": "目录层级（1-9）",
+      "defaultValue": 3
+    }
+  ]
+}

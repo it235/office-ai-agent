@@ -1,0 +1,17 @@
+{
+  "id": "ExecuteVBA",
+  "name": "执行VBA",
+  "description": "执行VBA代码作为回退方案",
+  "appType": "word",
+  "category": "高级功能",
+  "riskLevel": "risky",
+  "isVbaFallback": true,
+  "parameters": [
+    {
+      "name": "code",
+      "type": "string",
+      "required": true,
+      "description": "完整的VBA Sub或Function代码"
+    }
+  ]
+}

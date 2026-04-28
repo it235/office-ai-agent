@@ -283,10 +283,12 @@ function showIdentifyingStatus() {
  */
 function showAgentPlanningStatus(goal) {
     try {
-        // 移除识别中状态
+        // 移除识别中状态和已有的规划状态
         const identifyingCard = document.getElementById('identifying-status-card');
         if (identifyingCard) identifyingCard.remove();
-        
+        const existingPlanningCard = document.getElementById('planning-status-card');
+        if (existingPlanningCard) existingPlanningCard.remove();
+
         // 显示规划中状态
         const card = document.createElement('div');
         card.id = 'planning-status-card';

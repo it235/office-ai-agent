@@ -1,0 +1,10 @@
+{
+  "id": "data-clean",
+  "name": "数据清洗",
+  "description": "对Excel数据进行去重、填充、替换、格式化和异常值处理",
+  "triggerPatterns": ["清洗", "去重", "填充", "替换", "删除空行", "删除空列", "格式统一", "空值", "重复", "合并", "拆分"],
+  "requiredTools": ["CleanData", "RemoveDuplicates", "FindReplace", "FormatRange", "SortData", "FilterData", "MergeCells", "AutoFit"],
+  "promptTemplate": "你是一个数据清洗专家。请按照以下策略处理数据清洗需求：\n1. 先诊断数据质量问题（空值、重复、格式不一致、异常值）\n2. 按优先级处理：去重 → 处理空值 → 格式统一 → 异常值处理\n3. 保留原始数据的备份或记录清洗前后的对比\n4. 清洗后给出数据质量报告",
+  "maxSteps": 8,
+  "autoApprove": false
+}

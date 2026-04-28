@@ -1,0 +1,23 @@
+{
+  "id": "AutoFit",
+  "name": "自动调整",
+  "description": "自动调整列宽或行高",
+  "appType": "excel",
+  "category": "数据操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "range",
+      "type": "string",
+      "required": true,
+      "description": "目标范围"
+    },
+    {
+      "name": "type",
+      "type": "string",
+      "required": true,
+      "description": "调整类型：columns/rows/both"
+    }
+  ]
+}

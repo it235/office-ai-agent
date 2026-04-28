@@ -202,6 +202,12 @@
   <data name="ralph_agent" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\js\ralph-agent.js;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
   </data>
+  <data name="agent_protocol" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\js\agent-protocol.js;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
+  </data>
+  <data name="agent_card" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\js\agent-card.js;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
+  </data>
   <data name="model_switcher" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\js\model-switcher.js;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
   </data>

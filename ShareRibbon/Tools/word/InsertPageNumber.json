@@ -1,0 +1,24 @@
+{
+  "id": "InsertPageNumber",
+  "name": "插入页码",
+  "description": "插入页码到页眉或页脚",
+  "appType": "word",
+  "category": "文档结构",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "position",
+      "type": "string",
+      "required": true,
+      "description": "位置：header/footer"
+    },
+    {
+      "name": "alignment",
+      "type": "string",
+      "required": false,
+      "description": "对齐方式：left/center/right",
+      "defaultValue": "center"
+    }
+  ]
+}

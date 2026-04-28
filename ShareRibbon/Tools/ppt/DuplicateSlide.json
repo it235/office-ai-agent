@@ -1,0 +1,17 @@
+{
+  "id": "DuplicateSlide",
+  "name": "复制幻灯片",
+  "description": "复制指定幻灯片",
+  "appType": "ppt",
+  "category": "幻灯片操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "slideIndex",
+      "type": "integer",
+      "required": true,
+      "description": "要复制的幻灯片索引"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "id": "SortData",
+  "name": "排序数据",
+  "description": "对指定范围的数据进行排序",
+  "appType": "excel",
+  "category": "数据操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "range",
+      "type": "string",
+      "required": true,
+      "description": "要排序的数据范围"
+    },
+    {
+      "name": "sortColumn",
+      "type": "integer",
+      "required": true,
+      "description": "排序列号（从1开始）"
+    },
+    {
+      "name": "order",
+      "type": "string",
+      "required": false,
+      "description": "排序方向：asc/desc",
+      "defaultValue": "asc"
+    },
+    {
+      "name": "hasHeader",
+      "type": "boolean",
+      "required": false,
+      "description": "是否包含表头",
+      "defaultValue": true
+    }
+  ]
+}

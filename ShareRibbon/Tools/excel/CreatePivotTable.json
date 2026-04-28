@@ -1,0 +1,41 @@
+{
+  "id": "CreatePivotTable",
+  "name": "创建透视表",
+  "description": "从数据源创建数据透视表",
+  "appType": "excel",
+  "category": "数据操作",
+  "riskLevel": "medium",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "sourceRange",
+      "type": "string",
+      "required": true,
+      "description": "数据源范围"
+    },
+    {
+      "name": "targetCell",
+      "type": "string",
+      "required": true,
+      "description": "透视表放置位置"
+    },
+    {
+      "name": "rowFields",
+      "type": "array",
+      "required": true,
+      "description": "行字段数组"
+    },
+    {
+      "name": "valueFields",
+      "type": "array",
+      "required": true,
+      "description": "值字段数组"
+    },
+    {
+      "name": "columnFields",
+      "type": "array",
+      "required": false,
+      "description": "列字段数组"
+    }
+  ]
+}

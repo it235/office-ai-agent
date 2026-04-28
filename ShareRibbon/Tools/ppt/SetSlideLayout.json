@@ -1,0 +1,17 @@
+{
+  "id": "SetSlideLayout",
+  "name": "设置幻灯片布局",
+  "description": "更改幻灯片布局",
+  "appType": "ppt",
+  "category": "样式和动画",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "layout",
+      "type": "string",
+      "required": true,
+      "description": "布局：title/titleAndContent/blank"
+    }
+  ]
+}

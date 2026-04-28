@@ -1,0 +1,35 @@
+{
+  "id": "SetPageMargins",
+  "name": "设置页边距",
+  "description": "设置页面边距",
+  "appType": "word",
+  "category": "文档美化",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "top",
+      "type": "number",
+      "required": false,
+      "description": "上边距(cm)"
+    },
+    {
+      "name": "bottom",
+      "type": "number",
+      "required": false,
+      "description": "下边距(cm)"
+    },
+    {
+      "name": "left",
+      "type": "number",
+      "required": false,
+      "description": "左边距(cm)"
+    },
+    {
+      "name": "right",
+      "type": "number",
+      "required": false,
+      "description": "右边距(cm)"
+    }
+  ]
+}

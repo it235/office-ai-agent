@@ -1,0 +1,10 @@
+{
+  "id": "data-analysis",
+  "name": "数据分析",
+  "description": "对Excel数据进行统计、汇总、公式计算和数据分析",
+  "triggerPatterns": ["分析", "统计", "汇总", "计算", "平均值", "总和", "求和", "排名", "排序", "筛选", "透视"],
+  "requiredTools": ["ApplyFormula", "CreateChart", "CreatePivotTable", "SortData", "FilterData", "ConditionalFormat", "CleanData"],
+  "promptTemplate": "你是一个专业的数据分析师。请按照以下策略处理用户的分析需求：\n1. 先理解数据结构（列名、行数、数据类型）\n2. 选择合适的分析方法和公式\n3. 如需可视化，选择最能表达数据特征的图表类型\n4. 给出分析结论的文字说明",
+  "maxSteps": 10,
+  "autoApprove": false
+}

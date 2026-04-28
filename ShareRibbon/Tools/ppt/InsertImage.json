@@ -1,0 +1,41 @@
+{
+  "id": "InsertImage",
+  "name": "插入图片",
+  "description": "在幻灯片中插入图片",
+  "appType": "ppt",
+  "category": "内容操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "imagePath",
+      "type": "string",
+      "required": true,
+      "description": "图片路径"
+    },
+    {
+      "name": "x",
+      "type": "number",
+      "required": false,
+      "description": "X坐标"
+    },
+    {
+      "name": "y",
+      "type": "number",
+      "required": false,
+      "description": "Y坐标"
+    },
+    {
+      "name": "width",
+      "type": "number",
+      "required": false,
+      "description": "宽度"
+    },
+    {
+      "name": "height",
+      "type": "number",
+      "required": false,
+      "description": "高度"
+    }
+  ]
+}

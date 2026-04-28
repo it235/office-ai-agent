@@ -1,0 +1,23 @@
+{
+  "id": "InsertChart",
+  "name": "插入图表",
+  "description": "在幻灯片中插入图表",
+  "appType": "ppt",
+  "category": "高级功能",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "chartType",
+      "type": "string",
+      "required": true,
+      "description": "图表类型：column/line/pie"
+    },
+    {
+      "name": "data",
+      "type": "array",
+      "required": true,
+      "description": "数据（二维数组）"
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "id": "FormatRange",
+  "name": "格式化范围",
+  "description": "设置单元格的样式格式，包括字体、颜色、边框等",
+  "appType": "excel",
+  "category": "基础操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "range",
+      "type": "string",
+      "required": true,
+      "description": "要格式化的单元格范围"
+    },
+    {
+      "name": "style",
+      "type": "string",
+      "required": false,
+      "description": "预设样式：header/total/data"
+    },
+    {
+      "name": "bold",
+      "type": "boolean",
+      "required": false,
+      "description": "是否加粗"
+    },
+    {
+      "name": "italic",
+      "type": "boolean",
+      "required": false,
+      "description": "是否斜体"
+    },
+    {
+      "name": "fontSize",
+      "type": "integer",
+      "required": false,
+      "description": "字体大小"
+    },
+    {
+      "name": "backgroundColor",
+      "type": "string",
+      "required": false,
+      "description": "背景色"
+    },
+    {
+      "name": "fontColor",
+      "type": "string",
+      "required": false,
+      "description": "字体颜色"
+    },
+    {
+      "name": "borders",
+      "type": "string",
+      "required": false,
+      "description": "边框样式：true/all/outline/none"
+    }
+  ]
+}

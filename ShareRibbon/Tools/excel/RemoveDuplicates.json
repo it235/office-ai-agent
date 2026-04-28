@@ -1,0 +1,30 @@
+{
+  "id": "RemoveDuplicates",
+  "name": "删除重复项",
+  "description": "删除指定范围内的重复行",
+  "appType": "excel",
+  "category": "数据操作",
+  "riskLevel": "medium",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "range",
+      "type": "string",
+      "required": true,
+      "description": "数据范围"
+    },
+    {
+      "name": "columns",
+      "type": "array",
+      "required": false,
+      "description": "检查重复的列号数组"
+    },
+    {
+      "name": "hasHeader",
+      "type": "boolean",
+      "required": false,
+      "description": "是否包含表头",
+      "defaultValue": true
+    }
+  ]
+}

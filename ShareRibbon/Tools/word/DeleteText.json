@@ -1,0 +1,17 @@
+{
+  "id": "DeleteText",
+  "name": "删除文本",
+  "description": "删除指定范围的文本",
+  "appType": "word",
+  "category": "基础文本操作",
+  "riskLevel": "medium",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "range",
+      "type": "string",
+      "required": true,
+      "description": "范围：selection/all"
+    }
+  ]
+}

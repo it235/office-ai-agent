@@ -20,7 +20,6 @@ Public Class ChatSettings
     Public Shared Property selectedCellChecked As Boolean = False
     Public Shared Property executecodePreviewChecked As Boolean = True ' 执行代码前预览的默认选项
     Public Shared Property settingsScrollChecked As Boolean = True
-    Public Shared Property chatMode As String = "chat"
 
     ' 自动补全设置（已禁用 - 观察期）
     Public Shared Property EnableAutocomplete As Boolean = False     ' 自动补全功能已禁用，默认关闭
@@ -29,7 +28,7 @@ Public Class ChatSettings
 
     ' 修改方法签名，参数类型改为 Double 和 Integer
     Public Sub SaveSettings(topicRandomness As Double, contextLimit As Integer,
-                          selectedCell As Boolean, settingsScroll As Boolean, executecodePreview As Boolean, chatMode As String,
+                          selectedCell As Boolean, settingsScroll As Boolean, executecodePreview As Boolean,
                           Optional enableAutocomplete As Boolean = False, Optional autocompleteDelayMs As Integer = 800,
                           Optional autocompleteShortcut As String = "Ctrl+.")
         Try
@@ -40,7 +39,6 @@ Public Class ChatSettings
                 {"selectedCellChecked", selectedCell},
                 {"settingsScrollChecked", settingsScroll},
                 {"executecodePreviewChecked", executecodePreview},
-                {"chatMode", chatMode},
                 {"enableAutocomplete", enableAutocomplete},
                 {"autocompleteDelayMs", autocompleteDelayMs},
                 {"autocompleteShortcut", autocompleteShortcut}
@@ -61,7 +59,6 @@ Public Class ChatSettings
             ChatSettings.selectedCellChecked = selectedCell
             ChatSettings.settingsScrollChecked = settingsScroll
             ChatSettings.executecodePreviewChecked = executecodePreview
-            ChatSettings.chatMode = chatMode
             ChatSettings.EnableAutocomplete = enableAutocomplete
             ChatSettings.AutocompleteDelayMs = autocompleteDelayMs
             ChatSettings.AutocompleteShortcut = autocompleteShortcut
@@ -96,9 +93,6 @@ Public Class ChatSettings
                 End If
                 If settings.ContainsKey("executecodePreviewChecked") Then
                     executecodePreviewChecked = CBool(settings("executecodePreviewChecked"))
-                End If
-                If settings.ContainsKey("chatMode") Then
-                    chatMode = Convert.ToString(settings("chatMode"))
                 End If
                 If settings.ContainsKey("enableAutocomplete") Then
                     EnableAutocomplete = CBool(settings("enableAutocomplete"))

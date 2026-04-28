@@ -231,11 +231,6 @@ Public Class WebViewService
             document.getElementById('settings-selected-cell').checked = {chatSettings.selectedCellChecked.ToString().ToLower()};
             document.getElementById('settings-executecode-preview').checked = {chatSettings.executecodePreviewChecked.ToString().ToLower()};
             
-            var selectElement = document.getElementById('chatMode');
-            if (selectElement) {{
-                selectElement.value = '{chatSettings.chatMode}';
-            }}
-            
             document.getElementById('scrollChecked').checked = {chatSettings.settingsScrollChecked.ToString().ToLower()};
             document.getElementById('selectedCell').checked = {chatSettings.selectedCellChecked.ToString().ToLower()};
             "

@@ -1,0 +1,30 @@
+{
+  "id": "ApplyFormula",
+  "name": "应用公式",
+  "description": "在指定单元格范围应用Excel公式，支持自动向下填充",
+  "appType": "excel",
+  "category": "基础操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "targetRange",
+      "type": "string",
+      "required": true,
+      "description": "目标单元格范围，如 C1:C100"
+    },
+    {
+      "name": "formula",
+      "type": "string",
+      "required": true,
+      "description": "Excel公式，如 =A1+B1"
+    },
+    {
+      "name": "fillDown",
+      "type": "boolean",
+      "required": false,
+      "description": "是否自动向下填充",
+      "defaultValue": true
+    }
+  ]
+}

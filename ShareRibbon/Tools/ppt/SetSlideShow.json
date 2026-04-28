@@ -1,0 +1,23 @@
+{
+  "id": "SetSlideShow",
+  "name": "设置放映",
+  "description": "配置幻灯片放映设置",
+  "appType": "ppt",
+  "category": "高级功能",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "loopUntilEsc",
+      "type": "boolean",
+      "required": false,
+      "description": "是否循环放映"
+    },
+    {
+      "name": "advanceMode",
+      "type": "string",
+      "required": false,
+      "description": "翻页模式"
+    }
+  ]
+}

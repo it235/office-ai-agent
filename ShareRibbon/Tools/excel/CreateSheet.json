@@ -1,0 +1,29 @@
+{
+  "id": "CreateSheet",
+  "name": "创建工作表",
+  "description": "创建新的工作表",
+  "appType": "excel",
+  "category": "工作表操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "name",
+      "type": "string",
+      "required": true,
+      "description": "工作表名称"
+    },
+    {
+      "name": "position",
+      "type": "string",
+      "required": false,
+      "description": "插入位置：before/after"
+    },
+    {
+      "name": "referenceSheet",
+      "type": "string",
+      "required": false,
+      "description": "参考工作表名称"
+    }
+  ]
+}

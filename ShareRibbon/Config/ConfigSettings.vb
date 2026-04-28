@@ -20,5 +20,8 @@ Public Class ConfigSettings
     Public Shared Property propmtName As String
     Public Shared Property propmtContent As String
 
+    ' Agent 架构切换：true=使用新 AgentKernel，false=保留旧 RalphLoop/RalphAgent
+    Public Shared Property UseNewAgentKernel As Boolean = True
+
     Public Const OfficeAiAppDataFolder As String = "OfficeAiAppData"
 End Class

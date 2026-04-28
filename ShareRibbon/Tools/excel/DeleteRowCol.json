@@ -1,0 +1,30 @@
+{
+  "id": "DeleteRowCol",
+  "name": "删除行列",
+  "description": "删除指定行或列",
+  "appType": "excel",
+  "category": "高级功能",
+  "riskLevel": "medium",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "type",
+      "type": "string",
+      "required": true,
+      "description": "删除类型：row/column"
+    },
+    {
+      "name": "position",
+      "type": "string",
+      "required": true,
+      "description": "位置（行号或列字母）"
+    },
+    {
+      "name": "count",
+      "type": "integer",
+      "required": false,
+      "description": "删除数量",
+      "defaultValue": 1
+    }
+  ]
+}

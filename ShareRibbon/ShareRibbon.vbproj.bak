@@ -1,0 +1,537 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="..\packages\EntityFramework.6.5.1\build\EntityFramework.props" Condition="Exists('..\packages\EntityFramework.6.5.1\build\EntityFramework.props')" />
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{006508C7-FB9F-4484-A22A-9AA9487ACD0B}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <RootNamespace>ShareRibbon</RootNamespace>
+    <AssemblyName>ShareRibbon</AssemblyName>
+    <FileAlignment>512</FileAlignment>
+    <MyType>Windows</MyType>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <Deterministic>true</Deterministic>
+    <NuGetPackageImportStamp>
+    </NuGetPackageImportStamp>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <DefineDebug>true</DefineDebug>
+    <DefineTrace>true</DefineTrace>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DocumentationFile>ShareRibbon.xml</DocumentationFile>
+    <NoWarn>42016,41999,42017,42018,42019,42032,42036,42020,42021,42022,42358,42356</NoWarn>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <DefineDebug>false</DefineDebug>
+    <DefineTrace>true</DefineTrace>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DocumentationFile>ShareRibbon.xml</DocumentationFile>
+    <NoWarn>42016,41999,42017,42018,42019,42032,42036,42020,42021,42022,42358,42356</NoWarn>
+  </PropertyGroup>
+  <PropertyGroup>
+    <OptionExplicit>On</OptionExplicit>
+  </PropertyGroup>
+  <PropertyGroup>
+    <OptionCompare>Binary</OptionCompare>
+  </PropertyGroup>
+  <PropertyGroup>
+    <OptionStrict>Off</OptionStrict>
+  </PropertyGroup>
+  <PropertyGroup>
+    <OptionInfer>On</OptionInfer>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="EntityFramework, Version=6.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089, processorArchitecture=MSIL">
+      <HintPath>..\packages\EntityFramework.6.5.1\lib\net45\EntityFramework.dll</HintPath>
+    </Reference>
+    <Reference Include="EntityFramework.SqlServer, Version=6.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089, processorArchitecture=MSIL">
+      <HintPath>..\packages\EntityFramework.6.5.1\lib\net45\EntityFramework.SqlServer.dll</HintPath>
+    </Reference>
+    <Reference Include="HtmlAgilityPack, Version=1.11.24.0, Culture=neutral, PublicKeyToken=bd319b19eaf3b43a, processorArchitecture=MSIL">
+      <HintPath>..\packages\Anh.HtmlAgilityPack.zh-CN.1.11.24\lib\netstandard2.0\HtmlAgilityPack.dll</HintPath>
+    </Reference>
+    <Reference Include="Markdig, Version=0.41.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\Markdig.0.41.1\lib\net462\Markdig.dll</HintPath>
+    </Reference>
+    <Reference Include="MessagePack, Version=2.5.0.0, Culture=neutral, PublicKeyToken=b4a0369545f0a1be, processorArchitecture=MSIL">
+      <HintPath>..\packages\MessagePack.2.5.192\lib\net472\MessagePack.dll</HintPath>
+    </Reference>
+    <Reference Include="MessagePack.Annotations, Version=2.5.0.0, Culture=neutral, PublicKeyToken=b4a0369545f0a1be, processorArchitecture=MSIL">
+      <HintPath>..\packages\MessagePack.Annotations.2.5.192\lib\netstandard2.0\MessagePack.Annotations.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Bcl.AsyncInterfaces, Version=8.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.Bcl.AsyncInterfaces.8.0.0\lib\net462\Microsoft.Bcl.AsyncInterfaces.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Data.Sqlite, Version=10.0.3.0, Culture=neutral, PublicKeyToken=adb9793829ddae60, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.Data.Sqlite.Core.10.0.3\lib\netstandard2.0\Microsoft.Data.Sqlite.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.NET.StringTools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.NET.StringTools.17.6.3\lib\net472\Microsoft.NET.StringTools.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Office.Tools, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <EmbedInteropTypes>True</EmbedInteropTypes>
+    </Reference>
+    <Reference Include="Microsoft.Office.Tools.Common, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <EmbedInteropTypes>True</EmbedInteropTypes>
+    </Reference>
+    <Reference Include="Microsoft.Office.Tools.Common.v4.0.Utilities, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL" />
+    <Reference Include="Microsoft.Office.Tools.Excel, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <EmbedInteropTypes>True</EmbedInteropTypes>
+    </Reference>
+    <Reference Include="Microsoft.Office.Tools.v4.0.Framework, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL" />
+    <Reference Include="Microsoft.Vbe.Interop, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+      <EmbedInteropTypes>True</EmbedInteropTypes>
+    </Reference>
+    <Reference Include="Microsoft.VisualStudio.Threading, Version=17.13.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.VisualStudio.Threading.Only.17.13.61\lib\net472\Microsoft.VisualStudio.Threading.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.VisualStudio.Validation, Version=17.8.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.VisualStudio.Validation.17.8.8\lib\netstandard2.0\Microsoft.VisualStudio.Validation.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Web.WebView2.Core, Version=1.0.3240.44, Culture=neutral, PublicKeyToken=2a8ab48044d2601e, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.Web.WebView2.1.0.3240.44\lib\net462\Microsoft.Web.WebView2.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Web.WebView2.WinForms, Version=1.0.3240.44, Culture=neutral, PublicKeyToken=2a8ab48044d2601e, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.Web.WebView2.1.0.3240.44\lib\net462\Microsoft.Web.WebView2.WinForms.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Web.WebView2.Wpf, Version=1.0.3240.44, Culture=neutral, PublicKeyToken=2a8ab48044d2601e, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.Web.WebView2.1.0.3240.44\lib\net462\Microsoft.Web.WebView2.Wpf.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Win32.Registry, Version=5.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.Win32.Registry.5.0.0\lib\net461\Microsoft.Win32.Registry.dll</HintPath>
+    </Reference>
+    <Reference Include="Nerdbank.Streams, Version=2.12.0.0, Culture=neutral, PublicKeyToken=cac503e1823ce71c, processorArchitecture=MSIL">
+      <HintPath>..\packages\Nerdbank.Streams.2.12.87\lib\netstandard2.0\Nerdbank.Streams.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="Office, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+      <HintPath>..\packages\MicrosoftOfficeCore.15.0.0\lib\net35\Office.dll</HintPath>
+      <EmbedInteropTypes>True</EmbedInteropTypes>
+    </Reference>
+    <Reference Include="SQLitePCLRaw.core, Version=2.1.11.2622, Culture=neutral, PublicKeyToken=1488e028ca7ab535, processorArchitecture=MSIL">
+      <HintPath>..\packages\SQLitePCLRaw.core.2.1.11\lib\netstandard2.0\SQLitePCLRaw.core.dll</HintPath>
+    </Reference>
+    <Reference Include="StreamJsonRpc, Version=2.22.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\StreamJsonRpc.2.22.11\lib\netstandard2.0\StreamJsonRpc.dll</HintPath>
+    </Reference>
+    <Reference Include="System.ComponentModel.DataAnnotations" />
+    <Reference Include="System" />
+    <Reference Include="System.Buffers, Version=4.0.4.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Buffers.4.6.0\lib\net462\System.Buffers.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Collections.Immutable, Version=8.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Collections.Immutable.8.0.0\lib\net462\System.Collections.Immutable.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Configuration" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Data.SQLite, Version=2.0.2.0, Culture=neutral, PublicKeyToken=db937bc2d44ff139, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Data.SQLite.2.0.2\lib\net471\System.Data.SQLite.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Data.SQLite.EF6, Version=2.0.2.0, Culture=neutral, PublicKeyToken=db937bc2d44ff139, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Data.SQLite.EF6.2.0.2\lib\net471\System.Data.SQLite.EF6.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Diagnostics.DiagnosticSource, Version=8.0.0.1, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Diagnostics.DiagnosticSource.8.0.1\lib\net462\System.Diagnostics.DiagnosticSource.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.IO.Pipelines, Version=8.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.IO.Pipelines.8.0.0\lib\net462\System.IO.Pipelines.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Memory, Version=4.0.2.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Memory.4.6.0\lib\net462\System.Memory.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Numerics" />
+    <Reference Include="System.Numerics.Vectors, Version=4.1.5.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Numerics.Vectors.4.6.0\lib\net462\System.Numerics.Vectors.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Runtime.CompilerServices.Unsafe, Version=6.0.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Runtime.CompilerServices.Unsafe.6.1.0\lib\net462\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Security.AccessControl, Version=5.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Security.AccessControl.5.0.0\lib\net461\System.Security.AccessControl.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Security.Principal.Windows, Version=5.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Security.Principal.Windows.5.0.0\lib\net461\System.Security.Principal.Windows.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Text.Encodings.Web, Version=8.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Text.Encodings.Web.8.0.0\lib\net462\System.Text.Encodings.Web.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Text.Json, Version=8.0.0.5, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Text.Json.8.0.5\lib\net462\System.Text.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Threading.Tasks.Dataflow, Version=8.0.0.1, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Threading.Tasks.Dataflow.8.0.1\lib\net462\System.Threading.Tasks.Dataflow.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Threading.Tasks.Extensions, Version=4.2.1.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Threading.Tasks.Extensions.4.6.0\lib\net462\System.Threading.Tasks.Extensions.dll</HintPath>
+    </Reference>
+    <Reference Include="System.ValueTuple, Version=4.0.3.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.ValueTuple.4.5.0\lib\net47\System.ValueTuple.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Web" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="WindowsBase" />
+  </ItemGroup>
+  <ItemGroup>
+    <Import Include="Microsoft.VisualBasic" />
+    <Import Include="System" />
+    <Import Include="System.Collections" />
+    <Import Include="System.Collections.Generic" />
+    <Import Include="System.Data" />
+    <Import Include="System.Diagnostics" />
+    <Import Include="System.Linq" />
+    <Import Include="System.Xml.Linq" />
+    <Import Include="System.Threading.Tasks" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="ApplicationInfo.vb" />
+    <Compile Include="Common\LLMUtil.vb" />
+    <Compile Include="Config\ConfigApiForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Config\ConfigManager.vb" />
+    <Compile Include="Config\MemoryConfig.vb" />
+    <Compile Include="Storage\OfficeAiDatabase.vb" />
+    <Compile Include="Storage\MemoryRepository.vb" />
+    <Compile Include="Storage\ConversationRepository.vb" />
+    <Compile Include="Storage\PromptTemplateRepository.vb" />
+	<Compile Include="Storage\FormatTemplateRepository.vb" />
+    <Compile Include="Config\ConfigPromptForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Config\SkillsConfigForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Config\MemoryConfigForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Config\MemoryManageForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Config\ChatSettings.vb" />
+    <Compile Include="Config\ConfigSettings.vb" />
+    <Compile Include="Config\ProviderType.vb" />
+    <Compile Include="Config\PresetProviders.vb" />
+    <Compile Include="Config\ModelApiClient.vb" />
+    <Compile Include="Config\PromptConfiguration.vb" />
+    <Compile Include="Config\PromptManager.vb" />
+    <Compile Include="Config\ReformatTemplate.vb" />
+    <Compile Include="Config\ReformatTemplateManager.vb" />
+    <Compile Include="Config\StyleGuideResource.vb" />
+    <Compile Include="Config\StyleGuideManager.vb" />
+    <Compile Include="Config\SemanticStyleMapping.vb" />
+    <Compile Include="Config\SemanticTagRegistry.vb" />
+    <Compile Include="Config\SemanticMappingManager.vb" />
+    <Compile Include="Services\Reformat\LegacyTemplateConverter.vb" />
+    <Compile Include="Services\Reformat\SemanticRenderingEngine.vb" />
+    <Compile Include="Services\Reformat\FormatMirrorService.vb" />
+    <Compile Include="Services\Reformat\SemanticPromptBuilder.vb" />
+    <Compile Include="Services\Reformat\TaggingValidator.vb" />
+    <Compile Include="Services\Reformat\StyleGuideConverter.vb" />
+    <Compile Include="Services\Reformat\DocumentParserService.vb" />
+    <Compile Include="Services\Reformat\FormatPreviewService.vb" />
+    <Compile Include="Config\ReformatTemplateEditorForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Config\AboutForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Config\AutocompleteSettingsForm.vb" />
+    <Compile Include="Config\GlobalStatusStripAll.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Config\GlobalStatusStrip.vb" />
+    <Compile Include="Config\GlobalTips.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Translate\BaseTranslateService.vb" />
+    <Compile Include="Translate\DocumentTranslateService.vb" />
+    <Compile Include="Translate\TranslateActionForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Translate\TranslateDomainTemplate.vb" />
+    <Compile Include="Translate\TranslateGlobalSettingsForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Translate\TranslateSettings.vb" />
+    <Compile Include="Continuation\ContinuationService.vb" />
+    <Compile Include="Loop\RalphLoopMemory.vb" />
+    <Compile Include="Loop\RalphLoopController.vb" />
+    <Compile Include="Loop\RalphAgentController.vb" />
+    <Compile Include="Agent\AgentKernel.vb" />
+    <Compile Include="Agent\LoopEngine.vb" />
+    <Compile Include="Agent\AgentSession.vb" />
+    <Compile Include="Agent\AgentMemory.vb" />
+    <Compile Include="Agent\SkillRegistry.vb" />
+    <Compile Include="Agent\ToolRegistry.vb" />
+    <Compile Include="Agent\PromptManager.vb" />
+    <Compile Include="Config\WebView2Loader.vb" />
+    <Compile Include="Config\SqliteAssemblyResolver.vb" />
+    <Compile Include="Config\PhaseStartupManager.vb" />
+    <Compile Include="Config\SqliteNativeLoader.vb" />
+    <Compile Include="Controls\BaseChatControl.Designer.vb">
+      <DependentUpon>BaseChatControl.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Controls\BaseChatControl.vb">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="Controls\ReformatTemplateEditorControl.vb">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="Controls\BaseDataCapturePane.Designer.vb">
+      <DependentUpon>BaseDataCapturePane.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Controls\BaseDataCapturePane.vb">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="Controls\BaseChat.vb">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="Controls\BaseDeepseekChat.Designer.vb">
+      <DependentUpon>BaseDeepseekChat.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Controls\BaseDeepseekChat.vb">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="Controls\BaseDoubaoChat.Designer.vb">
+      <DependentUpon>BaseDoubaoChat.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Controls\BaseDoubaoChat.vb">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="Controls\WebSiteContentConfirmDialog.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Controls\CommandPreviewForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Log\SimpleLogger.vb" />
+    <Compile Include="Mcp\ApiKeyConfigForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Mcp\ImportConfigForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Mcp\MCPConfigForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Mcp\MCPConnectionConfig.vb" />
+    <Compile Include="Mcp\MCPEntities.vb" />
+    <Compile Include="Mcp\MCPPresetForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Mcp\StdioConfigForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Mcp\StreamJsonRpcMCPClient.vb" />
+    <Compile Include="My Project\AssemblyInfo.vb" />
+    <Compile Include="My Project\Application.Designer.vb">
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Application.myapp</DependentUpon>
+    </Compile>
+    <Compile Include="My Project\Resources.Designer.vb">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+    <Compile Include="My Project\Settings.Designer.vb">
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Settings.settings</DependentUpon>
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+    </Compile>
+    <Compile Include="Resources\ResourceExtractor.vb" />
+    <Compile Include="Resources\ShareResources.vb" />
+    <Compile Include="Ribbon\BaseOfficeRibbon.Designer.vb">
+      <DependentUpon>BaseOfficeRibbon.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Ribbon\BaseOfficeRibbon.vb">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="Controls\Models\SelectionInfo.vb" />
+    <Compile Include="Controls\Models\HistoryMessage.vb" />
+    <Compile Include="Controls\Services\WebViewService.vb" />
+    <Compile Include="Controls\Services\MessageService.vb" />
+    <Compile Include="Controls\Services\HttpStreamService.vb" />
+    <Compile Include="Controls\Services\CodeExecutionService.vb" />
+    <Compile Include="Controls\Services\FileParserService.vb" />
+    <Compile Include="Controls\Services\ChatContextBuilder.vb" />
+    <Compile Include="Controls\Services\ChatStateService.vb" />
+    <Compile Include="Controls\Services\UtilsService.vb" />
+    <Compile Include="Controls\Services\AutocompleteService.vb" />
+    <Compile Include="Controls\Services\RalphLoopService.vb" />
+    <Compile Include="Controls\Services\ReformatService.vb" />
+    <Compile Include="Controls\Services\HistoryService.vb" />
+    <Compile Include="Controls\Services\HistorySessionService.vb" />
+    <Compile Include="Controls\Services\RalphAgentService.vb" />
+    <Compile Include="Controls\Services\AgentKernelService.vb" />
+    <Compile Include="Controls\Services\ContextRelevanceService.vb" />
+    <Compile Include="Controls\Services\MemoryService.vb" />
+    <Compile Include="Controls\Services\McpService.vb" />
+    <Compile Include="Controls\Services\OfficeCompletionService.vb" />
+    <Compile Include="Controls\Services\IntentRecognitionService.vb" />
+    <Compile Include="Controls\Services\ExcelContextService.vb" />
+    <Compile Include="Controls\Services\ExecutionPlanRenderer.vb" />
+    <Compile Include="Controls\Models\ExecutionStep.vb" />
+    <Compile Include="Services\EmbeddingService.vb" />
+    <Compile Include="Services\SkillsDirectoryService.vb" />
+    <Compile Include="Services\SkillsService.vb" />
+    <Compile Include="Services\UnifiedMemoryService.vb" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Controls\BaseChatControl.resx">
+      <DependentUpon>BaseChatControl.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Controls\BaseDataCapturePane.resx">
+      <DependentUpon>BaseDataCapturePane.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="My Project\Resources.resx">
+      <Generator>PublicVbMyResourcesResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.vb</LastGenOutput>
+      <CustomToolNamespace>My.Resources</CustomToolNamespace>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="app.config" />
+    <None Include="My Project\Application.myapp">
+      <Generator>MyApplicationCodeGenerator</Generator>
+      <LastGenOutput>Application.Designer.vb</LastGenOutput>
+    </None>
+    <None Include="My Project\Settings.settings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+      <CustomToolNamespace>My</CustomToolNamespace>
+      <LastGenOutput>Settings.Designer.vb</LastGenOutput>
+    </None>
+    <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\about.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\aiapiconfig.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\chat.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\magic.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\send32.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\wait.gif" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\github.min.css" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\highlight.min.js" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\marked.min.js" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\vbscript.min.js" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\clear.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\deepseek.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\websit.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\website.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\mcp1.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\css\styles.css" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\js\utils.js" />
+    <None Include="Resources\js\core.js" />
+    <None Include="Resources\js\markdown-renderer.js" />
+    <None Include="Resources\js\chat-manager.js" />
+    <None Include="Resources\js\message-sender.js" />
+    <None Include="Resources\js\code-handler.js" />
+    <None Include="Resources\js\settings-manager.js" />
+    <None Include="Resources\js\mcp-manager.js" />
+    <None Include="Resources\js\revision-manager.js" />
+    <None Include="Resources\js\history-manager.js" />
+    <None Include="Resources\js\intent-preview.js" />
+    <None Include="Resources\js\ralph-loop.js" />
+    <None Include="Resources\js\ralph-agent.js" />
+    <None Include="Resources\js\agent-protocol.js" />
+    <None Include="Resources\js\agent-card.js" />
+    <None Include="Resources\js\autocomplete.js" />
+    <None Include="Resources\js\model-switcher.js" />
+    <None Include="Resources\js\reformat-template.js" />
+    <None Include="Resources\js\config-panel.js" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\chat-template-refactored.html" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\doubao_avatar.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\audit.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\help.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\papers.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\translate.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\aiwrite.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\autocomplete.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\promptconfig.png" />
+  </ItemGroup>
+  <ItemGroup>
+  </ItemGroup>
+  <!-- 复制 e_sqlite3.dll 到输出目录 (System.Data.SQLite 2.0 需要) -->
+  <Target Name="CopySqliteNativeDll" AfterTargets="Build">
+    <PropertyGroup>
+      <SqliteNativePath>..\packages\SQLitePCLRaw.lib.e_sqlite3.2.1.11\runtimes</SqliteNativePath>
+    </PropertyGroup>
+    <Copy SourceFiles="$(SqliteNativePath)\win-x86\native\e_sqlite3.dll" DestinationFolder="$(OutputPath)runtimes\win-x86\native" Condition="Exists('$(SqliteNativePath)\win-x86\native\e_sqlite3.dll')" />
+    <Copy SourceFiles="$(SqliteNativePath)\win-x64\native\e_sqlite3.dll" DestinationFolder="$(OutputPath)runtimes\win-x64\native" Condition="Exists('$(SqliteNativePath)\win-x64\native\e_sqlite3.dll')" />
+  </Target>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.VisualBasic.targets" />
+  <Import Project="..\packages\Microsoft.Web.WebView2.1.0.3240.44\build\Microsoft.Web.WebView2.targets" Condition="Exists('..\packages\Microsoft.Web.WebView2.1.0.3240.44\build\Microsoft.Web.WebView2.targets')" />
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>这台计算机上缺少此项目引用的 NuGet 程序包。使用“NuGet 程序包还原”可下载这些程序包。有关更多信息，请参见 http://go.microsoft.com/fwlink/?LinkID=322105。缺少的文件是 {0}。</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('..\packages\Microsoft.Web.WebView2.1.0.3240.44\build\Microsoft.Web.WebView2.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Web.WebView2.1.0.3240.44\build\Microsoft.Web.WebView2.targets'))" />
+    <Error Condition="!Exists('..\packages\EntityFramework.6.5.1\build\EntityFramework.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\EntityFramework.6.5.1\build\EntityFramework.props'))" />
+    <Error Condition="!Exists('..\packages\EntityFramework.6.5.1\build\EntityFramework.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\EntityFramework.6.5.1\build\EntityFramework.targets'))" />
+  </Target>
+  <Import Project="..\packages\EntityFramework.6.5.1\build\EntityFramework.targets" Condition="Exists('..\packages\EntityFramework.6.5.1\build\EntityFramework.targets')" />
+</Project>

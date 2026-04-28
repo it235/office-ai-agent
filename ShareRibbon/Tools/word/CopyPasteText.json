@@ -1,0 +1,23 @@
+{
+  "id": "CopyPasteText",
+  "name": "复制粘贴文本",
+  "description": "复制粘贴文本内容",
+  "appType": "word",
+  "category": "基础文本操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "sourceRange",
+      "type": "string",
+      "required": true,
+      "description": "源范围"
+    },
+    {
+      "name": "targetPosition",
+      "type": "string",
+      "required": false,
+      "description": "目标位置"
+    }
+  ]
+}

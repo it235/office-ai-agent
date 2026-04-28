@@ -1,0 +1,24 @@
+{
+  "id": "AddAnimation",
+  "name": "添加动画",
+  "description": "为幻灯片元素添加动画",
+  "appType": "ppt",
+  "category": "样式和动画",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "effect",
+      "type": "string",
+      "required": true,
+      "description": "动画效果：fadeIn/flyIn/zoom/wipe"
+    },
+    {
+      "name": "targetShapes",
+      "type": "string",
+      "required": false,
+      "description": "目标：all/title",
+      "defaultValue": "all"
+    }
+  ]
+}

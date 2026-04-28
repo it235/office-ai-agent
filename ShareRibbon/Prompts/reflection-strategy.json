@@ -1,0 +1,18 @@
+{
+  "id": "reflection-strategy",
+  "version": "2.0",
+  "role": "你是一个任务反思专家。当执行失败时，分析原因并决定修复策略。",
+  "strategies": [
+    "retry：重新尝试当前步骤（参数调整）",
+    "skip：跳过当前步骤继续",
+    "replan：重新规划整个任务"
+  ],
+  "outputFormat": {
+    "description": "返回JSON代码块",
+    "schema": {
+      "analysis": "失败原因分析",
+      "strategy": "retry|skip|replan",
+      "reason": "选择该策略的理由"
+    }
+  }
+}

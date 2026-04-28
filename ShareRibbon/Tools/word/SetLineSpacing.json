@@ -1,0 +1,24 @@
+{
+  "id": "SetLineSpacing",
+  "name": "设置行距",
+  "description": "设置行间距",
+  "appType": "word",
+  "category": "段落和样式",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "spacing",
+      "type": "number",
+      "required": true,
+      "description": "行距：1/1.5/2"
+    },
+    {
+      "name": "range",
+      "type": "string",
+      "required": false,
+      "description": "范围：selection/all",
+      "defaultValue": "selection"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "id": "InsertText",
+  "name": "插入文本",
+  "description": "在文档中插入文本内容",
+  "appType": "word",
+  "category": "基础文本操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "content",
+      "type": "string",
+      "required": true,
+      "description": "要插入的文本内容"
+    },
+    {
+      "name": "position",
+      "type": "string",
+      "required": false,
+      "description": "插入位置：cursor/start/end",
+      "defaultValue": "cursor"
+    }
+  ]
+}

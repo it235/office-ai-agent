@@ -1,0 +1,35 @@
+{
+  "id": "ConditionalFormat",
+  "name": "条件格式",
+  "description": "为单元格范围添加条件格式",
+  "appType": "excel",
+  "category": "数据操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "range",
+      "type": "string",
+      "required": true,
+      "description": "目标范围"
+    },
+    {
+      "name": "rule",
+      "type": "string",
+      "required": true,
+      "description": "规则类型：highlight/databar/colorscale/iconset"
+    },
+    {
+      "name": "condition",
+      "type": "string",
+      "required": false,
+      "description": "条件表达式"
+    },
+    {
+      "name": "color",
+      "type": "string",
+      "required": false,
+      "description": "颜色"
+    }
+  ]
+}

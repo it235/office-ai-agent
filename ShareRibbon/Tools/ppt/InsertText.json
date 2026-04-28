@@ -1,0 +1,36 @@
+{
+  "id": "InsertText",
+  "name": "插入文本",
+  "description": "在幻灯片中插入文本",
+  "appType": "ppt",
+  "category": "内容操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "content",
+      "type": "string",
+      "required": true,
+      "description": "文本内容"
+    },
+    {
+      "name": "slideIndex",
+      "type": "integer",
+      "required": false,
+      "description": "幻灯片索引，-1表示当前",
+      "defaultValue": -1
+    },
+    {
+      "name": "x",
+      "type": "number",
+      "required": false,
+      "description": "X坐标"
+    },
+    {
+      "name": "y",
+      "type": "number",
+      "required": false,
+      "description": "Y坐标"
+    }
+  ]
+}

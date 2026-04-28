@@ -1,0 +1,24 @@
+{
+  "id": "MergeCells",
+  "name": "合并单元格",
+  "description": "合并或取消合并指定范围的单元格",
+  "appType": "excel",
+  "category": "数据操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "range",
+      "type": "string",
+      "required": true,
+      "description": "单元格范围"
+    },
+    {
+      "name": "unmerge",
+      "type": "boolean",
+      "required": false,
+      "description": "是否取消合并",
+      "defaultValue": false
+    }
+  ]
+}

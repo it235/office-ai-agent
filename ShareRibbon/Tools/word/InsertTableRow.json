@@ -1,0 +1,23 @@
+{
+  "id": "InsertTableRow",
+  "name": "插入表格行",
+  "description": "在表格中插入行",
+  "appType": "word",
+  "category": "表格操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "tableIndex",
+      "type": "integer",
+      "required": true,
+      "description": "表格索引"
+    },
+    {
+      "name": "position",
+      "type": "string",
+      "required": true,
+      "description": "插入位置：after/before"
+    }
+  ]
+}

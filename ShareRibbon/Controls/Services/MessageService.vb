@@ -189,7 +189,6 @@ Public Class MessageService
                 .ContextLimit = CInt(jsonDoc("contextLimit")),
                 .SelectedCellChecked = CBool(jsonDoc("selectedCell")),
                 .SettingsScrollChecked = CBool(jsonDoc("settingsScroll")),
-                .ChatMode = jsonDoc("chatMode").ToString(),
                 .ExecuteCodePreview = CBool(jsonDoc("executeCodePreview"))
             })
     End Sub
@@ -390,7 +389,6 @@ Public Class SettingsEventArgs
     Public Property ContextLimit As Integer
     Public Property SelectedCellChecked As Boolean
     Public Property SettingsScrollChecked As Boolean
-    Public Property ChatMode As String
     Public Property ExecuteCodePreview As Boolean
 End Class
 

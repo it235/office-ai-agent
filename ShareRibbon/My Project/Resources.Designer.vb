@@ -546,7 +546,25 @@ Namespace My.Resources
                 Return ResourceManager.GetString("ralph_agent", resourceCulture)
             End Get
         End Property
-        
+
+        '''<summary>
+        '''  查找类似 agent-protocol.js 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property agent_protocol() As String
+            Get
+                Return ResourceManager.GetString("agent_protocol", resourceCulture)
+            End Get
+        End Property
+
+        '''<summary>
+        '''  查找类似 agent-card.js 的本地化字符串。
+        '''</summary>
+        Public ReadOnly Property agent_card() As String
+            Get
+                Return ResourceManager.GetString("agent_card", resourceCulture)
+            End Get
+        End Property
+
         '''<summary>
         '''  查找类似 /**
         ''' * ralph-loop.js - Ralph Loop 前端控制

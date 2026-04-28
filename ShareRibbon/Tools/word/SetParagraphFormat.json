@@ -1,0 +1,35 @@
+{
+  "id": "SetParagraphFormat",
+  "name": "设置段落格式",
+  "description": "设置段落对齐、缩进、间距等",
+  "appType": "word",
+  "category": "段落和样式",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "alignment",
+      "type": "string",
+      "required": false,
+      "description": "对齐方式：left/center/right/justify"
+    },
+    {
+      "name": "firstLineIndent",
+      "type": "number",
+      "required": false,
+      "description": "首行缩进"
+    },
+    {
+      "name": "beforeSpacing",
+      "type": "number",
+      "required": false,
+      "description": "段前间距"
+    },
+    {
+      "name": "afterSpacing",
+      "type": "number",
+      "required": false,
+      "description": "段后间距"
+    }
+  ]
+}

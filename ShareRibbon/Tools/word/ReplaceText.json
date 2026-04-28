@@ -1,0 +1,29 @@
+{
+  "id": "ReplaceText",
+  "name": "查找替换",
+  "description": "查找并替换文本内容",
+  "appType": "word",
+  "category": "基础文本操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "find",
+      "type": "string",
+      "required": true,
+      "description": "查找内容"
+    },
+    {
+      "name": "replace",
+      "type": "string",
+      "required": true,
+      "description": "替换内容"
+    },
+    {
+      "name": "matchCase",
+      "type": "boolean",
+      "required": false,
+      "description": "是否区分大小写"
+    }
+  ]
+}

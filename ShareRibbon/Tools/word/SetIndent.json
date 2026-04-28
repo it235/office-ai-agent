@@ -1,0 +1,29 @@
+{
+  "id": "SetIndent",
+  "name": "设置缩进",
+  "description": "设置段落缩进",
+  "appType": "word",
+  "category": "段落和样式",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "left",
+      "type": "number",
+      "required": false,
+      "description": "左缩进(cm)"
+    },
+    {
+      "name": "right",
+      "type": "number",
+      "required": false,
+      "description": "右缩进(cm)"
+    },
+    {
+      "name": "firstLine",
+      "type": "number",
+      "required": false,
+      "description": "首行缩进(cm)"
+    }
+  ]
+}

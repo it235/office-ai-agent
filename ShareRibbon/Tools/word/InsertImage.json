@@ -1,0 +1,29 @@
+{
+  "id": "InsertImage",
+  "name": "插入图片",
+  "description": "在文档中插入图片",
+  "appType": "word",
+  "category": "高级功能",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "imagePath",
+      "type": "string",
+      "required": true,
+      "description": "图片文件路径"
+    },
+    {
+      "name": "width",
+      "type": "number",
+      "required": false,
+      "description": "图片宽度"
+    },
+    {
+      "name": "height",
+      "type": "number",
+      "required": false,
+      "description": "图片高度"
+    }
+  ]
+}

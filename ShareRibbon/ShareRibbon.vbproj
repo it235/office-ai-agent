@@ -271,6 +271,13 @@
     <Compile Include="Loop\RalphLoopMemory.vb" />
     <Compile Include="Loop\RalphLoopController.vb" />
     <Compile Include="Loop\RalphAgentController.vb" />
+    <Compile Include="Agent\AgentKernel.vb" />
+    <Compile Include="Agent\LoopEngine.vb" />
+    <Compile Include="Agent\AgentSession.vb" />
+    <Compile Include="Agent\AgentMemory.vb" />
+    <Compile Include="Agent\SkillRegistry.vb" />
+    <Compile Include="Agent\ToolRegistry.vb" />
+    <Compile Include="Agent\PromptManager.vb" />
     <Compile Include="Config\WebView2Loader.vb" />
     <Compile Include="Config\SqliteAssemblyResolver.vb" />
     <Compile Include="Config\PhaseStartupManager.vb" />
@@ -364,11 +371,10 @@
     <Compile Include="Controls\Services\ChatStateService.vb" />
     <Compile Include="Controls\Services\UtilsService.vb" />
     <Compile Include="Controls\Services\AutocompleteService.vb" />
-    <Compile Include="Controls\Services\RalphLoopService.vb" />
     <Compile Include="Controls\Services\ReformatService.vb" />
     <Compile Include="Controls\Services\HistoryService.vb" />
     <Compile Include="Controls\Services\HistorySessionService.vb" />
-    <Compile Include="Controls\Services\RalphAgentService.vb" />
+    <Compile Include="Controls\Services\AgentKernelService.vb" />
     <Compile Include="Controls\Services\ContextRelevanceService.vb" />
     <Compile Include="Controls\Services\MemoryService.vb" />
     <Compile Include="Controls\Services\McpService.vb" />
@@ -471,6 +477,8 @@
     <None Include="Resources\js\intent-preview.js" />
     <None Include="Resources\js\ralph-loop.js" />
     <None Include="Resources\js\ralph-agent.js" />
+    <None Include="Resources\js\agent-protocol.js" />
+    <None Include="Resources\js\agent-card.js" />
     <None Include="Resources\js\autocomplete.js" />
     <None Include="Resources\js\model-switcher.js" />
     <None Include="Resources\js\reformat-template.js" />

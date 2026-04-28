@@ -1,0 +1,23 @@
+{
+  "id": "AddSpeakerNotes",
+  "name": "添加演讲备注",
+  "description": "为幻灯片添加演讲者备注",
+  "appType": "ppt",
+  "category": "高级功能",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "notes",
+      "type": "string",
+      "required": true,
+      "description": "备注内容"
+    },
+    {
+      "name": "slideIndex",
+      "type": "integer",
+      "required": false,
+      "description": "幻灯片索引"
+    }
+  ]
+}

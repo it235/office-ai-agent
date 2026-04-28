@@ -1,0 +1,30 @@
+{
+  "id": "ProtectSheet",
+  "name": "保护工作表",
+  "description": "保护或取消保护工作表",
+  "appType": "excel",
+  "category": "高级功能",
+  "riskLevel": "medium",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "sheetName",
+      "type": "string",
+      "required": false,
+      "description": "工作表名称"
+    },
+    {
+      "name": "password",
+      "type": "string",
+      "required": false,
+      "description": "保护密码"
+    },
+    {
+      "name": "unprotect",
+      "type": "boolean",
+      "required": false,
+      "description": "是否取消保护",
+      "defaultValue": false
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "id": "FormatText",
+  "name": "格式化文本",
+  "description": "设置文本格式样式",
+  "appType": "word",
+  "category": "基础文本操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "range",
+      "type": "string",
+      "required": true,
+      "description": "目标范围：selection/all"
+    },
+    {
+      "name": "bold",
+      "type": "boolean",
+      "required": false,
+      "description": "是否加粗"
+    },
+    {
+      "name": "italic",
+      "type": "boolean",
+      "required": false,
+      "description": "是否斜体"
+    },
+    {
+      "name": "fontSize",
+      "type": "integer",
+      "required": false,
+      "description": "字体大小"
+    },
+    {
+      "name": "fontName",
+      "type": "string",
+      "required": false,
+      "description": "字体名称"
+    },
+    {
+      "name": "underline",
+      "type": "boolean",
+      "required": false,
+      "description": "是否下划线"
+    },
+    {
+      "name": "color",
+      "type": "string",
+      "required": false,
+      "description": "字体颜色"
+    }
+  ]
+}

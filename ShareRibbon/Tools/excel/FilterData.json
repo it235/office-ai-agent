@@ -1,0 +1,36 @@
+{
+  "id": "FilterData",
+  "name": "筛选数据",
+  "description": "对数据范围应用或清除筛选",
+  "appType": "excel",
+  "category": "数据操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "range",
+      "type": "string",
+      "required": true,
+      "description": "要筛选的数据范围"
+    },
+    {
+      "name": "column",
+      "type": "integer",
+      "required": true,
+      "description": "筛选列号"
+    },
+    {
+      "name": "criteria",
+      "type": "string",
+      "required": false,
+      "description": "筛选条件，如 >100"
+    },
+    {
+      "name": "clearFilter",
+      "type": "boolean",
+      "required": false,
+      "description": "是否清除筛选",
+      "defaultValue": false
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "id": "RenameSheet",
+  "name": "重命名工作表",
+  "description": "重命名工作表",
+  "appType": "excel",
+  "category": "工作表操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "oldName",
+      "type": "string",
+      "required": true,
+      "description": "原名称"
+    },
+    {
+      "name": "newName",
+      "type": "string",
+      "required": true,
+      "description": "新名称"
+    }
+  ]
+}

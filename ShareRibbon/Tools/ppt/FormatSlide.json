@@ -1,0 +1,23 @@
+{
+  "id": "FormatSlide",
+  "name": "格式化幻灯片",
+  "description": "设置幻灯片背景、布局等",
+  "appType": "ppt",
+  "category": "样式和动画",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "background",
+      "type": "string",
+      "required": false,
+      "description": "背景设置"
+    },
+    {
+      "name": "layout",
+      "type": "string",
+      "required": false,
+      "description": "布局类型"
+    }
+  ]
+}

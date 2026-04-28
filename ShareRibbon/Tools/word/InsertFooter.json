@@ -1,0 +1,24 @@
+{
+  "id": "InsertFooter",
+  "name": "插入页脚",
+  "description": "插入或修改页脚",
+  "appType": "word",
+  "category": "文档结构",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "content",
+      "type": "string",
+      "required": true,
+      "description": "页脚内容"
+    },
+    {
+      "name": "alignment",
+      "type": "string",
+      "required": false,
+      "description": "对齐方式：left/center/right",
+      "defaultValue": "center"
+    }
+  ]
+}

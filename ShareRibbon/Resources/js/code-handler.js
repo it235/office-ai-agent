@@ -378,11 +378,6 @@ function rejectAnswer(uuid) {
     }
 }
 
-// Chat mode changed handler
-function chatModeChanged(select) {
-    settingsSave();
-}
-
 // Batch delete chat function
 function showBatchDeleteChat() {
     // Show action buttons

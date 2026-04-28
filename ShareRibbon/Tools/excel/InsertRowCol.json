@@ -1,0 +1,30 @@
+{
+  "id": "InsertRowCol",
+  "name": "插入行列",
+  "description": "插入行或列",
+  "appType": "excel",
+  "category": "高级功能",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "type",
+      "type": "string",
+      "required": true,
+      "description": "插入类型：row/column"
+    },
+    {
+      "name": "position",
+      "type": "string",
+      "required": true,
+      "description": "插入位置（行号或列字母）"
+    },
+    {
+      "name": "count",
+      "type": "integer",
+      "required": false,
+      "description": "插入数量",
+      "defaultValue": 1
+    }
+  ]
+}

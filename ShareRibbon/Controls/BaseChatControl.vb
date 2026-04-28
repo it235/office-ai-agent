@@ -46,37 +46,22 @@ Public MustInherit Class BaseChatControl
         End Get
     End Property
 
-    ' 延迟初始化的 Ralph Loop 服务
-    Private _ralphLoopService As RalphLoopService = Nothing
-    Protected ReadOnly Property RalphLoopSvc As RalphLoopService
+    ' 延迟初始化的统一 AgentKernel 服务（新架构）
+    Private _agentKernelService As AgentKernelService = Nothing
+    Protected ReadOnly Property AgentKernelSvc As AgentKernelService
         Get
-            If _ralphLoopService Is Nothing Then
-                _ralphLoopService = New RalphLoopService(
-                    AddressOf ExecuteJavaScriptAsyncJS,
-                    AddressOf Send,
-                    AddressOf EscapeJavaScriptString,
-                    AddressOf GetApplicationType)
-            End If
-            Return _ralphLoopService
-        End Get
-    End Property
-
-    ' 延迟初始化的 Ralph Agent 服务
-    Private _ralphAgentService As RalphAgentService = Nothing
-    Protected ReadOnly Property RalphAgentSvc As RalphAgentService
-        Get
-            If _ralphAgentService Is Nothing Then
-                _ralphAgentService = New RalphAgentService(
+            If _agentKernelService Is Nothing Then
+                _agentKernelService = New AgentKernelService(
                     AddressOf ExecuteJavaScriptAsyncJS,
                     AddressOf EscapeJavaScriptString,
-                    AddressOf SendAndGetResponse,
+                    AddressOf SendAndGetResponseAsync,
                     Sub(c, l, p) CodeExecutionService.ExecuteCode(c, l, p),
                     _chatStateService,
                     systemHistoryMessageData,
                     AddressOf ManageHistoryMessageSize,
                     AddressOf GetOfficeAppType)
             End If
-            Return _ralphAgentService
+            Return _agentKernelService
         End Get
     End Property
 
@@ -159,12 +144,8 @@ Public MustInherit Class BaseChatControl
                     AddressOf ExecuteJavaScriptAsyncJS,
                     AddressOf WaitForRendererMapAsync,
                     Sub(uuid, plainBuf) CheckAndCompleteProcessingHook(uuid, plainBuf),
-                    Sub(content)
-                        If RalphAgentSvc.AgentResponseBuffer IsNot Nothing Then
-                            RalphAgentSvc.AgentResponseBuffer.Append(content)
-                        End If
-                    End Sub,
-                    Sub() RalphAgentSvc.AgentResponseCompleted = True)
+                    Nothing,
+                    Nothing)
             End If
             Return _httpStreamService
         End Get
@@ -550,11 +531,6 @@ Public MustInherit Class BaseChatControl
                 updateAutocompleteSettings({{ enabled: {ChatSettings.EnableAutocomplete.ToString().ToLower()}, delayMs: {ChatSettings.AutocompleteDelayMs}, shortcut: '{ChatSettings.AutocompleteShortcut}' }});
             }}
             
-            var selectElement = document.getElementById('chatMode');
-            if (selectElement) {{
-                selectElement.value = '{ChatSettings.chatMode}';
-            }}
-            
             // 同步到主界面的checkbox
             document.getElementById('scrollChecked').checked = {ChatSettings.settingsScrollChecked.ToString().ToLower()};
             document.getElementById('selectedCell').checked = {ChatSettings.selectedCellChecked.ToString().ToLower()};
@@ -679,6 +655,16 @@ Public MustInherit Class BaseChatControl
                     HandleAbortAgent()
                 Case "refineAgentPlan"
                     HandleRefineAgentPlan(jsonDoc)
+
+                ' 统一 AgentKernel 消息处理（新架构）
+                Case "agent:approvePlan"
+                    HandleAgentApprovePlan(jsonDoc)
+                Case "agent:rejectPlan"
+                    HandleAgentRejectPlan(jsonDoc)
+                Case "agent:approveStep"
+                    HandleAgentApproveStep(jsonDoc)
+                Case "agent:refinePlan"
+                    HandleAgentRefinePlan(jsonDoc)
 
                 ' 文件选择对话框
                 Case "openFileDialog"
@@ -1158,14 +1144,13 @@ Public MustInherit Class BaseChatControl
         contextLimit = jsonDoc("contextLimit")
         selectedCellChecked = jsonDoc("selectedCell")
         settingsScrollChecked = jsonDoc("settingsScroll")
-        Dim chatMode As String = jsonDoc("chatMode")
         Dim executeCodePreview As Boolean = jsonDoc("executeCodePreview")
         Dim enableAutocomplete As Boolean = If(jsonDoc("enableAutocomplete")?.Value(Of Boolean)(), False)
         Dim autocompleteShortcut As String = If(jsonDoc("autocompleteShortcut")?.Value(Of String)(), "Ctrl+.")
         Dim chatSettings As New ChatSettings(GetApplication())
-        ' 保存设置到配置文件
+        ' 保存设置到配置文件（chatMode 已弃用，统一为智能模式）
         chatSettings.SaveSettings(topicRandomness, contextLimit, selectedCellChecked,
-                                  settingsScrollChecked, executeCodePreview, chatMode,
+                                  settingsScrollChecked, executeCodePreview,
                                   enableAutocomplete, 800, autocompleteShortcut)
     End Sub
 
@@ -1405,10 +1390,7 @@ Public MustInherit Class BaseChatControl
                          Await Send(finalMessageToLLM, templateSystemPrompt, False, "template_render")
                      End Function)
         Else
-            ' 获取当前聊天模式
-            Dim currentChatMode As String = ChatSettings.chatMode
-
-            ' 普通消息模式：先检查是否为追问，再决定是否进行意图识别
+            ' 智能模式：统一消息处理，自动路由到 AgentKernel 或普通聊天
             Task.Run(Async Function()
                          Try
                              ' 检查是否有引用内容（文件或选中内容）
@@ -1431,7 +1413,7 @@ Public MustInherit Class BaseChatControl
                              End If
 
                              ' 不是追问，进行意图识别
-                             ' 获取上下文快照并注入内容区引用与 RAG 记忆（阶段四统一智能体）
+                             ' 获取上下文快照并注入内容区引用与 RAG 记忆
                              Dim contextSnapshot = GetContextSnapshot()
                              EnrichContextForIntent(contextSnapshot, originalQuestion, filePaths, selectedContents)
 
@@ -1457,74 +1439,50 @@ Public MustInherit Class BaseChatControl
                              End If
                              IntentService.BuildExecutionPlanPreview(CurrentIntentResult)
 
-                             ' 决定是否需要询问用户确认
-                             Dim needConfirmation As Boolean = False
-                             Dim autoConfirmCountdown As Boolean = False  ' Agent模式下倒计时后自动确认
+                             ' 智能路由判断
+                             Dim isComplexTask As Boolean = (CurrentIntentResult.OfficeIntent <> OfficeIntentType.GENERAL_QUERY AndAlso
+                                                              CurrentIntentResult.Confidence >= 0.4)
 
                              ' 情况1：用户只引用了内容但没有输入问题
                              If hasReferences AndAlso String.IsNullOrWhiteSpace(originalQuestion) Then
                                  CurrentIntentResult.UserFriendlyDescription = "您引用了内容，请问您想要做什么？"
-                                 needConfirmation = True
-                                 ' 情况2：置信度太低（<0.4），让大模型来询问用户澄清
-                             ElseIf CurrentIntentResult.Confidence < 0.4 Then
-                                 ' 不弹出意图预览卡片，直接发送给大模型，由大模型来询问用户
-                                 needConfirmation = False
-                                 ' 情况3：Agent模式下也需要确认，但会倒计时自动执行
-                             ElseIf currentChatMode = "agent" Then
-                                 needConfirmation = True
-                                 autoConfirmCountdown = True  ' Agent模式：倒计时后自动确认
-                                 ' 情况4：普通模式下，置信度较高时也需要确认（仅第一次对话）
-                             ElseIf CurrentIntentResult.Confidence >= 0.4 AndAlso systemHistoryMessageData.Count < 2 Then
-                                 needConfirmation = True
-                                 autoConfirmCountdown = False  ' Chat模式：不自动确认
-                             Else
-                                 needConfirmation = False ' 有历史记录时默认不弹出确认框
-                             End If
-
-                             If needConfirmation Then
-                                 ' 需要用户确认，保存待发送的消息
                                  _pendingIntentMessage = finalMessageToLLM
                                  _pendingIntentResult = CurrentIntentResult
                                  _pendingFilePaths = filePaths
                                  _pendingIntentUserInput = originalQuestion
 
-                                 ' Agent模式：显示简洁的"识别中"提示，不显示详细意图预览卡片
-                                 If autoConfirmCountdown Then
-                                     ' Agent模式自动确认，只显示识别中提示
-                                     ExecuteJavaScriptAsyncJS("showIdentifyingStatus()")
-                                     Debug.WriteLine($"Agent模式：显示识别中提示，自动确认")
-                                     ' 直接调用确认逻辑，不等待前端
-                                     Dim msg = finalMessageToLLM
-                                     Dim intent = CurrentIntentResult
-                                     _pendingIntentMessage = Nothing
-                                     _pendingIntentResult = Nothing
-                                     _pendingFilePaths = Nothing
-                                     _pendingIntentUserInput = Nothing
-                                     
-                                     ' 直接进入Agent规划流程
-                                     StartAgentPlanningFlow(msg, intent)
-                                 Else
-                                     ' Chat模式：构建意图预览数据并发送给前端
-                                     Dim clarification = IntentService.GenerateIntentClarification(originalQuestion, contextSnapshot)
-
-                                     ' 使用LLM生成的描述
-                                     If Not String.IsNullOrEmpty(CurrentIntentResult.UserFriendlyDescription) Then
-                                         clarification.Description = CurrentIntentResult.UserFriendlyDescription
-                                     End If
-
-                                     Dim previewJson = IntentService.IntentClarificationToJson(clarification)
-                                     previewJson("autoConfirm") = False
-                                     previewJson("countdownSeconds") = 10
-
-                                     ' 通知前端显示意图预览卡片
-                                     ExecuteJavaScriptAsyncJS($"showIntentPreview({previewJson.ToString(Formatting.None)})")
-                                     Debug.WriteLine($"显示意图预览（需确认）: {CurrentIntentResult.UserFriendlyDescription}")
+                                 Dim clarification = IntentService.GenerateIntentClarification(originalQuestion, contextSnapshot)
+                                 If Not String.IsNullOrEmpty(CurrentIntentResult.UserFriendlyDescription) Then
+                                     clarification.Description = CurrentIntentResult.UserFriendlyDescription
                                  End If
-                             Else
-                                 ' 不需要确认，直接发送
+
+                                 Dim previewJson = IntentService.IntentClarificationToJson(clarification)
+                                 previewJson("autoConfirm") = False
+                                 previewJson("countdownSeconds") = 10
+
+                                 ExecuteJavaScriptAsyncJS($"showIntentPreview({previewJson.ToString(Formatting.None)})")
+                                 Debug.WriteLine($"显示意图预览（需确认）: {CurrentIntentResult.UserFriendlyDescription}")
+                                 Return
+                             End If
+
+                             ' 情况2：置信度太低（<0.4），让大模型来询问用户澄清
+                             If CurrentIntentResult.Confidence < 0.4 Then
                                  Debug.WriteLine($"直接发送消息（置信度:{CurrentIntentResult.Confidence:F2}）")
                                  SendChatMessageWithIntent(finalMessageToLLM, CurrentIntentResult)
+                                 Return
                              End If
+
+                             ' 情况3：复杂任务且启用了新架构 -> 自动走 AgentKernel（智能模式无需意图确认）
+                             If ConfigSettings.UseNewAgentKernel AndAlso isComplexTask Then
+                                 Debug.WriteLine($"智能路由：识别到复杂任务 [{CurrentIntentResult.OfficeIntent}]，自动启动 AgentKernel")
+                                 ExecuteJavaScriptAsyncJS("showIdentifyingStatus()")
+                                 StartAgentPlanningFlow(finalMessageToLLM, CurrentIntentResult)
+                                 Return
+                             End If
+
+                             ' 情况4：其他所有情况直接发送（智能模式不弹意图确认框）
+                             Debug.WriteLine($"智能路由：直接发送消息（置信度:{CurrentIntentResult.Confidence:F2}）")
+                             SendChatMessageWithIntent(finalMessageToLLM, CurrentIntentResult)
 
                          Catch ex As Exception
                              Debug.WriteLine($"意图识别失败，直接发送: {ex.Message}")
@@ -1557,22 +1515,20 @@ Public MustInherit Class BaseChatControl
 
     ''' <summary>
     ''' Agent模式下直接启动规划流程（不显示意图预览卡片）
+    ''' 当 UseNewAgentKernel=true 时，使用新 AgentKernelService
     ''' </summary>
     Private Sub StartAgentPlanningFlow(message As String, intent As IntentResult)
-        ' 保存用户消息
-        RalphAgentSvc.AgentFullUserMessage = message
-        RalphAgentSvc.AgentOriginalUserRequest = If(intent?.OriginalInput, message)
-        
+        AgentKernelSvc.AgentFullUserMessage = message
+        AgentKernelSvc.AgentOriginalUserRequest = If(intent?.OriginalInput, message)
+
         Task.Run(Async Function()
                      Try
                          Dim goal = If(String.IsNullOrWhiteSpace(intent.OriginalInput), intent.UserFriendlyDescription, intent.OriginalInput)
-                         Dim appType = GetOfficeAppType()
-                         
-                         ' 显示规划中的状态
+                         Dim appType = GetApplicationType()
+
                          ExecuteJavaScriptAsyncJS($"showAgentPlanningStatus(""{EscapeJavaScriptString(goal)}"")")
                          GlobalStatusStrip.ShowInfo("正在规划任务...")
-                         
-                         ' 获取当前Office内容和历史对话
+
                          Dim currentContent = GetCurrentOfficeContent()
                          Dim historyMessages As New List(Of Tuple(Of String, String))()
                          For Each msg In systemHistoryMessageData
@@ -1580,21 +1536,10 @@ Public MustInherit Class BaseChatControl
                                  historyMessages.Add(New Tuple(Of String, String)(msg.role, msg.content))
                              End If
                          Next
-                         
-                         ' 初始化Agent控制器
-                         InitializeAgentController(Nothing)
-                         
-                         ' 使用RalphAgentSvc启动Agent规划
-                         Dim success = Await RalphAgentSvc.Controller.StartAgent(message, appType, currentContent, historyMessages)
-                         
-                         If success Then
-                             ' 显示规划卡片
-                             Dim session = RalphAgentSvc.Controller.GetCurrentSession()
-                             If session IsNot Nothing Then
-                                 RalphAgentSvc.ShowAgentPlanCard(session)
-                             End If
-                         Else
-                             ' 规划失败，回退到普通聊天
+
+                         Dim success = Await AgentKernelSvc.StartAgentAsync(message, appType, currentContent, historyMessages)
+
+                         If Not success Then
                              Debug.WriteLine("[StartAgentPlanningFlow] 规划失败，回退到普通聊天")
                              GlobalStatusStrip.ShowWarning("规划失败，使用普通模式回答")
                              SendChatMessageWithIntent(message, intent)
@@ -1624,38 +1569,7 @@ Public MustInherit Class BaseChatControl
                 ExecuteJavaScriptAsyncJS($"showDetectedIntent('{_pendingIntentResult.IntentType}')")
             End If
 
-            ' Agent 模式：意图确认后请求 Spec 规划并进入 Ralph Loop 逐步执行（阶段四）
-            Dim currentChatMode As String = ChatSettings.chatMode
-            If currentChatMode = "agent" AndAlso _pendingIntentResult IsNot Nothing Then
-                Dim msg = _pendingIntentMessage
-                Dim intent = _pendingIntentResult
-                Dim paths = _pendingFilePaths
-                _pendingIntentMessage = Nothing
-                _pendingIntentResult = Nothing
-                _pendingFilePaths = Nothing
-                _pendingIntentUserInput = Nothing
-                Task.Run(Async Function()
-                             Try
-                                 Dim goal = If(String.IsNullOrWhiteSpace(intent.OriginalInput), intent.UserFriendlyDescription, intent.OriginalInput)
-                                 Dim appType = GetOfficeAppType()
-                                 Dim loopSession = Await RalphLoopSvc.Controller.StartNewLoop(goal, appType)
-                                 Dim loopDataJson = $"{{""goal"":""{EscapeJavaScriptString(goal)}"",""steps"":[],""status"":""planning""}}"
-                                 ExecuteJavaScriptAsyncJS($"showLoopPlanCard({loopDataJson})")
-                                 GlobalStatusStrip.ShowInfo("正在规划任务...")
-                                 Dim planningPrompt = RalphLoopSvc.Controller.GetPlanningPrompt(goal, intent)
-                                 RalphLoopSvc.IsPlanning = True
-                                 Await Send(planningPrompt, "", False, "")
-                             Catch ex As Exception
-                                 Debug.WriteLine($"[HandleConfirmIntent Agent] {ex.Message}")
-                                 GlobalStatusStrip.ShowWarning("规划启动失败，改为直接发送")
-                                 SendChatMessageWithIntent(msg, intent)
-                             End Try
-                         End Function)
-                GlobalStatusStrip.ShowInfo("已确认意图，正在规划...")
-                Return
-            End If
-
-            ' 普通模式：直接按意图发送
+            ' 智能模式：直接按意图发送
             SendChatMessageWithIntent(_pendingIntentMessage, _pendingIntentResult)
             _pendingIntentMessage = Nothing
             _pendingIntentResult = Nothing
@@ -1699,48 +1613,50 @@ Public MustInherit Class BaseChatControl
         End Try
     End Sub
 
-#Region "Ralph Loop 循环功能"
+#Region "Ralph Loop 循环功能（已迁移至 AgentKernel，保留空实现以兼容前端消息）"
 
     ''' <summary>
-    ''' 启动Ralph Loop - 用户输入目标后调用
+    ''' 启动Ralph Loop - 已迁移至 AgentKernel
     ''' </summary>
     Public Async Function StartRalphLoop(userGoal As String) As Task
-        Await RalphLoopSvc.StartRalphLoop(userGoal)
+        Debug.WriteLine("[AgentKernel] StartRalphLoop 已废弃，请使用 AgentKernel 统一入口")
+        Await Task.Delay(1)
     End Function
 
     ''' <summary>
-    ''' 处理前端startLoop消息
+    ''' 处理前端startLoop消息 - 已迁移至 AgentKernel
     ''' </summary>
     Protected Sub HandleStartLoop(jsonDoc As JObject)
-        RalphLoopSvc.HandleStartLoop(jsonDoc)
+        Debug.WriteLine("[AgentKernel] HandleStartLoop 已废弃")
     End Sub
 
     ''' <summary>
-    ''' 处理继续执行循环
+    ''' 处理继续执行循环 - 已迁移至 AgentKernel
     ''' </summary>
     Protected Async Sub HandleContinueLoop()
-        Await RalphLoopSvc.HandleContinueLoop()
+        Debug.WriteLine("[AgentKernel] HandleContinueLoop 已废弃")
+        Await Task.Delay(1)
     End Sub
 
     ''' <summary>
-    ''' 处理取消循环
+    ''' 处理取消循环 - 已迁移至 AgentKernel
     ''' </summary>
     Protected Sub HandleCancelLoop()
-        RalphLoopSvc.HandleCancelLoop()
+        Debug.WriteLine("[AgentKernel] HandleCancelLoop 已废弃")
     End Sub
 
     ''' <summary>
-    ''' 处理重新规划循环
+    ''' 处理重新规划循环 - 已迁移至 AgentKernel
     ''' </summary>
     Protected Overridable Sub HandleReplanLoop(jsonDoc As JObject)
-        RalphLoopSvc.HandleReplanLoop(jsonDoc)
+        Debug.WriteLine("[AgentKernel] HandleReplanLoop 已废弃")
     End Sub
 
     ''' <summary>
-    ''' 在流完成后检查是否需要处理Ralph Loop
+    ''' 在流完成后检查是否需要处理Ralph Loop - 已迁移至 AgentKernel
     ''' </summary>
     Protected Sub CheckRalphLoopCompletion(responseContent As String)
-        RalphLoopSvc.CheckRalphLoopCompletion(responseContent)
+        ' AgentKernel 自动处理完成状态，无需额外检查
     End Sub
 
     ''' <summary>
@@ -1757,15 +1673,8 @@ Public MustInherit Class BaseChatControl
 #Region "Ralph Agent 智能助手"
 
     ''' <summary>
-    ''' 初始化Agent控制器（委托给 RalphAgentSvc）
-    ''' </summary>
-    Protected Sub InitializeAgentController(Optional agentThinkingUuid As String = Nothing)
-        RalphAgentSvc.InitializeAgentController(agentThinkingUuid)
-    End Sub
-
-
-    ''' <summary>
     ''' 处理启动Agent请求
+    ''' 当 UseNewAgentKernel=true 时，使用新 AgentKernelService
     ''' </summary>
     Protected Sub HandleStartAgent(jsonDoc As JObject)
         Try
@@ -1778,10 +1687,8 @@ Public MustInherit Class BaseChatControl
                 Return
             End If
 
-            Debug.WriteLine($"[RalphAgent] 启动Agent，需求: {request}")
-
-            ' 保存原始用户请求，等 Agent 完成后一起保存到历史
-            RalphAgentSvc.AgentOriginalUserRequest = request
+            Debug.WriteLine($"[AgentKernel] 启动Agent，需求: {request}")
+            AgentKernelSvc.AgentOriginalUserRequest = request
 
             ' 解析文件路径和选中内容
             Dim filePaths As New List(Of String)()
@@ -1789,45 +1696,29 @@ Public MustInherit Class BaseChatControl
 
             If filePathsToken IsNot Nothing AndAlso filePathsToken.Type = JTokenType.Array Then
                 filePaths = filePathsToken.ToObject(Of List(Of String))()
-                Debug.WriteLine($"[RalphAgent] 收到 {filePaths.Count} 个文件引用")
             End If
-
             If selectedContentToken IsNot Nothing AndAlso selectedContentToken.Type = JTokenType.Array Then
                 Try
                     selectedContents = selectedContentToken.ToObject(Of List(Of SendMessageReferenceContentItem))()
-                    Debug.WriteLine($"[RalphAgent] 收到 {selectedContents.Count} 个选中内容引用")
                 Catch ex As Exception
                     Debug.WriteLine($"Error deserializing selectedContent: {ex.Message}")
                 End Try
             End If
 
-            ' 先在聊天界面显示AI正在思考的消息
-            RalphAgentSvc.AgentThinkingUuid = Guid.NewGuid().ToString()
+            ' 显示思考状态
+            AgentKernelSvc.AgentThinkingUuid = Guid.NewGuid().ToString()
             Dim now = DateTime.Now
             Dim timestamp = now.ToString("yyyy-MM-dd HH:mm:ss")
-            ' 创建AI消息section
-            ExecuteJavaScriptAsyncJS($"createChatSection('AI', '{timestamp}', '{RalphAgentSvc.AgentThinkingUuid}')")
-            ' 显示思考状态
-            ExecuteJavaScriptAsyncJS($"var thinkingDiv = document.getElementById('content-{RalphAgentSvc.AgentThinkingUuid}'); if(thinkingDiv) thinkingDiv.innerHTML = '<div class=""thinking-indicator""><div class=""thinking-dots""><span></span><span></span><span></span></div><span style=""margin-left: 12px; color: #6c757d;"">正在分析您的需求...</span></div>';")
+            ExecuteJavaScriptAsyncJS($"createChatSection('AI', '{timestamp}', '{AgentKernelSvc.AgentThinkingUuid}')")
+            ExecuteJavaScriptAsyncJS($"var thinkingDiv = document.getElementById('content-{AgentKernelSvc.AgentThinkingUuid}'); if(thinkingDiv) thinkingDiv.innerHTML = '<div class=""thinking-indicator""><div class=""thinking-dots""><span></span><span></span><span></span></div><span style=""margin-left: 12px; color: #6c757d;"">正在分析您的需求...</span></div>';")
 
-            ' 初始化控制器，传入uuid
-            InitializeAgentController(RalphAgentSvc.AgentThinkingUuid)
-
-            ' 保存原始请求
             Dim originalQuestion As String = request
-
-            ' 构建最终发送给 LLM 的消息
             Dim finalMessageToLLM As String = request
-
-            ' 处理选中的内容
             finalMessageToLLM = AppendCurrentSelectedContent("--- 我此次的问题：" & finalMessageToLLM & " ---")
 
-            ' 检查是否有文件需要解析
             If filePaths IsNot Nothing AndAlso filePaths.Count > 0 Then
-                ' 异步处理文件解析，避免卡死UI
                 HandleStartAgentWithFilesAsync(finalMessageToLLM, originalQuestion, filePaths, selectedContents)
             Else
-                ' 没有文件，直接处理消息
                 HandleStartAgentCore(finalMessageToLLM, originalQuestion, "")
             End If
 
@@ -1960,6 +1851,7 @@ Public MustInherit Class BaseChatControl
 
     ''' <summary>
     ''' 处理Agent启动的核心逻辑（文件解析完成后调用）
+    ''' 当 UseNewAgentKernel=true 时，路由到新的 AgentKernelService
     ''' </summary>
     Private Sub HandleStartAgentCore(question As String, originalQuestion As String, fileContent As String)
         ' 构建最终发送给 LLM 的消息
@@ -1970,77 +1862,131 @@ Public MustInherit Class BaseChatControl
             finalMessageToLLM &= fileContent
         End If
 
-        ' 保存完整用户消息（含选中内容+文件内容），供 OnAgentCompleted 存入历史和记忆
-        RalphAgentSvc.AgentFullUserMessage = finalMessageToLLM
+        AgentKernelSvc.AgentFullUserMessage = finalMessageToLLM
+        AgentKernelSvc.AgentOriginalUserRequest = originalQuestion
 
         Task.Run(Async Function()
                      Try
-                         ' 获取当前Office内容
                          Dim appType = GetApplicationType()
                          Dim currentContent = GetCurrentOfficeContent()
 
-                         ' 从 systemHistoryMessageData 获取历史对话（这是主要的历史记录）
                          Dim historyMessages As New List(Of Tuple(Of String, String))()
                          For Each msg In systemHistoryMessageData
-                             ' 只包含user和assistant消息，不包含system消息
                              If msg.role = "user" OrElse msg.role = "assistant" Then
                                  historyMessages.Add(New Tuple(Of String, String)(msg.role, msg.content))
                              End If
                          Next
-                         Debug.WriteLine($"[RalphAgent] 获取到 {historyMessages.Count} 条历史消息")
 
                          GlobalStatusStrip.ShowInfo("正在分析您的需求...")
+                         Dim success = Await AgentKernelSvc.StartAgentAsync(finalMessageToLLM, appType, currentContent, historyMessages)
 
-                         ' 启动Agent规划（包含历史对话）
-                         Dim success = Await RalphAgentSvc.Controller.StartAgent(finalMessageToLLM, appType, currentContent, historyMessages)
-
-                         If success Then
-                             ' 显示规划卡片
-                             Dim session = RalphAgentSvc.Controller.GetCurrentSession()
-                             If session IsNot Nothing Then
-                                 ShowAgentPlanCard(session)
-                             End If
-                         Else
+                         If Not success Then
                              GlobalStatusStrip.ShowWarning("无法分析您的需求，请重试")
-                             ' 规划失败，清除思考消息UUID
-                             RalphAgentSvc.AgentThinkingUuid = Nothing
+                             AgentKernelSvc.AgentThinkingUuid = Nothing
                          End If
                      Catch ex As Exception
-                         Debug.WriteLine($"HandleStartAgentCore 出错: {ex.Message}")
+                         Debug.WriteLine($"[AgentKernel] HandleStartAgentCore 出错: {ex.Message}")
                          GlobalStatusStrip.ShowWarning($"分析需求失败: {ex.Message}")
-                         ' 出错时也清除思考消息UUID
-                         RalphAgentSvc.AgentThinkingUuid = Nothing
+                         AgentKernelSvc.AgentThinkingUuid = Nothing
                      End Try
                  End Function)
     End Sub
 
     ''' <summary>
-    ''' 显示Agent规划卡片（委托给 RalphAgentSvc）
-    ''' </summary>
-    Private Sub ShowAgentPlanCard(session As RalphAgentSession)
-        RalphAgentSvc.ShowAgentPlanCard(session)
-    End Sub
-
-    ''' <summary>
-    ''' 处理开始执行Agent（委托给 RalphAgentSvc）
-    ''' </summary>
-    Protected Async Sub HandleStartAgentExecution(jsonDoc As JObject)
-        Await RalphAgentSvc.HandleStartAgentExecution()
-    End Sub
-
-    ''' <summary>
-    ''' 处理终止Agent（委托给 RalphAgentSvc）
-    ''' </summary>
-    Protected Sub HandleAbortAgent()
-        RalphAgentSvc.HandleAbortAgent()
-    End Sub
-
-    ''' <summary>
-    ''' 处理修改Agent计划（委托给 RalphAgentSvc）
+    ''' 处理修改Agent计划（新架构下暂不支持重新规划，记录日志）
     ''' </summary>
     Protected Overridable Sub HandleRefineAgentPlan(jsonDoc As JObject)
-        If RalphAgentSvc IsNot Nothing Then RalphAgentSvc.HandleRefineAgentPlan(jsonDoc)
+        Debug.WriteLine("[AgentKernel] 收到 refineAgentPlan 请求，当前架构不支持手动重新规划")
+        GlobalStatusStrip.ShowInfo("已收到修改请求，请在下一轮对话中直接描述新需求")
     End Sub
+
+    ''' <summary>
+    ''' 处理终止Agent（兼容新旧架构）
+    ''' </summary>
+    Protected Sub HandleAbortAgent()
+        AgentKernelSvc.AbortAgent()
+    End Sub
+
+    ''' <summary>
+    ''' 处理开始执行Agent（兼容新旧架构）
+    ''' </summary>
+    Protected Sub HandleStartAgentExecution(jsonDoc As JObject)
+        ' 新架构中，用户点击"开始执行"相当于批准计划
+        AgentKernelSvc.Approve()
+    End Sub
+
+#Region "AgentKernel 统一消息处理"
+
+    ''' <summary>
+    ''' 处理用户批准计划
+    ''' </summary>
+    Protected Sub HandleAgentApprovePlan(jsonDoc As JObject)
+        Try
+            If ConfigSettings.UseNewAgentKernel Then
+                AgentKernelSvc.Approve()
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"HandleAgentApprovePlan 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 处理用户拒绝计划
+    ''' </summary>
+    Protected Sub HandleAgentRejectPlan(jsonDoc As JObject)
+        Try
+            If ConfigSettings.UseNewAgentKernel Then
+                AgentKernelSvc.Reject()
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"HandleAgentRejectPlan 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 处理用户批准步骤（高风险操作）
+    ''' </summary>
+    Protected Sub HandleAgentApproveStep(jsonDoc As JObject)
+        Try
+            If ConfigSettings.UseNewAgentKernel Then
+                AgentKernelSvc.Approve()
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"HandleAgentApproveStep 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 处理用户修改计划
+    ''' </summary>
+    Protected Sub HandleAgentRefinePlan(jsonDoc As JObject)
+        Try
+            If ConfigSettings.UseNewAgentKernel Then
+                Dim feedback = jsonDoc("payload")?("feedback")?.ToString()
+                If String.IsNullOrEmpty(feedback) Then
+                    feedback = jsonDoc("feedback")?.ToString()
+                End If
+                If Not String.IsNullOrEmpty(feedback) Then
+                    Debug.WriteLine($"[AgentKernel] 用户请求修改计划: {feedback}")
+                    ExecuteJavaScriptAsyncJS("addThinkingMessage('正在根据您的意见重新规划...')")
+                    ' 重新启动 Agent 任务（带反馈）
+                    Dim request = AgentKernelSvc.AgentOriginalUserRequest
+                    If Not String.IsNullOrEmpty(request) Then
+                        Dim refinedRequest = request & vbCrLf & "[用户修改意见] " & feedback
+                        AgentKernelSvc.AgentThinkingUuid = Guid.NewGuid().ToString()
+                        Dim now = DateTime.Now
+                        Dim timestamp = now.ToString("yyyy-MM-dd HH:mm:ss")
+                        ExecuteJavaScriptAsyncJS($"createChatSection('AI', '{timestamp}', '{AgentKernelSvc.AgentThinkingUuid}')")
+                        HandleStartAgentCore(refinedRequest, request, "")
+                    End If
+                End If
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"HandleAgentRefinePlan 出错: {ex.Message}")
+        End Try
+    End Sub
+
+#End Region
 
     ''' <summary>
     ''' 获取当前Office内容（子类重写以提供具体实现）
@@ -2058,57 +2004,77 @@ Public MustInherit Class BaseChatControl
     End Function
 
     ''' <summary>
-    ''' 发送AI请求并获取完整响应（用于Agent规划）
-    ''' 当 historyMessages 不为空时，构建符合 OpenAI API 规范的 messages 数组：[system, ...history(user/assistant), user]
+    ''' 非流式 AI 请求，直接获取完整响应（供 AgentKernel 使用）
     ''' </summary>
-    Private Async Function SendAndGetResponse(prompt As String, systemPrompt As String, Optional historyMessages As List(Of HistoryMessage) = Nothing, Optional responseUuid As String = Nothing) As Task(Of String)
+    Private Async Function SendAndGetResponseAsync(prompt As String, systemPrompt As String, historyMessages As List(Of HistoryMessage)) As Task(Of String)
         Try
-            Dim uuid = If(responseUuid, Guid.NewGuid().ToString())
-
-            ' 创建临时的响应收集器
-            RalphAgentSvc.AgentResponseBuffer = New StringBuilder()
-            RalphAgentSvc.AgentResponseUuid = uuid
-            RalphAgentSvc.AgentResponseCompleted = False
-
-            If historyMessages IsNot Nothing AndAlso historyMessages.Count > 0 Then
-                ' 构建符合 OpenAI API 的 messages 数组：system → history(user/assistant) → user
-                Dim messagesArray As New JArray()
-                messagesArray.Add(New JObject From {{"role", "system"}, {"content", If(systemPrompt, "")}})
+            Dim messagesArray As New JArray()
+            If Not String.IsNullOrEmpty(systemPrompt) Then
+                messagesArray.Add(New JObject From {{"role", "system"}, {"content", systemPrompt}})
+            End If
+            If historyMessages IsNot Nothing Then
                 For Each msg In historyMessages
                     If Not String.IsNullOrEmpty(msg.content) Then
                         messagesArray.Add(New JObject From {{"role", msg.role}, {"content", msg.content}})
                     End If
                 Next
-                messagesArray.Add(New JObject From {{"role", "user"}, {"content", prompt}})
-
-                Dim requestObj As New JObject()
-                requestObj("model") = ConfigSettings.ModelName
-                requestObj("messages") = messagesArray
-                requestObj("stream") = True
-                Dim requestBody = requestObj.ToString(Newtonsoft.Json.Formatting.None)
-
-                Debug.WriteLine($"[SendAndGetResponse] 包含 {historyMessages.Count} 条历史消息，总消息数: {messagesArray.Count}")
-                HttpStreamSvc.FinalizeCallback = Nothing ' agent_planning 不需要保存历史
-                Await HttpStreamSvc.SendStreamRequestAsync(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody, prompt, Guid.NewGuid().ToString(), False, "agent_planning", uuid)
-            Else
-                Await Send(prompt, systemPrompt, False, "agent_planning", Nothing, uuid)
             End If
+            messagesArray.Add(New JObject From {{"role", "user"}, {"content", prompt}})
 
-            ' 等待响应完成（最多60秒）
-            Dim timeout = 60000
-            Dim waited = 0
-            While Not RalphAgentSvc.AgentResponseCompleted AndAlso waited < timeout
-                Await Task.Delay(100)
-                waited += 100
-            End While
+            Dim requestObj As New JObject()
+            requestObj("model") = ConfigSettings.ModelName
+            requestObj("messages") = messagesArray
+            requestObj("stream") = False
 
-            Dim result = RalphAgentSvc.AgentResponseBuffer.ToString()
-            RalphAgentSvc.AgentResponseBuffer = Nothing
-            RalphAgentSvc.AgentResponseUuid = Nothing
+            Dim requestBody = requestObj.ToString(Newtonsoft.Json.Formatting.None)
+            Dim apiUrl = ConfigSettings.ApiUrl
+            Dim apiKey = ConfigSettings.ApiKey
 
-            Return result
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
+
+            Using client As New HttpClient()
+                client.Timeout = TimeSpan.FromMinutes(2)
+                Dim request As New HttpRequestMessage(HttpMethod.Post, apiUrl)
+
+                ' Anthropic 兼容
+                If apiUrl.Contains("anthropic.com") Then
+                    request.Headers.Add("x-api-key", apiKey)
+                    request.Headers.Add("anthropic-version", "2023-06-01")
+                Else
+                    request.Headers.Authorization = New Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey)
+                End If
+
+                request.Content = New StringContent(requestBody, Encoding.UTF8, "application/json")
+
+                Using response As HttpResponseMessage = Await client.SendAsync(request)
+                    response.EnsureSuccessStatusCode()
+                    Dim jsonContent As String = Await response.Content.ReadAsStringAsync()
+
+                    ' 提取 content
+                    Dim json = JObject.Parse(jsonContent)
+                    Dim content As String = ""
+
+                    ' OpenAI 格式
+                    If json("choices") IsNot Nothing Then
+                        Dim choices = CType(json("choices"), JArray)
+                        If choices.Count > 0 Then
+                            content = If(choices(0)("message")?("content")?.ToString(), "")
+                        End If
+                    End If
+
+                    ' Anthropic 格式
+                    If String.IsNullOrEmpty(content) AndAlso json("content") IsNot Nothing Then
+                        Dim contentArr = CType(json("content"), JArray)
+                        If contentArr IsNot Nothing AndAlso contentArr.Count > 0 Then
+                            content = If(contentArr(0)("text")?.ToString(), "")
+                        End If
+                    End If
+
+                    Return content
+                End Using
+            End Using
         Catch ex As Exception
-            Debug.WriteLine($"SendAndGetResponse 出错: {ex.Message}")
+            Debug.WriteLine($"[SendAndGetResponseAsync] 请求失败: {ex.Message}")
             Return ""
         End Try
     End Function

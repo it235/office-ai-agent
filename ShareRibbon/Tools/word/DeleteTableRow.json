@@ -1,0 +1,23 @@
+{
+  "id": "DeleteTableRow",
+  "name": "删除表格行",
+  "description": "删除表格中的行",
+  "appType": "word",
+  "category": "表格操作",
+  "riskLevel": "medium",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "tableIndex",
+      "type": "integer",
+      "required": true,
+      "description": "表格索引"
+    },
+    {
+      "name": "rowIndex",
+      "type": "integer",
+      "required": true,
+      "description": "要删除的行号"
+    }
+  ]
+}

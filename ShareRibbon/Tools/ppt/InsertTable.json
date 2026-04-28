@@ -1,0 +1,29 @@
+{
+  "id": "InsertTable",
+  "name": "插入表格",
+  "description": "在幻灯片中插入表格",
+  "appType": "ppt",
+  "category": "内容操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "rows",
+      "type": "integer",
+      "required": true,
+      "description": "行数"
+    },
+    {
+      "name": "cols",
+      "type": "integer",
+      "required": true,
+      "description": "列数"
+    },
+    {
+      "name": "data",
+      "type": "array",
+      "required": false,
+      "description": "表格数据"
+    }
+  ]
+}

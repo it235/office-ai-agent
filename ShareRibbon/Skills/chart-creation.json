@@ -1,0 +1,10 @@
+{
+  "id": "chart-creation",
+  "name": "图表生成",
+  "description": "在Excel或PPT中创建各类数据可视化图表",
+  "triggerPatterns": ["图表", "图形", "可视化", "柱状图", "折线图", "饼图", "散点图", "条形图", "面积图", "雷达图", "漏斗图"],
+  "requiredTools": ["CreateChart", "InsertChart", "FormatRange", "ApplyFormula", "InsertTable"],
+  "promptTemplate": "你是一个数据可视化专家。请按照以下策略创建图表：\n1. 分析数据特征，选择最合适的图表类型\n   - 对比数据：柱状图/条形图\n   - 趋势数据：折线图/面积图\n   - 占比数据：饼图/环形图\n   - 关系数据：散点图/气泡图\n   - 多维度：雷达图\n2. 确保数据范围正确，包含表头\n3. 添加图表标题和数据标签\n4. 调整图表样式使其美观易读",
+  "maxSteps": 6,
+  "autoApprove": false
+}

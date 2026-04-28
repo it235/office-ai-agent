@@ -1,0 +1,29 @@
+{
+  "id": "InsertShape",
+  "name": "插入形状",
+  "description": "在幻灯片中插入形状",
+  "appType": "ppt",
+  "category": "内容操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "shapeType",
+      "type": "string",
+      "required": true,
+      "description": "形状类型"
+    },
+    {
+      "name": "x",
+      "type": "number",
+      "required": true,
+      "description": "X坐标"
+    },
+    {
+      "name": "y",
+      "type": "number",
+      "required": true,
+      "description": "Y坐标"
+    }
+  ]
+}

@@ -22,8 +22,7 @@ function settingsSave() {
     let settingsScroll = document.getElementById('settings-scroll-checked').checked;
     let selectedCell = document.getElementById('settings-selected-cell').checked;
     let executeCodePreview = document.getElementById('settings-executecode-preview').checked;
-    let chatMode = document.getElementById("chatMode").value;
-    
+
     // 自动补全设置
     let enableAutocomplete = document.getElementById('settings-autocomplete-enable').checked;
     let autocompleteShortcut = document.getElementById('settings-autocomplete-shortcut').value;
@@ -36,7 +35,6 @@ function settingsSave() {
             contextLimit: contextLimit,
             selectedCell: selectedCell,
             settingsScroll: settingsScroll,
-            chatMode: chatMode,
             executeCodePreview: executeCodePreview,
             enableAutocomplete: enableAutocomplete,
             autocompleteShortcut: autocompleteShortcut,
@@ -47,7 +45,6 @@ function settingsSave() {
             contextLimit: contextLimit,
             selectedCell: selectedCell,
             settingsScroll: settingsScroll,
-            chatMode: chatMode,
             executeCodePreview: executeCodePreview,
             enableAutocomplete: enableAutocomplete,
             autocompleteShortcut: autocompleteShortcut,

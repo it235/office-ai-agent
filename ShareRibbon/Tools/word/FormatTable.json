@@ -1,0 +1,35 @@
+{
+  "id": "FormatTable",
+  "name": "格式化表格",
+  "description": "设置表格样式",
+  "appType": "word",
+  "category": "表格操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "tableIndex",
+      "type": "integer",
+      "required": true,
+      "description": "表格索引（从1开始）"
+    },
+    {
+      "name": "style",
+      "type": "string",
+      "required": false,
+      "description": "表格样式"
+    },
+    {
+      "name": "borders",
+      "type": "boolean",
+      "required": false,
+      "description": "是否显示边框"
+    },
+    {
+      "name": "headerRow",
+      "type": "boolean",
+      "required": false,
+      "description": "是否有标题行"
+    }
+  ]
+}

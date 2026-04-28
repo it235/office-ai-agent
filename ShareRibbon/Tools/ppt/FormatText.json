@@ -1,0 +1,41 @@
+{
+  "id": "FormatText",
+  "name": "格式化文本",
+  "description": "设置幻灯片文本格式",
+  "appType": "ppt",
+  "category": "内容操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "bold",
+      "type": "boolean",
+      "required": false,
+      "description": "是否加粗"
+    },
+    {
+      "name": "italic",
+      "type": "boolean",
+      "required": false,
+      "description": "是否斜体"
+    },
+    {
+      "name": "fontSize",
+      "type": "integer",
+      "required": false,
+      "description": "字体大小"
+    },
+    {
+      "name": "fontName",
+      "type": "string",
+      "required": false,
+      "description": "字体名称"
+    },
+    {
+      "name": "color",
+      "type": "string",
+      "required": false,
+      "description": "字体颜色"
+    }
+  ]
+}

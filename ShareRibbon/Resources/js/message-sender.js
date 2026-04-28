@@ -27,8 +27,6 @@ function sendChatMessage() {
     // 优先从smart-input获取内容，兼容隐藏的textarea
     const smartInput = document.getElementById('smart-input');
     const chatInput = document.getElementById('chat-input');
-    const chatModeSelect = document.getElementById('chatMode');
-    
     // 从smart-input获取用户输入
     let userTypedText = '';
     if (smartInput && smartInput.innerText) {
@@ -36,7 +34,7 @@ function sendChatMessage() {
     } else if (chatInput) {
         userTypedText = chatInput.value.trim();
     }
-    
+
     // 检测 /loop 命令 - 启动 Ralph Loop
     if (userTypedText.startsWith('/loop ')) {
         const loopGoal = userTypedText.substring(6).trim();
@@ -44,7 +42,7 @@ function sendChatMessage() {
             // 清空输入
             if (smartInput) smartInput.innerText = '';
             if (chatInput) chatInput.value = '';
-            
+
             // 发送启动循环消息
             sendMessageToServer({
                 type: 'startLoop',
@@ -53,74 +51,9 @@ function sendChatMessage() {
             return;
         }
     }
-    
-    // 检测是否为Agent模式
-    const chatMode = chatModeSelect ? chatModeSelect.value : 'chat';
+
     const attachedFileObjects = window.attachedFiles;
     const selectedSheetContent = window.getAllSelectedContent();
-    
-    if (chatMode === 'agent') {
-        // Agent模式：发送startAgent请求
-        if (userTypedText || attachedFileObjects.length > 0 || selectedSheetContent.length > 0) {
-            // 清空输入
-            if (smartInput) smartInput.innerText = '';
-            if (chatInput) chatInput.value = '';
-            
-            // 先显示用户消息
-            const uuid = generateUUID();
-            const now = new Date();
-            const timestamp = formatDateTime(now);
-            createChatSection('Me', timestamp, uuid);
-            const messageContentDiv = document.getElementById('content-' + uuid);
-            if (messageContentDiv) {
-                let htmlContent = '';
-                if (userTypedText) {
-                    htmlContent += marked.parse(userTypedText);
-                }
-                
-                // 添加选中内容引用
-                if (selectedSheetContent.length > 0) {
-                    let itemsHtml = selectedSheetContent.map(item => `<div>${item.sheetName}: ${item.address}</div>`).join('');
-                    htmlContent += `
-                        <div class="chat-message-references collapsed" id="msg-ref-sel-${uuid}">
-                            <div class="chat-message-reference-header" onclick="toggleChatMessageReference(this)">
-                                <span class="chat-message-reference-arrow">&#9658;</span>
-                                <span class="chat-message-reference-label">引用内容 (${selectedSheetContent.length})</span>
-                            </div>
-                            <div class="chat-message-reference-content">
-                                ${itemsHtml}
-                            </div>
-                        </div>`;
-                }
-                
-                // 添加文件引用
-                if (attachedFileObjects.length > 0) {
-                    let displayItemsHtml = attachedFileObjects.map(file => `<div>${escapeHtml(file.name)}</div>`).join('');
-                    htmlContent += `
-                        <div class="chat-message-references collapsed" id="msg-ref-file-${uuid}">
-                            <div class="chat-message-reference-header" onclick="toggleChatMessageReference(this)">
-                                <span class="chat-message-reference-arrow">&#9658;</span>
-                                <span class="chat-message-reference-label">引用文件 (${attachedFileObjects.length})</span>
-                            </div>
-                            <div class="chat-message-reference-content">
-                                ${displayItemsHtml}
-                            </div>
-                        </div>`;
-                }
-                
-                messageContentDiv.innerHTML = htmlContent;
-            }
-            
-            // 发送启动Agent消息（包含文件引用和选中内容）
-            sendMessageToServer({
-                type: 'startAgent',
-                request: userTypedText,
-                filePaths: attachedFileObjects.map(file => (file && typeof file.path === 'string' && file.path) ? file.path : file.name),
-                selectedContent: selectedSheetContent
-            });
-            return;
-        }
-    }
 
     // 检查是否处于续写模式
     if (window.continuationModeActive) {

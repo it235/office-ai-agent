@@ -1,0 +1,23 @@
+{
+  "id": "ApplyTheme",
+  "name": "应用主题",
+  "description": "应用预设主题或自定义主题",
+  "appType": "ppt",
+  "category": "母版和主题",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "themeName",
+      "type": "string",
+      "required": false,
+      "description": "主题名称"
+    },
+    {
+      "name": "themeFile",
+      "type": "string",
+      "required": false,
+      "description": "主题文件路径"
+    }
+  ]
+}

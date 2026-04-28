@@ -1,0 +1,23 @@
+{
+  "id": "WriteData",
+  "name": "写入数据",
+  "description": "向指定单元格范围写入数据，支持单值或二维数组",
+  "appType": "excel",
+  "category": "基础操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "targetRange",
+      "type": "string",
+      "required": true,
+      "description": "目标单元格范围"
+    },
+    {
+      "name": "data",
+      "type": "array",
+      "required": true,
+      "description": "要写入的数据（单值或二维数组）"
+    }
+  ]
+}

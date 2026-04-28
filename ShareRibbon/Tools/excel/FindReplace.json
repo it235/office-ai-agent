@@ -1,0 +1,41 @@
+{
+  "id": "FindReplace",
+  "name": "查找替换",
+  "description": "在范围内查找并替换文本",
+  "appType": "excel",
+  "category": "数据操作",
+  "riskLevel": "safe",
+  "isVbaFallback": false,
+  "parameters": [
+    {
+      "name": "range",
+      "type": "string",
+      "required": true,
+      "description": "查找范围，all 表示全部"
+    },
+    {
+      "name": "find",
+      "type": "string",
+      "required": true,
+      "description": "查找内容"
+    },
+    {
+      "name": "replace",
+      "type": "string",
+      "required": true,
+      "description": "替换内容"
+    },
+    {
+      "name": "matchCase",
+      "type": "boolean",
+      "required": false,
+      "description": "是否区分大小写"
+    },
+    {
+      "name": "matchEntireCell",
+      "type": "boolean",
+      "required": false,
+      "description": "是否全单元格匹配"
+    }
+  ]
+}
