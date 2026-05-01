@@ -129,8 +129,5 @@ Public Class PhaseStartupManager
     End Sub
 
     Private Sub LogTimings(phase As String)
-        For Each t In _timings
-            Debug.WriteLine($"[Startup] {phase}: {t.Item1} = {t.Item2}ms")
-        Next
     End Sub
 End Class

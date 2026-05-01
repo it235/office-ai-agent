@@ -214,6 +214,9 @@
   <data name="reformat_template" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\js\reformat-template.js;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
   </data>
+  <data name="reformat_chat" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\js\reformat-chat.js;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
+  </data>
   <data name="config_panel" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\js\config-panel.js;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
   </data>

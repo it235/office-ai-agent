@@ -5,7 +5,9 @@
 
 // Send message payload to server (VB backend)
 function sendMessageToServer(messagePayload) {
+    console.log('[DEBUG sendMessageToServer] type=' + messagePayload.type, JSON.stringify(messagePayload).substring(0, 200));
     if (window.chrome && window.chrome.webview) {
+        console.log('[DEBUG sendMessageToServer] using chrome.webview.postMessage');
         window.chrome.webview.postMessage(messagePayload);
     } else if (window.vsto) {
         if (typeof window.vsto.sendMessage === 'function') {

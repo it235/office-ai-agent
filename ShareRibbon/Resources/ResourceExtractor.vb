@@ -7,7 +7,7 @@ Public Class ResourceExtractor
     ''' <summary>
     ''' 资源版本号 — 更新此值可强制刷新所有前端资源文件
     ''' </summary>
-    Private Shared _resourceVersion As String = "2026.04.28.2"
+    Private Shared _resourceVersion As String = "2026.05.01.1"
 
     ''' <summary>
     ''' 获取最后一次错误信息
@@ -105,6 +105,7 @@ Public Class ResourceExtractor
                 {"agent_card", "agent-card.js"},
                 {"model_switcher", "model-switcher.js"},
                 {"reformat_template", "reformat-template.js"},
+                {"reformat_chat", "reformat-chat.js"},
                 {"config_panel", "config-panel.js"}
             }
 

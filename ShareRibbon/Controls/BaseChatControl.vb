@@ -448,27 +448,17 @@ Public MustInherit Class BaseChatControl
     Private Async Sub OnWebViewNavigationCompleted(sender As Object, e As CoreWebView2NavigationCompletedEventArgs) Handles ChatBrowser.NavigationCompleted
         If e.IsSuccess Then
             Try
-                If ChatBrowser.InvokeRequired Then
-                    ' 切换到 UI 线程执行
-                    ChatBrowser.Invoke(Sub()
-                                           InitializeSettings()
-                                           InitializeMcpSettings() ' 添加MCP初始化
+                ' Async Sub中Await后VSTO同步上下文可能丢失，
+                ' 统一通过Invoke确保CoreWebView2访问在UI线程
+                Await Task.Delay(100)
+                ChatBrowser.Invoke(Sub()
+                                       InitializeSettings()
+                                       InitializeMcpSettings()
 
-                                           ' 直接在UI线程移除事件处理器
-                                           If ChatBrowser IsNot Nothing AndAlso ChatBrowser.CoreWebView2 IsNot Nothing Then
-                                               RemoveHandler ChatBrowser.CoreWebView2.NavigationCompleted, AddressOf OnWebViewNavigationCompleted
-                                           End If
-                                       End Sub)
-                Else
-                    Await Task.Delay(100)
-                    InitializeSettings()
-                    InitializeMcpSettings() ' 添加MCP初始化
-
-                    ' 直接在UI线程移除事件处理器
-                    If ChatBrowser IsNot Nothing AndAlso ChatBrowser.CoreWebView2 IsNot Nothing Then
-                        RemoveHandler ChatBrowser.CoreWebView2.NavigationCompleted, AddressOf OnWebViewNavigationCompleted
-                    End If
-                End If
+                                       If ChatBrowser IsNot Nothing AndAlso ChatBrowser.CoreWebView2 IsNot Nothing Then
+                                           RemoveHandler ChatBrowser.CoreWebView2.NavigationCompleted, AddressOf OnWebViewNavigationCompleted
+                                       End If
+                                   End Sub)
             Catch ex As Exception
                 Debug.WriteLine($"导航完成事件处理中出错: {ex.Message}")
                 Debug.WriteLine(ex.StackTrace)
@@ -543,8 +533,11 @@ Public MustInherit Class BaseChatControl
 
     Protected Sub WebView2_WebMessageReceived(sender As Object, e As CoreWebView2WebMessageReceivedEventArgs)
         Try
-            Dim jsonDoc As JObject = JObject.Parse(e.WebMessageAsJson)
+            Dim rawJson As String = e.WebMessageAsJson
+            Debug.WriteLine($"[DEBUG WebMessageReceived] raw={If(rawJson?.Length > 200, rawJson.Substring(0, 200), rawJson)}")
+            Dim jsonDoc As JObject = JObject.Parse(rawJson)
             Dim messageType As String = jsonDoc("type").ToString()
+            Debug.WriteLine($"[DEBUG WebMessageReceived] messageType={messageType}")
 
             Select Case messageType
                 Case "checkedChange"
@@ -730,11 +723,22 @@ Public MustInherit Class BaseChatControl
                 Case "previewAiTemplate"
                     HandlePreviewAiTemplate(jsonDoc)
 
+                ' 智能排版 v2 消息处理
+                Case "applySmartReformat"
+                    HandleApplySmartReformat(jsonDoc)
+                Case "refineSmartReformat"
+                    HandleRefineSmartReformat(jsonDoc)
+                Case "switchReformatTemplate"
+                    HandleSwitchReformatTemplate(jsonDoc)
+                Case "previewReformatCompare"
+                    HandlePreviewReformatCompare(jsonDoc)
+
                 Case Else
                     Debug.WriteLine($"未知消息类型: {messageType}")
             End Select
         Catch ex As Exception
-            Debug.WriteLine($"处理消息出错: {ex.Message}")
+            Debug.WriteLine($"[DEBUG WebMessageReceived] 处理消息出错: {ex.Message}")
+            Debug.WriteLine($"[DEBUG WebMessageReceived] StackTrace: {ex.StackTrace}")
         End Try
     End Sub
 
@@ -1168,6 +1172,7 @@ Public MustInherit Class BaseChatControl
 
     ' 在 HandleSendMessage 方法中添加文件内容解析逻辑
     Protected Overridable Sub HandleSendMessage(jsonDoc As JObject)
+        Debug.WriteLine($"[DEBUG BaseChatControl.HandleSendMessage] called, jsonDoc keys={String.Join(",", jsonDoc.Properties().Select(Function(p) p.Name))}")
         Dim messageValue As JToken = jsonDoc("value")
         Dim question As String
         Dim filePaths As List(Of String) = New List(Of String)()
@@ -3110,6 +3115,7 @@ Public MustInherit Class BaseChatControl
 
     ' 注入辅助脚本
     Protected Sub InitializeWebView2Script()
+        Debug.WriteLine("[DEBUG InitializeWebView2Script] Registering WebMessageReceived handler")
         ' 设置 Web 消息处理器
         AddHandler ChatBrowser.WebMessageReceived, AddressOf WebView2_WebMessageReceived
         ' 注入 VSTO 桥接脚本
@@ -3251,6 +3257,34 @@ Public MustInherit Class BaseChatControl
             Debug.WriteLine($"HandleUndoReformat 出错: {ex.Message}")
             GlobalStatusStrip.ShowWarning($"撤销排版失败: {ex.Message}")
         End Try
+    End Sub
+
+    ''' <summary>
+    ''' 智能排版 v2：应用排版方案（由派生类覆写实现具体Office应用逻辑）
+    ''' </summary>
+    Protected Overridable Sub HandleApplySmartReformat(jsonDoc As JObject)
+        Debug.WriteLine("HandleApplySmartReformat not overridden in derived class")
+    End Sub
+
+    ''' <summary>
+    ''' 智能排版 v2：微调排版方案（由派生类覆写实现具体Office应用逻辑）
+    ''' </summary>
+    Protected Overridable Sub HandleRefineSmartReformat(jsonDoc As JObject)
+        Debug.WriteLine("HandleRefineSmartReformat not overridden in derived class")
+    End Sub
+
+    ''' <summary>
+    ''' 智能排版 v2：切换排版模板/标准（由派生类覆写实现具体逻辑）
+    ''' </summary>
+    Protected Overridable Sub HandleSwitchReformatTemplate(jsonDoc As JObject)
+        Debug.WriteLine("HandleSwitchReformatTemplate not overridden in derived class")
+    End Sub
+
+    ''' <summary>
+    ''' 智能排版 v2：显示排版前后对比（由派生类覆写实现具体逻辑）
+    ''' </summary>
+    Protected Overridable Sub HandlePreviewReformatCompare(jsonDoc As JObject)
+        Debug.WriteLine("HandlePreviewReformatCompare not overridden in derived class")
     End Sub
 
 #End Region

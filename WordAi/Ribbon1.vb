@@ -145,10 +145,35 @@ Public Class Ribbon1
         End Try
     End Sub
 
-    ' 排版功能 - 进入模板选择模式
+    ' 智能排版 v2：分析文档 → 推荐标准 → 显示预览 → 用户确认后应用
+    ' 不再直接进入模板选择模式，而是触发一键速排流程
     Protected Overrides Async Sub ReformatButton_Click(sender As Object, e As RibbonControlEventArgs)
         Try
-            ' 打开Chat面板并进入模板选择模式（不再预先检查选中内容，改为选择模板后再检查）
+            Dim wordApp = Globals.ThisAddIn.Application
+
+            ' 获取选中内容
+            Dim selText As String = String.Empty
+            Try
+                If wordApp?.Selection?.Range IsNot Nothing Then
+                    selText = wordApp.Selection.Range.Text
+                End If
+            Catch
+                selText = String.Empty
+            End Try
+
+            If String.IsNullOrWhiteSpace(selText) Then
+                ' 没有选中内容时，打开Chat并显示引导
+                Globals.ThisAddIn.ShowChatTaskPane()
+                Await Task.Delay(250)
+                Dim ctrl = ThisAddIn.chatControl
+                If ctrl IsNot Nothing Then
+                    Await ctrl.ExecuteJavaScriptAsyncJS("showQuickReformatGuide();")
+                End If
+                GlobalStatusStripAll.ShowWarning("请先选中需要排版的文本内容，或直接在Chat中输入排版指令。")
+                Return
+            End If
+
+            ' 打开Chat面板并触发一键速排
             Globals.ThisAddIn.ShowChatTaskPane()
             Await Task.Delay(250)
 
@@ -158,11 +183,11 @@ Public Class Ribbon1
                 Return
             End If
 
-            ' 进入模板选择模式
-            chatCtrl.EnterReformatTemplateMode()
+            ' 触发智能排版
+            Await chatCtrl.TriggerSmartReformat()
 
         Catch ex As Exception
-            MessageBox.Show("进入排版模式出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("智能排版出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
 
@@ -293,7 +318,8 @@ Public Class Ribbon1
         End Try
     End Sub
 
-    ' 模板排版功能 - Word实现（使用JSON格式完整提取模板结构）
+    ' 模板排版功能（高级/模板模式）- 使用JSON格式完整提取模板结构
+    ' 注意：普通排版请使用上方的"排版"按钮（智能排版 v2），本按钮为高级模板模式
     Protected Overrides Sub TemplateFormatButton_Click(sender As Object, e As RibbonControlEventArgs)
         Try
             ' 1. 打开文件对话框选择模板文件

@@ -235,6 +235,10 @@
     <Compile Include="Config\SemanticStyleMapping.vb" />
     <Compile Include="Config\SemanticTagRegistry.vb" />
     <Compile Include="Config\SemanticMappingManager.vb" />
+    <Compile Include="Services\Reformat\DocumentAnalyzer.vb" />
+    <Compile Include="Services\Reformat\FormattingKnowledgeEngine.vb" />
+    <Compile Include="Services\Reformat\FormattingStandardData.vb" />
+    <Compile Include="Services\Reformat\SmartFormattingOrchestrator.vb" />
     <Compile Include="Services\Reformat\LegacyTemplateConverter.vb" />
     <Compile Include="Services\Reformat\SemanticRenderingEngine.vb" />
     <Compile Include="Services\Reformat\FormatMirrorService.vb" />
@@ -371,6 +375,7 @@
     <Compile Include="Controls\Services\ChatStateService.vb" />
     <Compile Include="Controls\Services\UtilsService.vb" />
     <Compile Include="Controls\Services\AutocompleteService.vb" />
+    <Compile Include="Controls\Services\ChatFormatterAgent.vb" />
     <Compile Include="Controls\Services\ReformatService.vb" />
     <Compile Include="Controls\Services\HistoryService.vb" />
     <Compile Include="Controls\Services\HistorySessionService.vb" />
@@ -481,6 +486,7 @@
     <None Include="Resources\js\agent-card.js" />
     <None Include="Resources\js\autocomplete.js" />
     <None Include="Resources\js\model-switcher.js" />
+    <None Include="Resources\js\reformat-chat.js" />
     <None Include="Resources\js\reformat-template.js" />
     <None Include="Resources\js\config-panel.js" />
   </ItemGroup>

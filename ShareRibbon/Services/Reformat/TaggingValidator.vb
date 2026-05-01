@@ -46,7 +46,13 @@ Public Class TaggingValidator
 
         If tagsArray Is Nothing OrElse tagsArray.Count = 0 Then
             result.IsValid = False
-            result.Errors.Add("标注结果为空或格式不正确")
+            ' 检测是否输出了代码而非 JSON
+            Dim codeType = DetectCodeResponse(taggingJson)
+            If Not String.IsNullOrEmpty(codeType) Then
+                result.Errors.Add($"模型错误地返回了{codeType}代码，而非JSON标注数组。请检查模型配置，或尝试切换模型。")
+            Else
+                result.Errors.Add("标注结果为空或格式不正确")
+            End If
             Return result
         End If
 
@@ -113,6 +119,16 @@ Public Class TaggingValidator
         ' 严重错误超过20%则判定为校验失败
         If severeErrorCount > totalParagraphs * 0.2 Then
             result.IsValid = False
+        End If
+
+        ' 安全检查：如果所有标签都是同一个（如全部body.normal），可能是AI敷衍——仍然接受但添加警告
+        If result.ValidatedTags.Count >= 3 Then
+            Dim firstTag = result.ValidatedTags(0).TagId
+            Dim allSame = result.ValidatedTags.All(Function(t) t.TagId = firstTag)
+            If allSame Then
+                result.Errors.Add($"警告：所有段落都被标注为同一标签'{firstTag}'，标题层级可能丢失。")
+                ' 不设为Invalid，让用户自行判断
+            End If
         End If
 
         Return result
@@ -202,6 +218,25 @@ Public Class TaggingValidator
         End If
 
         Return json.Trim()
+    End Function
+
+    ''' <summary>检测 AI 是否错误地返回了代码而非 JSON</summary>
+    Private Shared Function DetectCodeResponse(response As String) As String
+        If String.IsNullOrWhiteSpace(response) Then Return Nothing
+        Dim lower = response.ToLowerInvariant().Trim()
+        If lower.Contains("sub ") AndAlso (lower.Contains("end sub") OrElse lower.Contains("dim ")) Then
+            Return "VBA"
+        End If
+        If lower.Contains("def ") AndAlso lower.Contains("return ") Then
+            Return "Python"
+        End If
+        If lower.Contains("function ") AndAlso lower.Contains("{") AndAlso lower.Contains("}") Then
+            Return "JavaScript"
+        End If
+        If lower.StartsWith("```") AndAlso Not lower.Contains("[") AndAlso Not lower.Contains("{") Then
+            Return "代码块"
+        End If
+        Return Nothing
     End Function
 
     ''' <summary>查找最接近的可用标签</summary>

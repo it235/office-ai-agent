@@ -179,15 +179,16 @@ Partial Class BaseOfficeRibbon
         Me.ReformatButton.Name = "ReformatButton"
         Me.ReformatButton.ControlSize = Microsoft.Office.Core.RibbonControlSize.RibbonControlSizeLarge
         Me.ReformatButton.ShowImage = True
-        Me.ReformatButton.ScreenTip = "对选中或全文进行结构化排版"
-        Me.ReformatButton.SuperTip = "优化标题、段落与列表并返回可解析的修订JSON"
+        Me.ReformatButton.ScreenTip = "智能排版：自动识别文档类型并套用国标格式"
+        Me.ReformatButton.SuperTip = "自动检测文档类型（公文/论文/报告等），匹配GB/T 9704等标准，一键排版。支持对话式微调和范文克隆。"
 
         Me.TemplateFormatButton.Label = "模板排版"
         Me.TemplateFormatButton.Name = "TemplateFormatButton"
         Me.TemplateFormatButton.ControlSize = Microsoft.Office.Core.RibbonControlSize.RibbonControlSizeLarge
         Me.TemplateFormatButton.ShowImage = True
+        Me.TemplateFormatButton.Visible = False
         Me.TemplateFormatButton.ScreenTip = "使用模板格式排版"
-        Me.TemplateFormatButton.SuperTip = "选择格式模板，AI生成内容时将参考模板中的字体、字号、段落等格式"
+        Me.TemplateFormatButton.SuperTip = "选择格式模板，AI生成内容时将参考模板中的字体、字号、段落等格式（已合并到智能排版，此按钮隐藏）"
 
 
         ' ========== Group 5: 工具箱 (Excel专用) ==========

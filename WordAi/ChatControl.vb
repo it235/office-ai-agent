@@ -40,6 +40,10 @@ Public Class ChatControl
     Private Const MAX_REFORMAT_RETRIES As Integer = 2 ' 最大重试次数
     Private _mirrorFormatDocName As String = "" ' 格式克隆时记录源文档名
 
+    ' 智能排版 v2 字段
+    Private _formatterAgent As ChatFormatterAgent = Nothing
+    Private _activeReformatPlan As ReformatPreviewPlan = Nothing
+
     ''' <summary>
     ''' 设置排版上下文，用于规则匹配后应用格式
     ''' </summary>
@@ -341,7 +345,77 @@ Public Class ChatControl
         Await ExecuteJavaScriptAsyncJS("showReformatModeIndicator();")
         ExitReformatTemplateMode()
 
-        Dim systemPrompt = SemanticPromptBuilder.BuildSemanticTaggingPrompt(mapping, paragraphTexts)
+        ' --- 智能排版 v2 优化：过滤非文本段落，传入样式上下文、字号、加粗和检测到的标题 ---
+        Dim textOnlyParagraphs As New List(Of String)()
+        Dim textOnlyStyles As New List(Of String)()
+        Dim textOnlyOrigIndices As New List(Of Integer)()
+        Dim textOnlyFontSizes As New List(Of Single)()
+        Dim textOnlyIsBold As New List(Of Boolean)()
+
+        ' 从Word段落提取字号和加粗信息
+        Dim allFontSizes As New List(Of Single)()
+        Dim allIsBold As New List(Of Boolean)()
+        If allParagraphs IsNot Nothing Then
+            For Each p In allParagraphs
+                Try
+                    allFontSizes.Add(CSng(p.Range.Font.Size))
+                Catch
+                    allFontSizes.Add(12.0F)
+                End Try
+                Try
+                    allIsBold.Add(CBool(p.Range.Font.Bold))
+                Catch
+                    allIsBold.Add(False)
+                End Try
+            Next
+        End If
+
+        For i = 0 To paragraphTexts.Count - 1
+            If paragraphTypes(i) = "text" Then
+                textOnlyParagraphs.Add(paragraphTexts(i))
+                textOnlyStyles.Add(paragraphStyles(i))
+                textOnlyOrigIndices.Add(i)
+                If i < allFontSizes.Count Then textOnlyFontSizes.Add(allFontSizes(i)) Else textOnlyFontSizes.Add(12.0F)
+                If i < allIsBold.Count Then textOnlyIsBold.Add(allIsBold(i)) Else textOnlyIsBold.Add(False)
+            End If
+        Next
+
+        ' 使用 DocumentAnalyzer 检测标题结构，辅助 AI 判断
+        Dim detectedHeadingInfo As String = Nothing
+        Try
+            Dim analyzer As New DocumentAnalyzer()
+            Dim analysis = analyzer.Analyze(paragraphTexts)
+            If analysis.DocStructure IsNot Nothing AndAlso analysis.DocStructure.Headings.Count > 0 Then
+                Dim sb As New System.Text.StringBuilder()
+                sb.AppendLine("以下段落被系统初步判定为标题，供参考：")
+                For Each h In analysis.DocStructure.Headings
+                    sb.AppendLine($"  段落[{h.ParagraphIndex}] 级别{h.Level}: {h.Text.Substring(0, Math.Min(h.Text.Length, 60))}")
+                Next
+                detectedHeadingInfo = sb.ToString()
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"DocumentAnalyzer heading detection failed: {ex.Message}")
+        End Try
+
+        ' 从映射的标签MatchHint构建文档类型上下文，帮助AI理解识别规则
+        Dim docTypeCtx As New System.Text.StringBuilder()
+        docTypeCtx.AppendLine(displayName)
+        If mapping.SemanticTags.Count > 0 Then
+            docTypeCtx.AppendLine()
+            docTypeCtx.AppendLine("各语义标签的识别规则：")
+            For Each tag In mapping.SemanticTags
+                If Not String.IsNullOrEmpty(tag.MatchHint) Then
+                    docTypeCtx.AppendLine($"- {tag.TagId}({tag.DisplayName}): {tag.MatchHint}")
+                End If
+            Next
+        End If
+
+        Dim systemPrompt = SemanticPromptBuilder.BuildSemanticTaggingPrompt(
+            mapping, textOnlyParagraphs, textOnlyStyles, textOnlyOrigIndices, detectedHeadingInfo,
+            documentTypeContext:=docTypeCtx.ToString(),
+            paragraphFontSizes:=textOnlyFontSizes,
+            paragraphIsBold:=textOnlyIsBold)
+
         SetReformatContext(allParagraphs.Cast(Of Object).ToList(), paragraphStyles, paragraphTypes, mapping)
         Await Send("请使用「" & displayName & "」对选中内容进行语义标注。", systemPrompt, False, "semantic_reformat")
         GlobalStatusStrip.ShowInfo("正在使用「" & displayName & "」排版...")
@@ -402,6 +476,375 @@ Public Class ChatControl
         End Try
     End Sub
 
+    ' ================== Smart Reformat v2 Methods ==================
+
+    ''' <summary>转义JS字符串中的特殊字符</summary>
+    Private Function EscapeForJs(text As String) As String
+        Return text.Replace("\", "\\").Replace("`", "\`").Replace("$", "\$").Replace(vbCr, "").Replace(vbLf, "\n")
+    End Function
+
+    ''' <summary>获取或创建 ChatFormatterAgent 实例</summary>
+    Private Function GetFormatterAgent() As ChatFormatterAgent
+        If _formatterAgent Is Nothing Then
+            ' 共享ReformatSvc中的编排器实例，确保微调上下文一致
+            _formatterAgent = New ChatFormatterAgent(
+                AddressOf ExecuteJavaScriptAsyncJS,
+                AddressOf EscapeForJs,
+                orchestrator:=ReformatSvc.ChatFormatterAgent.Orchestrator)
+        End If
+        Return _formatterAgent
+    End Function
+
+    ''' <summary>
+    ''' 触发智能排版——分析选中文本→推荐标准→显示排版卡片预览
+    ''' 由 Ribbon "排版"按钮调用
+    ''' </summary>
+    Public Async Function TriggerSmartReformat() As Task
+        Try
+            Dim wordApp = Globals.ThisAddIn.Application
+
+            ' 从选区收集段落信息
+            Dim allParagraphs As List(Of Microsoft.Office.Interop.Word.Paragraph) = Nothing
+            Dim paragraphStyles As List(Of String) = Nothing
+            Dim paragraphTypes As List(Of String) = Nothing
+            Dim paragraphTexts As List(Of String) = Nothing
+
+            If Not CollectParagraphsFromSelection(wordApp.Selection.Range, allParagraphs, paragraphStyles, paragraphTypes, paragraphTexts) Then
+                GlobalStatusStrip.ShowWarning("没有找到有效段落。")
+                Return
+            End If
+
+            ' 提取Word富文本信息（字号、加粗）用于增强分析
+            Dim paragraphFontSizes As New List(Of Single)()
+            Dim paragraphIsBold As New List(Of Boolean)()
+            If allParagraphs IsNot Nothing Then
+                For Each p In allParagraphs
+                    Try
+                        paragraphFontSizes.Add(CSng(p.Range.Font.Size))
+                    Catch
+                        paragraphFontSizes.Add(12.0F)
+                    End Try
+                    Try
+                        paragraphIsBold.Add(CBool(p.Range.Font.Bold))
+                    Catch
+                        paragraphIsBold.Add(False)
+                    End Try
+                Next
+            End If
+
+            ' 在 Chat 中显示分析指示器
+            Await ExecuteJavaScriptAsyncJS("showQuickReformatIndicator();")
+
+            ' 执行编排器分析（增强版，传入Word富文本信息）
+            Dim agent = GetFormatterAgent()
+            Dim plan = agent.Orchestrator.AnalyzeAndRecommend(paragraphTexts, paragraphStyles, paragraphFontSizes, paragraphIsBold)
+
+            ' 存储段落类型
+            plan.ParagraphTypes = paragraphTypes
+
+            ' 生成排版卡片 HTML
+            Dim html = agent.GenerateFormattingCardHtml(plan)
+            Dim responseUuid As String = Guid.NewGuid().ToString()
+
+            ' 创建 Chat 消息区并推送卡片
+            Dim jsCreate As String = $"createChatSection('AI排版助手', formatDateTime(new Date()), '{responseUuid}');"
+            Await ExecuteJavaScriptAsyncJS(jsCreate)
+
+            ' 保存方案供后续应用
+            _activeReformatPlan = plan
+            SetReformatContext(allParagraphs.Cast(Of Object).ToList(), paragraphStyles, paragraphTypes, plan.SemanticMapping)
+
+            ' 推送卡片到前端
+            Dim jsonPayload As New JObject()
+            jsonPayload("uuid") = responseUuid
+            jsonPayload("html") = html
+            Await ExecuteJavaScriptAsyncJS($"appendFormattingCard({jsonPayload.ToString(Newtonsoft.Json.Formatting.None)});")
+
+            GlobalStatusStrip.ShowInfo($"分析完成，推荐标准: {plan.StandardName}")
+        Catch ex As Exception
+            Debug.WriteLine($"TriggerSmartReformat error: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"智能排版失败: {ex.Message}")
+        End Try
+    End Function
+
+    ''' <summary>应用当前预览的排版方案到 Word 文档</summary>
+    Private Async Function ApplyReformatPlan() As Task
+        Try
+            If _activeReformatPlan Is Nothing OrElse _activeReformatPlan.SemanticMapping Is Nothing Then
+                GlobalStatusStrip.ShowWarning("没有可应用的排版方案。")
+                Return
+            End If
+
+            ' 复用已有的 StartSemanticReformatPipeline 流水线
+            Dim mapping = _activeReformatPlan.SemanticMapping
+            Await StartSemanticReformatPipeline(mapping, _activeReformatPlan.StandardName)
+        Catch ex As Exception
+            Debug.WriteLine($"ApplyReformatPlan error: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"应用排版失败: {ex.Message}")
+        End Try
+    End Function
+
+    ''' <summary>智能排版 v2：应用排版方案</summary>
+    Protected Overrides Async Sub HandleApplySmartReformat(jsonDoc As JObject)
+        Await ApplyReformatPlan()
+    End Sub
+
+    ''' <summary>智能排版 v2：微调排版方案</summary>
+    Protected Overrides Async Sub HandleRefineSmartReformat(jsonDoc As JObject)
+        Try
+            Dim instruction As String = If(jsonDoc("instruction")?.ToString(), "")
+            If String.IsNullOrEmpty(instruction) Then
+                GlobalStatusStrip.ShowWarning("未提供微调指令。")
+                Return
+            End If
+
+            ' 重新收集段落信息
+            Dim wordApp = Globals.ThisAddIn.Application
+            Dim allParagraphs As List(Of Microsoft.Office.Interop.Word.Paragraph) = Nothing
+            Dim paragraphStyles As List(Of String) = Nothing
+            Dim paragraphTypes As List(Of String) = Nothing
+            Dim paragraphTexts As List(Of String) = Nothing
+            If Not CollectParagraphsFromSelection(wordApp.Selection.Range, allParagraphs, paragraphStyles, paragraphTypes, paragraphTexts) Then
+                GlobalStatusStrip.ShowWarning("没有找到有效段落。")
+                Return
+            End If
+
+            ' 通过编排器应用微调
+            Dim agent = GetFormatterAgent()
+            Dim refinedPlan = agent.Orchestrator.ApplyRefinement(instruction)
+            If refinedPlan IsNot Nothing Then
+                _activeReformatPlan = refinedPlan
+
+                ' 重新生成卡片
+                Dim html = agent.GenerateFormattingCardHtml(refinedPlan)
+                Dim responseUuid As String = Guid.NewGuid().ToString()
+                Dim jsonPayload As New JObject()
+                jsonPayload("uuid") = responseUuid
+                jsonPayload("html") = html
+                Await ExecuteJavaScriptAsyncJS($"appendFormattingCard({jsonPayload.ToString(Newtonsoft.Json.Formatting.None)});")
+                GlobalStatusStrip.ShowInfo("排版方案已微调。")
+            Else
+                GlobalStatusStrip.ShowWarning("微调失败，请尝试更明确的指令。")
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"HandleRefineSmartReformat error: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"排版微调失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>智能排版 v2：切换排版标准/模板</summary>
+    Protected Overrides Async Sub HandleSwitchReformatTemplate(jsonDoc As JObject)
+        Try
+            Dim templateName As String = If(jsonDoc("templateName")?.ToString(), "")
+            If String.IsNullOrEmpty(templateName) Then
+                ' 无指定标准时重新分析
+                Dim wordApp = Globals.ThisAddIn.Application
+                Dim allParagraphs As List(Of Microsoft.Office.Interop.Word.Paragraph) = Nothing
+                Dim paragraphStyles As List(Of String) = Nothing
+                Dim paragraphTypes As List(Of String) = Nothing
+                Dim paragraphTexts As List(Of String) = Nothing
+                If Not CollectParagraphsFromSelection(wordApp.Selection.Range, allParagraphs, paragraphStyles, paragraphTypes, paragraphTexts) Then
+                    GlobalStatusStrip.ShowWarning("没有找到有效段落。")
+                    Return
+                End If
+
+                Dim agent = GetFormatterAgent()
+                Dim plan = agent.Orchestrator.AnalyzeAndRecommend(paragraphTexts)
+                If plan IsNot Nothing Then
+                    _activeReformatPlan = plan
+                    Dim html = agent.GenerateFormattingCardHtml(plan)
+                    Dim responseUuid As String = Guid.NewGuid().ToString()
+                    Dim jsonPayload As New JObject()
+                    jsonPayload("uuid") = responseUuid
+                    jsonPayload("html") = html
+                    Await ExecuteJavaScriptAsyncJS($"appendFormattingCard({jsonPayload.ToString(Newtonsoft.Json.Formatting.None)});")
+                End If
+            Else
+                ' TODO: 按指定标准名称重新分析（扩展点）
+                GlobalStatusStrip.ShowInfo($"切换到标准: {templateName}")
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"HandleSwitchReformatTemplate error: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"切换排版标准失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>智能排版 v2：显示排版前后对比</summary>
+    Protected Overrides Async Sub HandlePreviewReformatCompare(jsonDoc As JObject)
+        Try
+            If _activeReformatPlan Is Nothing Then
+                GlobalStatusStrip.ShowWarning("没有可预览的排版方案。")
+                Return
+            End If
+
+            Dim sb As New StringBuilder()
+            sb.AppendLine("【排版前后对比】")
+            sb.AppendLine($"推荐标准: {_activeReformatPlan.StandardName}")
+            sb.AppendLine($"文档类型: {_activeReformatPlan.DetectedType.ToString()}")
+            sb.AppendLine($"共 {_activeReformatPlan.TotalStyleChanges} 处格式变更:")
+            For Each change In _activeReformatPlan.Changes
+                sb.AppendLine($"  - [{change.NewTag}] {change.ChangeDescription}")
+            Next
+
+            Dim responseUuid As String = Guid.NewGuid().ToString()
+            Dim jsCreate As String = $"createChatSection('排版对比', formatDateTime(new Date()), '{responseUuid}');"
+            Await ExecuteJavaScriptAsyncJS(jsCreate)
+            Dim escapedText = sb.ToString().Replace("\", "\\").Replace("'", "\'").Replace(vbCr, "\n").Replace(vbLf, "")
+            Await ExecuteJavaScriptAsyncJS($"appendRenderer('{responseUuid}','{escapedText}');")
+        Catch ex As Exception
+            Debug.WriteLine($"HandlePreviewReformatCompare error: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"预览对比失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 重写消息发送：拦截排版相关消息，走专门的排版流程
+    ''' </summary>
+    Protected Overrides Sub HandleSendMessage(jsonDoc As JObject)
+        Debug.WriteLine($"[DEBUG WordAi.HandleSendMessage] ENTER")
+        Dim messageValue As JToken = jsonDoc("value")
+        Dim question As String = ""
+
+        If messageValue IsNot Nothing AndAlso messageValue.Type = JTokenType.Object Then
+            question = messageValue("text")?.ToString()
+        End If
+        Debug.WriteLine($"[DEBUG WordAi.HandleSendMessage] question='{question}', IsExplicit={IsExplicitFormattingRequest(question)}")
+
+        ' 仅拦截明确的排版指令（严格匹配），避免误截日常对话
+        If Not String.IsNullOrEmpty(question) AndAlso IsExplicitFormattingRequest(question) Then
+            Debug.WriteLine($"[DEBUG WordAi.HandleSendMessage] routing to HandleChatDrivenReformat")
+            ' 排版消息走专门流程（内部处理显示+出错回退）
+            HandleChatDrivenReformat(question, jsonDoc)
+            Return
+        End If
+
+        ' 非排版消息走正常流程
+        Debug.WriteLine($"[DEBUG WordAi.HandleSendMessage] routing to MyBase.HandleSendMessage")
+        MyBase.HandleSendMessage(jsonDoc)
+    End Sub
+
+    ''' <summary>
+    ''' 判断是否为明确的排版指令（比IsFormattingRelated更严格）
+    ''' 必须包含排版核心关键词+动作词，避免误截日常对话
+    ''' </summary>
+    Private Shared Function IsExplicitFormattingRequest(message As String) As Boolean
+        If String.IsNullOrWhiteSpace(message) Then Return False
+
+        ' 核心排版动作词（必须命中至少一个）
+        Dim actionKeywords As String() = {
+            "排版", "重新排版", "帮我排版", "按.*排版", "按照.*排版",
+            "格式化", "套用格式", "应用格式", "换一种排版"
+        }
+        ' 补充场景词（配合动作词使用）
+        Dim topicKeywords As String() = {
+            "公文", "国标", "GB/T", "gbt", "标准格式",
+            "仿宋", "宋体", "黑体", "楷体", "微软雅黑", "小标宋"
+        }
+
+        Dim msg = message.Trim()
+
+        ' 直接包含"排版"动作
+        If msg.Contains("排版") Then Return True
+        ' "按XX格式/标准" 句式
+        If (msg.Contains("按") OrElse msg.Contains("按照") OrElse msg.Contains("参照")) AndAlso
+           (msg.Contains("格式") OrElse msg.Contains("标准") OrElse msg.Contains("模板")) Then Return True
+        ' "格式化" 动作
+        If msg.Contains("格式化") Then Return True
+        ' "套用/应用格式" 动作
+        If (msg.Contains("套用") OrElse msg.Contains("应用")) AndAlso msg.Contains("格式") Then Return True
+        ' 主题词+动作组合（如"公文标准"、"宋体样式"）
+        For Each topic In topicKeywords
+            If msg.Contains(topic) AndAlso
+               (msg.Contains("排") OrElse msg.Contains("格式") OrElse msg.Contains("样式") OrElse msg.Contains("规范")) Then
+                Return True
+            End If
+        Next
+
+        Return False
+    End Function
+
+    ''' <summary>
+    ''' Chat驱动的排版流程：收集段落→意图解析→选择标准→预览卡片
+    ''' 用户点击"应用排版"后走V1的AI语义标注管道（StartSemanticReformatPipeline）
+    ''' </summary>
+    Private Async Sub HandleChatDrivenReformat(userMessage As String, originalJsonDoc As JObject)
+        Try
+            Dim wordApp = Globals.ThisAddIn.Application
+
+            ' 1. 从选区收集段落信息
+            Dim allParagraphs As List(Of Microsoft.Office.Interop.Word.Paragraph) = Nothing
+            Dim paragraphStyles As List(Of String) = Nothing
+            Dim paragraphTypes As List(Of String) = Nothing
+            Dim paragraphTexts As List(Of String) = Nothing
+
+            If Not CollectParagraphsFromSelection(wordApp.Selection.Range, allParagraphs, paragraphStyles, paragraphTypes, paragraphTexts) Then
+                ' 没有选区时回退到正常AI对话流程
+                MyBase.HandleSendMessage(originalJsonDoc)
+                Return
+            End If
+
+            ' 2. 提取Word富文本信息（字号、加粗）用于增强分析
+            Dim paragraphFontSizes As New List(Of Single)()
+            Dim paragraphIsBold As New List(Of Boolean)()
+            If allParagraphs IsNot Nothing Then
+                For Each p In allParagraphs
+                    Try
+                        paragraphFontSizes.Add(CSng(p.Range.Font.Size))
+                    Catch
+                        paragraphFontSizes.Add(12.0F)
+                    End Try
+                    Try
+                        paragraphIsBold.Add(CBool(p.Range.Font.Bold))
+                    Catch
+                        paragraphIsBold.Add(False)
+                    End Try
+                Next
+            End If
+
+            ' 3. 显示用户消息到Chat（普通气泡）
+            Dim userMsgUuid = Guid.NewGuid().ToString()
+            Dim jsUserMsg = $"createChatSection('你', formatDateTime(new Date()), '{userMsgUuid}');"
+            Await ExecuteJavaScriptAsyncJS(jsUserMsg)
+            Dim escapedMsg = userMessage.Replace("\", "\\").Replace("'", "\'").Replace(vbCr, "\n").Replace(vbLf, "")
+            Await ExecuteJavaScriptAsyncJS($"document.getElementById('content-{userMsgUuid}').innerHTML = '<p>{escapedMsg}</p>';")
+
+            ' 4. 通过编排器解析意图并推荐标准（增强版，传入Word富文本信息）
+            GlobalStatusStrip.ShowInfo("正在分析文档...")
+            Dim agent = GetFormatterAgent()
+            Dim plan = Await agent.Orchestrator.ChatReformatAsync(
+                userMessage, paragraphTexts, New List(Of Object)(),
+                paragraphStyles, paragraphFontSizes, paragraphIsBold)
+
+            ' 5. 存储段落类型到方案中
+            plan.ParagraphTypes = paragraphTypes
+
+            ' 6. 存储上下文供后续应用
+            _activeReformatPlan = plan
+            SetReformatContext(allParagraphs.Cast(Of Object).ToList(), paragraphStyles, paragraphTypes, plan.SemanticMapping)
+
+            ' 7. 生成排版卡片并推送到Chat
+            Dim html = agent.GenerateFormattingCardHtml(plan)
+            Dim responseUuid = Guid.NewGuid().ToString()
+            Dim jsCreate = $"createChatSection('AI排版助手', formatDateTime(new Date()), '{responseUuid}');"
+            Await ExecuteJavaScriptAsyncJS(jsCreate)
+
+            Dim jsonPayload As New JObject()
+            jsonPayload("uuid") = responseUuid
+            jsonPayload("html") = html
+            Await ExecuteJavaScriptAsyncJS($"appendFormattingCard({jsonPayload.ToString(Newtonsoft.Json.Formatting.None)});")
+
+            GlobalStatusStrip.ShowInfo($"分析完成，推荐标准: {plan.StandardName}")
+        Catch ex As Exception
+            Debug.WriteLine($"HandleChatDrivenReformat error: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"智能排版失败: {ex.Message}")
+            ' 排版失败时回退到正常AI对话流程
+            Try
+                MyBase.HandleSendMessage(originalJsonDoc)
+            Catch fallbackEx As Exception
+                Debug.WriteLine($"HandleChatDrivenReformat fallback error: {fallbackEx.Message}")
+            End Try
+        End Try
+    End Sub
 
     Public Sub New()
         ' 此调用是设计师所必需的。
