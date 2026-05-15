@@ -28,7 +28,8 @@ Public MustInherit Class BaseChatControl
     Protected _chatStateService As New ChatStateService()
     Private _historyService As HistoryService = Nothing
     Private _mcpService As McpService = Nothing
-    
+    Private _selfCheckLoopController As SelfCheckLoopController = Nothing
+
     ' 延迟初始化的排版服务
     Private _reformatService As ReformatService = Nothing
     Protected ReadOnly Property ReformatSvc As ReformatService
@@ -130,6 +131,20 @@ Public MustInherit Class BaseChatControl
                 _codeExecutionService.JsonCommandExecutor = AddressOf ExecuteJsonCommand
             End If
             Return _codeExecutionService
+        End Get
+    End Property
+
+    ' 延迟初始化的自检Loop控制器
+    Protected ReadOnly Property SelfCheckLoopController As SelfCheckLoopController
+        Get
+            If _selfCheckLoopController Is Nothing Then
+                _selfCheckLoopController = New SelfCheckLoopController(
+                    New PreSendChecker(),
+                    New PostFlushValidator(),
+                    New DslInstructionExecutor(),
+                    New PostExecutionVerifier())
+            End If
+            Return _selfCheckLoopController
         End Get
     End Property
 
@@ -629,16 +644,6 @@ Public MustInherit Class BaseChatControl
                 Case "cancelIntent"
                     HandleCancelIntent()
 
-                ' Ralph Loop 循环功能消息处理
-                Case "continueLoop"
-                    HandleContinueLoop()
-                Case "cancelLoop"
-                    HandleCancelLoop()
-                Case "startLoop"
-                    HandleStartLoop(jsonDoc)
-                Case "replanLoop"
-                    HandleReplanLoop(jsonDoc)
-
                 ' Ralph Agent 智能助手消息处理
                 Case "startAgent"
                     HandleStartAgent(jsonDoc)
@@ -726,12 +731,18 @@ Public MustInherit Class BaseChatControl
                 ' 智能排版 v2 消息处理
                 Case "applySmartReformat"
                     HandleApplySmartReformat(jsonDoc)
+                Case "undoReformat"
+                    HandleUndoReformat(jsonDoc)
                 Case "refineSmartReformat"
                     HandleRefineSmartReformat(jsonDoc)
                 Case "switchReformatTemplate"
                     HandleSwitchReformatTemplate(jsonDoc)
                 Case "previewReformatCompare"
                     HandlePreviewReformatCompare(jsonDoc)
+
+                ' 校对专注模式消息处理
+                Case "proofread"
+                    HandleProofreadFocusMode(jsonDoc)
 
                 Case Else
                     Debug.WriteLine($"未知消息类型: {messageType}")
@@ -1448,6 +1459,27 @@ Public MustInherit Class BaseChatControl
                              Dim isComplexTask As Boolean = (CurrentIntentResult.OfficeIntent <> OfficeIntentType.GENERAL_QUERY AndAlso
                                                               CurrentIntentResult.Confidence >= 0.4)
 
+                             ' === 自检Loop: 发送前校验（排版/校对场景）===
+                             Dim isFormattingOrProofreading As Boolean = (CurrentIntentResult.OfficeIntent = OfficeIntentType.FORMAT_STYLE OrElse
+                                                                         CurrentIntentResult.OfficeIntent = OfficeIntentType.TEXT_FORMAT)
+                             If isFormattingOrProofreading Then
+                                 Try
+                                     Dim execContext = Await BuildExecutionContextAsync(originalQuestion, filePaths, selectedContents)
+                                     execContext.IntentResult = CurrentIntentResult
+                                     Dim preCheck = Await SelfCheckLoopController.PreSendCheckAsync(execContext)
+                                     If Not preCheck.IsValid Then
+                                         Debug.WriteLine($"[SelfCheck] PreSendCheck阻止发送: {String.Join(";", preCheck.Errors)}")
+                                         GlobalStatusStrip.ShowWarning($"请求未通过预检: {String.Join(";", preCheck.Errors)}")
+                                         Return
+                                     End If
+                                     If preCheck.Warnings.Count > 0 Then
+                                         Debug.WriteLine($"[SelfCheck] PreSendCheck警告: {String.Join(";", preCheck.Warnings)}")
+                                     End If
+                                 Catch ex As Exception
+                                     Debug.WriteLine($"[SelfCheck] PreSendCheck异常: {ex.Message}")
+                                 End Try
+                             End If
+
                              ' 情况1：用户只引用了内容但没有输入问题
                              If hasReferences AndAlso String.IsNullOrWhiteSpace(originalQuestion) Then
                                  CurrentIntentResult.UserFriendlyDescription = "您引用了内容，请问您想要做什么？"
@@ -1618,52 +1650,6 @@ Public MustInherit Class BaseChatControl
         End Try
     End Sub
 
-#Region "Ralph Loop 循环功能（已迁移至 AgentKernel，保留空实现以兼容前端消息）"
-
-    ''' <summary>
-    ''' 启动Ralph Loop - 已迁移至 AgentKernel
-    ''' </summary>
-    Public Async Function StartRalphLoop(userGoal As String) As Task
-        Debug.WriteLine("[AgentKernel] StartRalphLoop 已废弃，请使用 AgentKernel 统一入口")
-        Await Task.Delay(1)
-    End Function
-
-    ''' <summary>
-    ''' 处理前端startLoop消息 - 已迁移至 AgentKernel
-    ''' </summary>
-    Protected Sub HandleStartLoop(jsonDoc As JObject)
-        Debug.WriteLine("[AgentKernel] HandleStartLoop 已废弃")
-    End Sub
-
-    ''' <summary>
-    ''' 处理继续执行循环 - 已迁移至 AgentKernel
-    ''' </summary>
-    Protected Async Sub HandleContinueLoop()
-        Debug.WriteLine("[AgentKernel] HandleContinueLoop 已废弃")
-        Await Task.Delay(1)
-    End Sub
-
-    ''' <summary>
-    ''' 处理取消循环 - 已迁移至 AgentKernel
-    ''' </summary>
-    Protected Sub HandleCancelLoop()
-        Debug.WriteLine("[AgentKernel] HandleCancelLoop 已废弃")
-    End Sub
-
-    ''' <summary>
-    ''' 处理重新规划循环 - 已迁移至 AgentKernel
-    ''' </summary>
-    Protected Overridable Sub HandleReplanLoop(jsonDoc As JObject)
-        Debug.WriteLine("[AgentKernel] HandleReplanLoop 已废弃")
-    End Sub
-
-    ''' <summary>
-    ''' 在流完成后检查是否需要处理Ralph Loop - 已迁移至 AgentKernel
-    ''' </summary>
-    Protected Sub CheckRalphLoopCompletion(responseContent As String)
-        ' AgentKernel 自动处理完成状态，无需额外检查
-    End Sub
-
     ''' <summary>
     ''' 获取应用类型（子类重写）
     ''' </summary>
@@ -1672,8 +1658,6 @@ Public MustInherit Class BaseChatControl
         Dim appType = If(appInfo IsNot Nothing, appInfo.Type.ToString(), "Excel")
         Return appType
     End Function
-
-#End Region
 
 #Region "Ralph Agent 智能助手"
 
@@ -2006,6 +1990,74 @@ Public MustInherit Class BaseChatControl
         Catch
         End Try
         Return "(无选中内容)"
+    End Function
+
+    ''' <summary>
+    ''' 构建执行上下文（供自检Loop使用）
+    ''' </summary>
+    Protected Overridable Async Function BuildExecutionContextAsync(
+        originalQuestion As String,
+        filePaths As List(Of String),
+        selectedContents As List(Of SendMessageReferenceContentItem)) As Task(Of ExecutionContext)
+
+        Dim context As New ExecutionContext()
+        context.UserMessage = originalQuestion
+        context.OriginalQuestion = originalQuestion
+        context.FilePaths = If(filePaths, New List(Of String)())
+
+        ' 根据意图设置请求操作类型
+        If CurrentIntentResult IsNot Nothing Then
+            Select Case CurrentIntentResult.OfficeIntent
+                Case OfficeIntentType.FORMAT_STYLE, OfficeIntentType.TEXT_FORMAT
+                    context.RequestedOperation = RequestedOperation.Reformat
+                    context.ExpectedFormat = InstructionFormat.DslJson
+                Case OfficeIntentType.DOCUMENT_EDIT
+                    ' 文档编辑可能包含校对需求，根据描述判断
+                    If CurrentIntentResult.UserFriendlyDescription IsNot Nothing AndAlso
+                       CurrentIntentResult.UserFriendlyDescription.ToLower().Contains("校对") Then
+                        context.RequestedOperation = RequestedOperation.Proofread
+                        context.ExpectedFormat = InstructionFormat.ProofreadJson
+                    Else
+                        context.RequestedOperation = RequestedOperation.Reformat
+                        context.ExpectedFormat = InstructionFormat.DslJson
+                    End If
+                Case Else
+                    context.RequestedOperation = RequestedOperation.GeneralQuery
+            End Select
+        End If
+
+        ' 获取Office内容信息
+        Try
+            Dim appInfo = GetApplication()
+            If appInfo IsNot Nothing Then
+                Select Case appInfo.Type.ToString().ToLower()
+                    Case "word"
+                        context.OfficeAppType = OfficeAppType.Word
+                    Case "excel"
+                        context.OfficeAppType = OfficeAppType.Excel
+                    Case "powerpoint"
+                        context.OfficeAppType = OfficeAppType.PowerPoint
+                End Select
+            End If
+
+            Dim contentInfo As New OfficeContentInfo()
+            Dim selInfo = CaptureCurrentSelectionInfo("")
+            If selInfo IsNot Nothing Then
+                contentInfo.SelectedParagraphs = New List(Of String) From {selInfo.SelectedText}
+                context.SelectionInfo = selInfo
+                context.RequiresSelection = Not String.IsNullOrEmpty(selInfo.SelectedText)
+            End If
+            context.OfficeContent = contentInfo
+        Catch ex As Exception
+            Debug.WriteLine($"[BuildExecutionContextAsync] 获取Office内容失败: {ex.Message}")
+        End Try
+
+        ' 历史上下文
+        If systemHistoryMessageData IsNot Nothing Then
+            context.ConversationHistory = systemHistoryMessageData.ToList()
+        End If
+
+        Return context
     End Function
 
     ''' <summary>
@@ -2908,8 +2960,31 @@ Public MustInherit Class BaseChatControl
             End If
         End If
 
-        ' Ralph Loop 完成检查
-        CheckRalphLoopCompletion(allPlainMarkdownBuffer.ToString())
+        ' === 自检Loop: Flush后校验（排版/校对场景的AI响应格式校验）===
+        Try
+            If _responseModeMap.ContainsKey(_finalUuid) Then
+                Dim mode = _responseModeMap(_finalUuid)
+                If mode = "reformat" OrElse mode = "proofread" OrElse mode = "semantic_reformat" Then
+                    Dim aiResponse = allPlainMarkdownBuffer.ToString()
+                    If Not String.IsNullOrWhiteSpace(aiResponse) Then
+                        Dim expectedFormat = If(mode = "proofread", InstructionFormat.ProofreadJson, InstructionFormat.DslJson)
+                        Dim execContext = New ExecutionContext()
+                        Dim validation = SelfCheckLoopController.PostFlushValidateAsync(aiResponse, expectedFormat, execContext).Result
+                        If Not validation.IsValid Then
+                            Debug.WriteLine($"[SelfCheck] PostFlush校验失败: {String.Join(";", validation.Errors.Select(Function(e) e.Message))}")
+                            If validation.Errors.Any(Function(e) e.Level = ErrorLevel.Critical) Then
+                                GlobalStatusStrip.ShowWarning($"AI响应格式校验未通过，可能存在指令错误")
+                            End If
+                        Else
+                            Debug.WriteLine($"[SelfCheck] PostFlush校验通过，解析到 {validation.ParsedInstructions.Count} 条指令")
+                        End If
+                    End If
+                End If
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"[SelfCheck] PostFlush校验异常: {ex.Message}")
+        End Try
+
     End Sub
 
 
@@ -3235,9 +3310,9 @@ Public MustInherit Class BaseChatControl
     End Sub
 
     ''' <summary>
-    ''' 撤销排版（回退UndoRecord快照）
+    ''' 撤销排版（根据不同的Office应用使用正确的撤销方式）
     ''' </summary>
-    Protected Sub HandleUndoReformat()
+    Protected Overridable Sub HandleUndoReformat()
         Try
             Dim appInfo = GetApplication()
             If appInfo Is Nothing Then Return
@@ -3249,10 +3324,85 @@ Public MustInherit Class BaseChatControl
                 Debug.WriteLine("获取 Office 应用对象失败: " & ex.Message)
             End Try
 
-            If officeApp IsNot Nothing Then
-                officeApp.ActiveDocument.Undo()
-                GlobalStatusStrip.ShowInfo("已撤销排版操作")
+            If officeApp Is Nothing Then
+                GlobalStatusStrip.ShowWarning("无法获取Office应用对象，请尝试按 Ctrl+Z 撤销")
+                Return
             End If
+
+            Dim appName = GetOfficeApplicationName()
+            Debug.WriteLine($"HandleUndoReformat: appName={appName}")
+
+            Select Case appName
+                Case "Word"
+                    ' Word: 支持 UndoRecord，优先使用 Application.Undo() 更可靠
+                    Try
+                        ' Application.Undo() 能正确撤销通过 UndoRecord 创建的自定义撤销记录
+                        officeApp.Undo()
+                        GlobalStatusStrip.ShowInfo("已撤销排版操作")
+                    Catch ex As Exception
+                        Debug.WriteLine($"Word Application.Undo 失败，尝试 Document.Undo: {ex.Message}")
+                        Try
+                            officeApp.ActiveDocument.Undo()
+                            GlobalStatusStrip.ShowInfo("已撤销排版操作")
+                        Catch ex2 As Exception
+                            Debug.WriteLine($"Word Document.Undo 也失败: {ex2.Message}")
+                            ' 终极备选：通过 CommandBars 触发标准撤销
+                            Try
+                                officeApp.CommandBars.ExecuteMso("Undo")
+                                GlobalStatusStrip.ShowInfo("已撤销排版操作")
+                            Catch ex3 As Exception
+                                Debug.WriteLine($"Word CommandBars 撤销也失败: {ex3.Message}")
+                                GlobalStatusStrip.ShowWarning("撤销排版失败，请手动按 Ctrl+Z")
+                            End Try
+                        End Try
+                    End Try
+
+                Case "PowerPoint"
+                    ' PowerPoint: 不支持 UndoRecord，只能撤销最近一次操作
+                    Try
+                        ' PowerPoint Application 没有 ActiveDocument 属性，使用 ActivePresentation
+                        officeApp.ActivePresentation.Undo()
+                        GlobalStatusStrip.ShowWarning("已撤销排版操作（PPT撤销受限，如果未完全恢复请多次按 Ctrl+Z）")
+                    Catch ex As Exception
+                        Debug.WriteLine($"PowerPoint 撤销失败: {ex.Message}")
+                        Try
+                            ' 备选：通过 CommandBars 触发标准撤销
+                            officeApp.CommandBars.ExecuteMso("Undo")
+                            GlobalStatusStrip.ShowWarning("已撤销排版操作（PPT撤销受限，如果未完全恢复请多次按 Ctrl+Z）")
+                        Catch ex2 As Exception
+                            Debug.WriteLine($"PowerPoint CommandBars 撤销也失败: {ex2.Message}")
+                            GlobalStatusStrip.ShowWarning("PPT撤销排版失败，请手动按 Ctrl+Z 多次撤销")
+                        End Try
+                    End Try
+
+                Case "Excel"
+                    ' Excel: 排版功能尚在开发中，但保留撤销入口
+                    Try
+                        ' Excel 使用 ActiveWorkbook，没有 ActiveDocument
+                        officeApp.ActiveWorkbook.Undo()
+                        GlobalStatusStrip.ShowInfo("已撤销排版操作")
+                    Catch ex As Exception
+                        Debug.WriteLine($"Excel 撤销失败: {ex.Message}")
+                        Try
+                            officeApp.CommandBars.ExecuteMso("Undo")
+                            GlobalStatusStrip.ShowInfo("已撤销排版操作")
+                        Catch ex2 As Exception
+                            Debug.WriteLine($"Excel CommandBars 撤销也失败: {ex2.Message}")
+                            GlobalStatusStrip.ShowWarning("撤销排版失败，请手动按 Ctrl+Z")
+                        End Try
+                    End Try
+
+                Case Else
+                    ' 未知应用类型，尝试通用方式
+                    Try
+                        officeApp.Undo()
+                        GlobalStatusStrip.ShowInfo("已撤销排版操作")
+                    Catch ex As Exception
+                        Debug.WriteLine($"通用撤销失败: {ex.Message}")
+                        GlobalStatusStrip.ShowWarning("撤销排版失败，请尝试按 Ctrl+Z")
+                    End Try
+            End Select
+
         Catch ex As Exception
             Debug.WriteLine($"HandleUndoReformat 出错: {ex.Message}")
             GlobalStatusStrip.ShowWarning($"撤销排版失败: {ex.Message}")
@@ -3264,6 +3414,13 @@ Public MustInherit Class BaseChatControl
     ''' </summary>
     Protected Overridable Sub HandleApplySmartReformat(jsonDoc As JObject)
         Debug.WriteLine("HandleApplySmartReformat not overridden in derived class")
+    End Sub
+
+    ''' <summary>
+    ''' 智能排版 v2：撤销排版（从快照恢复，由派生类覆写实现具体Office应用逻辑）
+    ''' </summary>
+    Protected Overridable Sub HandleUndoReformat(jsonDoc As JObject)
+        Debug.WriteLine("HandleUndoReformat not overridden in derived class")
     End Sub
 
     ''' <summary>
@@ -3285,6 +3442,13 @@ Public MustInherit Class BaseChatControl
     ''' </summary>
     Protected Overridable Sub HandlePreviewReformatCompare(jsonDoc As JObject)
         Debug.WriteLine("HandlePreviewReformatCompare not overridden in derived class")
+    End Sub
+
+    ''' <summary>
+    ''' 校对专注模式消息处理（由派生类覆写实现具体逻辑）
+    ''' </summary>
+    Protected Overridable Sub HandleProofreadFocusMode(jsonDoc As JObject)
+        Debug.WriteLine("HandleProofreadFocusMode not overridden in derived class")
     End Sub
 
 #End Region

@@ -58,8 +58,8 @@ Public Class ConfigPromptForm
     Public Property propmtName As String
     Public Property propmtContent As String
 
-    ' 默认提示词
-    Private ReadOnly DEFAULT_PROMPTS As New Dictionary(Of String, String) From {
+    ' 默认提示词（静态常量，供 LoadConfigStatic 和实例方法共用）
+    Private Shared ReadOnly DEFAULT_PROMPTS As New Dictionary(Of String, String) From {
         {"Excel", "你是一名Excel专家，擅长数据分析、公式计算。如果用户需求明确，返回JSON命令执行操作；如果需求不明确，请先询问澄清。"},
         {"Word", "你是一名Word文档专家，擅长文档编辑、格式排版和内容生成。如果用户需求明确，返回JSON命令执行操作；如果需求不明确，请先询问澄清。"},
         {"PowerPoint", "你是一名PowerPoint演示专家，擅长幻灯片设计、动画效果和内容创作。如果用户需求明确，返回JSON命令执行操作；如果需求不明确，请先询问澄清。"}
@@ -682,6 +682,70 @@ Public Class ConfigPromptForm
         End If
     End Sub
 
+    ''' <summary>
+    ''' 共享配置路径（用于静态加载）
+    ''' </summary>
+    Private Shared Function GetConfigFilePath(appType As String) As String
+        Dim appDataFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), ConfigSettings.OfficeAiAppDataFolder)
+        Return Path.Combine(appDataFolder, $"prompt_config_{appType.ToLower()}.json")
+    End Function
+
+    ''' <summary>
+    ''' 加载提示词配置（静态版本，不创建UI，用于启动时后台加载）
+    ''' </summary>
+    Public Shared Sub LoadConfigStatic(appType As String)
+        Dim configFilePath = GetConfigFilePath(appType)
+        ConfigPromptData = New List(Of PromptConfigItem)()
+
+        If File.Exists(configFilePath) Then
+            Try
+                Dim json As String = File.ReadAllText(configFilePath)
+                ConfigPromptData = JsonConvert.DeserializeObject(Of List(Of PromptConfigItem))(json)
+            Catch ex As Exception
+                Debug.WriteLine($"[ConfigPromptForm] 静态加载提示词配置失败: {ex.Message}")
+            End Try
+        End If
+
+        ' 如果为空，添加默认配置
+        If ConfigPromptData Is Nothing OrElse ConfigPromptData.Count = 0 Then
+            ConfigPromptData = New List(Of PromptConfigItem)()
+            Dim defaultPrompt = GetDefaultPromptStatic(appType)
+            ConfigPromptData.Add(defaultPrompt)
+            Try
+                Dim dir = Path.GetDirectoryName(configFilePath)
+                If Not Directory.Exists(dir) Then Directory.CreateDirectory(dir)
+                Dim json As String = JsonConvert.SerializeObject(ConfigPromptData, Formatting.Indented)
+                File.WriteAllText(configFilePath, json)
+            Catch ex2 As Exception
+                Debug.WriteLine($"[ConfigPromptForm] 保存默认提示词配置失败: {ex2.Message}")
+            End Try
+        End If
+
+        ' 初始化全局配置
+        For Each item In ConfigPromptData
+            If item.selected Then
+                ConfigSettings.propmtName = item.name
+                ConfigSettings.propmtContent = item.content
+                Exit For
+            End If
+        Next
+    End Sub
+
+    ''' <summary>
+    ''' 获取默认提示词（静态版本）
+    ''' </summary>
+    Private Shared Function GetDefaultPromptStatic(appType As String) As PromptConfigItem
+        Dim content = If(DEFAULT_PROMPTS.ContainsKey(appType), DEFAULT_PROMPTS(appType), "你是一名Office办公专家。")
+        Return New PromptConfigItem() With {
+            .name = $"{appType}助手",
+            .content = content,
+            .selected = True
+        }
+    End Function
+
+    ''' <summary>
+    ''' 加载提示词配置（实例版本，创建UI后调用）
+    ''' </summary>
     Public Sub LoadConfig()
         ConfigPromptData = New List(Of PromptConfigItem)()
 

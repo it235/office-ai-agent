@@ -6,7 +6,6 @@ Imports System.Net.Http
 Imports System.Text
 Imports System.Text.RegularExpressions
 Imports System.Windows.Forms
-Imports Microsoft.Office.Tools.Excel
 Imports Microsoft.Office.Tools.Ribbon
 Imports Newtonsoft.Json.Linq
 
@@ -22,14 +21,15 @@ Public MustInherit Class BaseOfficeRibbon
         PhaseStartupManager.Instance.StartRequiredPhase()
 
         ' 将文件 I/O 密集的配置加载推迟到后台线程：
-        '   ConfigManager.LoadConfig()     读取 API 配置 JSON
-        '   ConfigPromptForm.LoadConfig()  读取提示词模板 JSON
+        '   ConfigManager.LoadConfig()          读取 API 配置 JSON
+        '   ConfigPromptForm.LoadConfigStatic() 读取提示词模板 JSON（静态方法，不创建UI）
         ' 两者均为纯文件操作，不涉及 COM/UI，在后台线程执行安全，可避免阻塞 Ribbon 渲染
         Await Task.Run(Sub()
+            ' 加载 API 配置
             Dim apiConfig As New ConfigManager()
             apiConfig.LoadConfig()
-            Dim promptConfig As New ConfigPromptForm(appInfo)
-            promptConfig.LoadConfig()
+            ' 加载提示词配置（静态方法，不创建UI控件，避免阻塞启动）
+            ConfigPromptForm.LoadConfigStatic(appInfo.Type.ToString())
         End Sub)
 
         ' Phase 2: 后台预加载 WebView2/SQLite/Resource（fire-and-forget，不阻塞）
@@ -110,26 +110,11 @@ Public MustInherit Class BaseOfficeRibbon
     End Sub
 
 
-    ' 定义 ComboBoxItem 类
-    Private Class ComboBoxItem
-        Public Property Text As String
-        Public Property Value As String
-
-        Public Sub New(text As String, value As String)
-            Me.Text = text
-            Me.Value = value
-        End Sub
-
-        Public Overrides Function ToString() As String
-            Return Text
-        End Function
-    End Class
-
     ' AI聊天实现
     Protected MustOverride Sub ChatButton_Click(sender As Object, e As RibbonControlEventArgs) Handles ChatButton.Click
 
     ' web爬虫实现
-    Protected MustOverride Sub WebResearchButton_Click(sender As Object, e As RibbonControlEventArgs) Handles WebCaptureButton.Click
+    Protected MustOverride Sub WebCaptureButton_Click(sender As Object, e As RibbonControlEventArgs) Handles WebCaptureButton.Click
 
     ' 聚光灯实现（跟随鼠标选中整行和整列并高亮）
     Protected MustOverride Sub SpotlightButton_Click(sender As Object, e As RibbonControlEventArgs) Handles SpotlightButton.Click

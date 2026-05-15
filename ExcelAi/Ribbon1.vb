@@ -13,7 +13,7 @@ Public Class Ribbon1
     Protected Overrides Sub ChatButton_Click(sender As Object, e As RibbonControlEventArgs)
         Globals.ThisAddIn.ShowChatTaskPane()
     End Sub
-    Protected Overrides Sub WebResearchButton_Click(sender As Object, e As RibbonControlEventArgs)
+    Protected Overrides Sub WebCaptureButton_Click(sender As Object, e As RibbonControlEventArgs)
         Globals.ThisAddIn.ShowChatTaskPane()
     End Sub ' 修改 SpotlightButton_Click 方法处理单击和双击
     Protected Overrides Sub SpotlightButton_Click(sender As Object, e As RibbonControlEventArgs)

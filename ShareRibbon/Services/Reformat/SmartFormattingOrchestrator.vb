@@ -785,6 +785,11 @@ Public Class SmartFormattingOrchestrator
                 If standard IsNot Nothing Then
                     Dim docAnalysis = _analyzer.Analyze(paragraphs, paragraphStyles, paragraphFontSizes, paragraphIsBold)
                     plan = GeneratePreviewPlan(docAnalysis, standard, paragraphs)
+                    ' 用户明确指定了标准时，用用户意图覆盖分析器猜测的文档类型
+                    If intent.TargetDocumentType <> DocumentType.Unknown Then
+                        plan.DetectedType = intent.TargetDocumentType
+                    End If
+                    plan.DocumentTypeName = standard.Name
                     _refinementContext.Update(docAnalysis, plan.SemanticMapping, standard, plan)
                 Else
                     plan = AnalyzeAndRecommend(paragraphs, paragraphStyles, paragraphFontSizes, paragraphIsBold)

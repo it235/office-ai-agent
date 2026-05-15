@@ -44,6 +44,11 @@ Public Class ChatControl
     Private _formatterAgent As ChatFormatterAgent = Nothing
     Private _activeReformatPlan As ReformatPreviewPlan = Nothing
 
+    ' 排版撤销快照
+    Private _reformatSnapshot As SemanticRenderingEngine.ReformatSnapshot = Nothing
+    Private _reformatSnapshotParagraphs As List(Of Object) = Nothing
+    Private _reformatSnapshotTypes As List(Of String) = Nothing
+
     ''' <summary>
     ''' 设置排版上下文，用于规则匹配后应用格式
     ''' </summary>
@@ -403,7 +408,9 @@ Public Class ChatControl
         If mapping.SemanticTags.Count > 0 Then
             docTypeCtx.AppendLine()
             docTypeCtx.AppendLine("各语义标签的识别规则：")
-            For Each tag In mapping.SemanticTags
+            Dim tags As List(Of SemanticTag) = mapping.SemanticTags
+            For i As Integer = 0 To tags.Count - 1
+                Dim tag As SemanticTag = tags(i)
                 If Not String.IsNullOrEmpty(tag.MatchHint) Then
                     docTypeCtx.AppendLine($"- {tag.TagId}({tag.DisplayName}): {tag.MatchHint}")
                 End If
@@ -457,11 +464,6 @@ Public Class ChatControl
             If mapping IsNot Nothing Then
                 Dim systemPrompt = SemanticPromptBuilder.BuildSemanticTaggingPrompt(mapping, paragraphTexts)
                 SetReformatContext(allParagraphs.Cast(Of Object).ToList(), paragraphStyles, paragraphTypes, mapping)
-                Try
-                    wordApp.UndoRecord.StartCustomRecord("AI排版")
-                Catch ex As Exception
-                    Debug.WriteLine($"StartCustomRecord 失败: {ex.Message}")
-                End Try
                 Await Send("请使用「" & guide.Name & "」排版规范对选中内容进行语义标注。", systemPrompt, False, "semantic_reformat")
             Else
                 Dim conversionPrompt = StyleGuideConverter.BuildConversionPrompt(guide.GuideContent)
@@ -478,18 +480,13 @@ Public Class ChatControl
 
     ' ================== Smart Reformat v2 Methods ==================
 
-    ''' <summary>转义JS字符串中的特殊字符</summary>
-    Private Function EscapeForJs(text As String) As String
-        Return text.Replace("\", "\\").Replace("`", "\`").Replace("$", "\$").Replace(vbCr, "").Replace(vbLf, "\n")
-    End Function
-
     ''' <summary>获取或创建 ChatFormatterAgent 实例</summary>
     Private Function GetFormatterAgent() As ChatFormatterAgent
         If _formatterAgent Is Nothing Then
             ' 共享ReformatSvc中的编排器实例，确保微调上下文一致
             _formatterAgent = New ChatFormatterAgent(
                 AddressOf ExecuteJavaScriptAsyncJS,
-                AddressOf EscapeForJs,
+                AddressOf JsUtil.EscapeForJs,
                 orchestrator:=ReformatSvc.ChatFormatterAgent.Orchestrator)
         End If
         Return _formatterAgent
@@ -589,6 +586,41 @@ Public Class ChatControl
         Await ApplyReformatPlan()
     End Sub
 
+    ''' <summary>智能排版 v2：撤销排版（从快照恢复）</summary>
+    Protected Overrides Sub HandleUndoReformat(jsonDoc As JObject)
+        If _reformatSnapshot Is Nothing OrElse _reformatSnapshotParagraphs Is Nothing Then
+            GlobalStatusStrip.ShowWarning("没有可撤销的排版操作。")
+            Return
+        End If
+
+        Dim wordApp = Globals.ThisAddIn.Application
+        If wordApp Is Nothing Then
+            GlobalStatusStrip.ShowWarning("无法获取Word应用对象。")
+            Return
+        End If
+
+        Dim screenUpdated As Boolean = False
+        Try
+            wordApp.ScreenUpdating = False
+            screenUpdated = True
+            Dim restoredCount = SemanticRenderingEngine.RestoreFormatSnapshot(
+                _reformatSnapshot, _reformatSnapshotParagraphs, _reformatSnapshotTypes)
+            GlobalStatusStrip.ShowInfo($"排版已撤销，恢复 {restoredCount} 个段落。")
+            Debug.WriteLine($"排版撤销完成: {restoredCount}/{_reformatSnapshot.ParagraphCount} 个段落已恢复")
+        Catch ex As Exception
+            Debug.WriteLine($"HandleUndoReformat 失败: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"撤销排版失败: {ex.Message}")
+        Finally
+            If screenUpdated Then
+                Try : wordApp.ScreenUpdating = True : Catch : End Try
+            End If
+            ' 无论成功失败都清除快照（避免残留状态）
+            _reformatSnapshot = Nothing
+            _reformatSnapshotParagraphs = Nothing
+            _reformatSnapshotTypes = Nothing
+        End Try
+    End Sub
+
     ''' <summary>智能排版 v2：微调排版方案</summary>
     Protected Overrides Async Sub HandleRefineSmartReformat(jsonDoc As JObject)
         Try
@@ -614,6 +646,9 @@ Public Class ChatControl
             Dim refinedPlan = agent.Orchestrator.ApplyRefinement(instruction)
             If refinedPlan IsNot Nothing Then
                 _activeReformatPlan = refinedPlan
+
+                ' 同步 V1 上下文，确保"应用排版"使用最新数据
+                SetReformatContext(allParagraphs.Cast(Of Object).ToList(), paragraphStyles, paragraphTypes, refinedPlan.SemanticMapping)
 
                 ' 重新生成卡片
                 Dim html = agent.GenerateFormattingCardHtml(refinedPlan)
@@ -649,7 +684,28 @@ Public Class ChatControl
                 End If
 
                 Dim agent = GetFormatterAgent()
-                Dim plan = agent.Orchestrator.AnalyzeAndRecommend(paragraphTexts)
+
+                ' 收集字体大小和加粗信息用于增强分析
+                Dim paragraphFontSizes As New List(Of Single)()
+                Dim paragraphIsBold As New List(Of Boolean)()
+                For Each p As Microsoft.Office.Interop.Word.Paragraph In allParagraphs
+                    Try
+                        Dim fRange = p.Range
+                        If fRange.Font IsNot Nothing Then
+                            paragraphFontSizes.Add(If(fRange.Font.Size > 0, fRange.Font.Size, 10.5F))
+                            Dim boldRaw As Object = fRange.Font.Bold
+                            paragraphIsBold.Add(boldRaw IsNot Nothing AndAlso (CInt(boldRaw) <> 0))
+                        Else
+                            paragraphFontSizes.Add(10.5F)
+                            paragraphIsBold.Add(False)
+                        End If
+                    Catch
+                        paragraphFontSizes.Add(10.5F)
+                        paragraphIsBold.Add(False)
+                    End Try
+                Next
+
+                Dim plan = agent.Orchestrator.AnalyzeAndRecommend(paragraphTexts, paragraphStyles, paragraphFontSizes, paragraphIsBold)
                 If plan IsNot Nothing Then
                     _activeReformatPlan = plan
                     Dim html = agent.GenerateFormattingCardHtml(plan)
@@ -843,6 +899,183 @@ Public Class ChatControl
             Catch fallbackEx As Exception
                 Debug.WriteLine($"HandleChatDrivenReformat fallback error: {fallbackEx.Message}")
             End Try
+        End Try
+    End Sub
+
+    ' ================== 校对专注模式 ==================
+
+    ''' <summary>
+    ''' 校对专注模式实例
+    ''' </summary>
+    Private _proofreadFocusMode As SmartProofreadFocusMode = Nothing
+
+    ''' <summary>
+    ''' 当前校对的段落列表（用于结果处理）
+    ''' </summary>
+    Private _proofreadParagraphs As List(Of String) = Nothing
+
+    ''' <summary>
+    ''' 校对时用户选中的 Range（用于替换操作限定范围）
+    ''' </summary>
+    Private _proofreadSelectionRange As Object = Nothing
+
+    ''' <summary>
+    ''' 获取或创建校对专注模式实例
+    ''' </summary>
+    Private Function GetProofreadFocusMode() As SmartProofreadFocusMode
+        If _proofreadFocusMode Is Nothing Then
+            _proofreadFocusMode = New SmartProofreadFocusMode(
+                AddressOf ExecuteJavaScriptAsyncJS,
+                AddressOf ApplyCorrectionToWord)
+        End If
+        Return _proofreadFocusMode
+    End Function
+
+    ''' <summary>
+    ''' 处理校对专注模式的消息
+    ''' </summary>
+    Protected Overrides Sub HandleProofreadFocusMode(jsonDoc As JObject)
+        Try
+            Dim action As String = If(jsonDoc("action")?.ToString(), "")
+            Dim proofreadMode = GetProofreadFocusMode()
+
+            Select Case action
+                Case "accept"
+                    Dim issueId As String = If(jsonDoc("issueId")?.ToString(), "")
+                    Task.Run(Async Function()
+                                 Await proofreadMode.AcceptCorrectionAsync(issueId)
+                             End Function)
+
+                Case "ignore"
+                    Dim issueId As String = If(jsonDoc("issueId")?.ToString(), "")
+                    Task.Run(Async Function()
+                                 Await proofreadMode.IgnoreIssueAsync(issueId)
+                             End Function)
+
+                Case "acceptAll"
+                    Task.Run(Async Function()
+                                 Await proofreadMode.AcceptAllAsync()
+                             End Function)
+
+                Case "exit"
+                    Task.Run(Async Function()
+                                 Await proofreadMode.ExitAsync()
+                             End Function)
+            End Select
+        Catch ex As Exception
+            Debug.WriteLine($"HandleProofreadFocusMode 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 将修正应用到Word文档（限定在选区内搜索替换）
+    ''' </summary>
+    Private Async Function ApplyCorrectionToWord(original As String, corrected As String) As Task(Of Boolean)
+        Return Await Task.Run(Function()
+                                  Try
+                                      Dim wordApp = Globals.ThisAddIn.Application
+                                      If wordApp Is Nothing Then Return False
+
+                                      ' 使用存储的选区范围进行替换，避免替换文档中其他位置
+                                      Dim searchRange = TryCast(_proofreadSelectionRange, Microsoft.Office.Interop.Word.Range)
+                                      If searchRange Is Nothing Then
+                                          ' 回退到当前选中范围
+                                          searchRange = TryCast(wordApp.Selection.Range, Microsoft.Office.Interop.Word.Range)
+                                      End If
+                                      If searchRange Is Nothing Then Return False
+
+                                      ' 在选区内查找并替换
+                                      With searchRange.Find
+                                          .Text = original
+                                          .Replacement.Text = corrected
+                                          .Forward = True
+                                          .Wrap = Microsoft.Office.Interop.Word.WdFindWrap.wdFindStop
+                                          .Format = False
+                                          .MatchCase = True
+                                          .MatchWholeWord = False
+
+                                          Dim replaced As Boolean = .Execute(Replace:=Microsoft.Office.Interop.Word.WdReplace.wdReplaceOne)
+                                          Return replaced
+                                      End With
+                                  Catch ex As Exception
+                                      Debug.WriteLine($"ApplyCorrectionToWord 出错: {ex.Message}")
+                                      Return False
+                                  End Try
+                              End Function)
+    End Function
+
+    ''' <summary>
+    ''' 执行校对分析（由Ribbon按钮调用）
+    ''' </summary>
+    Public Async Function ExecuteProofreadAsync() As Task
+        Try
+            Dim wordApp = Globals.ThisAddIn.Application
+            If wordApp Is Nothing Then Return
+
+            ' 获取选中内容
+            Dim selRange = wordApp.Selection.Range
+            If selRange Is Nothing OrElse String.IsNullOrWhiteSpace(selRange.Text) Then
+                GlobalStatusStrip.ShowWarning("请先选中需要校对的文本内容。")
+                Return
+            End If
+
+            ' 按段落收集文本
+            Dim paragraphs As New List(Of String)()
+            Dim sb As New StringBuilder()
+            sb.AppendLine("以下是需要校对的内容（按段落编号）：")
+
+            For Each p In selRange.Paragraphs
+                Dim paraText As String = If(p.Range.Text IsNot Nothing, p.Range.Text.ToString().TrimEnd(vbCr, vbLf), String.Empty)
+                If Not String.IsNullOrWhiteSpace(paraText) Then
+                    paragraphs.Add(paraText)
+                    sb.AppendLine($"[段落{paragraphs.Count - 1}] {paraText}")
+                End If
+            Next
+
+            If paragraphs.Count = 0 Then
+                GlobalStatusStrip.ShowWarning("选中的内容没有有效段落。")
+                Return
+            End If
+
+            ' 存储段落列表供结果处理使用
+            _proofreadParagraphs = paragraphs
+            ' 存储当前选区范围，供替换操作限定范围使用
+            _proofreadSelectionRange = selRange
+
+            ' 进入校对专注模式
+            Dim proofreadMode = GetProofreadFocusMode()
+            Await proofreadMode.EnterAsync()
+
+            ' 显示加载中提示
+            Await ExecuteJavaScriptAsyncJS("showProofreadModeIndicator(); showProofreadLoading();")
+            GlobalStatusStrip.ShowInfo("正在校对，请稍候...")
+
+            ' 构建校对提示词
+            Dim systemPrompt = ProofreadPromptBuilder.BuildFullDocumentPrompt(paragraphs)
+
+            ' 发送校对请求
+            Await Send(sb.ToString(), systemPrompt, False, "proofread")
+
+        Catch ex As Exception
+            Debug.WriteLine($"ExecuteProofreadAsync 出错: {ex.Message}")
+            GlobalStatusStrip.ShowWarning($"校对失败: {ex.Message}")
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 处理校对结果（在校对完成后调用）
+    ''' </summary>
+    Public Sub ProcessProofreadResult(aiResponse As String, paragraphs As List(Of String))
+        Try
+            Dim proofreadMode = GetProofreadFocusMode()
+            If proofreadMode Is Nothing Then Return
+
+            ' 异步执行校对分析
+            Task.Run(Async Function()
+                         Await proofreadMode.AnalyzeAsync(aiResponse, paragraphs, Globals.ThisAddIn.Application)
+                     End Function)
+        Catch ex As Exception
+            Debug.WriteLine($"ProcessProofreadResult 出错: {ex.Message}")
         End Try
     End Sub
 
@@ -1608,18 +1841,24 @@ Public Class ChatControl
                 End Try
             End If
 
-            ' 如果是审阅修订动作，解析并展示 revisions（前端会处理）
+            ' 如果是校对动作，调用校对专注模式处理结果
             If String.Equals(mode, "proofread", StringComparison.OrdinalIgnoreCase) Then
                 Try
                     Dim aiText As String = allPlainMarkdownBuffer.ToString()
-                    Dim revisions As JArray = TryExtractJsonArrayFromText(aiText)
-                    If revisions IsNot Nothing AndAlso revisions.Count > 0 Then
-                        _revisionsMap(_finalUuid) = revisions
-                        Dim jsRev As String = $"showRevisions('{_finalUuid}', {revisions.ToString(Formatting.None)});"
-                        ExecuteJavaScriptAsyncJS(jsRev)
+                    ' 调用校对专注模式处理结果（内联标注 + 侧边面板）
+                    If _proofreadParagraphs IsNot Nothing AndAlso _proofreadParagraphs.Count > 0 Then
+                        ProcessProofreadResult(aiText, _proofreadParagraphs)
+                    Else
+                        ' 如果没有段落列表，只显示前端 revisions
+                        Dim revisions As JArray = TryExtractJsonArrayFromText(aiText)
+                        If revisions IsNot Nothing AndAlso revisions.Count > 0 Then
+                            _revisionsMap(_finalUuid) = revisions
+                            Dim jsRev As String = $"showRevisions('{_finalUuid}', {revisions.ToString(Formatting.None)});"
+                            ExecuteJavaScriptAsyncJS(jsRev)
+                        End If
                     End If
                 Catch ex As Exception
-                    Debug.WriteLine("尝试解析并发送 revisions 时出错: " & ex.Message)
+                    Debug.WriteLine("校对结果处理出错: " & ex.Message)
                 End Try
             End If
 
@@ -2117,27 +2356,57 @@ Public Class ChatControl
 
             ' 使用渲染引擎应用格式
             Dim wordApp = Globals.ThisAddIn.Application
+            Dim undoStarted As Boolean = False
+            Dim renderResult As SemanticRenderingEngine.RenderResult = Nothing
+
+            ' 在应用前捕获格式快照（独立于Word UndoRecord的撤销机制）
+            Try
+                _reformatSnapshot = SemanticRenderingEngine.CaptureFormatSnapshot(_reformatParagraphs, _reformatTypes)
+                _reformatSnapshotParagraphs = _reformatParagraphs
+                _reformatSnapshotTypes = _reformatTypes
+                Debug.WriteLine($"排版快照已捕获: {_reformatSnapshot.ParagraphCount} 个段落")
+            Catch snapEx As Exception
+                _reformatSnapshot = Nothing
+                Debug.WriteLine($"捕获排版快照失败: {snapEx.Message}")
+            End Try
 
             ' 开始Undo快照（必须紧贴格式操作，跨async边界会失效）
             Try
                 wordApp.UndoRecord.StartCustomRecord("AI排版")
+                undoStarted = True
             Catch ex As Exception
                 Debug.WriteLine($"StartCustomRecord 失败: {ex.Message}")
             End Try
 
-            Dim renderResult = SemanticRenderingEngine.ApplySemanticFormatting(
-                validation.ValidatedTags, _reformatMapping, _reformatParagraphs, _reformatTypes, wordApp)
-
-            ' 结束Undo快照
+            ' 用指令方式应用格式（每条指令自带Rollback，支持逐条撤销）
             Try
-                wordApp.UndoRecord.EndCustomRecord()
-            Catch ex As Exception
-                Debug.WriteLine($"EndCustomRecord 失败: {ex.Message}")
+                renderResult = SemanticRenderingEngine.ApplySemanticFormattingViaInstructions(
+                    validation.ValidatedTags, _reformatMapping, _reformatParagraphs, _reformatTypes, wordApp)
+            Finally
+                ' 【关键】无论 ApplySemanticFormatting 是否抛出异常，都必须关闭UndoRecord
+                ' 否则Word撤销系统会锁死，后续所有Undo()调用都会失效
+                If undoStarted Then
+                    Try
+                        wordApp.UndoRecord.EndCustomRecord()
+                    Catch ex As Exception
+                        Debug.WriteLine($"EndCustomRecord 失败: {ex.Message}")
+                    End Try
+                End If
             End Try
 
-            ' 推送排版结果到前端
-            Dim resultJson = renderResult.ToJson()
-            Await ExecuteJavaScriptAsyncJS($"showReformatResult({resultJson.ToString(Formatting.None)});")
+            ' 推送排版结果到前端（含内置撤销按钮）
+            If renderResult IsNot Nothing Then
+                Dim resultJson = renderResult.ToJson()
+                Await ExecuteJavaScriptAsyncJS($"showReformatResult({resultJson.ToString(Formatting.None)});")
+            Else
+                ' ApplySemanticFormatting 返回了 Nothing（理论上不应该）
+                Await ShowReformatError("排版渲染引擎返回空结果")
+                ' 清理但不抛异常
+                _reformatParagraphs = Nothing
+                _reformatStyles = Nothing
+                _reformatTypes = Nothing
+                Return
+            End If
 
             ' 显示状态
             Dim resultMsg = $"排版完成，共处理 {renderResult.AppliedCount} 个段落"
@@ -2213,14 +2482,6 @@ Public Class ChatControl
 
             ' 构建语义标注提示词
             Dim systemPrompt = SemanticPromptBuilder.BuildSemanticTaggingPrompt(mapping, paragraphTexts)
-
-            ' 开始Undo快照
-            Dim wordApp = Globals.ThisAddIn.Application
-            Try
-                wordApp.UndoRecord.StartCustomRecord("AI排版")
-            Catch ex As Exception
-                Debug.WriteLine($"StartCustomRecord 失败: {ex.Message}")
-            End Try
 
             ' 发送语义标注请求
             Await Send("规范已解析，现在进行语义标注。", systemPrompt, False, "semantic_reformat")
@@ -2509,7 +2770,7 @@ Public Class ChatControl
     End Sub
 
     ''' <summary>
-    ''' 执行JSON命令（重写基类方法）- 带严格验证
+    ''' 执行JSON命令（重写基类方法）- 带严格验证，支持DSL和旧版格式
     ''' </summary>
     Protected Overrides Function ExecuteJsonCommand(jsonCode As String, preview As Boolean) As Boolean
         Try
@@ -2519,6 +2780,13 @@ Public Class ChatControl
                 Return True ' 返回True表示"成功处理"，避免显示错误
             End If
 
+            ' === DSL格式检测与转换 ===
+            Dim detectedFormat = DslProtocolDetector.DetectFormat(jsonCode)
+            If detectedFormat = InstructionFormat.DslJson OrElse detectedFormat = InstructionFormat.ProofreadJson Then
+                Return ExecuteDslCommand(jsonCode, preview)
+            End If
+
+            ' === 旧版JSON命令格式（兼容） ===
             ' 使用严格的结构验证
             Dim errorMessage As String = ""
             Dim normalizedJson As JToken = Nothing
@@ -2555,6 +2823,284 @@ Public Class ChatControl
             ShareRibbon.GlobalStatusStrip.ShowWarning($"执行失败: {ex.Message}")
             Return False
         End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行DSL指令 - 桥接到已有的Word排版渲染管道
+    ''' </summary>
+    Private Function ExecuteDslCommand(jsonCode As String, preview As Boolean) As Boolean
+        Try
+            Dim instructions = Instruction.ParseInstructions(jsonCode)
+
+            If instructions Is Nothing OrElse instructions.Count = 0 Then
+                ShareRibbon.GlobalStatusStrip.ShowWarning("DSL指令解析为空")
+                Return False
+            End If
+
+            ' 预览模式
+            If preview Then
+                Dim previewJson As JToken = Nothing
+                Try
+                    previewJson = JObject.Parse(jsonCode)
+                Catch
+                    previewJson = New JObject()
+                End Try
+                If Not ShareRibbon.CommandPreviewForm.ShowPreview($"DSL指令预览 - 共 {instructions.Count} 条指令", previewJson) Then
+                    ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
+                    Return True
+                End If
+            End If
+
+            ' 桥接到已有排版管道：DSL指令 → 语义标签 → SemanticRenderingEngine
+            If _reformatMapping Is Nothing OrElse _reformatParagraphs Is Nothing Then
+                ShareRibbon.GlobalStatusStrip.ShowWarning("没有排版上下文，请先选择内容并发起排版")
+                Return False
+            End If
+
+            Dim wordApp = Globals.ThisAddIn.Application
+            Dim undoStarted As Boolean = False
+
+            Try
+                wordApp.UndoRecord.StartCustomRecord("AI排版(DSL)")
+                undoStarted = True
+            Catch ex As Exception
+                Debug.WriteLine($"DSL StartCustomRecord 失败: {ex.Message}")
+            End Try
+
+            Dim appliedCount As Integer = 0
+            Try
+                ' 遍历DSL指令，转换为Word DOM操作
+                For Each inst In instructions
+                    Try
+                        Dim opResult = ApplySingleDslInstruction(inst, wordApp)
+                        If opResult Then appliedCount += 1
+                    Catch ex As Exception
+                        Debug.WriteLine($"DSL指令 {inst.Id} 执行失败: {ex.Message}")
+                    End Try
+                Next
+            Finally
+                If undoStarted Then
+                    Try
+                        wordApp.UndoRecord.EndCustomRecord()
+                    Catch ex As Exception
+                        Debug.WriteLine($"DSL EndCustomRecord 失败: {ex.Message}")
+                    End Try
+                End If
+            End Try
+
+            If appliedCount > 0 Then
+                ShareRibbon.GlobalStatusStrip.ShowInfo($"DSL排版完成，应用了 {appliedCount}/{instructions.Count} 条指令")
+            Else
+                ShareRibbon.GlobalStatusStrip.ShowWarning($"DSL指令未能应用任何格式（共{instructions.Count}条）")
+            End If
+
+            Return appliedCount > 0
+
+        Catch ex As Exception
+            Debug.WriteLine($"[ExecuteDslCommand] 出错: {ex.Message}")
+            ShareRibbon.GlobalStatusStrip.ShowWarning($"DSL执行失败: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 执行单条DSL指令到Word DOM
+    ''' </summary>
+    Private Function ApplySingleDslInstruction(inst As Instruction, wordApp As Object) As Boolean
+        Select Case inst.Operation
+            Case "setParagraphStyle"
+                Return ApplyDslParagraphStyle(inst, wordApp)
+            Case "setCharacterFormat"
+                Return ApplyDslCharacterFormat(inst, wordApp)
+            Case "setPageSetup"
+                Return ApplyDslPageSetup(inst, wordApp)
+            Case "insertBreak"
+                Return ApplyDslInsertBreak(inst, wordApp)
+            Case "suggestCorrection", "suggestFormatFix", "suggestStyleUnify", "markForReview"
+                ' 校对类指令不产生DOM修改，仅建议
+                Debug.WriteLine($"DSL校对建议: {inst.GetDescription()}")
+                Return True
+            Case Else
+                Debug.WriteLine($"DSL未知指令类型: {inst.Operation}")
+                Return False
+        End Select
+    End Function
+
+    ''' <summary>
+    ''' DSL: 设置段落样式
+    ''' </summary>
+    Private Function ApplyDslParagraphStyle(inst As Instruction, wordApp As Object) As Boolean
+        Dim targetIndex = CInt(inst.GetParam("target.index", -1))
+        If targetIndex < 0 OrElse _reformatParagraphs Is Nothing OrElse targetIndex >= _reformatParagraphs.Count Then
+            Return False
+        End If
+
+        Dim para = _reformatParagraphs(targetIndex)
+        Dim range As Object = Nothing
+        Try
+            range = para.GetType().InvokeMember("Range", Reflection.BindingFlags.GetProperty, Nothing, para, Nothing)
+        Catch
+            Return False
+        End Try
+
+        ' 应用样式名
+        Dim styleName = inst.GetParam("styleName", String.Empty)?.ToString()
+        If Not String.IsNullOrEmpty(styleName) Then
+            Try
+                range.GetType().InvokeMember("Style", Reflection.BindingFlags.SetProperty, Nothing, range,
+                    New Object() {wordApp.ActiveDocument.Styles(styleName)})
+            Catch
+            End Try
+        End If
+
+        ' 应用字体设置
+        Dim font = inst.GetParam("font", Nothing)
+        If font IsNot Nothing Then
+            Try
+                Dim fontObj = range.GetType().InvokeMember("Font", Reflection.BindingFlags.GetProperty, Nothing, range, Nothing)
+                Dim fontName = font("name")?.ToString()
+                If Not String.IsNullOrEmpty(fontName) Then
+                    fontObj.GetType().InvokeMember("Name", Reflection.BindingFlags.SetProperty, Nothing, fontObj, New Object() {fontName})
+                End If
+                Dim fontSize = font("size")
+                If fontSize IsNot Nothing Then
+                    fontObj.GetType().InvokeMember("Size", Reflection.BindingFlags.SetProperty, Nothing, fontObj, New Object() {CSng(CType(fontSize, JToken).Value(Of Single)())})
+                End If
+            Catch
+            End Try
+        End If
+
+        ' 应用对齐
+        Dim alignment = inst.GetParam("alignment", String.Empty)?.ToString()
+        If Not String.IsNullOrEmpty(alignment) Then
+            Try
+                Dim alignValue As Integer = GetWordAlignmentValue(alignment)
+                range.GetType().InvokeMember("ParagraphFormat", Reflection.BindingFlags.GetProperty, Nothing, range, Nothing) _
+                    .GetType().InvokeMember("Alignment", Reflection.BindingFlags.SetProperty, Nothing,
+                    range.GetType().InvokeMember("ParagraphFormat", Reflection.BindingFlags.GetProperty, Nothing, range, Nothing),
+                    New Object() {alignValue})
+            Catch
+            End Try
+        End If
+
+        Return True
+    End Function
+
+    ''' <summary>
+    ''' DSL: 设置字符格式
+    ''' </summary>
+    Private Function ApplyDslCharacterFormat(inst As Instruction, wordApp As Object) As Boolean
+        Dim targetIndex = CInt(inst.GetParam("target.index", -1))
+        If targetIndex < 0 OrElse _reformatParagraphs Is Nothing OrElse targetIndex >= _reformatParagraphs.Count Then
+            Return False
+        End If
+
+        Dim para = _reformatParagraphs(targetIndex)
+        Dim range As Object = Nothing
+        Try
+            range = para.GetType().InvokeMember("Range", Reflection.BindingFlags.GetProperty, Nothing, para, Nothing)
+        Catch
+            Return False
+        End Try
+
+        Dim font = inst.GetParam("font", Nothing)
+        If font IsNot Nothing Then
+            Try
+                Dim fontObj = range.GetType().InvokeMember("Font", Reflection.BindingFlags.GetProperty, Nothing, range, Nothing)
+
+                Dim bold = font("bold")
+                If bold IsNot Nothing Then
+                    fontObj.GetType().InvokeMember("Bold", Reflection.BindingFlags.SetProperty, Nothing, fontObj, New Object() {Convert.ToInt32(CType(bold, JToken).Value(Of Boolean)())})
+                End If
+
+                Dim italic = font("italic")
+                If italic IsNot Nothing Then
+                    fontObj.GetType().InvokeMember("Italic", Reflection.BindingFlags.SetProperty, Nothing, fontObj, New Object() {Convert.ToInt32(CType(italic, JToken).Value(Of Boolean)())})
+                End If
+
+                Dim fontName = font("name")?.ToString()
+                If Not String.IsNullOrEmpty(fontName) Then
+                    fontObj.GetType().InvokeMember("Name", Reflection.BindingFlags.SetProperty, Nothing, fontObj, New Object() {fontName})
+                End If
+
+                Dim fontSize = font("size")
+                If fontSize IsNot Nothing Then
+                    fontObj.GetType().InvokeMember("Size", Reflection.BindingFlags.SetProperty, Nothing, fontObj, New Object() {CSng(CType(fontSize, JToken).Value(Of Single)())})
+                End If
+
+                Dim colorValue = font("color")
+                If colorValue IsNot Nothing Then
+                    fontObj.GetType().InvokeMember("Color", Reflection.BindingFlags.SetProperty, Nothing, fontObj, New Object() {CInt(CType(colorValue, JToken).Value(Of Integer)())})
+                End If
+            Catch ex As Exception
+                Debug.WriteLine($"ApplyDslCharacterFormat: {ex.Message}")
+            End Try
+        End If
+
+        Return True
+    End Function
+
+    ''' <summary>
+    ''' DSL: 设置页面格式
+    ''' </summary>
+    Private Function ApplyDslPageSetup(inst As Instruction, wordApp As Object) As Boolean
+        Try
+            Dim section = wordApp.ActiveDocument.Sections(1)
+            Dim pageSetup = section.GetType().InvokeMember("PageSetup", Reflection.BindingFlags.GetProperty, Nothing, section, Nothing)
+
+            Dim margins = inst.GetParam("margins", Nothing)
+            If margins IsNot Nothing Then
+                Dim topVal = margins("top")
+                If topVal IsNot Nothing Then
+                    pageSetup.GetType().InvokeMember("TopMargin", Reflection.BindingFlags.SetProperty, Nothing, pageSetup, New Object() {CSng(CType(topVal, JToken).Value(Of Single)())})
+                End If
+                Dim bottomVal = margins("bottom")
+                If bottomVal IsNot Nothing Then
+                    pageSetup.GetType().InvokeMember("BottomMargin", Reflection.BindingFlags.SetProperty, Nothing, pageSetup, New Object() {CSng(CType(bottomVal, JToken).Value(Of Single)())})
+                End If
+                Dim leftVal = margins("left")
+                If leftVal IsNot Nothing Then
+                    pageSetup.GetType().InvokeMember("LeftMargin", Reflection.BindingFlags.SetProperty, Nothing, pageSetup, New Object() {CSng(CType(leftVal, JToken).Value(Of Single)())})
+                End If
+                Dim rightVal = margins("right")
+                If rightVal IsNot Nothing Then
+                    pageSetup.GetType().InvokeMember("RightMargin", Reflection.BindingFlags.SetProperty, Nothing, pageSetup, New Object() {CSng(CType(rightVal, JToken).Value(Of Single)())})
+                End If
+            End If
+
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine($"ApplyDslPageSetup: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' DSL: 插入分隔符
+    ''' </summary>
+    Private Function ApplyDslInsertBreak(inst As Instruction, wordApp As Object) As Boolean
+        Try
+            Dim breakType = inst.GetParam("breakType", "page")?.ToString()
+            Dim wdBreakType As Integer = If(breakType = "page", 7, If(breakType = "line", 6, 7))
+            wordApp.Selection.GetType().InvokeMember("InsertBreak", Reflection.BindingFlags.InvokeMethod, Nothing, wordApp.Selection, New Object() {wdBreakType})
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine($"ApplyDslInsertBreak: {ex.Message}")
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 获取Word对齐常量值
+    ''' </summary>
+    Private Function GetWordAlignmentValue(alignment As String) As Integer
+        Select Case alignment.ToLower()
+            Case "left" : Return 0
+            Case "center" : Return 1
+            Case "right" : Return 2
+            Case "justify" : Return 3
+            Case Else : Return 0
+        End Select
     End Function
 
     ''' <summary>

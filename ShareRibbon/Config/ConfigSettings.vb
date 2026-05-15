@@ -23,5 +23,10 @@ Public Class ConfigSettings
     ' Agent 架构切换：true=使用新 AgentKernel，false=保留旧 RalphLoop/RalphAgent
     Public Shared Property UseNewAgentKernel As Boolean = True
 
+    ' Loop 框架配置
+    Public Shared Property UseLoopFramework As Boolean = True
+    Public Shared Property UseAdvancedPlanning As Boolean = True
+    Public Shared Property MaxLoopIterations As Integer = 3
+
     Public Const OfficeAiAppDataFolder As String = "OfficeAiAppData"
 End Class

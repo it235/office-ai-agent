@@ -437,20 +437,67 @@ Public Class DocumentAnalyzer
         For Each keyword In OfficialDocKeywords
             If fullText.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0 Then
                 matchedCount += 1
-                score += 0.08
+                score += 0.05
             End If
         Next
 
-        ' 发文字号模式：〔2024〕或 〔2025〕等
-        If Regex.IsMatch(fullText, "〔\d{4}〕") Then
+        ' ===== 新增：公文标题模式识别 =====
+        ' 关于XXX的通知/决定/批复/请示/报告/函
+        If Regex.IsMatch(fullText, "关于.{2,30}的(通知|决定|批复|请示|报告|函)") Then
+            score += 0.35
+        End If
+
+        ' XX局关于XXX的通知/决定 等变体
+        If Regex.IsMatch(fullText, ".{2,10}关于.{2,20}的(通知|决定|批复)") Then
             score += 0.3
+        End If
+
+        ' ===== 新增：发文字号变体识别 =====
+        ' 标准格式：〔2024〕、〔2025〕等
+        If Regex.IsMatch(fullText, "〔\d{4}〕") Then
+            score += 0.25
+        End If
+
+        ' 变体格式1：〔2024〕X号
+        If Regex.IsMatch(fullText, "〔\d{4}〕\d*号") Then
+            score += 0.25
+        End If
+
+        ' 变体格式2：（2024）或（2025）
+        If Regex.IsMatch(fullText, "[（(]\d{4}[）)]") Then
+            score += 0.2
+        End If
+
+        ' 变体格式3：〔2024〕x月x日
+        If Regex.IsMatch(fullText, "〔\d{4}〕\d{1,2}月") Then
+            score += 0.2
+        End If
+
+        ' ===== 新增：公文常用结语识别 =====
+        If Regex.IsMatch(fullText, "特此通知") Then
+            score += 0.2
+        End If
+        If Regex.IsMatch(fullText, "现印发给你们") Then
+            score += 0.15
+        End If
+        If Regex.IsMatch(fullText, "请遵照执行") Then
+            score += 0.15
+        End If
+        If Regex.IsMatch(fullText, "请各|请各县|请各市") Then
+            score += 0.15
+        End If
+        If Regex.IsMatch(fullText, "经研究决定") Then
+            score += 0.15
+        End If
+        If Regex.IsMatch(fullText, "现予公布") Then
+            score += 0.15
         End If
 
         ' 红色横线特征（公文常见分隔线）
         If paragraphs.Any(Function(p) p.Trim() = "──" OrElse
                                        p.Trim().All(Function(c) c = "─"c OrElse c = "—"c) AndAlso
                                        p.Trim().Length >= 5) Then
-            score += 0.15
+            score += 0.1
         End If
 
         ' 模板头特征：顶格主送机关
@@ -460,19 +507,55 @@ Public Class DocumentAnalyzer
             score += 0.15
         End If
 
-        ' 落款特征
+        ' ===== 新增：落款特征增强 =====
+        ' 成文日期格式验证（多种可能）
+        Dim hasDate = paragraphs.Any(Function(p) Regex.IsMatch(p.Trim(), "^\d{4}年\d{1,2}月\d{1,2}日$"))
+        If hasDate Then
+            score += 0.15
+        End If
+
+        ' 机关落款
         If paragraphs.Any(Function(p) p.Trim().EndsWith("办公室") OrElse
                                        p.Trim().EndsWith("局") OrElse
                                        p.Trim().EndsWith("委员会") OrElse
-                                       p.Trim().EndsWith("部")) AndAlso
-           paragraphs.Any(Function(p) Regex.IsMatch(p.Trim(), "^\d{4}年\d{1,2}月\d{1,2}日$")) Then
-            score += 0.2
+                                       p.Trim().EndsWith("部") OrElse
+                                       p.Trim().EndsWith("厅") OrElse
+                                       p.Trim().EndsWith("政府") OrElse
+                                       p.Trim().EndsWith("党委")) Then
+            score += 0.1
+        End If
+
+        ' 同时有落款机关和日期
+        If hasDate AndAlso paragraphs.Any(Function(p)
+            Return p.Trim().EndsWith("办公室") OrElse
+                   p.Trim().EndsWith("局") OrElse
+                   p.Trim().EndsWith("委员会") OrElse
+                   p.Trim().EndsWith("部") OrElse
+                   p.Trim().EndsWith("厅") OrElse
+                   p.Trim().EndsWith("政府") OrElse
+                   p.Trim().EndsWith("党委")
+        End Function) Then
+            score += 0.15
+        End If
+
+        ' ===== 新增：公文结构特征 =====
+        ' 段首缩进特征（正文通常首行缩进）
+        Dim indentedParagraphs = paragraphs.Where(Function(p)
+            If String.IsNullOrWhiteSpace(p) Then Return False
+            Dim trimmed = p.Trim()
+            Return trimmed.Length > 0 AndAlso Char.IsWhiteSpace(trimmed(0)) AndAlso trimmed.Length > 3
+        End Function).Count()
+        If indentedParagraphs > paragraphs.Count * 0.3 Then
+            score += 0.1
         End If
 
         ' 关键词覆盖度修正
         Dim keywordRatio = matchedCount / OfficialDocKeywords.Length
-        If keywordRatio > 0.3 Then
-            score += 0.15
+        If keywordRatio > 0.2 Then
+            score += 0.1
+        End If
+        If keywordRatio > 0.35 Then
+            score += 0.1
         End If
 
         Return Math.Min(score, 1.0)
@@ -1038,18 +1121,14 @@ Public Class DocumentAnalyzer
 
         Select Case docType
             Case DocumentType.OfficialDocument
-                ids.Add("gbt9704-2012")
-                ids.Add("official-document-simple")
+                ids.Add("gbt-9704-2012")
             Case DocumentType.AcademicPaper
-                ids.Add("academic-paper-generic")
+                ids.Add("academic-general")
                 If docStructure.Headings.Count >= 3 Then
-                    ids.Add("academic-paper-structured")
+                    ids.Add("gbt-7714-2015")
                 End If
             Case DocumentType.BusinessReport
-                ids.Add("business-report-generic")
-                If docStructure.TableCount > 0 Then
-                    ids.Add("business-report-data")
-                End If
+                ids.Add("business-report")
             Case DocumentType.Contract
                 ids.Add("contract-generic")
             Case DocumentType.[Resume]

@@ -73,6 +73,9 @@ Namespace Agent
                 _skillRegistry.LoadFromDirectory(SkillsDirectory)
             End If
 
+            ' 将 Skill 脚本注册为可执行工具
+            _toolRegistry.LoadSkillScriptsAsTools()
+
             ' 绑定回调
             _loopEngine.SendAIRequest = Function(prompt, system, history)
                                             Return SendAIRequest(prompt, system, history)

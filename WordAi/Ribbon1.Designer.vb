@@ -43,7 +43,7 @@ Partial Class Ribbon1
     '不要使用代码编辑器修改它。
     <System.Diagnostics.DebuggerStepThrough()>
     Private Overloads Sub InitializeComponent()
-        Me.TabAI.Label = "Word AI"  ' 修改标签为 Excel 特定的
+        Me.TabAI.Label = "Word AI"
 
         ' 设置特定的图标
         Me.ConfigApiButton.Image = ShareRibbon.SharedResources.AiApiConfig
@@ -57,7 +57,7 @@ Partial Class Ribbon1
         Me.AboutButton.Image = ShareRibbon.SharedResources.About
         Me.ClearCacheButton.Image = ShareRibbon.SharedResources.Clear
 
-        ' 设置 Excel 特定的提示
+        ' 设置 Word 特定的提示
         Me.DataAnalysisButton.SuperTip = "可选中提出的问题和数据后AI帮你整理到另外一个sheet中"
         Me.PromptConfigButton.SuperTip = "优秀的提示词可以更好的帮AI确定自己的定位，让输出内容更符合你的期望"
         Me.ChatButton.SuperTip = "像使用客户端一样与AI对话，聊天更加便捷"
@@ -68,6 +68,7 @@ Partial Class Ribbon1
         Me.MCPButton.Image = ShareRibbon.SharedResources.Mcp1
         Me.BatchDataGenButton.Visible = False
         Me.SpotlightButton.Visible = False
+        Me.DataAnalysisButton.Visible = False
 
         Me.DeepseekButton.Image = ShareRibbon.SharedResources.Deepseek
         Me.DoubaoButton.Image = ShareRibbon.SharedResources.Doubao
@@ -78,8 +79,6 @@ Partial Class Ribbon1
         Me.StudyButton.Image = ShareRibbon.SharedResources.Help
         Me.ProofreadButton.Image = ShareRibbon.SharedResources.Audit
         Me.ReformatButton.Image = ShareRibbon.SharedResources.Papers
-
-        Me.TemplateFormatButton.Visible = False
     End Sub
 
 End Class

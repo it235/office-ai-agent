@@ -32,6 +32,12 @@ Public Class ChatFormatterAgent
     Private ReadOnly _orchestrator As SmartFormattingOrchestrator
     Private ReadOnly _executeScript As Func(Of String, Task)
     Private ReadOnly _escapeJs As Func(Of String, String)
+    Private ReadOnly _textAnalyzer As Func(Of String, String, Task(Of String))
+
+    ''' <summary>
+    ''' 存储最后AI标注的段落结果（用于应用排版时）
+    ''' </summary>
+    Private _lastTaggedParagraphs As List(Of TaggedParagraph) = Nothing
 
     ''' <summary>
     ''' 构造函数
@@ -44,6 +50,7 @@ Public Class ChatFormatterAgent
 
         _executeScript = executeScript
         _escapeJs = escapeJs
+        _textAnalyzer = textAnalyzer
         _orchestrator = If(orchestrator, New SmartFormattingOrchestrator())
     End Sub
 
@@ -271,6 +278,162 @@ Public Class ChatFormatterAgent
         }
 
         Return newRequestKeywords.Any(Function(k) message.IndexOf(k, StringComparison.OrdinalIgnoreCase) >= 0)
+    End Function
+
+    ''' <summary>
+    ''' 获取最后AI标注的段落结果（用于应用排版时）
+    ''' </summary>
+    Public Function GetLastTaggedParagraphs() As List(Of TaggedParagraph)
+        Return _lastTaggedParagraphs
+    End Function
+
+    ''' <summary>
+    ''' 使用AI进行语义标注
+    ''' 调用AI分析文档内容，返回每个段落对应的语义标签
+    ''' </summary>
+    ''' <param name="paragraphs">文档段落文本列表</param>
+    ''' <param name="mapping">当前排版标准的语义样式映射</param>
+    ''' <param name="paragraphStyles">段落样式名称列表（可选，用于增强AI判断）</param>
+    ''' <param name="documentTypeContext">文档类型上下文描述（可选）</param>
+    ''' <param name="detectedHeadings">已检测到的标题结构（可选）</param>
+    Public Async Function PerformAISemanticTaggingAsync(
+        paragraphs As List(Of String),
+        mapping As SemanticStyleMapping,
+        Optional paragraphStyles As List(Of String) = Nothing,
+        Optional documentTypeContext As String = Nothing,
+        Optional detectedHeadings As String = Nothing) As Task(Of List(Of TaggedParagraph))
+
+        _lastTaggedParagraphs = Nothing
+
+        ' 如果没有AI分析器，回退到基于规则的简单标注（全部body.normal）
+        If _textAnalyzer Is Nothing Then
+            Debug.WriteLine("[ChatFormatterAgent] 没有配置AI分析器，使用默认标注")
+            Dim fallback As New List(Of TaggedParagraph)()
+            For i = 0 To paragraphs.Count - 1
+                fallback.Add(New TaggedParagraph(i, "body.normal"))
+            Next
+            _lastTaggedParagraphs = fallback
+            Return fallback
+        End If
+
+        Try
+            ' 构建AI提示词
+            Dim originalIndices As New List(Of Integer)()
+            For i = 0 To paragraphs.Count - 1
+                originalIndices.Add(i)
+            Next
+
+            Dim prompt = SemanticPromptBuilder.BuildSemanticTaggingPrompt(
+                mapping,
+                paragraphs,
+                paragraphStyles,
+                originalIndices,
+                detectedHeadings,
+                documentTypeContext)
+
+            ' 调用AI获取标注结果
+            Debug.WriteLine("[ChatFormatterAgent] 正在调用AI进行语义标注...")
+            Dim aiResponse = Await _textAnalyzer("semantic_tagging", prompt)
+
+            If String.IsNullOrWhiteSpace(aiResponse) Then
+                Debug.WriteLine("[ChatFormatterAgent] AI返回为空，使用默认标注")
+                Return Await GetDefaultTaggingAsync(paragraphs)
+            End If
+
+            ' 解析AI响应
+            Dim taggedParagraphs = ParseAITagResponse(aiResponse, paragraphs.Count)
+            _lastTaggedParagraphs = taggedParagraphs
+
+            Debug.WriteLine($"[ChatFormatterAgent] AI标注完成: {taggedParagraphs.Count}个段落")
+            Return taggedParagraphs
+
+        Catch ex As Exception
+            Debug.WriteLine($"[ChatFormatterAgent] AI标注失败: {ex.Message}")
+        End Try
+
+        ' 如果解析失败或结果为空，返回默认标注
+        Return Await GetDefaultTaggingAsync(paragraphs)
+    End Function
+
+    ''' <summary>
+    ''' 获取默认标注（全部标记为body.normal）
+    ''' </summary>
+    Private Async Function GetDefaultTaggingAsync(paragraphs As List(Of String)) As Task(Of List(Of TaggedParagraph))
+        Dim result As New List(Of TaggedParagraph)()
+        For i = 0 To paragraphs.Count - 1
+            result.Add(New TaggedParagraph(i, "body.normal"))
+        Next
+        _lastTaggedParagraphs = result
+        Return result
+    End Function
+
+    ''' <summary>
+    ''' 解析AI标注响应
+    ''' </summary>
+    Private Function ParseAITagResponse(response As String, paragraphCount As Integer) As List(Of TaggedParagraph)
+        Dim result As New List(Of TaggedParagraph)()
+
+        Try
+            ' 清理响应文本，移除可能的markdown代码块标记
+            Dim cleanResponse = response.Trim()
+            If cleanResponse.StartsWith("```json") Then
+                cleanResponse = cleanResponse.Substring(7)
+            ElseIf cleanResponse.StartsWith("```") Then
+                cleanResponse = cleanResponse.Substring(3)
+            End If
+            If cleanResponse.EndsWith("```") Then
+                cleanResponse = cleanResponse.Substring(0, cleanResponse.Length - 3)
+            End If
+            cleanResponse = cleanResponse.Trim()
+
+            ' 尝试解析JSON数组
+            Dim taggerd As List(Of TaggedParagraph) = Nothing
+            Try
+                taggerd = JsonConvert.DeserializeObject(Of List(Of TaggedParagraph))(cleanResponse)
+            Catch ex As Exception
+                ' JSON解析失败，尝试正则提取
+                Debug.WriteLine($"[ChatFormatterAgent] JSON解析失败: {ex.Message}")
+                taggerd = ParseTagResponseWithRegex(cleanResponse, paragraphCount)
+            End Try
+
+            If taggerd IsNot Nothing AndAlso taggerd.Count > 0 Then
+                result.AddRange(taggerd)
+            End If
+
+        Catch ex As Exception
+            Debug.WriteLine($"[ChatFormatterAgent] 解析标注响应失败: {ex.Message}")
+        End Try
+
+        ' 如果解析失败或结果为空，返回默认标注
+        If result.Count = 0 Then
+            For i = 0 To paragraphCount - 1
+                result.Add(New TaggedParagraph(i, "body.normal"))
+            Next
+        End If
+
+        Return result
+    End Function
+
+    ''' <summary>
+    ''' 使用正则表达式解析标注响应（当JSON解析失败时）
+    ''' </summary>
+    Private Function ParseTagResponseWithRegex(response As String, paragraphCount As Integer) As List(Of TaggedParagraph)
+        Dim result As New List(Of TaggedParagraph)()
+
+        ' 匹配 {paraIndex:数字, tag:"标签"} 模式
+        Dim pattern = """paraIndex""\s*:\s*(\d+)\s*,\s*""tag""\s*:\s*""([^""]+)"""
+        Dim matches = System.Text.RegularExpressions.Regex.Matches(response, pattern)
+
+        For Each match In matches
+            Dim paraIndex = Integer.Parse(match.Groups(1).Value)
+            Dim tag = match.Groups(2).Value
+            If paraIndex >= 0 AndAlso paraIndex < paragraphCount Then
+                result.Add(New TaggedParagraph(paraIndex, tag))
+            End If
+        Next
+
+        ' 如果正则也没有匹配到，返回空列表（将使用默认标注）
+        Return result
     End Function
 
 End Class

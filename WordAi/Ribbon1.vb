@@ -17,7 +17,7 @@ Public Class Ribbon1
     Protected Overrides Sub ChatButton_Click(sender As Object, e As RibbonControlEventArgs)
         Globals.ThisAddIn.ShowChatTaskPane()
     End Sub
-    Protected Overrides Sub WebResearchButton_Click(sender As Object, e As RibbonControlEventArgs)
+    Protected Overrides Sub WebCaptureButton_Click(sender As Object, e As RibbonControlEventArgs)
         Globals.ThisAddIn.ShowDataCaptureTaskPane()
     End Sub
     Protected Overrides Sub SpotlightButton_Click(sender As Object, e As RibbonControlEventArgs)
@@ -51,49 +51,10 @@ Public Class Ribbon1
         End If
     End Sub
 
-    ' Proofread 按钮 — 校对功能（简化版：仅校对选中内容，使用段落索引定位）
+    ' Proofread 按钮 — 校对专注模式入口
     Protected Overrides Async Sub ProofreadButton_Click(sender As Object, e As RibbonControlEventArgs)
         Try
-            Dim wordApp = Globals.ThisAddIn.Application
-            Dim selText As String = String.Empty
-
-            Try
-                If wordApp IsNot Nothing AndAlso wordApp.Selection IsNot Nothing Then
-                    selText = If(wordApp.Selection.Range IsNot Nothing, wordApp.Selection.Range.Text, String.Empty)
-                End If
-            Catch ex As Exception
-                selText = String.Empty
-            End Try
-
-            ' 必须先选中内容
-            If String.IsNullOrWhiteSpace(selText) Then
-                GlobalStatusStripAll.ShowWarning("请先选中需要校对的文本内容。")
-                Return
-            End If
-
-            Dim selRange = wordApp.Selection.Range
-
-            ' 按段落分割选中内容，构建带索引的文本
-            Dim paragraphs As New List(Of String)()
-            Dim paraIndex As Integer = 0
-            Dim sb As New StringBuilder()
-            sb.AppendLine("以下是需要校对的内容（按段落编号）：")
-
-            For Each p In selRange.Paragraphs
-                Dim paraText As String = If(p.Range.Text IsNot Nothing, p.Range.Text.ToString().TrimEnd(vbCr, vbLf), String.Empty)
-                If Not String.IsNullOrWhiteSpace(paraText) Then
-                    paragraphs.Add(paraText)
-                    sb.AppendLine($"[段落{paraIndex}] {paraText}")
-                    paraIndex += 1
-                End If
-            Next
-
-            If paragraphs.Count = 0 Then
-                MessageBox.Show("选中的内容没有有效段落。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
-                Return
-            End If
-
-            ' 打开侧栏
+            ' 确保Chat面板已打开
             Globals.ThisAddIn.ShowChatTaskPane()
             Await Task.Delay(250)
 
@@ -103,45 +64,11 @@ Public Class Ribbon1
                 Return
             End If
 
-            ' 显示校对模式吸顶提示
-            Await chatCtrl.ExecuteJavaScriptAsyncJS("showProofreadModeIndicator();")
+            ' 执行校对专注模式
+            Await chatCtrl.ExecuteProofreadAsync()
 
-            ' 构建前端提示
-            buildHtmlHint(chatCtrl, "正在向模型发起校对请求，请耐心等待")
-
-            ' 构建简化的提示词
-            Dim systemPrompt As New StringBuilder()
-            systemPrompt.AppendLine("你是Word内容校对助手。请检查以下内容中的错字、错标点或不当换行，并给出修正建议。")
-            systemPrompt.AppendLine("必须且仅返回一个严格的JSON数组，格式如下：")
-            systemPrompt.AppendLine("[{")
-            systemPrompt.AppendLine("  ""paraIndex"": 0,")
-            systemPrompt.AppendLine("  ""original"": ""原文片段"",")
-            systemPrompt.AppendLine("  ""corrected"": ""修正后的文字"",")
-            systemPrompt.AppendLine("  ""reason"": ""简短说明修正原因""")
-            systemPrompt.AppendLine("}]")
-            systemPrompt.AppendLine()
-            systemPrompt.AppendLine("注意：")
-            systemPrompt.AppendLine("- paraIndex是段落编号，从0开始")
-            systemPrompt.AppendLine("- 如果没有需要修正的内容，返回空数组[]")
-            systemPrompt.AppendLine("- 不要输出任何非JSON内容")
-
-            Await chatCtrl.Send(sb.ToString(), systemPrompt.ToString(), False, "proofread")
         Catch ex As Exception
             MessageBox.Show("执行校对过程出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-        End Try
-    End Sub
-
-    Private Async Sub buildHtmlHint(chatCtrl As ChatControl, displayContent As String)
-
-        Try
-            Dim responseUuid As String = Guid.NewGuid().ToString()
-            Dim aiName As String = ConfigSettings.platform & " " & ConfigSettings.ModelName
-            Dim jsCreate As String = $"createChatSection('{aiName}', formatDateTime(new Date()), '{responseUuid}');"
-            Await chatCtrl.ExecuteJavaScriptAsyncJS(jsCreate)
-            Dim js = $"appendRenderer('{responseUuid}','{displayContent}');"
-            Await chatCtrl.ExecuteJavaScriptAsyncJS(js)
-        Catch ex As Exception
-            Debug.WriteLine("ExecuteJavaScriptAsyncJS 调用失败: " & ex.Message)
         End Try
     End Sub
 
@@ -303,21 +230,6 @@ Public Class Ribbon1
         End Try
     End Sub
 
-    ' 接受补全功能
-    Protected Sub AcceptCompletionButton_Click(sender As Object, e As RibbonControlEventArgs)
-        Try
-            Dim completionManager = WordCompletionManager.Instance
-            If completionManager IsNot Nothing AndAlso completionManager.HasGhostText Then
-                completionManager.AcceptCurrentCompletion()
-            Else
-                ' 没有可接受的补全时，显示提示
-                MessageBox.Show("当前没有可接受的补全建议。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
-            End If
-        Catch ex As Exception
-            MessageBox.Show("接受补全时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-        End Try
-    End Sub
-
     ' 模板排版功能（高级/模板模式）- 使用JSON格式完整提取模板结构
     ' 注意：普通排版请使用上方的"排版"按钮（智能排版 v2），本按钮为高级模板模式
     Protected Overrides Sub TemplateFormatButton_Click(sender As Object, e As RibbonControlEventArgs)
@@ -365,7 +277,7 @@ Public Class Ribbon1
                     ' 调用JS进入模板渲染模式
                     Task.Run(Async Function()
                                  Await Task.Delay(500) ' 等待WebView加载
-                                 Dim jsCall = $"enterTemplateMode(`{EscapeForJs(templateContent)}`, `{EscapeForJs(templateName)}`);"
+                                 Dim jsCall = $"enterTemplateMode(`{JsUtil.EscapeForJs(templateContent)}`, `{JsUtil.EscapeForJs(templateName)}`);"
                                  Await chatCtrl.ExecuteJavaScriptAsyncJS(jsCall)
                              End Function)
 
@@ -577,10 +489,6 @@ Public Class Ribbon1
         Catch
             Return "auto"
         End Try
-    End Function
-
-    Private Function EscapeForJs(text As String) As String
-        Return text.Replace("\", "\\").Replace("`", "\`").Replace("$", "\$").Replace(vbCr, "").Replace(vbLf, "\n")
     End Function
 
 End Class

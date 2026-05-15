@@ -62,6 +62,25 @@ Public Class SemanticPromptBuilder
         sb.AppendLine("7. 包含日期且位于文末的短段落，通常是落款/署名。")
         sb.AppendLine()
 
+        ' ===== 新增：中文排版规则 =====
+        sb.AppendLine("【中文排版规则】")
+        sb.AppendLine("- 标点符号不能出现在行首（句号、逗号、顿号等不能独占一行开头）")
+        sb.AppendLine("- 中英文之间需有空格（中文和英文单词之间要加空格）")
+        sb.AppendLine("- 标题不能出现在页面底部成为「孤标题」（标题下方至少需要一行正文）")
+        sb.AppendLine("- 段落长度要合理：正文每段一般不超过500字，过长应分段")
+        sb.AppendLine("- 公文正文每段开头应首行缩进2字符（除非是标题性质的段落）")
+        sb.AppendLine()
+
+        ' ===== 新增：Few-Shot示例 =====
+        sb.AppendLine("【标注示例】")
+        sb.AppendLine("以下是根据不同文档类型的标注示例，请参考这些模式进行标注：")
+        sb.AppendLine()
+
+        ' 根据文档类型选择示例
+        Dim examples As String = GetExamplesByDocumentType(documentTypeContext, mapping)
+        sb.Append(examples)
+        sb.AppendLine()
+
         ' 可用标签列表
         sb.AppendLine("【可用标签】")
         For Each tag In mapping.SemanticTags
@@ -127,6 +146,79 @@ Public Class SemanticPromptBuilder
             sb.Append($"[{origIdx}]{styleHint}{formatHint} {text}")
             sb.AppendLine()
         Next
+
+        Return sb.ToString()
+    End Function
+
+    ''' <summary>
+    ''' 根据文档类型获取对应的标注示例
+    ''' </summary>
+    ''' <param name="documentTypeContext">文档类型上下文（标准名称）</param>
+    ''' <param name="mapping">语义样式映射</param>
+    Private Shared Function GetExamplesByDocumentType(documentTypeContext As String, mapping As SemanticStyleMapping) As String
+        Dim sb As New StringBuilder()
+
+        ' 公文示例
+        If Not String.IsNullOrEmpty(documentTypeContext) AndAlso
+           (documentTypeContext.Contains("公文") OrElse documentTypeContext.Contains("GB/T 9704")) Then
+            sb.AppendLine("公文文档标注示例：")
+            sb.AppendLine("「XX局〔2024〕15号」 → header.refno（发文字号，居中，仿宋16pt）")
+            sb.AppendLine("「关于加强安全管理的通知」 → title.main（文件标题，居中，方正小标宋22pt加粗红色）")
+            sb.AppendLine("「各区县教育局」 → title.recipient（主送机关，顶格左对齐）")
+            sb.AppendLine("「一、总体要求」 → heading.1（一级标题，黑体16pt加粗）")
+            sb.AppendLine("「（一）基本原则」 → heading.2（二级标题，楷体16pt加粗）")
+            sb.AppendLine("「为进一步做好安全工作，根据...」 → body.normal（正文，仿宋16pt，两端对齐，首行缩进2字符）")
+            sb.AppendLine("「XX市教育局」 → footer.signature（发文机关署名，右对齐）")
+            sb.AppendLine("「2024年1月15日」 → footer.date（成文日期，右对齐）")
+            Return sb.ToString()
+        End If
+
+        ' 学术论文示例
+        If Not String.IsNullOrEmpty(documentTypeContext) AndAlso
+           (documentTypeContext.Contains("学术") OrElse documentTypeContext.Contains("论文")) Then
+            sb.AppendLine("学术论文文档标注示例：")
+            sb.AppendLine("「基于深度学习的图像识别技术研究」 → title.main（论文标题，黑体18pt加粗居中）")
+            sb.AppendLine("「摘要」 → title.abstract（摘要标题，黑体14pt加粗）")
+            sb.AppendLine("「本文提出了一种新的...」 → body.abstract（摘要正文，宋体12pt，首行缩进2字符）")
+            sb.AppendLine("「关键词」 → title.keywords（关键词标题，黑体14pt加粗）")
+            sb.AppendLine("「深度学习；图像识别；卷积神经网络」 → body.keywords（关键词，宋体12pt）")
+            sb.AppendLine("「第1章 引言」 → heading.1（一级标题，黑体14pt加粗）")
+            sb.AppendLine("「1.1 研究背景」 → heading.2（二级标题，黑体12pt加粗）")
+            sb.AppendLine("「近年来，随着人工智能技术的快速发展...」 → body.normal（正文，宋体12pt，两端对齐，首行缩进2字符）")
+            sb.AppendLine("「参考文献」 → title.references（参考文献标题，黑体14pt加粗）")
+            Return sb.ToString()
+        End If
+
+        ' 商务报告示例
+        If Not String.IsNullOrEmpty(documentTypeContext) AndAlso
+           (documentTypeContext.Contains("商务") OrElse documentTypeContext.Contains("报告")) Then
+            sb.AppendLine("商务报告文档标注示例：")
+            sb.AppendLine("「2024年度工作总结报告」 → title.main（报告标题，微软雅黑20pt加粗居中）")
+            sb.AppendLine("「一、年度业绩回顾」 → heading.1（一级标题，微软雅黑16pt加粗）")
+            sb.AppendLine("「（一）销售收入分析」 → heading.2（二级标题，微软雅黑14pt加粗）")
+            sb.AppendLine("「2024年公司实现销售收入同比增长15%...」 → body.normal（正文，微软雅黑11pt，两端对齐）")
+            sb.AppendLine("「综上所述，2024年公司取得了良好的业绩...」 → body.summary（摘要总结，微软雅黑11pt）")
+            Return sb.ToString()
+        End If
+
+        ' 通用文档示例（默认）
+        sb.AppendLine("通用文档标注示例：")
+        sb.AppendLine("「第一章 总则」 → heading.1（一级标题）")
+        sb.AppendLine("「1.1 目的和依据」 → heading.2（二级标题）")
+        sb.AppendLine("「1.1.1 为规范...」 → heading.3（三级标题）")
+        sb.AppendLine("「本条例旨在...」 → body.normal（正文段落）")
+        sb.AppendLine("「第一条 为规范...」 → body.normal（条正文）")
+
+        ' 如果mapping中有自定义标签，也展示一下
+        If mapping IsNot Nothing AndAlso mapping.SemanticTags.Count > 0 Then
+            sb.AppendLine()
+            sb.AppendLine("当前标准支持的特殊标签：")
+            For Each tag In mapping.SemanticTags.Take(6)
+                If tag.TagId.StartsWith("header.") OrElse tag.TagId.StartsWith("title.") OrElse tag.TagId.StartsWith("footer.") Then
+                    sb.AppendLine($"- {tag.TagId}: {tag.DisplayName}")
+                End If
+            Next
+        End If
 
         Return sb.ToString()
     End Function

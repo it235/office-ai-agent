@@ -14,7 +14,7 @@ Public Class PresetProviders
 
         ' 深度求索 (DeepSeek)
         Dim deepseek As New ConfigItem()
-        deepseek.pltform = "深度求索 (DeepSeek)"
+        deepseek.platform = "深度求索 (DeepSeek)"
         deepseek.url = "https://api.deepseek.com/chat/completions"
         deepseek.registerUrl = "https://platform.deepseek.com/api_keys"
         deepseek.providerType = ProviderType.Cloud
@@ -30,7 +30,7 @@ Public Class PresetProviders
 
         ' 硅基流动 (SiliconFlow)
         Dim siliconflow As New ConfigItem()
-        siliconflow.pltform = "硅基流动 (SiliconFlow)"
+        siliconflow.platform = "硅基流动 (SiliconFlow)"
         siliconflow.url = "https://api.siliconflow.cn/v1/chat/completions"
         siliconflow.registerUrl = "https://cloud.siliconflow.cn/i/PGhr3knx"
         siliconflow.providerType = ProviderType.Cloud
@@ -47,7 +47,7 @@ Public Class PresetProviders
 
         ' 阿里云百炼 (Qwen)
         Dim aliyun As New ConfigItem()
-        aliyun.pltform = "阿里云百炼 (Qwen)"
+        aliyun.platform = "阿里云百炼 (Qwen)"
         aliyun.url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
         aliyun.registerUrl = "https://help.aliyun.com/zh/model-studio/getting-started/first-api-call-to-qwen"
         aliyun.providerType = ProviderType.Cloud
@@ -64,7 +64,7 @@ Public Class PresetProviders
 
         ' 百度千帆
         Dim baidu As New ConfigItem()
-        baidu.pltform = "百度千帆"
+        baidu.platform = "百度千帆"
         baidu.url = "https://qianfan.baidubce.com/v2/chat/completions"
         baidu.registerUrl = "https://console.bce.baidu.com/qianfan/ais/console/applicationConsole/application"
         baidu.providerType = ProviderType.Cloud
@@ -80,7 +80,7 @@ Public Class PresetProviders
 
         ' 智谱清言 (GLM)
         Dim zhipu As New ConfigItem()
-        zhipu.pltform = "智谱清言 (GLM)"
+        zhipu.platform = "智谱清言 (GLM)"
         zhipu.url = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
         zhipu.registerUrl = "https://www.bigmodel.cn/invite?icode=pRDixwFdhElsS8rrQ7JbplwpqjqOwPB5EXW6OL4DgqY%3D"
         '    https://open.bigmodel.cn/usercenter/apikeys
@@ -98,7 +98,7 @@ Public Class PresetProviders
 
         ' 腾讯混元 (Hunyuan)
         Dim tencent As New ConfigItem()
-        tencent.pltform = "腾讯混元 (Hunyuan)"
+        tencent.platform = "腾讯混元 (Hunyuan)"
         tencent.url = "https://api.hunyuan.cloud.tencent.com/v1/chat/completions"
         tencent.registerUrl = "https://cloud.tencent.com/product/hunyuan"
         tencent.providerType = ProviderType.Cloud
@@ -114,7 +114,7 @@ Public Class PresetProviders
 
         ' OpenRouter
         Dim openrouter As New ConfigItem()
-        openrouter.pltform = "OpenRouter"
+        openrouter.platform = "OpenRouter"
         openrouter.url = "https://openrouter.ai/api/v1/chat/completions"
         openrouter.registerUrl = "https://openrouter.ai/keys"
         openrouter.providerType = ProviderType.Cloud
@@ -132,7 +132,7 @@ Public Class PresetProviders
 
         ' Kimi (Moonshot)
         Dim kimi As New ConfigItem()
-        kimi.pltform = "Kimi (Moonshot)"
+        kimi.platform = "Kimi (Moonshot)"
         kimi.url = "https://api.moonshot.cn/v1/chat/completions"
         kimi.registerUrl = "https://platform.moonshot.cn/console/api-keys"
         kimi.providerType = ProviderType.Cloud
@@ -147,7 +147,7 @@ Public Class PresetProviders
 
         ' Google Gemini
         Dim gemini As New ConfigItem()
-        gemini.pltform = "Google Gemini"
+        gemini.platform = "Google Gemini"
         gemini.url = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
         gemini.registerUrl = "https://aistudio.google.com/apikey"
         gemini.providerType = ProviderType.Cloud
@@ -162,7 +162,7 @@ Public Class PresetProviders
 
         ' OpenAI ChatGPT
         Dim openai As New ConfigItem()
-        openai.pltform = "OpenAI ChatGPT"
+        openai.platform = "OpenAI ChatGPT"
         openai.url = "https://api.openai.com/v1/chat/completions"
         openai.registerUrl = "https://platform.openai.com/api-keys"
         openai.providerType = ProviderType.Cloud
@@ -180,7 +180,7 @@ Public Class PresetProviders
 
         ' Grok (xAI)
         Dim grok As New ConfigItem()
-        grok.pltform = "Grok (xAI)"
+        grok.platform = "Grok (xAI)"
         grok.url = "https://api.x.ai/v1/chat/completions"
         grok.registerUrl = "https://console.x.ai/"
         grok.providerType = ProviderType.Cloud
@@ -194,7 +194,7 @@ Public Class PresetProviders
 
         ' 火山方舟 (VolcEngine Ark)
         Dim volcark As New ConfigItem()
-        volcark.pltform = "火山方舟 (VolcEngine)"
+        volcark.platform = "火山方舟 (VolcEngine)"
         volcark.url = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
         volcark.registerUrl = "https://www.volcengine.com/product/ark"
         volcark.providerType = ProviderType.Cloud
@@ -209,7 +209,7 @@ Public Class PresetProviders
 
         ' 科大讯飞 (iFlytek Spark)
         Dim iflytek As New ConfigItem()
-        iflytek.pltform = "科大讯飞 (Spark)"
+        iflytek.platform = "科大讯飞 (Spark)"
         iflytek.url = "https://spark-api-open.xf-yun.com/v1/chat/completions"
         iflytek.registerUrl = "https://xinghuo.xfyun.cn/sparkapi"
         iflytek.providerType = ProviderType.Cloud
@@ -225,7 +225,7 @@ Public Class PresetProviders
 
         ' 京东云 (JDCloud)
         Dim jdcloud As New ConfigItem()
-        jdcloud.pltform = "京东云 (JDCloud)"
+        jdcloud.platform = "京东云 (JDCloud)"
         jdcloud.url = "https://modelservice.jdcloud.com/coding/openai/v1"
         jdcloud.registerUrl = "https://joybuilder-console.jdcloud.com/overview"
         jdcloud.providerType = ProviderType.Cloud
@@ -239,7 +239,7 @@ Public Class PresetProviders
 
         ' 小米大模型 (MiLM)
         Dim xiaomi As New ConfigItem()
-        xiaomi.pltform = "小米大模型 (MiLM)"
+        xiaomi.platform = "小米大模型 (MiLM)"
         xiaomi.url = "https://api.xiaomimimo.com/v1/chat/completions"
         xiaomi.registerUrl = "https://platform.xiaomimimo.com/#/console/api-keys"
         xiaomi.providerType = ProviderType.Cloud
@@ -253,7 +253,7 @@ Public Class PresetProviders
 
         ' LiteLLM (LLM网关代理)
         Dim litellm As New ConfigItem()
-        litellm.pltform = "LiteLLM"
+        litellm.platform = "LiteLLM"
         litellm.url = "http://localhost:4000/v1/chat/completions"
         litellm.registerUrl = "https://docs.litellm.ai/"
         litellm.providerType = ProviderType.Cloud
@@ -265,7 +265,7 @@ Public Class PresetProviders
 
         ' Anthropic Claude
         Dim anthropic As New ConfigItem()
-        anthropic.pltform = "Anthropic Claude"
+        anthropic.platform = "Anthropic Claude"
         anthropic.url = "https://api.anthropic.com/v1/messages"
         anthropic.registerUrl = "https://console.anthropic.com/settings/keys"
         anthropic.providerType = ProviderType.Cloud
@@ -289,7 +289,7 @@ Public Class PresetProviders
 
         ' Ollama
         Dim ollama As New ConfigItem()
-        ollama.pltform = "Ollama"
+        ollama.platform = "Ollama"
         ollama.url = "http://localhost:11434/v1/chat/completions"
         ollama.providerType = ProviderType.Local
         ollama.isPreset = True
@@ -306,7 +306,7 @@ Public Class PresetProviders
 
         ' vLLM
         Dim vllm As New ConfigItem()
-        vllm.pltform = "vLLM"
+        vllm.platform = "vLLM"
         vllm.url = "http://localhost:8000/v1/chat/completions"
         vllm.providerType = ProviderType.Local
         vllm.isPreset = True
@@ -318,7 +318,7 @@ Public Class PresetProviders
 
         ' LM Studio
         Dim lmstudio As New ConfigItem()
-        lmstudio.pltform = "LM Studio"
+        lmstudio.platform = "LM Studio"
         lmstudio.url = "http://localhost:1234/v1/chat/completions"
         lmstudio.providerType = ProviderType.Local
         lmstudio.isPreset = True
@@ -330,7 +330,7 @@ Public Class PresetProviders
 
         ' RWKV
         Dim rwkv As New ConfigItem()
-        rwkv.pltform = "RWKV"
+        rwkv.platform = "RWKV"
         rwkv.url = "http://localhost:8080/v1/chat/completions"
         rwkv.providerType = ProviderType.Local
         rwkv.isPreset = True
@@ -342,7 +342,7 @@ Public Class PresetProviders
 
         ' LMDeploy
         Dim lmdeploy As New ConfigItem()
-        lmdeploy.pltform = "LMDeploy"
+        lmdeploy.platform = "LMDeploy"
         lmdeploy.url = "http://localhost:23333/v1/chat/completions"
         lmdeploy.providerType = ProviderType.Local
         lmdeploy.isPreset = True

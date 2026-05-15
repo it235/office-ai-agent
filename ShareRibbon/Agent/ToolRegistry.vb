@@ -126,6 +126,49 @@ Namespace Agent
         End Sub
 
         ''' <summary>
+        ''' 从 Skills 目录加载所有脚本作为工具
+        ''' </summary>
+        Public Sub LoadSkillScriptsAsTools()
+            Try
+                Dim allSkills = SkillsDirectoryService.GetAllSkills()
+                For Each skill In allSkills
+                    If skill.Scripts IsNot Nothing AndAlso skill.Scripts.Count > 0 Then
+                        For Each script In skill.Scripts
+                            Dim toolId = $"skill_script.{skill.Name}.{script.FileName}"
+                            Dim toolDesc = If(Not String.IsNullOrEmpty(script.Description), script.Description, "")
+                            Dim tool As New ToolDescriptor() With {
+                                .Id = toolId,
+                                .Name = $"{skill.Name}/{script.FileName}",
+                                .Description = $"执行 Skill '{skill.Name}' 的脚本 {script.FileName} ({script.ScriptType})" &
+                                              If(toolDesc <> "", vbCrLf & toolDesc, ""),
+                                .AppType = "common",
+                                .Category = "Skill 脚本",
+                                .RiskLevel = "medium",
+                                .Parameters = New List(Of ToolParam)()
+                            }
+
+                            ' 添加参数说明
+                            If Not String.IsNullOrEmpty(script.ArgsHint) Then
+                                tool.Parameters.Add(New ToolParam() With {
+                                    .Name = "args",
+                                    .Type = "string",
+                                    .Required = False,
+                                    .Description = script.ArgsHint
+                                })
+                            End If
+
+                            _tools(toolId) = tool
+                        Next
+                    End If
+                Next
+                Dim totalScripts = allSkills.Sum(Function(s) If(s.Scripts IsNot Nothing, s.Scripts.Count, 0))
+                Debug.WriteLine($"[ToolRegistry] 从 Skills 加载了 {totalScripts} 个脚本工具")
+            Catch ex As Exception
+                Debug.WriteLine($"[ToolRegistry] 加载 Skill 脚本工具失败: {ex.Message}")
+            End Try
+        End Sub
+
+        ''' <summary>
         ''' 获取指定应用可用的工具
         ''' </summary>
         Public Function GetAvailableTools(appType As String) As List(Of ToolDescriptor)
@@ -287,6 +330,13 @@ Namespace Agent
                 Return ToolResult.Failed(toolId, $"未找到工具: {toolId}")
             End If
 
+            ' Skill 脚本工具调用（以 skill_script. 开头）
+            If toolId.StartsWith("skill_script.") Then
+                Dim scriptResult = Await ExecuteSkillScriptAsync(toolId, params)
+                sw.Stop()
+                Return scriptResult
+            End If
+
             ' MCP 工具调用（以 mcp. 开头）
             If toolId.StartsWith("mcp.") Then
                 If _mcpClient Is Nothing OrElse Not _mcpClient.IsInitialized Then
@@ -354,6 +404,68 @@ Namespace Agent
 
             sw.Stop()
             Return ToolResult.Failed(toolId, "未知的工具类型")
+        End Function
+
+        ''' <summary>
+        ''' 执行 Skill 脚本工具
+        ''' </summary>
+        Private Async Function ExecuteSkillScriptAsync(toolId As String, params As JObject) As Task(Of ToolResult)
+            ' toolId 格式: skill_script.{skillName}.{scriptFileName}
+            Dim parts = toolId.Split("."c)
+            If parts.Length < 4 Then
+                Return ToolResult.Failed(toolId, $"无效的 Skill 脚本工具 ID: {toolId}")
+            End If
+
+            Dim skillName = parts(1)
+            Dim scriptFileName = String.Join(".", parts.Skip(2))
+
+            ' 查找 Skill 和脚本
+            Dim allSkills = SkillsDirectoryService.GetAllSkills()
+            Dim skill = allSkills.FirstOrDefault(Function(s) s.Name.Equals(skillName, StringComparison.OrdinalIgnoreCase))
+            If skill Is Nothing Then
+                Return ToolResult.Failed(toolId, $"未找到 Skill: {skillName}")
+            End If
+
+            Dim script = skill.Scripts.FirstOrDefault(Function(s) s.FileName.Equals(scriptFileName, StringComparison.OrdinalIgnoreCase))
+            If script Is Nothing Then
+                Return ToolResult.Failed(toolId, $"未找到脚本: {scriptFileName} (在 Skill {skillName} 中)")
+            End If
+
+            ' 解析参数
+            Dim args As New Dictionary(Of String, String)()
+            If params IsNot Nothing Then
+                For Each prop In params.Properties()
+                    args(prop.Name) = prop.Value?.ToString()
+                Next
+            End If
+
+            ' 执行脚本
+            Try
+                Dim result = Await SkillScriptExecutor.ExecuteScriptAsync(script, args, skill.FilePath)
+
+                If result.Success Then
+                    Dim output = result.StdOut
+                    If String.IsNullOrEmpty(output) Then output = "脚本执行成功（无输出）"
+                    Return ToolResult.Succeed(toolId, output,
+                        New With {
+                            .elapsedMs = result.ElapsedMs,
+                            .exitCode = result.ExitCode,
+                            .skillName = skillName,
+                            .scriptFileName = scriptFileName
+                        })
+                Else
+                    Return ToolResult.Failed(toolId,
+                        $"脚本执行失败 (退出码: {result.ExitCode})" &
+                        If(Not String.IsNullOrEmpty(result.ErrorMessage), $": {result.ErrorMessage}", ""),
+                        New With {
+                            .elapsedMs = result.ElapsedMs,
+                            .exitCode = result.ExitCode,
+                            .stdErr = result.StdErr
+                        })
+                End If
+            Catch ex As Exception
+                Return ToolResult.Failed(toolId, $"脚本执行异常: {ex.Message}")
+            End Try
         End Function
 
         ''' <summary>

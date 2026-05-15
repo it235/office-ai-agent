@@ -1,4 +1,5 @@
 Imports System.IO
+Imports System.Text
 Imports System.Threading.Tasks
 Imports System.Windows.Forms
 Imports Newtonsoft.Json
@@ -15,6 +16,7 @@ Public Class ReformatService
     Private ReadOnly _showTemplateEditor As Func(Of ReformatTemplate, Boolean)
     Private ReadOnly _getStylePreviewCallback As Func(Of PreviewStyleCallback)
     Private ReadOnly _uploadDocxTemplateFromPath As Action(Of String)
+    Private ReadOnly _textAnalyzer As Func(Of String, String, Task(Of String))
 
     ' 排版重试上下文
     Private _reformatRetryContext As New Dictionary(Of String, Tuple(Of String, String))()
@@ -32,7 +34,7 @@ Public Class ReformatService
     Public ReadOnly Property ChatFormatterAgent As ChatFormatterAgent
         Get
             If _chatFormatterAgent Is Nothing Then
-                _chatFormatterAgent = New ChatFormatterAgent(_executeScript, _escapeJs)
+                _chatFormatterAgent = New ChatFormatterAgent(_executeScript, _escapeJs, _textAnalyzer)
             End If
             Return _chatFormatterAgent
         End Get
@@ -44,7 +46,8 @@ Public Class ReformatService
         invokeOnUiThread As Action(Of Action),
         showTemplateEditor As Func(Of ReformatTemplate, Boolean),
         getStylePreviewCallback As Func(Of PreviewStyleCallback),
-        uploadDocxTemplateFromPath As Action(Of String))
+        uploadDocxTemplateFromPath As Action(Of String),
+        Optional textAnalyzer As Func(Of String, String, Task(Of String)) = Nothing)
 
         _executeScript = executeScript
         _escapeJs = escapeJs
@@ -52,6 +55,7 @@ Public Class ReformatService
         _showTemplateEditor = showTemplateEditor
         _getStylePreviewCallback = getStylePreviewCallback
         _uploadDocxTemplateFromPath = uploadDocxTemplateFromPath
+        _textAnalyzer = textAnalyzer
     End Sub
 
 #Region "排版模板"
@@ -732,9 +736,44 @@ Public Class ReformatService
             End If
 
             Dim paragraphs = JsonConvert.DeserializeObject(Of List(Of String))(paragraphsJson)
+            If paragraphs Is Nothing OrElse paragraphs.Count = 0 Then
+                GlobalStatusStrip.ShowWarning("段落数据为空")
+                Return
+            End If
+
+            ' 可选的段落样式信息（用于增强AI标注）
+            Dim paragraphStyles As List(Of String) = Nothing
+            Dim paragraphStylesJson = jsonDoc("paragraphStyles")?.ToString()
+            If Not String.IsNullOrEmpty(paragraphStylesJson) Then
+                paragraphStyles = JsonConvert.DeserializeObject(Of List(Of String))(paragraphStylesJson)
+            End If
 
             GlobalStatusStrip.ShowInfo("正在分析文档...")
+
+            ' 第一步：生成基于规则的排版方案
             Dim plan = Await QuickReformatAsync(paragraphs, New List(Of Object)())
+
+            ' 第二步：如果需要AI标注，执行AI语义标注
+            If plan.SemanticMapping IsNot Nothing AndAlso plan.SemanticMapping.SemanticTags.Count > 0 Then
+                ' 构建文档类型上下文
+                Dim docTypeContext = GetDocumentTypeContext(plan)
+
+                ' 构建已检测到的标题结构描述
+                Dim detectedHeadings = GetDetectedHeadingsDescription(plan)
+
+                GlobalStatusStrip.ShowInfo("正在进行AI语义标注...")
+
+                ' 调用AI进行语义标注
+                Dim taggedParagraphs = Await ChatFormatterAgent.PerformAISemanticTaggingAsync(
+                    paragraphs,
+                    plan.SemanticMapping,
+                    paragraphStyles,
+                    docTypeContext,
+                    detectedHeadings)
+
+                ' 更新plan的changes使用AI标注结果
+                UpdatePlanWithAITagging(plan, taggedParagraphs, paragraphs)
+            End If
 
             Dim html = ChatFormatterAgent.GenerateFormattingCardHtml(plan)
             Dim escapedHtml = _escapeJs(html)
@@ -775,18 +814,25 @@ Public Class ReformatService
                 Return
             End If
 
-            ' 如果没有传入标注结果，构建默认标注（全文为正文）
+            ' 如果没有传入标注结果，尝试使用AI标注结果
             Dim taggedParagraphs As List(Of TaggedParagraph)
             If Not String.IsNullOrEmpty(taggedParagraphsJson) Then
                 taggedParagraphs = JsonConvert.DeserializeObject(Of List(Of TaggedParagraph))(taggedParagraphsJson)
             Else
-                ' 从JSON中解析wordParagraphs数量
-                Dim paraCountObj = jsonDoc("paraCount")?.ToObject(Of Integer)()
-                Dim paraCount = If(paraCountObj, 0)
-                taggedParagraphs = New List(Of TaggedParagraph)()
-                For i = 0 To paraCount - 1
-                    taggedParagraphs.Add(New TaggedParagraph(i, "body.normal"))
-                Next
+                ' 优先尝试使用ChatFormatterAgent中最后AI标注的结果
+                Dim aiTagged = ChatFormatterAgent.GetLastTaggedParagraphs()
+                If aiTagged IsNot Nothing AndAlso aiTagged.Count > 0 Then
+                    taggedParagraphs = aiTagged
+                    Debug.WriteLine($"[HandleApplyReformat] 使用AI标注结果: {taggedParagraphs.Count}个段落")
+                Else
+                    ' 如果没有AI标注结果，从JSON中解析wordParagraphs数量
+                    Dim paraCountObj = jsonDoc("paraCount")?.ToObject(Of Integer)()
+                    Dim paraCount = If(paraCountObj, 0)
+                    taggedParagraphs = New List(Of TaggedParagraph)()
+                    For i = 0 To paraCount - 1
+                        taggedParagraphs.Add(New TaggedParagraph(i, "body.normal"))
+                    Next
+                End If
             End If
 
             ' 构建段落类型列表：优先从JSON获取，其次从编排器上下文获取，最后从Word推断
@@ -1010,6 +1056,226 @@ Public Class ReformatService
             Case DocumentType.GeneralDocument : Return "通用文档"
             Case Else : Return "未知类型"
         End Select
+    End Function
+
+    ''' <summary>
+    ''' 构建文档类型上下文描述（用于AI标注提示词）
+    ''' </summary>
+    Private Function GetDocumentTypeContext(plan As ReformatPreviewPlan) As String
+        Dim sb As New StringBuilder()
+
+        If plan Is Nothing Then Return ""
+
+        sb.AppendLine($"检测到的文档类型: {GetDocumentTypeNameChinese(plan.DetectedType)}")
+        sb.AppendLine($"推荐标准: {plan.StandardName}")
+
+        If Not String.IsNullOrEmpty(plan.StandardDescription) Then
+            sb.AppendLine($"标准说明: {plan.StandardDescription}")
+        End If
+
+        ' 添加特定标准的详细规则
+        If plan.StandardName.Contains("GB/T 9704") Then
+            sb.AppendLine()
+            sb.AppendLine("【GB/T 9704-2012 公文格式规范要点】")
+            sb.AppendLine("- 发文机关标志：方正小标宋简体22pt，红色(#C00000)，居中")
+            sb.AppendLine("- 发文字号：仿宋_GB2312 16pt，居中，格式如「×发〔2026〕×号」")
+            sb.AppendLine("- 文件标题：方正小标宋简体22pt，加粗，居中")
+            sb.AppendLine("- 主送机关：仿宋_GB2312 16pt，左对齐顶格")
+            sb.AppendLine("- 正文一级标题：黑体16pt加粗")
+            sb.AppendLine("- 正文二级标题：楷体_GB2312 16pt加粗")
+            sb.AppendLine("- 正文三级标题：仿宋_GB2312 16pt加粗")
+            sb.AppendLine("- 正文：仿宋_GB2312 16pt，两端对齐，首行缩进2字符")
+            sb.AppendLine("- 附件说明：仿宋_GB2312 16pt，正文下空1行")
+            sb.AppendLine("- 发文机关署名：仿宋_GB2312 16pt，右对齐")
+            sb.AppendLine("- 成文日期：仿宋_GB2312 16pt，右对齐，阿拉伯数字")
+            sb.AppendLine("- 页边距：上37mm，下35mm，左28mm，右26mm")
+        ElseIf plan.StandardName.Contains("学术") Then
+            sb.AppendLine()
+            sb.AppendLine("【学术论文通用格式要点】")
+            sb.AppendLine("- 论文标题：黑体18pt加粗居中")
+            sb.AppendLine("- 摘要标题：黑体14pt加粗")
+            sb.AppendLine("- 摘要正文：宋体12pt，首行缩进2字符")
+            sb.AppendLine("- 关键词标题：黑体14pt加粗")
+            sb.AppendLine("- 关键词：宋体12pt")
+            sb.AppendLine("- 一级标题（章）：黑体14pt加粗")
+            sb.AppendLine("- 二级标题（节）：黑体12pt加粗")
+            sb.AppendLine("- 正文：宋体12pt，两端对齐，首行缩进2字符")
+            sb.AppendLine("- 参考文献：宋体10pt")
+        ElseIf plan.StandardName.Contains("商务") OrElse plan.StandardName.Contains("报告") Then
+            sb.AppendLine()
+            sb.AppendLine("【商务报告通用格式要点】")
+            sb.AppendLine("- 报告标题：微软雅黑20pt加粗居中")
+            sb.AppendLine("- 一级标题：微软雅黑16pt加粗")
+            sb.AppendLine("- 二级标题：微软雅黑14pt加粗")
+            sb.AppendLine("- 正文：微软雅黑11pt，两端对齐")
+        End If
+
+        Return sb.ToString()
+    End Function
+
+    ''' <summary>
+    ''' 构建已检测到的标题结构描述（用于AI标注提示词）
+    ''' </summary>
+    Private Function GetDetectedHeadingsDescription(plan As ReformatPreviewPlan) As String
+        Dim sb As New StringBuilder()
+
+        If plan Is Nothing OrElse plan.Changes Is Nothing Then Return ""
+
+        sb.AppendLine("以下段落已被识别为标题结构：")
+        For Each change In plan.Changes
+            If change.NewTag.StartsWith("heading") OrElse change.NewTag.StartsWith("title") Then
+                sb.AppendLine($"- [{change.ParagraphIndex}] {change.ParagraphPreview} → 标注为 {change.NewTag}")
+            End If
+        Next
+
+        Return sb.ToString()
+    End Function
+
+    ''' <summary>
+    ''' 使用AI标注结果更新排版方案
+    ''' </summary>
+    Private Sub UpdatePlanWithAITagging(plan As ReformatPreviewPlan, taggedParagraphs As List(Of TaggedParagraph), paragraphs As List(Of String))
+        ' 防御性检查
+        If plan Is Nothing Then Return
+        If taggedParagraphs Is Nothing OrElse taggedParagraphs.Count = 0 Then Return
+
+        ' 保留原有的标题结构（从plan.Changes中提取heading相关的）
+        Dim headingChanges = plan.Changes?.Where(Function(c) c.NewTag.StartsWith("heading") OrElse c.NewTag.StartsWith("title")).ToList()
+
+        ' 清空changes，重新用AI标注结果构建
+        plan.Changes = New List(Of FormatChange)()
+
+        ' 添加标题变更（来自规则引擎的初步识别）
+        If headingChanges IsNot Nothing Then
+            For Each h In headingChanges
+                plan.Changes.Add(h)
+            Next
+        End If
+
+        ' 用AI标注结果补充/覆盖正文标注
+        For Each tagged In taggedParagraphs
+            ' 跳过已经在headingChanges中的段落
+            If headingChanges IsNot Nothing AndAlso headingChanges.Any(Function(h) h.ParagraphIndex = tagged.ParaIndex) Then
+                Continue For
+            End If
+
+            ' 跳过超出范围的索引
+            If tagged.ParaIndex < 0 OrElse tagged.ParaIndex >= paragraphs.Count Then
+                Continue For
+            End If
+
+            Dim change As New FormatChange()
+            change.ParagraphIndex = tagged.ParaIndex
+
+            ' 段落预览文本
+            If tagged.ParaIndex < paragraphs.Count Then
+                Dim text = paragraphs(tagged.ParaIndex)
+                change.ParagraphPreview = If(text.Length > 50, text.Substring(0, 50) & "...", text)
+            Else
+                change.ParagraphPreview = ""
+            End If
+
+            change.OldTag = "body.normal"
+            change.NewTag = tagged.TagId
+
+            ' 从SemanticMapping获取标签的格式信息
+            Dim semanticTag = plan.SemanticMapping?.FindTag(tagged.TagId)
+            If semanticTag IsNot Nothing Then
+                ' 使用SemanticRenderingEngine的格式化描述逻辑
+                If semanticTag.Font IsNot Nothing Then
+                    change.NewFont = FormatFontDescription(semanticTag.Font)
+                End If
+                If semanticTag.Paragraph IsNot Nothing Then
+                    change.NewAlignment = GetAlignmentDisplayName(semanticTag.Paragraph.Alignment)
+                    If semanticTag.Paragraph.FirstLineIndent > 0 Then
+                        change.NewIndent = $"首行缩进{semanticTag.Paragraph.FirstLineIndent}字符"
+                    End If
+                End If
+                change.ChangeDescription = BuildFormatDescription(semanticTag)
+            Else
+                change.ChangeDescription = tagged.TagId
+            End If
+
+            plan.Changes.Add(change)
+        Next
+
+        ' 去除重复（同一段落只保留一个变更）
+        Dim seenIndices = New HashSet(Of Integer)()
+        Dim distinctChanges = New List(Of FormatChange)()
+        For Each c In plan.Changes
+            If seenIndices.Add(c.ParagraphIndex) Then
+                distinctChanges.Add(c)
+            End If
+        Next
+        plan.Changes = distinctChanges
+
+        ' 更新总变更数
+        plan.TotalStyleChanges = plan.Changes.Count
+
+        ' AI标注已完成，不再需要AI标注
+        plan.NeedsAITagging = False
+    End Sub
+
+    ''' <summary>
+    ''' 格式化字体描述字符串
+    ''' </summary>
+    Private Shared Function FormatFontDescription(font As FontConfig) As String
+        If font Is Nothing Then Return ""
+        Dim parts As New List(Of String)()
+
+        If Not String.IsNullOrEmpty(font.FontNameCN) Then
+            parts.Add(font.FontNameCN)
+        End If
+        If font.FontSize > 0 Then
+            parts.Add($"{font.FontSize}pt")
+        End If
+        If font.Bold Then
+            parts.Add("加粗")
+        End If
+        If font.Italic Then
+            parts.Add("斜体")
+        End If
+
+        Return String.Join(" ", parts)
+    End Function
+
+    ''' <summary>
+    ''' 获取对齐方式的中文显示名称
+    ''' </summary>
+    Private Shared Function GetAlignmentDisplayName(alignment As String) As String
+        If String.IsNullOrEmpty(alignment) Then Return ""
+        Select Case alignment.ToLower()
+            Case "center" : Return "居中"
+            Case "right" : Return "右对齐"
+            Case "justify" : Return "两端对齐"
+            Case Else : Return "左对齐"
+        End Select
+    End Function
+
+    ''' <summary>
+    ''' 根据语义标签构建格式变更的文字描述
+    ''' </summary>
+    Private Shared Function BuildFormatDescription(tag As SemanticTag) As String
+        Dim parts As New List(Of String)()
+
+        If tag.Font IsNot Nothing Then
+            parts.Add(FormatFontDescription(tag.Font))
+        End If
+
+        If tag.Paragraph IsNot Nothing Then
+            Dim alignName = GetAlignmentDisplayName(tag.Paragraph.Alignment)
+            If Not String.IsNullOrEmpty(alignName) Then
+                parts.Add(alignName)
+            End If
+            If tag.Paragraph.FirstLineIndent > 0 Then
+                parts.Add($"首行缩进{tag.Paragraph.FirstLineIndent}字符")
+            End If
+            If tag.Paragraph.LineSpacing > 0 AndAlso Math.Abs(tag.Paragraph.LineSpacing - 1.5) > 0.01 Then
+                parts.Add($"行距{tag.Paragraph.LineSpacing}")
+            End If
+        End If
+
+        Return String.Join(", ", parts)
     End Function
 
 #End Region

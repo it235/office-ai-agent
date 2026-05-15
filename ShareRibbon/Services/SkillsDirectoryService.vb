@@ -48,6 +48,12 @@ Public Class SkillFileDefinition
     ''' <summary>应用类型（用于分类）</summary>
     Public Property Application As String = ""
 
+    ''' <summary>脚本列表（从 scripts/ 目录解析）</summary>
+    Public Property Scripts As List(Of SkillScript) = New List(Of SkillScript)()
+
+    ''' <summary>默认脚本文件名（可选）</summary>
+    Public Property DefaultScript As String = ""
+
     Public ReadOnly Property AllowedToolsText As String
         Get
             If AllowedTools Is Nothing OrElse AllowedTools.Count = 0 Then Return ""
@@ -72,6 +78,43 @@ Public Class SkillFileDefinition
             Return "1.0"
         End Get
     End Property
+
+    ''' <summary>
+    ''' 获取默认脚本（用于执行）
+    ''' </summary>
+    Public Function GetDefaultScript() As SkillScript
+        If Scripts Is Nothing OrElse Scripts.Count = 0 Then Return Nothing
+        If Not String.IsNullOrEmpty(DefaultScript) Then
+            Return Scripts.FirstOrDefault(Function(s) s.FileName = DefaultScript)
+        End If
+        Return Scripts.First()
+    End Function
+End Class
+
+''' <summary>
+''' Skill脚本定义
+''' </summary>
+Public Class SkillScript
+    ''' <summary>脚本文件名</summary>
+    Public Property FileName As String
+
+    ''' <summary>脚本完整路径</summary>
+    Public Property FilePath As String
+
+    ''' <summary>脚本类型：python / powershell / shell / batch</summary>
+    Public Property ScriptType As String
+
+    ''' <summary>脚本描述</summary>
+    Public Property Description As String
+
+    ''' <summary>是否可执行</summary>
+    Public Property Executable As Boolean = True
+
+    ''' <summary>脚本参数说明</summary>
+    Public Property ArgsHint As String = ""
+
+    ''' <summary>工作目录（相对于Skill目录）</summary>
+    Public Property WorkingDirectory As String = ""
 End Class
 
 ''' <summary>
@@ -211,7 +254,86 @@ Public Class SkillsDirectoryService
             skill.Content &= vbCrLf & vbCrLf & "---" & vbCrLf & vbCrLf & File.ReadAllText(examplesPath)
         End If
 
+        ' 发现并解析 scripts/ 目录下的脚本
+        DiscoverSkillScripts(dirPath, skill)
+
         Return skill
+    End Function
+
+    ''' <summary>
+    ''' 发现 Skill 目录下的脚本文件
+    ''' </summary>
+    Private Shared Sub DiscoverSkillScripts(skillDir As String, skill As SkillFileDefinition)
+        Dim scriptsPath = Path.Combine(skillDir, "scripts")
+        If Not Directory.Exists(scriptsPath) Then Return
+
+        Try
+            Dim scriptFiles = Directory.GetFiles(scriptsPath, "*.*", SearchOption.TopDirectoryOnly)
+            For Each scriptPath In scriptFiles
+                Dim fileName = Path.GetFileName(scriptPath)
+                Dim ext = Path.GetExtension(fileName).ToLowerInvariant()
+
+                ' 只处理可执行脚本类型
+                Select Case ext
+                    Case ".py", ".ps1", ".sh", ".bat", ".cmd"
+                        Dim scriptType = GetScriptType(ext)
+                        If scriptType <> "" Then
+                            Dim script = New SkillScript() With {
+                                .FileName = fileName,
+                                .FilePath = scriptPath,
+                                .ScriptType = scriptType,
+                                .Description = $"执行 {fileName} 脚本",
+                                .Executable = True
+                            }
+
+                            ' 尝试从同名的 .md 文件读取脚本说明
+                            Dim descPath = Path.Combine(scriptsPath, fileName & ".md")
+                            If File.Exists(descPath) Then
+                                Dim descContent = File.ReadAllText(descPath)
+                                ' 解析脚本说明（支持 frontmatter 格式）
+                                Dim descLines = descContent.Split({vbCrLf, vbLf, vbCr}, StringSplitOptions.None)
+                                Dim inFrontMatter = False
+                                For Each line In descLines
+                                    If line.Trim() = "---" Then
+                                        inFrontMatter = Not inFrontMatter
+                                        Continue For
+                                    End If
+                                    If Not inFrontMatter AndAlso line.StartsWith("#") Then
+                                        script.Description = line.TrimStart("#"c).Trim()
+                                        Exit For
+                                    End If
+                                Next
+                                If script.Description = $"执行 {fileName} 脚本" Then
+                                    ' 如果没有找到标题，使用第一行非空非frontmatter行
+                                    For Each line In descLines
+                                        If Not line.Trim().StartsWith("---") AndAlso Not line.Trim().StartsWith("#") AndAlso Not String.IsNullOrWhiteSpace(line.Trim()) Then
+                                            script.Description = line.Trim()
+                                            Exit For
+                                        End If
+                                    Next
+                                End If
+                            End If
+
+                            skill.Scripts.Add(script)
+                        End If
+                End Select
+            Next
+        Catch ex As Exception
+            Debug.WriteLine($"[SkillsDirectoryService] 发现脚本失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 根据扩展名获取脚本类型
+    ''' </summary>
+    Private Shared Function GetScriptType(ext As String) As String
+        Select Case ext.ToLower()
+            Case ".py" : Return "python"
+            Case ".ps1" : Return "powershell"
+            Case ".sh" : Return "shell"
+            Case ".bat", ".cmd" : Return "batch"
+            Case Else : Return ""
+        End Select
     End Function
 
     ''' <summary>
@@ -359,6 +481,8 @@ Public Class SkillsDirectoryService
                             skill.Tags = value.Split({","c}, StringSplitOptions.RemoveEmptyEntries).
                                 Select(Function(s) s.Trim()).Where(Function(s) Not String.IsNullOrWhiteSpace(s)).ToList()
                         End If
+                    Case "default-script"
+                        skill.DefaultScript = value
                 End Select
             End If
         Next

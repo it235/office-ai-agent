@@ -1169,9 +1169,9 @@ Public Class ConfigApiForm
         cloudPlatformLabel.Visible = isPreset
         cloudPlatformTextBox.Visible = Not isPreset
         If isPreset Then
-            cloudPlatformLabel.Text = currentCloudConfig.pltform
+            cloudPlatformLabel.Text = currentCloudConfig.platform
         Else
-            cloudPlatformTextBox.Text = currentCloudConfig.pltform
+            cloudPlatformTextBox.Text = currentCloudConfig.platform
         End If
 
         cloudUrlLabel.Visible = isPreset
@@ -1247,7 +1247,7 @@ Public Class ConfigApiForm
         Cursor = Cursors.WaitCursor
 
         If Not currentCloudConfig.isPreset Then
-            currentCloudConfig.pltform = cloudPlatformTextBox.Text
+            currentCloudConfig.platform = cloudPlatformTextBox.Text
             currentCloudConfig.url = cloudUrlTextBox.Text
         End If
         currentCloudConfig.key = apiKey
@@ -1306,7 +1306,7 @@ Public Class ConfigApiForm
         Dim platformName As String
         Dim apiUrl As String
         If currentCloudConfig.isPreset Then
-            platformName = currentCloudConfig.pltform
+            platformName = currentCloudConfig.platform
             apiUrl = currentCloudConfig.url
         Else
             platformName = cloudPlatformTextBox.Text
@@ -1357,7 +1357,7 @@ Public Class ConfigApiForm
         Cursor = Cursors.WaitCursor
 
         If Not currentCloudConfig.isPreset Then
-            currentCloudConfig.pltform = platformName
+            currentCloudConfig.platform = platformName
             currentCloudConfig.url = apiUrl
         End If
         currentCloudConfig.key = apiKey
@@ -1365,7 +1365,7 @@ Public Class ConfigApiForm
         Try
             Dim validationResult = Await ValidateApiAsync(apiUrl, apiKey, selectedChatModelName)
             If validationResult Then
-                currentCloudConfig.pltform = platformName
+                currentCloudConfig.platform = platformName
                 currentCloudConfig.url = apiUrl
                 currentCloudConfig.key = apiKey
                 currentCloudConfig.validated = True
@@ -1388,7 +1388,7 @@ Public Class ConfigApiForm
 
                 ConfigSettings.ApiUrl = currentCloudConfig.url
                 ConfigSettings.ApiKey = apiKey
-                ConfigSettings.platform = currentCloudConfig.pltform
+                ConfigSettings.platform = currentCloudConfig.platform
                 ConfigSettings.ModelName = selectedChatModelName
 
                 Dim selectedChatModel = currentCloudConfig.model.FirstOrDefault(Function(m) m.modelName = selectedChatModelName)
@@ -1434,7 +1434,7 @@ Public Class ConfigApiForm
             Return
         End If
 
-        If MessageBox.Show($"确定要删除 {currentCloudConfig.pltform} 吗？", "确认删除", MessageBoxButtons.YesNo, MessageBoxIcon.Question) = DialogResult.Yes Then
+        If MessageBox.Show($"确定要删除 {currentCloudConfig.platform} 吗？", "确认删除", MessageBoxButtons.YesNo, MessageBoxIcon.Question) = DialogResult.Yes Then
             ConfigData.Remove(currentCloudConfig)
             SaveConfig()
             LoadDataToUI()
@@ -1443,7 +1443,7 @@ Public Class ConfigApiForm
 
     Private Sub CloudAddButton_Click(sender As Object, e As EventArgs)
         Dim newConfig As New ConfigItem() With {
-            .pltform = "新云端服务",
+            .platform = "新云端服务",
             .url = "https://api.example.com/v1/chat/completions",
             .providerType = ProviderType.Cloud,
             .isPreset = False,
@@ -1532,7 +1532,7 @@ Public Class ConfigApiForm
 
         currentLocalConfig = CType(localProviderListBox.SelectedItem, ConfigItem)
 
-        localPlatformTextBox.Text = currentLocalConfig.pltform
+        localPlatformTextBox.Text = currentLocalConfig.platform
         localUrlTextBox.Text = currentLocalConfig.url
         localApiKeyTextBox.Text = If(String.IsNullOrEmpty(currentLocalConfig.key), "", currentLocalConfig.key)
         localDefaultKeyLabel.Text = If(String.IsNullOrEmpty(currentLocalConfig.defaultApiKey), "", $"提示: 默认APIKey为 '{currentLocalConfig.defaultApiKey}'，大多数情况可留空")
@@ -1578,7 +1578,7 @@ Public Class ConfigApiForm
         localRefreshModelsButton.Text = "刷新中..."
         Cursor = Cursors.WaitCursor
 
-        currentLocalConfig.pltform = localPlatformTextBox.Text
+        currentLocalConfig.platform = localPlatformTextBox.Text
         currentLocalConfig.url = apiUrl
         currentLocalConfig.key = apiKey
 
@@ -1677,7 +1677,7 @@ Public Class ConfigApiForm
         localSaveButton.Text = "验证中..."
         Cursor = Cursors.WaitCursor
 
-        currentLocalConfig.pltform = platformName
+        currentLocalConfig.platform = platformName
         currentLocalConfig.url = apiUrl
         currentLocalConfig.key = apiKey
 
@@ -1704,7 +1704,7 @@ Public Class ConfigApiForm
 
                 ConfigSettings.ApiUrl = currentLocalConfig.url
                 ConfigSettings.ApiKey = apiKey
-                ConfigSettings.platform = currentLocalConfig.pltform
+                ConfigSettings.platform = currentLocalConfig.platform
                 ConfigSettings.ModelName = selectedChatModelName
 
                 Dim selectedChatModel = currentLocalConfig.model.FirstOrDefault(Function(m) m.modelName = selectedChatModelName)
@@ -1750,7 +1750,7 @@ Public Class ConfigApiForm
             Return
         End If
 
-        If MessageBox.Show($"确定要删除 {currentLocalConfig.pltform} 吗？", "确认删除", MessageBoxButtons.YesNo, MessageBoxIcon.Question) = DialogResult.Yes Then
+        If MessageBox.Show($"确定要删除 {currentLocalConfig.platform} 吗？", "确认删除", MessageBoxButtons.YesNo, MessageBoxIcon.Question) = DialogResult.Yes Then
             ConfigData.Remove(currentLocalConfig)
             SaveConfig()
             LoadDataToUI()
@@ -1759,7 +1759,7 @@ Public Class ConfigApiForm
 
     Private Sub LocalAddButton_Click(sender As Object, e As EventArgs)
         Dim newConfig As New ConfigItem() With {
-            .pltform = "新本地服务",
+            .platform = "新本地服务",
             .url = "http://localhost:11434/v1/chat/completions",
             .providerType = ProviderType.Local,
             .isPreset = False,

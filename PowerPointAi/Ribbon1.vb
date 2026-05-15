@@ -14,7 +14,7 @@ Public Class Ribbon1
         Globals.ThisAddIn.ShowChatTaskPane()
     End Sub
 
-    Protected Overrides Sub WebResearchButton_Click(sender As Object, e As RibbonControlEventArgs)
+    Protected Overrides Sub WebCaptureButton_Click(sender As Object, e As RibbonControlEventArgs)
         Globals.ThisAddIn.ShowChatTaskPane()
     End Sub
 
@@ -22,8 +22,8 @@ Public Class Ribbon1
         'Globals.ThisAddIn.ShowChatTaskPane()
     End Sub
     Protected Overrides Sub DataAnalysisButton_Click(sender As Object, e As RibbonControlEventArgs)
-        ' Word 特定的数据分析逻辑
-        MessageBox.Show("Word数据分析功能正在开发中...")
+        ' PowerPoint 特定的数据分析逻辑
+        MessageBox.Show("PowerPoint数据分析功能正在开发中...")
     End Sub
 
     Protected Overrides Function GetApplication() As ApplicationInfo
@@ -53,22 +53,6 @@ Public Class Ribbon1
         MessageBox.Show("PowerPoint校对功能正在开发中...", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
     End Sub
 
-    ''' <summary>
-    ''' 在聊天面板显示提示信息
-    ''' </summary>
-    Private Async Sub buildHtmlHint(chatCtrl As ChatControl, displayContent As String)
-        Try
-            Dim responseUuid As String = Guid.NewGuid().ToString()
-            Dim aiName As String = ShareRibbon.ConfigSettings.platform & " " & ShareRibbon.ConfigSettings.ModelName
-            Dim jsCreate As String = $"createChatSection('{aiName}', formatDateTime(new Date()), '{responseUuid}');"
-            Await chatCtrl.ExecuteJavaScriptAsyncJS(jsCreate)
-            Dim js = $"appendRenderer('{responseUuid}','{displayContent}');"
-            Await chatCtrl.ExecuteJavaScriptAsyncJS(js)
-        Catch ex As Exception
-            Debug.WriteLine("ExecuteJavaScriptAsyncJS 调用失败: " & ex.Message)
-        End Try
-    End Sub
-
     ' 排版功能 - 进入模板选择模式
     Protected Overrides Async Sub ReformatButton_Click(sender As Object, e As RibbonControlEventArgs)
         Try
@@ -89,27 +73,6 @@ Public Class Ribbon1
             MessageBox.Show("进入排版模式出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
-
-    ''' <summary>
-    ''' 判断形状类型（标题/副标题/正文）
-    ''' </summary>
-    Private Function GetShapeType(shp As Microsoft.Office.Interop.PowerPoint.Shape) As String
-        Try
-            If shp.PlaceholderFormat IsNot Nothing Then
-                Select Case shp.PlaceholderFormat.Type
-                    Case Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderTitle,
-                         Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderCenterTitle
-                        Return "标题"
-                    Case Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderSubtitle
-                        Return "副标题"
-                    Case Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderBody
-                        Return "正文"
-                End Select
-            End If
-        Catch
-        End Try
-        Return "文本框"
-    End Function
 
     ' 一键翻译功能 - PowerPoint实现
     Protected Overrides Async Sub TranslateButton_Click(sender As Object, e As RibbonControlEventArgs)
@@ -220,21 +183,6 @@ Public Class Ribbon1
         End Try
     End Sub
 
-    ' 接受补全功能 - PowerPoint实现
-    Protected Sub AcceptCompletionButton_Click(sender As Object, e As RibbonControlEventArgs)
-        Try
-            Dim completionManager = PowerPointCompletionManager.Instance
-            If completionManager IsNot Nothing AndAlso completionManager.HasGhostText Then
-                completionManager.AcceptCurrentCompletion()
-            Else
-                ' 没有可接受的补全时，显示提示
-                MessageBox.Show("当前没有可接受的补全建议。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
-            End If
-        Catch ex As Exception
-            MessageBox.Show("接受补全时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-        End Try
-    End Sub
-
     ' 模板排版功能 - PowerPoint实现（使用JSON格式完整提取模板结构）
     Protected Overrides Sub TemplateFormatButton_Click(sender As Object, e As RibbonControlEventArgs)
         Try
@@ -281,7 +229,7 @@ Public Class Ribbon1
                     ' 调用JS进入模板渲染模式
                     Task.Run(Async Function()
                                  Await Task.Delay(500)
-                                 Dim jsCall = $"enterTemplateMode(`{EscapeForJs(templateContent)}`, `{EscapeForJs(templateName)}`);"
+                                 Dim jsCall = $"enterTemplateMode(`{JsUtil.EscapeForJs(templateContent)}`, `{JsUtil.EscapeForJs(templateName)}`);"
                                  Await chatCtrl.ExecuteJavaScriptAsyncJS(jsCall)
                              End Function)
 
@@ -463,9 +411,5 @@ Public Class Ribbon1
         Catch
             Return "文本"
         End Try
-    End Function
-
-    Private Function EscapeForJs(text As String) As String
-        Return text.Replace("\", "\\").Replace("`", "\`").Replace("$", "\$").Replace(vbCr, "").Replace(vbLf, "\n")
     End Function
 End Class

@@ -32,7 +32,7 @@ Public Class ConfigManager
             If item.selected Then
                 ConfigSettings.ApiUrl = item.url
                 ConfigSettings.ApiKey = item.key
-                ConfigSettings.platform = item.pltform
+                ConfigSettings.platform = item.platform
                 For Each item_m In item.model
                     If item_m.selected Then
                         If item_m.modelType = ModelType.Chat Then
@@ -56,7 +56,7 @@ Public Class ConfigManager
     Private Sub MergeConfigurations(loadedData As List(Of ConfigItem))
         ' 先添加云端预置配置
         For Each preset In PresetProviders.GetCloudProviders()
-            Dim existing = loadedData.FirstOrDefault(Function(x) x.pltform = preset.pltform OrElse x.url = preset.url)
+            Dim existing = loadedData.FirstOrDefault(Function(x) x.platform = preset.platform OrElse x.url = preset.url)
             If existing IsNot Nothing Then
                 ' 保留用户的key和selected状态
                 preset.key = existing.key
@@ -84,7 +84,7 @@ Public Class ConfigManager
 
         ' 添加本地预置配置
         For Each preset In PresetProviders.GetLocalProviders()
-            Dim existing = loadedData.FirstOrDefault(Function(x) x.pltform = preset.pltform OrElse x.url = preset.url)
+            Dim existing = loadedData.FirstOrDefault(Function(x) x.platform = preset.platform OrElse x.url = preset.url)
             If existing IsNot Nothing Then
                 preset.key = existing.key
                 preset.selected = existing.selected
@@ -111,7 +111,7 @@ Public Class ConfigManager
 
         ' 添加用户自定义的非预置配置
         For Each userConfig In loadedData
-            Dim isPresetPlatform = ConfigData.Any(Function(x) x.pltform = userConfig.pltform OrElse x.url = userConfig.url)
+            Dim isPresetPlatform = ConfigData.Any(Function(x) x.platform = userConfig.platform OrElse x.url = userConfig.url)
             If Not isPresetPlatform Then
                 ' 用户自定义的服务商，直接添加
                 userConfig.isPreset = False
@@ -140,7 +140,7 @@ Public Class ConfigManager
 
     ' Api配置（每次仅可使用1格）
     Public Class ConfigItem
-        Public Property pltform As String
+        Public Property platform As String
         Public Property url As String
         Public Property model As List(Of ConfigItemModel)
         Public Property key As String
@@ -165,7 +165,7 @@ Public Class ConfigManager
         Public Property defaultApiKey As String = ""
 
         Public Overrides Function ToString() As String
-            Return pltform
+            Return platform
         End Function
     End Class
 

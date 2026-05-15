@@ -69,14 +69,11 @@ Partial Class Ribbon1
         Me.MCPButton.Image = ShareRibbon.SharedResources.Mcp1
         Me.WebCaptureButton.Image = ShareRibbon.SharedResources.Send32
         Me.SpotlightButton.Image = ShareRibbon.SharedResources.Wait
-        ' 已实现的功能按钮：显示
-        ' Me.BatchDataGenButton.Visible = True  (默认 True，无需重复)
-        ' Me.WebCaptureButton.Visible = True    (默认 True，无需重复)
-        Me.ProofreadButton.Visible = True   ' 功能开发中，按钮可见以便用户发现
-        Me.ReformatButton.Visible = True    ' 功能开发中，按钮可见以便用户发现
-        ' Excel 不支持的功能：保持隐藏
+        ' 工具箱按钮已全部实现
+        ' Excel 暂不支持的内容提效功能：保持隐藏
+        Me.ProofreadButton.Visible = False
+        Me.ReformatButton.Visible = False
         Me.ContinuationButton.Visible = False
-        Me.TemplateFormatButton.Visible = False
         Me.TranslateButton.Image = ShareRibbon.SharedResources.Translate
         Me.StudyButton.Image = ShareRibbon.SharedResources.Help
     End Sub

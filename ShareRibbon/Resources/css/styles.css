@@ -3631,6 +3631,7 @@ input:checked + .mcp-toggle-slider:before {
     align-items: center;
     justify-content: center;
     z-index: 10000;
+    animation: fadeIn 0.2s ease;
 }
 
 .template-preview-dialog {
@@ -4054,64 +4055,6 @@ input:checked + .mcp-toggle-slider:before {
 
 .template-action-btn.manage-btn.active {
     background: #43a047;
-}
-
-/* 模板预览对话框 */
-.template-preview-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0,0,0,0.5);
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    animation: fadeIn 0.2s ease;
-}
-
-.template-preview-dialog {
-    background: white;
-    border-radius: 12px;
-    width: 90%;
-    max-width: 600px;
-    max-height: 80vh;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-}
-
-.template-preview-header {
-    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-    color: white;
-    padding: 14px 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 16px;
-    font-weight: 500;
-}
-
-.template-preview-close-btn {
-    background: transparent;
-    border: none;
-    color: white;
-    font-size: 24px;
-    cursor: pointer;
-    opacity: 0.8;
-    line-height: 1;
-}
-
-.template-preview-close-btn:hover {
-    opacity: 1;
-}
-
-.template-preview-content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px;
 }
 
 .preview-header {

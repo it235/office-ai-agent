@@ -220,6 +220,9 @@
   <data name="config_panel" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\js\config-panel.js;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
   </data>
+  <data name="proofread_ui" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\js\proofread-ui.js;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
+  </data>
   <data name="chat_template_refactored" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\chat-template-refactored.html;System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089;utf-8</value>
   </data>

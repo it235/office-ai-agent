@@ -50,7 +50,7 @@ Public Class UnifiedMemoryService
     ''' <summary>
     ''' 计算记忆重要性（基于内容、用户反馈、访问频率）
     ''' </summary>
-    Private Shared Function CalculateImportance(
+    Public Shared Function CalculateImportance(
         content As String,
         memoryType As String,
         metadata As Dictionary(Of String, Object)) As Double
@@ -95,7 +95,7 @@ Public Class UnifiedMemoryService
     ''' <summary>
     ''' 建立记忆关联（后台线程执行）
     ''' </summary>
-    Private Shared Sub BuildMemoryAssociations(memoryId As Long, content As String)
+    Public Shared Sub BuildMemoryAssociations(memoryId As Long, content As String)
         Try
             ' 1. 查找相似记忆
             Dim similarMemories = MemoryRepository.GetSimilarMemories(memoryId, topK:=5)

@@ -29,10 +29,59 @@ Public Class ChatControl
     Private _reformatShapes As List(Of Object) = Nothing
     Private _reformatTypes As List(Of String) = Nothing
 
+    ' 排版撤销快照（PPT不支持UndoRecord，使用自定义快照）
+    Private _reformatUndoSnapshots As List(Of ShapeFormatSnapshot) = Nothing
+
+    ''' <summary>
+    ''' 形状格式快照 - 用于PPT排版撤销
+    ''' </summary>
+    Private Class ShapeFormatSnapshot
+        Public ShapeIndex As Integer
+        Public FontNameFarEast As String = ""
+        Public FontName As String = ""
+        Public FontSize As Single = 0
+        Public Bold As Microsoft.Office.Core.MsoTriState = Microsoft.Office.Core.MsoTriState.msoFalse
+        Public Alignment As Microsoft.Office.Interop.PowerPoint.PpParagraphAlignment = Microsoft.Office.Interop.PowerPoint.PpParagraphAlignment.ppAlignLeft
+
+        Public Shared Function Capture(shp As Microsoft.Office.Interop.PowerPoint.Shape, index As Integer) As ShapeFormatSnapshot
+            Dim snap As New ShapeFormatSnapshot()
+            snap.ShapeIndex = index
+            Try
+                If shp.HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                    Dim tr = shp.TextFrame.TextRange
+                    snap.FontNameFarEast = If(tr.Font.NameFarEast IsNot Nothing, tr.Font.NameFarEast, "")
+                    snap.FontName = If(tr.Font.Name IsNot Nothing, tr.Font.Name, "")
+                    snap.FontSize = tr.Font.Size
+                    snap.Bold = tr.Font.Bold
+                    snap.Alignment = tr.ParagraphFormat.Alignment
+                End If
+            Catch ex As Exception
+                Debug.WriteLine($"捕获形状{index}快照失败: {ex.Message}")
+            End Try
+            Return snap
+        End Function
+
+        Public Sub Restore(shp As Microsoft.Office.Interop.PowerPoint.Shape)
+            Try
+                If shp.HasTextFrame <> Microsoft.Office.Core.MsoTriState.msoTrue Then Return
+                Dim tr = shp.TextFrame.TextRange
+                If Not String.IsNullOrEmpty(FontNameFarEast) Then tr.Font.NameFarEast = FontNameFarEast
+                If Not String.IsNullOrEmpty(FontName) Then tr.Font.Name = FontName
+                If FontSize > 0 Then tr.Font.Size = FontSize
+                tr.Font.Bold = Bold
+                tr.ParagraphFormat.Alignment = Alignment
+            Catch ex As Exception
+                Debug.WriteLine($"恢复形状{ShapeIndex}快照失败: {ex.Message}")
+            End Try
+        End Sub
+    End Class
+
     ''' <summary>
     ''' 设置排版上下文，用于规则匹配后应用格式
     ''' </summary>
     Public Sub SetReformatContext(shapes As List(Of Object), types As List(Of String))
+        ' 新排版开始时，清空旧的撤销快照（防止不匹配）
+        _reformatUndoSnapshots = Nothing
         _reformatShapes = shapes
         _reformatTypes = types
     End Sub
@@ -2207,6 +2256,17 @@ Public Class ChatControl
             Dim appliedCount As Integer = 0
             Dim defaultRule As String = If(ruleDict.ContainsKey("body"), "body", ruleDict.Keys.FirstOrDefault())
 
+            ' 保存排版前快照（用于PPT撤销，因PPT不支持UndoRecord）
+            _reformatUndoSnapshots = New List(Of ShapeFormatSnapshot)()
+            For i As Integer = 0 To _reformatShapes.Count - 1
+                Try
+                    Dim shp = DirectCast(_reformatShapes(i), Microsoft.Office.Interop.PowerPoint.Shape)
+                    _reformatUndoSnapshots.Add(ShapeFormatSnapshot.Capture(shp, i))
+                Catch ex As Exception
+                    Debug.WriteLine($"捕获形状{i}快照失败: {ex.Message}")
+                End Try
+            Next
+
             For i As Integer = 0 To _reformatShapes.Count - 1
                 Try
                     Dim shp = DirectCast(_reformatShapes(i), Microsoft.Office.Interop.PowerPoint.Shape)
@@ -2247,9 +2307,8 @@ Public Class ChatControl
                 End Try
             Next
 
-            ' 清理上下文
-            _reformatShapes = Nothing
-            _reformatTypes = Nothing
+            ' 保留 _reformatShapes/_reformatTypes 用于撤销快照恢复
+            ' 撤销或新排版开始时会重新设置
 
             GlobalStatusStrip.ShowInfo($"排版完成，共处理 {appliedCount} 个文本框")
 
@@ -2326,6 +2385,54 @@ Public Class ChatControl
         Catch ex As Exception
             Debug.WriteLine("ApplyFormattingToShape 出错: " & ex.Message)
         End Try
+    End Sub
+
+    ''' <summary>
+    ''' 从快照恢复格式（PPT专用撤销方式）
+    ''' </summary>
+    Private Sub RestoreFormattingSnapshots()
+        If _reformatUndoSnapshots Is Nothing OrElse _reformatUndoSnapshots.Count = 0 Then
+            Debug.WriteLine("没有排版快照可恢复")
+            Return
+        End If
+
+        Dim restoredCount As Integer = 0
+        For Each snap In _reformatUndoSnapshots
+            Try
+                If snap.ShapeIndex >= 0 AndAlso snap.ShapeIndex < _reformatShapes.Count Then
+                    Dim shp = DirectCast(_reformatShapes(snap.ShapeIndex), Microsoft.Office.Interop.PowerPoint.Shape)
+                    snap.Restore(shp)
+                    restoredCount += 1
+                End If
+            Catch ex As Exception
+                Debug.WriteLine($"恢复形状{snap.ShapeIndex}失败: {ex.Message}")
+            End Try
+        Next
+        Debug.WriteLine($"从快照恢复了 {restoredCount} 个形状的格式")
+
+        ' 清理快照和上下文
+        _reformatUndoSnapshots = Nothing
+        _reformatShapes = Nothing
+        _reformatTypes = Nothing
+    End Sub
+
+    ''' <summary>
+    ''' 撤销排版（PPT重写：优先从快照恢复，失败后回退到基类Undo）
+    ''' </summary>
+    Protected Overrides Sub HandleUndoReformat()
+        ' 优先尝试从快照恢复（最可靠）
+        If _reformatUndoSnapshots IsNot Nothing AndAlso _reformatUndoSnapshots.Count > 0 Then
+            Try
+                RestoreFormattingSnapshots()
+                GlobalStatusStrip.ShowInfo("已撤销排版操作")
+                Return
+            Catch ex As Exception
+                Debug.WriteLine($"快照恢复失败，回退到Undo: {ex.Message}")
+            End Try
+        End If
+
+        ' 回退到基类Undo机制
+        MyBase.HandleUndoReformat()
     End Sub
 
 #End Region

@@ -456,7 +456,7 @@ window.appendFormattingCard = function(payload) {
         refineArea.innerHTML =
             '<div class="formatting-refine-input-row">' +
             '  <input type="text" class="formatting-refine-input" placeholder="输入微调指令，如：标题改为黑体居中..." />' +
-            '  <button class="formatting-refine-send-btn" onclick="window.sendRefinementFromCard(\'' + uuid + '\')">发送</button>' +
+            '  <button class="formatting-btn formatting-refine-send-btn" data-uuid="' + uuid + '">发送</button>' +
             '</div>';
         cardBody.appendChild(refineArea);
     }
@@ -492,6 +492,13 @@ document.addEventListener('click', function(e) {
     } else if (btn.classList.contains('formatting-btn-ghost')) {
         // "微调" / "继续微调"
         toggleRefinementInput(uuid);
+    } else if (btn.classList.contains('formatting-refine-send-btn')) {
+        // "发送"微调指令
+        var input = card.querySelector('.formatting-refine-input');
+        if (input && input.value.trim()) {
+            sendRefinementCommand(uuid, input.value.trim());
+            input.value = '';
+        }
     }
 });
 
@@ -657,4 +664,31 @@ window.enterSmartReformatMode = function() {
 window.exitSmartReformatMode = function() {
     document.body.classList.remove('smart-reformat-mode');
     sendReformatAction('exitSmartReformat');
+};
+
+/**
+ * 显示排版引导提示（当用户未选中文本时由 Ribbon 按钮调用）
+ */
+window.showQuickReformatGuide = function() {
+    var existing = document.getElementById('quick-reformat-guide');
+    if (existing) return;
+
+    var chatContainer = document.getElementById('chat-container');
+    if (!chatContainer) return;
+
+    var guide = document.createElement('div');
+    guide.id = 'quick-reformat-guide';
+    guide.className = 'quick-reformat-guide';
+    guide.innerHTML =
+        '<div class="quick-reformat-guide-content" style="background:#f0f7ff;border:1px solid #b3d4fc;border-radius:8px;padding:16px;margin:12px;">' +
+        '  <div style="font-weight:600;color:#1a56db;margin-bottom:8px;">&#x1F4D0; 智能排版使用说明</div>' +
+        '  <ul style="margin:0;padding-left:20px;color:#444;font-size:13px;line-height:1.8;">' +
+        '    <li>在文档中<span style="font-weight:600;">选中需要排版的内容</span>，然后点击 Ribbon 上的"排版"按钮</li>' +
+        '    <li>或在 Chat 中输入排版指令，如：<code style="background:#e8e8e8;padding:2px 6px;border-radius:3px;">按公文标准排版</code></li>' +
+        '    <li>支持标准：公文(GB/T 9704)、学术论文、商务报告、合同等</li>' +
+        '  </ul>' +
+        '  <button onclick="this.parentElement.parentElement.remove()" style="margin-top:8px;padding:4px 12px;border:1px solid #1a56db;background:white;color:#1a56db;border-radius:4px;cursor:pointer;font-size:12px;">知道了</button>' +
+        '</div>';
+
+    chatContainer.insertBefore(guide, chatContainer.firstChild);
 };

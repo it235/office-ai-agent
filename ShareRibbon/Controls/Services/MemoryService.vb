@@ -126,8 +126,15 @@ Public Class MemoryService
                              Debug.WriteLine($"[MemoryService] 生成记忆向量失败: {vecEx.Message}")
                          End Try
 
-                         MemoryRepository.InsertAtomicMemory(candidate, Nothing, sessionId, appType, embeddingJson)
-                         Debug.WriteLine($"[MemoryService] 原子记忆已保存，长度: {candidate.Length}, 有向量: {Not String.IsNullOrWhiteSpace(embeddingJson)}")
+                         ' 使用增强重要性评分和知识关联
+                        Dim importance = UnifiedMemoryService.CalculateImportance(candidate, "conversation", Nothing)
+                        Dim memoryId = MemoryRepository.InsertMemory(candidate, embeddingJson, sessionId, appType, "short_term", importance, "conversation")
+                        Debug.WriteLine($"[MemoryService] 原子记忆已保存(ID={memoryId})，长度: {candidate.Length}, 重要性: {importance:F2}")
+
+                        ' 异步建立知识关联（fire-and-forget，不影响主流程）
+                        If memoryId > 0 Then
+                            Task.Run(Sub() UnifiedMemoryService.BuildMemoryAssociations(memoryId, candidate))
+                        End If
                      Catch ex As Exception
                          Debug.WriteLine($"SaveAtomicMemoryAsync 失败: {ex.Message}")
                      End Try
@@ -161,8 +168,9 @@ Public Class MemoryService
                 End If
             Next
 
-            MemoryRepository.InsertAtomicMemory(candidate, Nothing, sessionId, appType)
-            Debug.WriteLine($"[MemoryService] 已同步保存文件内容到记忆，长度: {candidate.Length}")
+            Dim importance = UnifiedMemoryService.CalculateImportance(candidate, "knowledge", Nothing)
+            Dim memoryId = MemoryRepository.InsertMemory(candidate, Nothing, sessionId, appType, "short_term", importance, "file_content")
+            Debug.WriteLine($"[MemoryService] 已同步保存文件内容到记忆(ID={memoryId})，长度: {candidate.Length}")
         Catch ex As Exception
             Debug.WriteLine($"SaveFileContentToMemory 失败: {ex.Message}")
         End Try
@@ -208,8 +216,9 @@ Public Class MemoryService
                              Dim uStore = If(uTrimmed.Length > maxLen, uTrimmed.Substring(0, maxLen), uTrimmed)
                              If uStore.Length >= 10 AndAlso Not IsDuplicate(sessionId, uStore) Then
                                  Dim embJson = Await GenerateEmbeddingJson(uStore)
-                                 MemoryRepository.InsertAtomicMemory(uStore, Nothing, sessionId, appType, embJson, "short_term")
-                                 Debug.WriteLine($"[MemoryService] 保存 user 记忆，长度: {uStore.Length}, 有向量: {Not String.IsNullOrWhiteSpace(embJson)}")
+                                 Dim uImportance = UnifiedMemoryService.CalculateImportance(uStore, "conversation", Nothing)
+                                MemoryRepository.InsertMemory(uStore, embJson, sessionId, appType, "short_term", uImportance, "user_query")
+                                 Debug.WriteLine($"[MemoryService] 保存 user 记忆，长度: {uStore.Length}, 重要性: {uImportance:F2}")
                              End If
                          End If
 
@@ -219,8 +228,9 @@ Public Class MemoryService
                              Dim aStore = If(aTrimmed.Length > maxLen, aTrimmed.Substring(0, maxLen), aTrimmed)
                              If aStore.Length >= 10 AndAlso Not IsDuplicate(sessionId, aStore) Then
                                  Dim embJson = Await GenerateEmbeddingJson(aStore)
-                                 MemoryRepository.InsertAtomicMemory(aStore, Nothing, sessionId, appType, embJson, "short_term")
-                                 Debug.WriteLine($"[MemoryService] 保存 assistant 记忆，长度: {aStore.Length}, 有向量: {Not String.IsNullOrWhiteSpace(embJson)}")
+                                 Dim aImportance = UnifiedMemoryService.CalculateImportance(aStore, "assistant_solution", Nothing)
+                                MemoryRepository.InsertMemory(aStore, embJson, sessionId, appType, "short_term", aImportance, "assistant_reply")
+                                 Debug.WriteLine($"[MemoryService] 保存 assistant 记忆，长度: {aStore.Length}, 重要性: {aImportance:F2}")
                              End If
                          End If
                      Catch ex As Exception

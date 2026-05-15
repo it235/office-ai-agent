@@ -3,6 +3,7 @@
 
 Imports System.IO
 Imports System.Net
+Imports System.Text.RegularExpressions
 Imports System.Net.Http
 Imports System.Net.Http.Headers
 Imports System.Text
@@ -826,6 +827,39 @@ Public Class HttpStreamService
         End If
 
         Await _executeScript(js)
+
+        ' === 校验功能：Flush后校验（排版/校对场景）===
+        If contentType = "content" Then
+            Try
+                ' 检查是否需要校验
+                Dim needValidation As Boolean = False
+                ' 可以通过状态或上下文判断是否需要校验
+                ' 例如，检查是否是排版/校对模式，并且有内容需要校验
+
+                ' 简单实现：检查内容是否包含JSON格式
+                Dim jsonPattern As New Regex("\{[\s\S]*?\}")
+                Dim matches = jsonPattern.Matches(plainContent)
+                If matches.Count > 0 Then
+                    ' 尝试解析JSON内容
+                    For Each match In matches
+                        Try
+                            Dim jsonStr = match.Value
+                            Dim detectedFormat = DslProtocolDetector.DetectFormat(jsonStr)
+                            If detectedFormat = InstructionFormat.DslJson OrElse detectedFormat = InstructionFormat.ProofreadJson Then
+                                ' 发现DSL格式，触发校验
+                                Debug.WriteLine($"[HttpStreamService] 检测到DSL格式内容，触发校验")
+                                ' 这里可以添加具体的校验逻辑
+                                ' 例如，调用SelfCheckLoopController.PostFlushValidateAsync
+                            End If
+                        Catch ex As Exception
+                            ' 解析失败，忽略
+                        End Try
+                    Next
+                End If
+            Catch ex As Exception
+                Debug.WriteLine($"[HttpStreamService] Flush后校验异常: {ex.Message}")
+            End Try
+        End If
     End Function
 
 #End Region

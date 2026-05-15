@@ -73,6 +73,24 @@ Public Class ChatContextBuilder
                         skillParts.Add(detailMessage)
                     End If
 
+                    ' 如果 Skill 有脚本，添加脚本信息
+                    If topSkill.Skill.Scripts IsNot Nothing AndAlso topSkill.Skill.Scripts.Count > 0 Then
+                        Dim scriptInfo As New List(Of String)()
+                        scriptInfo.Add("**可执行脚本：**")
+                        For Each script In topSkill.Skill.Scripts
+                            scriptInfo.Add($"- `{script.FileName}` ({script.ScriptType})" &
+                                If(Not String.IsNullOrEmpty(script.Description), $" - {script.Description}", ""))
+                        Next
+                        If topSkill.Skill.Scripts.Count > 0 Then
+                            scriptInfo.Add("")
+                            scriptInfo.Add("**脚本调用格式：**")
+                            scriptInfo.Add("```json")
+                            scriptInfo.Add($"{{""command"": ""skill_script.{topSkill.Skill.Name}.{topSkill.Skill.Scripts(0).FileName}"", ""params"": {{""arg1"": ""value1""}}}}")
+                            scriptInfo.Add("```")
+                        End If
+                        skillParts.Add(String.Join(vbCrLf, scriptInfo))
+                    End If
+
                     Dim metaHints As New List(Of String)()
                     metaHints.Add($"当前推荐: {topSkill.Skill.Name}")
                     If topSkill.Skill.Tags IsNot Nothing AndAlso topSkill.Skill.Tags.Count > 0 Then

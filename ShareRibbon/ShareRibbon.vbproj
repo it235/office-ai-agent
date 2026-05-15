@@ -116,6 +116,10 @@
       <HintPath>..\packages\MicrosoftOfficeCore.15.0.0\lib\net35\Office.dll</HintPath>
       <EmbedInteropTypes>True</EmbedInteropTypes>
     </Reference>
+    <Reference Include="Microsoft.Office.Interop.Word, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+      <Private>False</Private>
+      <EmbedInteropTypes>true</EmbedInteropTypes>
+    </Reference>
     <Reference Include="SQLitePCLRaw.core, Version=2.1.11.2622, Culture=neutral, PublicKeyToken=1488e028ca7ab535, processorArchitecture=MSIL">
       <HintPath>..\packages\SQLitePCLRaw.core.2.1.11\lib\netstandard2.0\SQLitePCLRaw.core.dll</HintPath>
     </Reference>
@@ -199,6 +203,7 @@
   <ItemGroup>
     <Compile Include="ApplicationInfo.vb" />
     <Compile Include="Common\LLMUtil.vb" />
+    <Compile Include="Common\JsUtil.vb" />
     <Compile Include="Config\ConfigApiForm.vb">
       <SubType>Form</SubType>
     </Compile>
@@ -273,8 +278,6 @@
     <Compile Include="Translate\TranslateSettings.vb" />
     <Compile Include="Continuation\ContinuationService.vb" />
     <Compile Include="Loop\RalphLoopMemory.vb" />
-    <Compile Include="Loop\RalphLoopController.vb" />
-    <Compile Include="Loop\RalphAgentController.vb" />
     <Compile Include="Agent\AgentKernel.vb" />
     <Compile Include="Agent\LoopEngine.vb" />
     <Compile Include="Agent\AgentSession.vb" />
@@ -389,9 +392,46 @@
     <Compile Include="Controls\Services\ExecutionPlanRenderer.vb" />
     <Compile Include="Controls\Models\ExecutionStep.vb" />
     <Compile Include="Services\EmbeddingService.vb" />
+    <Compile Include="Services\SkillScriptExecutor.vb" />
     <Compile Include="Services\SkillsDirectoryService.vb" />
     <Compile Include="Services\SkillsService.vb" />
     <Compile Include="Services\UnifiedMemoryService.vb" />
+    <Compile Include="Services\Proofread\ProofreadModels.vb" />
+    <Compile Include="Services\Proofread\ProofreadPromptBuilder.vb" />
+    <Compile Include="Services\Proofread\SmartProofreadFocusMode.vb" />
+    <!-- WordDocumentService.vb 移至WordAi项目（需Word Interop） -->
+    <Compile Include="Loop\LoopPhase.vb" />
+    <Compile Include="Loop\InstructionError.vb" />
+    <Compile Include="Loop\ExecutionContext.vb" />
+    <Compile Include="Loop\LoopResult.vb" />
+    <Compile Include="Loop\ContextCheckResult.vb" />
+    <Compile Include="Loop\ValidationResult.vb" />
+    <Compile Include="Loop\VerificationResult.vb" />
+    <Compile Include="Loop\CorrectionResult.vb" />
+    <Compile Include="Loop\ExecutionResult.vb" />
+    <Compile Include="Loop\Interfaces\IContextChecker.vb" />
+    <Compile Include="Loop\Interfaces\IInstructionValidator.vb" />
+    <Compile Include="Loop\Interfaces\IInstructionPlanner.vb" />
+    <Compile Include="Loop\Interfaces\IInstructionGenerator.vb" />
+    <Compile Include="Loop\Interfaces\IInstructionExecutor.vb" />
+    <Compile Include="Loop\Interfaces\IResultVerifier.vb" />
+    <Compile Include="Loop\SelfCheckLoopController.vb" />
+    <Compile Include="Loop\Checkers\PreSendChecker.vb" />
+    <Compile Include="Loop\Validators\PostFlushValidator.vb" />
+    <Compile Include="Loop\Verifiers\PostExecutionVerifier.vb" />
+    <Compile Include="Loop\Executors\DslInstructionExecutor.vb" />
+    <!-- WordDslExecutor.vb 移至WordAi项目（需Word Interop） -->
+    <Compile Include="Loop\DslJsonValidator.vb" />
+    <Compile Include="Loop\DefaultInstructionPlanner.vb" />
+    <Compile Include="Loop\DefaultInstructionGenerator.vb" />
+    <Compile Include="Protocol\Instruction.vb" />
+    <Compile Include="Protocol\InstructionDefinition.vb" />
+    <Compile Include="Protocol\InstructionRegistry.vb" />
+    <Compile Include="Protocol\DslPromptBuilder.vb" />
+    <Compile Include="Protocol\ReformatInstructionSet.vb" />
+    <Compile Include="Protocol\ProofreadInstructionSet.vb" />
+    <!-- WordDomMapper.vb 移至WordAi项目（需Word Interop） -->
+    <Compile Include="Undo\UndoStack.vb" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Controls\BaseChatControl.resx">
@@ -489,6 +529,7 @@
     <None Include="Resources\js\reformat-chat.js" />
     <None Include="Resources\js\reformat-template.js" />
     <None Include="Resources\js\config-panel.js" />
+    <None Include="Resources\js\proofread-ui.js" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Resources\chat-template-refactored.html" />

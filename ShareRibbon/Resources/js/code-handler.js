@@ -2026,7 +2026,7 @@ window.updateFileParsingProgress = updateFileParsingProgress;
 
 /**
  * 显示排版结果卡片（渲染引擎完成后由VB调用）
- * @param {Object} result - {appliedCount, skippedCount, tags: {tagId: count}}
+ * @param {Object} result - {appliedCount, skippedCount, tags: {tagId: count}, success, error}
  */
 function showReformatResult(result) {
     try {
@@ -2035,6 +2035,23 @@ function showReformatResult(result) {
 
         const chatContainer = document.getElementById('chat-container');
         if (!chatContainer) return;
+
+        // 处理错误情况（无排版可撤销）
+        if (result.success === false) {
+            const errorCard = document.createElement('div');
+            errorCard.className = 'reformat-result-card';
+            errorCard.innerHTML = `
+                <div style="background: #fff5f5; border: 1px solid #fed7d7; border-radius: 8px; padding: 12px 16px; margin: 8px 0;">
+                    <div style="font-size: 13px; font-weight: 600; color: #c53030; margin-bottom: 6px;">
+                        排版失败
+                    </div>
+                    <div style="font-size: 12px; color: #718096; word-break: break-all;">${result.error || '未知错误'}</div>
+                </div>
+            `;
+            chatContainer.appendChild(errorCard);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            return;
+        }
 
         // 构建标签使用统计
         let tagStats = '';
@@ -2045,6 +2062,7 @@ function showReformatResult(result) {
 
         const card = document.createElement('div');
         card.className = 'reformat-result-card';
+        const hasChanges = (result.appliedCount || 0) > 0;
         card.innerHTML = `
             <div style="background: #f8f9fa; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; margin: 8px 0;">
                 <div style="font-size: 13px; font-weight: 600; color: #2d3748; margin-bottom: 6px;">
@@ -2052,9 +2070,9 @@ function showReformatResult(result) {
                 </div>
                 ${tagStats ? `<div style="font-size: 11px; color: #718096; margin-bottom: 8px; word-break: break-all;">${tagStats}</div>` : ''}
                 <div style="display: flex; gap: 8px;">
-                    <button onclick="undoReformat()" style="padding: 5px 14px; font-size: 12px; border: 1px solid #e53e3e; color: #e53e3e; background: white; border-radius: 4px; cursor: pointer;">
+                    ${hasChanges ? `<button onclick="undoReformat()" style="padding: 5px 14px; font-size: 12px; border: 1px solid #e53e3e; color: #e53e3e; background: white; border-radius: 4px; cursor: pointer;">
                         撤销排版
-                    </button>
+                    </button>` : ''}
                     <button onclick="reenterReformatMode()" style="padding: 5px 14px; font-size: 12px; border: 1px solid #667eea; color: #667eea; background: white; border-radius: 4px; cursor: pointer;">
                         继续排版
                     </button>

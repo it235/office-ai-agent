@@ -71,12 +71,6 @@ Partial Class BaseOfficeRibbon
         Me.SpotlightButton = Me.Factory.CreateRibbonButton
         Me.BatchDataGenButton = Me.Factory.CreateRibbonButton()
 
-        ' 兼容旧代码的分隔符（保留但不使用）
-        Me.Separator1 = Me.Factory.CreateRibbonSeparator
-        Me.Separator2 = Me.Factory.CreateRibbonSeparator
-        ' 兼容旧代码的GroupAI（保留但不使用）
-        Me.GroupAI = Me.Factory.CreateRibbonGroup
-
         Me.TabAI.SuspendLayout()
         Me.SuspendLayout()
 
@@ -265,12 +259,6 @@ Partial Class BaseOfficeRibbon
         Me.StudyButton.ScreenTip = "查看教学文档"
         Me.StudyButton.SuperTip = "打开在线教学文档，了解所有功能的使用方法"
 
-        ' ========== 兼容旧代码 ==========
-        Me.Separator1.Name = "Separator1"
-        Me.Separator2.Name = "Separator2"
-        Me.GroupAI.Label = "AI大模型"
-        Me.GroupAI.Name = "GroupAI"
-
         ' BaseOfficeRibbon
         Me.Name = "BaseOfficeRibbon"
         Me.Tabs.Add(Me.TabAI)
@@ -324,9 +312,4 @@ Partial Class BaseOfficeRibbon
     ' Group 8: 帮助与学习
     Protected WithEvents GroupHelp As Microsoft.Office.Tools.Ribbon.RibbonGroup
     Protected WithEvents StudyButton As Microsoft.Office.Tools.Ribbon.RibbonButton
-
-    ' 兼容旧代码（保留但不再使用）
-    Protected WithEvents GroupAI As Microsoft.Office.Tools.Ribbon.RibbonGroup
-    Protected WithEvents Separator1 As Microsoft.Office.Tools.Ribbon.RibbonSeparator
-    Protected WithEvents Separator2 As Microsoft.Office.Tools.Ribbon.RibbonSeparator
 End Class

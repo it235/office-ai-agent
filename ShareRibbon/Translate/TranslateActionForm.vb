@@ -360,7 +360,7 @@ Public Class TranslateActionForm
 
         For Each cfg In ConfigManager.ConfigData
             If cfg.validated Then
-                cbPlatform.Items.Add(cfg.pltform)
+                cbPlatform.Items.Add(cfg.platform)
                 If cfg.translateSelected Then
                     selectedPlatformIdx = idx
                 End If
@@ -429,7 +429,7 @@ Public Class TranslateActionForm
         Dim platformName = cbPlatform.SelectedItem?.ToString()
         If String.IsNullOrEmpty(platformName) Then Return
 
-        Dim cfg = ConfigManager.ConfigData.FirstOrDefault(Function(c) c.pltform = platformName)
+        Dim cfg = ConfigManager.ConfigData.FirstOrDefault(Function(c) c.platform = platformName)
         If cfg Is Nothing OrElse cfg.model Is Nothing Then Return
 
         Dim selectedModelIdx = -1
@@ -492,7 +492,7 @@ Public Class TranslateActionForm
         Dim platformName = cbPlatform.SelectedItem?.ToString()
         If Not String.IsNullOrEmpty(platformName) Then
             For Each cfg In ConfigManager.ConfigData
-                cfg.translateSelected = (cfg.pltform = platformName)
+                cfg.translateSelected = (cfg.platform = platformName)
                 If cfg.translateSelected AndAlso cfg.model IsNot Nothing Then
                     Dim selectedModelName = cbModel.SelectedItem?.ToString()
                     For Each m In cfg.model
