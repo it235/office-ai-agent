@@ -95,7 +95,8 @@ Namespace Agent.Harness
                                                          officeContext,
                                                          contextPack,
                                                          turn.TaskSpec,
-                                                         turn.SelectedSkills)
+                                                         turn.SelectedSkills,
+                                                         cancellationToken)
                 Dim first = Await Task.WhenAny(pending.AgentTask, pending.ApprovalSignal.Task)
                 If first Is pending.ApprovalSignal.Task AndAlso Not pending.AgentTask.IsCompleted Then
                     keepPending = True
@@ -111,6 +112,20 @@ Namespace Agent.Harness
 
                 Dim agentResult = Await pending.AgentTask
                 pending.IsCompleted = True
+
+                If agentResult IsNot Nothing AndAlso agentResult.IsCancelled Then
+                    RaisePhase(runId, "cancelled", "已取消")
+                    SafeCompleteRun(runId, "cancelled", "已取消", ExceptionClassifier.CodeCancelled, DateTime.Now)
+                    Return New HarnessRunResult With {
+                        .RunId = runId,
+                        .Status = HarnessRunStatus.Cancelled,
+                        .UserMessage = If(agentResult.Message, "已取消"),
+                        .DebugMessage = "CANCELLED_AT_SAFE_POINT",
+                        .AgentSessionId = If(agentResult.SessionId, ""),
+                        .StartedAt = startedAt,
+                        .FinishedAt = DateTime.Now
+                    }
+                End If
 
                 cancellationToken.ThrowIfCancellationRequested()
 
@@ -186,6 +201,23 @@ Namespace Agent.Harness
 
             Dim agentResult = Await pending.AgentTask
             pending.IsCompleted = True
+
+            If agentResult IsNot Nothing AndAlso agentResult.IsCancelled Then
+                SafeCompleteRun(runId, "cancelled", "已取消", ExceptionClassifier.CodeCancelled, DateTime.Now)
+                RaisePhase(runId, "cancelled", "已取消")
+                RemovePendingRun(runId)
+                _currentRunId = ""
+                Return New HarnessRunResult With {
+                    .RunId = runId,
+                    .Status = HarnessRunStatus.Cancelled,
+                    .UserMessage = If(agentResult.Message, "已取消"),
+                    .DebugMessage = "CANCELLED_AT_SAFE_POINT",
+                    .AgentSessionId = If(agentResult.SessionId, ""),
+                    .StartedAt = pending.StartedAt,
+                    .FinishedAt = DateTime.Now
+                }
+            End If
+
             Dim succeeded = agentResult IsNot Nothing AndAlso agentResult.Success
             Dim status = If(succeeded, HarnessRunStatus.Succeeded, HarnessRunStatus.Failed)
             Dim message = If(agentResult?.Message, If(succeeded, "执行完成", "执行失败"))

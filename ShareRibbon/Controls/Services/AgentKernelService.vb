@@ -29,6 +29,9 @@ Public Class AgentKernelService
     Public Property CurrentAgentSessionId As String = Nothing
     Public Property CurrentHarnessRunId As String = Nothing
 
+    ' 协作式取消：每次运行一个 CTS，AbortAgent 触发 Cancel，Loop 在步骤边界收敛。
+    Private _runCts As Threading.CancellationTokenSource
+
     Public Sub New(
         executeScript As Func(Of String, Task),
         escapeJs As Func(Of String, String),
@@ -123,7 +126,8 @@ Public Class AgentKernelService
                 .TaskSpec = taskSpec,
                 .SelectedSkills = If(selectedSkills, New List(Of SkillFileDefinition)())
             }
-            Dim result = Await _officeHarness.RunAsync(turn, Threading.CancellationToken.None)
+            _runCts = New Threading.CancellationTokenSource()
+            Dim result = Await _officeHarness.RunAsync(turn, _runCts.Token)
 
             If result Is Nothing Then
                 AppLogger.Warn("AgentKernelService", "StartAgentAsync returned null result")
@@ -133,6 +137,11 @@ Public Class AgentKernelService
             If result.Status = Agent.Harness.HarnessRunStatus.AwaitingApproval Then
                 AppLogger.Info("AgentKernelService", $"Harness run awaiting approval: {result.RunId}")
                 Return True
+            End If
+            If result.Status = Agent.Harness.HarnessRunStatus.Cancelled Then
+                AppLogger.Info("AgentKernelService", $"Harness run cancelled: {result.UserMessage}")
+                CurrentHarnessRunId = Nothing
+                Return False
             End If
             If result.Status <> Agent.Harness.HarnessRunStatus.Succeeded Then
                 AppLogger.Warn("AgentKernelService", $"StartAgentAsync agent failed: {result.UserMessage}")
@@ -152,22 +161,37 @@ Public Class AgentKernelService
     End Function
 
     ''' <summary>
-    ''' 终止当前 Agent 任务
+    ''' 终止当前 Agent 任务：触发协作式取消，等待循环在安全点收敛，而不是伪造"已终止"。
     ''' </summary>
     Public Sub AbortAgent()
         Try
-            Dim sessionId = CurrentAgentSessionId
-            Dim runId = CurrentHarnessRunId
-            If Not String.IsNullOrWhiteSpace(runId) Then CancelHarnessRunAsync(runId)
+            Dim signaledRunning = False
+            If _runCts IsNot Nothing AndAlso Not _runCts.IsCancellationRequested Then
+                _runCts.Cancel()
+                signaledRunning = True
+            End If
 
-            ' 清除状态
+            ' 若正卡在等待审批，取消令牌无法立刻唤醒，需主动拒绝以释放挂起回调。
+            Dim hadPendingApproval = False
+            If Not String.IsNullOrWhiteSpace(CurrentHarnessRunId) Then
+                hadPendingApproval = True
+                CancelHarnessRunAsync(CurrentHarnessRunId)
+            End If
+
+            If signaledRunning OrElse hadPendingApproval Then
+                OnKernelStatusChanged("正在停止，等待当前步骤安全结束…")
+                Return
+            End If
+
+            ' 没有正在运行的任务：直接复位 UI。
+            Dim sessionId = CurrentAgentSessionId
             AgentThinkingUuid = Nothing
             AgentOriginalUserRequest = Nothing
             AgentFullUserMessage = Nothing
             CurrentAgentSessionId = Nothing
+            CurrentHarnessRunId = Nothing
 
             _executeScript($"completeAgent('{sessionId}', false, '已终止')")
-
             GlobalStatusStrip.ShowInfo("已终止Agent")
         Catch ex As Exception
             AppLogger.Error("AgentKernelService", "AbortAgent exception", ex)
@@ -202,9 +226,17 @@ Public Class AgentKernelService
 
     Private Async Sub CancelHarnessRunAsync(runId As String)
         Try
-            Await _officeHarness.CancelAsync(runId, Threading.CancellationToken.None)
+            Dim result = Await _officeHarness.CancelAsync(runId, Threading.CancellationToken.None)
+            ' 运行中无法安全抢占宿主 COM 属预期：真正停止由 _runCts 在步骤边界收敛；此处仅如实记录。
+            If result Is Nothing Then
+                AppLogger.Warn("AgentKernelService", "Cancel harness run returned null")
+            ElseIf result.Status = Agent.Harness.HarnessRunStatus.Cancelled OrElse
+                   result.Status = Agent.Harness.HarnessRunStatus.Succeeded OrElse
+                   result.Status = Agent.Harness.HarnessRunStatus.Failed Then
+                AppLogger.Info("AgentKernelService", $"Cancel harness run: status={result.Status} debug={result.DebugMessage}")
+            End If
         Catch ex As Exception
-            AppLogger.Warn("AgentKernelService", $"Cancel harness run failed: {AppLogger.Redact(ex.Message)}")
+            AppLogger.Warn("AgentKernelService", $"Cancel harness run threw: {AppLogger.Redact(ex.Message)}")
         End Try
     End Sub
 
@@ -213,7 +245,10 @@ Public Class AgentKernelService
 #Region "Event Handlers"
 
     Private Sub OnHarnessContextReady(sender As Object, e As Agent.Harness.HarnessContextEventArgs)
-        If e Is Nothing OrElse String.IsNullOrWhiteSpace(e.ContextPackJson) Then Return
+        If e Is Nothing Then Return
+        ' runId 需在运行期间可得，供 AbortAgent 在等待审批时定位挂起的运行。
+        If Not String.IsNullOrWhiteSpace(e.RunId) Then CurrentHarnessRunId = e.RunId
+        If String.IsNullOrWhiteSpace(e.ContextPackJson) Then Return
         Try
             Dim escaped = _escapeJs(e.ContextPackJson)
             _executeScript($"window.officeAiContextPack = JSON.parse('{escaped}'); if (typeof updateContextPackTrace === 'function') updateContextPackTrace(window.officeAiContextPack);")
@@ -410,6 +445,15 @@ Public Class AgentKernelService
             AgentFullUserMessage = Nothing
             AgentThinkingUuid = Nothing
             CurrentAgentSessionId = Nothing
+            CurrentHarnessRunId = Nothing
+            Dim cts = _runCts
+            _runCts = Nothing
+            If cts IsNot Nothing Then
+                Try
+                    cts.Dispose()
+                Catch
+                End Try
+            End If
         End Try
     End Sub
 

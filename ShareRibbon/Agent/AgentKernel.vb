@@ -1,5 +1,6 @@
 Imports System.IO
 Imports System.Linq
+Imports System.Threading
 Imports System.Threading.Tasks
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
@@ -203,7 +204,8 @@ Namespace Agent
                                             Optional officeContext As Context.OfficeContext = Nothing,
                                             Optional contextPack As Context.ContextPack = Nothing,
                                             Optional taskSpec As AgentTaskSpec = Nothing,
-                                            Optional selectedSkills As List(Of SkillFileDefinition) = Nothing) As Task(Of AgentResult)
+                                            Optional selectedSkills As List(Of SkillFileDefinition) = Nothing,
+                                            Optional cancellationToken As CancellationToken = Nothing) As Task(Of AgentResult)
             Dim cid = AppLogger.BeginScope()
             AppLogger.Info("AgentKernel", $"ExecuteAsync start appType={appType} cid={cid}")
 
@@ -251,7 +253,7 @@ Namespace Agent
                 )
 
                 ' 执行 ReAct Loop
-                Dim result = Await _loopEngine.RunAsync(_session, systemPrompt, matchedSkill)
+                Dim result = Await _loopEngine.RunAsync(_session, systemPrompt, matchedSkill, cancellationToken)
 
                 ' 保存记忆
                 _memory.AddTaskRecord(result)

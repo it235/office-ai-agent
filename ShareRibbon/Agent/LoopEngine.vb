@@ -1,5 +1,6 @@
 Imports System.Text
 Imports System.Linq
+Imports System.Threading
 Imports System.Threading.Tasks
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
@@ -44,7 +45,8 @@ Namespace Agent
         ''' </summary>
         Public Async Function RunAsync(session As AgentSession,
                                         systemPrompt As String,
-                                        Optional skill As AgentSkill = Nothing) As Task(Of AgentResult)
+                                        Optional skill As AgentSkill = Nothing,
+                                        Optional cancellationToken As CancellationToken = Nothing) As Task(Of AgentResult)
             Dim noProgressCount As Integer = 0
             Dim replanAttempts As Integer = 0
             _multimodalRepairDisabledForRun = False
@@ -86,6 +88,11 @@ Namespace Agent
                 ' Phase 3: ReAct Loop
                 Dim stepIndex As Integer = 0
                 While stepIndex < session.Plan.Steps.Count AndAlso session.CurrentIteration < MaxIterations
+                    ' 协作式停止：在步骤边界检查，不打断进行中的宿主操作，但不启动下一步。
+                    If cancellationToken.IsCancellationRequested Then
+                        Return FinishCancelled(session)
+                    End If
+
                     Dim planStep = session.Plan.Steps(stepIndex)
                     planStep.Status = StepStatus.Running
 
@@ -323,17 +330,32 @@ Namespace Agent
                             replanAttempts += 1
                             AppLogger.Info("LoopEngine", $"Reflect/replan attempt {replanAttempts}: {toolResult.ToObserveSummary()}")
 
-                            Dim newPlan = Await ReflectAndReplanAsync(session, toolResult.ToObserveSummary(), systemPrompt)
-                            If newPlan IsNot Nothing AndAlso newPlan.Steps.Count > 0 Then
-                                session.Plan = newPlan
-                                stepIndex = 0
-                                noProgressCount = 0
-                                Continue While
-                            Else
-                                Dim replanFail = $"重新规划失败: {toolResult.ToObserveSummary()}"
-                                AppLogger.Error("LoopEngine", replanFail)
-                                Return AgentResult.Failed(session.Id, replanFail)
-                            End If
+                            Dim reflection = Await ReflectAndReplanAsync(session, toolResult.ToObserveSummary(), systemPrompt)
+                            Select Case reflection?.Strategy
+                                Case "retry"
+                                    ' 重试同一步骤：不前移索引，避免重跑已成功步骤造成重复写入
+                                    planStep.Status = StepStatus.Pending
+                                    planStep.ErrorMessage = Nothing
+                                    noProgressCount = 0
+                                    Continue While
+                                Case "skip"
+                                    ' 跳过当前失败步骤：标记后前进，已完成步骤保持不动
+                                    planStep.Status = StepStatus.Skipped
+                                    noProgressCount = 0
+                                    stepIndex += 1
+                                    Continue While
+                                Case "replan"
+                                    ' 仅全新计划才从第 0 步重跑
+                                    session.Plan = reflection.Plan
+                                    stepIndex = 0
+                                    noProgressCount = 0
+                                    OnStatusChanged?.Invoke($"已重新规划（共 {session.Plan.Steps.Count} 步），按新计划从头执行...")
+                                    Continue While
+                                Case Else
+                                    Dim replanFail = $"重新规划未能给出可执行修复: {toolResult.ToObserveSummary()}"
+                                    AppLogger.Error("LoopEngine", replanFail)
+                                    Return AgentResult.Failed(session.Id, replanFail)
+                            End Select
                         End If
                     End If
 
@@ -349,7 +371,7 @@ Namespace Agent
                 End If
 
                 Dim incompleteSteps = session.Plan.Steps.
-                    Where(Function(s) s.Status <> StepStatus.Completed).
+                    Where(Function(s) s.Status <> StepStatus.Completed AndAlso s.Status <> StepStatus.Skipped).
                     ToList()
                 If incompleteSteps.Count > 0 Then
                     session.Status = AgentStatus.Failed
@@ -383,6 +405,20 @@ Namespace Agent
             End Try
         End Function
 
+
+        ''' <summary>
+        ''' 协作式停止的收敛出口：只在不打断进行中宿主操作的安全点调用。
+        ''' </summary>
+        Private Function FinishCancelled(session As AgentSession) As AgentResult
+            session.Status = AgentStatus.Aborted
+            Dim executed = session.CurrentIteration
+            Dim cancelMsg = If(executed > 0,
+                               $"已按你的请求停止，已完成 {executed} 个操作，未继续后续步骤。",
+                               "已按你的请求停止，尚未执行任何操作。")
+            OnStatusChanged?.Invoke(cancelMsg)
+            AppLogger.Info("LoopEngine", $"Run cancelled at step boundary, iterations={executed}")
+            Return AgentResult.CancelledResult(session.Id, cancelMsg)
+        End Function
 
         ''' <summary>
         ''' 获取撤销管理器（供外部访问）

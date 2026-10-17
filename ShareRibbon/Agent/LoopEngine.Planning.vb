@@ -435,37 +435,55 @@ complexity 规则：
         End Function
 
         ''' <summary>
-        ''' 反思并重新规划
+        ''' 反思决策：携带策略与（可选）新计划，供调用方按语义处理步骤索引，
+        ''' 避免 retry/skip 一律重置到第 0 步而重跑已成功步骤造成重复写入。
+        ''' </summary>
+        Private Class ReflectionDecision
+            Public Property Strategy As String = "none"
+            Public Property Plan As ExecutionPlan
+            Public Shared ReadOnly Property NoAction As ReflectionDecision
+                Get
+                    Return New ReflectionDecision With {.Strategy = "none"}
+                End Get
+            End Property
+        End Class
+
+        ''' <summary>
+        ''' 反思并给出修复策略
         ''' </summary>
         Private Async Function ReflectAndReplanAsync(session As AgentSession,
                                                       observation As String,
-                                                      systemPrompt As String) As Task(Of ExecutionPlan)
+                                                      systemPrompt As String) As Task(Of ReflectionDecision)
             Try
                 Dim prompt = _promptManager.BuildReflectionPrompt(session, observation)
                 Dim response = Await SendAIRequest(prompt, systemPrompt, Nothing)
 
                 Dim jsonStr = ExtractJson(response)
-                If String.IsNullOrEmpty(jsonStr) Then Return Nothing
+                If String.IsNullOrEmpty(jsonStr) Then Return ReflectionDecision.NoAction
 
                 Dim decision = JObject.Parse(jsonStr)
-                Dim strategy = decision("strategy")?.ToString()?.ToLower()
+                Dim strategy = decision("strategy")?.ToString()?.Trim()?.ToLowerInvariant()
 
                 Select Case strategy
                     Case "retry"
-                        ' 重试当前计划
-                        Return session.Plan
+                        ' 重试当前步骤：沿用现有计划，由调用方保持在同一步骤，不重置索引
+                        Return New ReflectionDecision With {.Strategy = "retry", .Plan = session.Plan}
                     Case "skip"
-                        ' 跳过当前步骤继续
-                        Return session.Plan
+                        ' 跳过当前失败步骤：由调用方前进一步，已完成步骤保持不动
+                        Return New ReflectionDecision With {.Strategy = "skip", .Plan = session.Plan}
                     Case "replan"
-                        ' 重新生成计划
-                        Return Await GeneratePlanAsync(session, systemPrompt, session.Skill)
+                        ' 生成全新计划：仅在此情况下由调用方从第 0 步重新执行
+                        Dim newPlan = Await GeneratePlanAsync(session, systemPrompt, session.Skill)
+                        If newPlan IsNot Nothing AndAlso newPlan.Steps.Count > 0 Then
+                            Return New ReflectionDecision With {.Strategy = "replan", .Plan = newPlan}
+                        End If
+                        Return ReflectionDecision.NoAction
                     Case Else
-                        Return Nothing
+                        Return ReflectionDecision.NoAction
                 End Select
             Catch ex As Exception
                 Debug.WriteLine($"[LoopEngine] 反思失败: {ex.Message}")
-                Return Nothing
+                Return ReflectionDecision.NoAction
             End Try
         End Function
 

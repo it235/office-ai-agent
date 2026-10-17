@@ -274,6 +274,14 @@ Namespace Agent
             sb.AppendLine($"步骤 {planStep.StepNumber}: {planStep.Description}")
             sb.AppendLine()
 
+            ' 计划阶段已生成的精确工具与参数必须带到执行阶段，否则模型会重新生成、
+            ' 造成参数漂移（公式、图片路径、目标范围等偏离原计划）。
+            If Not String.IsNullOrWhiteSpace(planStep.Code) Then
+                sb.AppendLine("【本步计划指定的操作】默认严格采用以下已规划的工具与参数，仅当上一步观察明确证明其不适用时才可修正，且只改必要字段：")
+                sb.AppendLine(planStep.Code.Trim())
+                sb.AppendLine()
+            End If
+
             If Not String.IsNullOrWhiteSpace(previousObservation) Then
                 sb.AppendLine("【上一步的观察结果】")
                 sb.AppendLine(previousObservation)
