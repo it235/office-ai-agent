@@ -814,6 +814,15 @@ Namespace Agent
                 ' 构建完整的 JSON 命令
                 Dim command As String
                 If params.ContainsKey("commands") Then
+                    ' 批量信封允许用外层已放行工具包裹任意内层命令，内层不再经过本方法顶部的
+                    ' 安全/Skill/宿主裁决。这里对每条内层命令补跑同一套门控，防止绕过 VBA 禁用、
+                    ' allowed-tools 边界和删除/高风险审批。
+                    Dim batchGate = ValidateBatchCommandEnvelope(executionContext, appType, params)
+                    If batchGate IsNot Nothing Then
+                        sw.Stop()
+                        If batchGate.ElapsedMs <= 0 Then batchGate.ElapsedMs = sw.ElapsedMilliseconds
+                        Return batchGate
+                    End If
                     command = params.ToString(Formatting.None)
                 Else
                     Dim wrapped = New JObject From {
@@ -849,6 +858,90 @@ Namespace Agent
                                     errorCode:=ExceptionClassifier.CodeNotFound,
                                     userMessage:="未识别的工具类型",
                                     recoverable:=False)
+        End Function
+
+        ''' <summary>
+        ''' 批量信封的内层命令名解析到已注册工具；先精确匹配 id，再按规范化 key/别名匹配唯一项。
+        ''' </summary>
+        Private Function ResolveBatchCommandTool(commandName As String) As ToolDescriptor
+            If String.IsNullOrWhiteSpace(commandName) Then Return Nothing
+            Dim direct = GetTool(commandName.Trim())
+            If direct IsNot Nothing Then Return direct
+
+            Dim normalized = NormalizeToolKey(commandName)
+            Dim matches = _tools.Values.
+                Where(Function(t) NormalizeToolKey(t.Id) = normalized OrElse NormalizeToolKey(t.Name) = normalized).
+                ToList()
+            If matches.Count = 1 Then Return matches(0)
+            Return Nothing
+        End Function
+
+        ''' <summary>
+        ''' 对 {commands:[...]} 批量信封逐条内层命令复用宿主/Skill/安全/审批裁决。
+        ''' 全部通过返回 Nothing；任一违规返回对应 ToolResult 失败，整批拒绝。
+        ''' </summary>
+        Private Function ValidateBatchCommandEnvelope(executionContext As ToolExecutionContext,
+                                                      appType As String,
+                                                      params As JObject) As ToolResult
+            Dim arr = TryCast(params("commands"), JArray)
+            If arr Is Nothing Then Return Nothing
+
+            For Each item In arr.OfType(Of JObject)()
+                Dim commandName = item("command")?.ToString()
+                Dim innerTool = ResolveBatchCommandTool(commandName)
+                If innerTool Is Nothing Then
+                    Dim notFoundMessage = $"批量命令包含未注册或不支持当前宿主的操作: {If(commandName, "(空)")}"
+                    Return ToolResult.Failed(If(commandName, "batch"),
+                                             notFoundMessage,
+                                             New With {.command = commandName, .appType = appType},
+                                             ExceptionClassifier.CodeNotFound,
+                                             notFoundMessage,
+                                             notFoundMessage,
+                                             recoverable:=False)
+                End If
+
+                If Not String.IsNullOrWhiteSpace(appType) AndAlso Not SupportsApp(innerTool, appType) Then
+                    Dim hostMessage = $"批量命令 {innerTool.Id} 不支持当前宿主 {appType}"
+                    Return ToolResult.Failed(innerTool.Id,
+                                             hostMessage,
+                                             New With {.appType = appType, .toolAppType = innerTool.AppType},
+                                             ExceptionClassifier.CodeHostUnsupported,
+                                             hostMessage,
+                                             hostMessage,
+                                             recoverable:=False)
+                End If
+
+                If executionContext IsNot Nothing AndAlso
+                   executionContext.HasPrimarySkillGate() AndAlso
+                   Not executionContext.IsToolAllowed(innerTool.Id) Then
+                    Dim gateMessage = $"批量命令 {innerTool.Id} 不在当前 Skill 允许工具集合中"
+                    Return ToolResult.Failed(innerTool.Id,
+                                             gateMessage,
+                                             New With {
+                                                 .primarySkill = executionContext.PrimarySkillName,
+                                                 .allowedTools = executionContext.AllowedToolsText()
+                                             },
+                                             ExceptionClassifier.CodeToolNotAllowed,
+                                             gateMessage,
+                                             gateMessage,
+                                             recoverable:=True)
+                End If
+
+                Dim innerParams = TryCast(item("params"), JObject)
+                If innerParams Is Nothing Then innerParams = New JObject()
+                Dim decision = _safetyGate.Evaluate(innerTool, innerParams)
+                If decision IsNot Nothing AndAlso decision.Action <> Execution.SafetyAction.Allow Then
+                    If decision.Action = Execution.SafetyAction.RequireApproval AndAlso
+                       executionContext IsNot Nothing AndAlso
+                       executionContext.ConsumeToolApproval(innerTool.Id, innerParams) Then
+                        ' 该内层命令已针对精确参数获得一次性审批，放行继续执行。
+                    Else
+                        Return BuildSafetyFailure(innerTool, decision)
+                    End If
+                End If
+            Next
+
+            Return Nothing
         End Function
 
         Private Shared Function BuildSafetyFailure(tool As ToolDescriptor,
