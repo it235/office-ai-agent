@@ -1382,6 +1382,9 @@ Public Class ChatControl
                 snapshot("textHash") = ComputePowerPointObservationHash(GetPowerPointSlideText(slide))
                 snapshot("textPreview") = TruncatePowerPointObservationText(GetPowerPointSlideText(slide), 240)
                 snapshot("notesHash") = ComputePowerPointObservationHash(GetPowerPointNotesText(slide))
+                ' 动画与形状格式不在文本里：补齐这两类，否则 AddAnimation/FormatSlide 会被判为"无变化"而触发重放。
+                snapshot("animationCount") = GetPowerPointAnimationCount(slide)
+                snapshot("formatHash") = ComputePowerPointObservationHash(GetPowerPointFormatSignature(slide))
             End If
         Catch ex As Exception
             snapshot("captureError") = AppLogger.Redact(ex.Message)
@@ -1418,7 +1421,9 @@ Public Class ChatControl
 
         Dim diff As New JObject From {
             {"slideCountDelta", GetPowerPointSnapshotInteger(afterSnapshot, "slideCount") - GetPowerPointSnapshotInteger(beforeSnapshot, "slideCount")},
-            {"shapeCountDelta", GetPowerPointSnapshotInteger(afterSnapshot, "shapeCount") - GetPowerPointSnapshotInteger(beforeSnapshot, "shapeCount")}
+            {"shapeCountDelta", GetPowerPointSnapshotInteger(afterSnapshot, "shapeCount") - GetPowerPointSnapshotInteger(beforeSnapshot, "shapeCount")},
+            {"animationCountDelta", GetPowerPointSnapshotInteger(afterSnapshot, "animationCount") - GetPowerPointSnapshotInteger(beforeSnapshot, "animationCount")},
+            {"formatChanged", Not String.Equals(GetPowerPointSnapshotString(beforeSnapshot, "formatHash"), GetPowerPointSnapshotString(afterSnapshot, "formatHash"), StringComparison.Ordinal)}
         }
 
         Return New JObject From {
@@ -1436,6 +1441,11 @@ Public Class ChatControl
     Private Shared Function GetPowerPointSnapshotInteger(snapshot As JObject, name As String) As Integer
         If snapshot Is Nothing Then Return 0
         Return If(snapshot(name)?.Value(Of Integer)(), 0)
+    End Function
+
+    Private Shared Function GetPowerPointSnapshotString(snapshot As JObject, name As String) As String
+        If snapshot Is Nothing Then Return ""
+        Return If(snapshot(name)?.ToString(), "")
     End Function
 
     Private Shared Function ComputePowerPointObservationHash(value As String) As String
@@ -1477,6 +1487,48 @@ Public Class ChatControl
             For Each shape As Object In slide.NotesPage.Shapes
                 Try
                     If shape.HasTextFrame AndAlso shape.TextFrame.HasText Then parts.Add(If(shape.TextFrame.TextRange.Text, ""))
+                Catch
+                End Try
+            Next
+        Catch
+        End Try
+        Return String.Join(vbLf, parts)
+    End Function
+
+    Private Shared Function GetPowerPointAnimationCount(slide As Object) As Integer
+        Try
+            Dim mainSeq = slide.TimeLine.MainSequence
+            If mainSeq IsNot Nothing Then Return CInt(mainSeq.Count)
+        Catch
+        End Try
+        Return 0
+    End Function
+
+    Private Shared Function GetPowerPointFormatSignature(slide As Object) As String
+        Dim parts As New List(Of String)()
+        Try
+            For Each shape As Object In slide.Shapes
+                Try
+                    Dim segment As New StringBuilder()
+                    segment.Append(shape.Name).Append("|")
+                    segment.Append(CInt(shape.Left)).Append(",")
+                    segment.Append(CInt(shape.Top)).Append(",")
+                    segment.Append(CInt(shape.Width)).Append(",")
+                    segment.Append(CInt(shape.Height))
+                    Try
+                        If CType(shape.Fill.Type, Integer) = 1 Then segment.Append(";fill=").Append(shape.Fill.ForeColor.RGB)
+                    Catch
+                    End Try
+                    If shape.HasTextFrame AndAlso shape.TextFrame.HasText Then
+                        Dim tr = shape.TextFrame.TextRange.Font
+                        segment.Append(";font=").Append(If(tr.Name, "")).Append(",")
+                        segment.Append(CSng(tr.Size)).Append(",b=").Append(CInt(tr.Bold)).Append(",i=").Append(CInt(tr.Italic))
+                        Try
+                            segment.Append(",color=").Append(tr.Color.RGB)
+                        Catch
+                        End Try
+                    End If
+                    parts.Add(segment.ToString())
                 Catch
                 End Try
             Next
