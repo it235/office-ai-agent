@@ -69,9 +69,6 @@ docs/*
 !docs/design/
 !docs/design/**
 !docs/VS2026-InstallerProjects.md
-!docs/project-assessment-optimization-plan.md
-!docs/build-and-installer.md
-!docs/signing-and-certificates.md
 !docs/project-issues-and-optimization-audit.md
 !docs/ai-native-harness-design.md
 !docs/ai-native-harness-implementation-design.md
