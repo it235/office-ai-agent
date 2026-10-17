@@ -339,7 +339,10 @@ Public Class AgentMemoryRepository
     Public Shared Function RetrieveMemoryItems(query As String, appType As String, documentId As String, projectId As String, Optional topN As Integer = 8) As List(Of MemoryItemRecord)
         OfficeAiDatabase.EnsureInitialized()
         Dim results As New List(Of MemoryItemRecord)()
-        Dim whereParts As New List(Of String) From {"status = 'active'"}
+        Dim whereParts As New List(Of String) From {
+            "status = 'active'",
+            "(expires_at IS NULL OR expires_at = '' OR expires_at > datetime('now', 'localtime'))"
+        }
         Dim searchTerms = GetSearchTerms(query)
 
         If Not String.IsNullOrWhiteSpace(appType) Then whereParts.Add("(app_type = @app_type OR app_type IS NULL OR app_type = '')")
@@ -412,6 +415,7 @@ Public Class AgentMemoryRepository
 
         Dim whereParts As New List(Of String) From {
             "m.status = 'active'",
+            "(m.expires_at IS NULL OR m.expires_at = '' OR m.expires_at > datetime('now', 'localtime'))",
             "e.vector_status = 'ready'",
             "e.embedding_json IS NOT NULL",
             "e.embedding_json != ''"
@@ -597,6 +601,93 @@ Public Class AgentMemoryRepository
             End Using
         End Using
     End Sub
+
+    ''' <summary>
+    ''' Atomically claims up to <paramref name="limit"/> pending jobs in a single transaction:
+    ''' selects candidate ids and flips them to 'processing' together, so a concurrent worker
+    ''' (another host sharing the same SQLite file, or a re-entrant kick) cannot claim the same row.
+    ''' Replaces the old SELECT-then-MarkJobProcessing split that left a claim window open.
+    ''' </summary>
+    Public Shared Function ClaimPendingJobs(Optional limit As Integer = 5) As List(Of MemoryJobRecord)
+        OfficeAiDatabase.EnsureInitialized()
+        Dim results As New List(Of MemoryJobRecord)()
+        Dim max = Math.Max(1, limit)
+
+        Using conn As New SQLiteConnection(OfficeAiDatabase.GetConnectionString())
+            conn.Open()
+            Using tx = conn.BeginTransaction()
+                Dim ids As New List(Of String)()
+                Using cmd As New SQLiteCommand(
+                    "SELECT job_id FROM memory_job WHERE status = 'pending' " &
+                    "AND (next_run_at IS NULL OR next_run_at = '' OR next_run_at <= datetime('now', 'localtime')) " &
+                    "ORDER BY created_at ASC LIMIT @limit", conn)
+                    cmd.Transaction = tx
+                    cmd.Parameters.AddWithValue("@limit", max)
+                    Using rdr = cmd.ExecuteReader()
+                        While rdr.Read()
+                            If Not rdr.IsDBNull(0) Then ids.Add(rdr.GetString(0))
+                        End While
+                    End Using
+                End Using
+
+                If ids.Count = 0 Then
+                    tx.Commit()
+                    Return results
+                End If
+
+                Dim placeholders As New List(Of String)()
+                For i = 0 To ids.Count - 1
+                    placeholders.Add("@id" & i)
+                Next
+                Dim idList = String.Join(",", placeholders)
+
+                Using upd As New SQLiteCommand(
+                    "UPDATE memory_job SET status = 'processing', updated_at = datetime('now', 'localtime') " &
+                    "WHERE status = 'pending' AND job_id IN (" & idList & ")", conn)
+                    upd.Transaction = tx
+                    For i = 0 To ids.Count - 1
+                        upd.Parameters.AddWithValue("@id" & i, ids(i))
+                    Next
+                    upd.ExecuteNonQuery()
+                End Using
+
+                Using sel As New SQLiteCommand(
+                    "SELECT job_id, job_type, target_id, payload_json, status, attempt_count, last_error, created_at, updated_at, next_run_at " &
+                    "FROM memory_job WHERE job_id IN (" & idList & ")", conn)
+                    sel.Transaction = tx
+                    For i = 0 To ids.Count - 1
+                        sel.Parameters.AddWithValue("@id" & i, ids(i))
+                    Next
+                    Using rdr = sel.ExecuteReader()
+                        While rdr.Read()
+                            results.Add(ReadMemoryJob(rdr))
+                        End While
+                    End Using
+                End Using
+
+                tx.Commit()
+            End Using
+        End Using
+
+        Return results
+    End Function
+
+    ''' <summary>
+    ''' Returns jobs left stuck in 'processing' (crash, host closed mid-run) back to 'pending'
+    ''' once they are older than <paramref name="staleMinutes"/>, so the queue self-heals.
+    ''' </summary>
+    Public Shared Function ReclaimStaleProcessingJobs(Optional staleMinutes As Integer = 30) As Integer
+        OfficeAiDatabase.EnsureInitialized()
+        Using conn As New SQLiteConnection(OfficeAiDatabase.GetConnectionString())
+            conn.Open()
+            Using cmd As New SQLiteCommand(
+                "UPDATE memory_job SET status = 'pending', updated_at = datetime('now', 'localtime') " &
+                "WHERE status = 'processing' AND updated_at < datetime('now', 'localtime', @window)", conn)
+                cmd.Parameters.AddWithValue("@window", "-" & Math.Max(1, staleMinutes) & " minutes")
+                Return cmd.ExecuteNonQuery()
+            End Using
+        End Using
+    End Function
 
     Public Shared Sub UpsertSkillRegistry(record As SkillRegistryRecord)
         OfficeAiDatabase.EnsureInitialized()

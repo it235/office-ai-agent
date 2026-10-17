@@ -26,6 +26,10 @@ Public Class AgentMemoryPipelineService
 
         Task.Run(Async Function()
                      Try
+                         Dim reclaimed = AgentMemoryRepository.ReclaimStaleProcessingJobs()
+                         If reclaimed > 0 Then
+                             Debug.WriteLine($"[AgentMemoryPipeline] 回收 {reclaimed} 个卡住的 processing job")
+                         End If
                          If EmbeddingService.IsEmbeddingAvailable() Then
                              Dim queued = AgentMemoryRepository.EnqueuePendingEmbeddingJobs(limit)
                              If queued > 0 Then
@@ -49,13 +53,11 @@ Public Class AgentMemoryPipelineService
 
         While processed < maxItems
             Dim batchSize = Math.Min(5, maxItems - processed)
-            Dim jobs = AgentMemoryRepository.GetPendingMemoryJobs(batchSize)
+            Dim jobs = AgentMemoryRepository.ClaimPendingJobs(batchSize)
             If jobs Is Nothing OrElse jobs.Count = 0 Then Exit While
 
             For Each job In jobs
                 Try
-                    AgentMemoryRepository.MarkJobProcessing(job.JobId)
-
                     Select Case If(job.JobType, "").Trim().ToLowerInvariant()
                         Case "extract_memory"
                             Await ProcessExtractMemoryJobAsync(job)
