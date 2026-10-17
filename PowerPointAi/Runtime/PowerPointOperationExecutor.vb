@@ -173,6 +173,7 @@ Namespace OfficeRuntime
                 EnsureTargetCompatibility(resolved, reflectedMember)
                 Dim boundComObjects As New List(Of Object)()
                 Dim returnValue As Object = Nothing
+                Dim isReadOnlyMember = String.Equals(capability.RiskLevel, "safe", StringComparison.OrdinalIgnoreCase)
                 Try
                     If TypeOf reflectedMember Is PropertyInfo Then
                         returnValue = ExecuteProperty(operation,
@@ -183,7 +184,8 @@ Namespace OfficeRuntime
                         returnValue = ExecuteMethod(operation,
                                                     resolved.Value,
                                                     DirectCast(reflectedMember, MethodInfo),
-                                                    boundComObjects)
+                                                    boundComObjects,
+                                                    isReadOnlyMember)
                     Else
                         Throw New PowerPointOperationException(ExceptionClassifier.CodeMemberNotExecutable,
                                                                "Only catalog properties and methods are executable",
@@ -241,11 +243,21 @@ Namespace OfficeRuntime
         Private Shared Function ExecuteMethod(operation As OfficeOperation,
                                               target As Object,
                                               method As MethodInfo,
-                                              boundComObjects As List(Of Object)) As Object
+                                              boundComObjects As List(Of Object),
+                                              isReadOnlyMember As Boolean) As Object
             Dim action = operation.Action.Trim().ToLowerInvariant()
-            If action <> "invoke" AndAlso action <> "create" AndAlso action <> "delete" AndAlso action <> "collection_item" AndAlso action <> "get" Then
-                ThrowMemberAction(operation, $"Action {operation.Action} cannot execute a method")
-            End If
+            Select Case action
+                Case "get", "collection_item"
+                    ' 读语义只能用于只读访问器：绝不允许通过 get 触发有副作用的方法（如 Save/Export/Delete）。
+                    If Not isReadOnlyMember Then
+                        ThrowMemberAction(operation,
+                                          "Action " & operation.Action & " cannot invoke a side-effecting method; use invoke")
+                    End If
+                Case "invoke", "create", "delete"
+                    ' 写语义：可执行性与 SafetyGate 已在主链上游裁决。
+                Case Else
+                    ThrowMemberAction(operation, $"Action {operation.Action} cannot execute a method")
+            End Select
             Dim args = BindParameters(method.GetParameters(), operation.Arguments, boundComObjects)
             Return method.Invoke(target, args)
         End Function

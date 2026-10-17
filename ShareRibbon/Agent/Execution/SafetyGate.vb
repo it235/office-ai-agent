@@ -134,7 +134,15 @@ Namespace Agent.Execution
                    ContainsMemberToken(memberId, "clear") OrElse
                    ContainsMemberToken(memberId, "close") OrElse
                    ContainsMemberToken(memberId, "saveas") OrElse
-                   ContainsMemberToken(memberId, "savecopyas") Then
+                   ContainsMemberToken(memberId, "savecopyas") OrElse
+                   ContainsMemberToken(memberId, "save") OrElse
+                   ContainsMemberToken(memberId, "export") OrElse
+                   ContainsMemberToken(memberId, "printout") OrElse
+                   ContainsMemberToken(memberId, "sendmail") OrElse
+                   ContainsMemberToken(memberId, "checkin") OrElse
+                   ContainsMemberToken(memberId, "checkout") OrElse
+                   ContainsMemberToken(memberId, "reload") OrElse
+                   ContainsMemberToken(memberId, "protect") Then
                     requiresApproval = True
                     highestRisk = "risky"
                 ElseIf action <> "get" Then
