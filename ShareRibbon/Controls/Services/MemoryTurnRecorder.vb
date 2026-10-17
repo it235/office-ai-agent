@@ -19,44 +19,21 @@ Public Class MemoryTurnRecorder
         Dim capturedResponseMode = If(responseMode, "")
         Dim capturedAppType = If(appType, "")
 
+        ' ChatStateService.AddMessage 已把每条 user/assistant 消息写入 conversation_event
+        ' （event_type=chat_message），这里不再重复 append，只负责触发一次记忆抽取；
+        ' 抽取按 session 拾取尚未处理的 chat_message 事件，天然幂等。
         Task.Run(Sub()
                      Try
-                         Dim userMetadata As New JObject()
-                         userMetadata("responseMode") = capturedResponseMode
-                         userMetadata("addHistory") = addHistory
-
-                         Dim userEventId = AgentMemoryRepository.AppendConversationEvent(New ConversationEventRecord With {
-                             .SessionId = capturedSessionId,
-                             .AppType = capturedAppType,
-                             .EventType = "chat_message",
-                             .Role = "user",
-                             .Content = capturedUserQuestion,
-                             .MetadataJson = userMetadata.ToString(Formatting.None)
-                         })
-
-                         Dim assistantMetadata As New JObject()
-                         assistantMetadata("responseMode") = capturedResponseMode
-                         assistantMetadata("sourceUserEventId") = userEventId
-
-                         Dim assistantEventId = AgentMemoryRepository.AppendConversationEvent(New ConversationEventRecord With {
-                             .SessionId = capturedSessionId,
-                             .AppType = capturedAppType,
-                             .EventType = "chat_message",
-                             .Role = "assistant",
-                             .Content = capturedAssistantAnswer,
-                             .MetadataJson = assistantMetadata.ToString(Formatting.None)
-                         })
-
                          Dim payload As New JObject()
-                         payload("user_event_id") = userEventId
-                         payload("assistant_event_id") = assistantEventId
                          payload("session_id") = capturedSessionId
                          payload("app_type") = capturedAppType
                          payload("response_mode") = capturedResponseMode
+                         payload("has_user_content") = Not String.IsNullOrWhiteSpace(capturedUserQuestion)
+                         payload("has_assistant_content") = Not String.IsNullOrWhiteSpace(capturedAssistantAnswer)
 
                          AgentMemoryRepository.EnqueueJob(New MemoryJobRecord With {
                              .JobType = "extract_memory",
-                             .TargetId = assistantEventId,
+                             .TargetId = capturedSessionId,
                              .PayloadJson = payload.ToString(Formatting.None),
                              .Status = "pending"
                          })

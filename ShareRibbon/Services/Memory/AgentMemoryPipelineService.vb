@@ -1,6 +1,7 @@
 ' ShareRibbon\Services\Memory\AgentMemoryPipelineService.vb
 ' Incremental processor for sidecar memory jobs.
 
+Imports System.Linq
 Imports System.Threading.Tasks
 Imports Newtonsoft.Json.Linq
 
@@ -81,36 +82,36 @@ Public Class AgentMemoryPipelineService
 
     Private Shared Async Function ProcessExtractMemoryJobAsync(job As MemoryJobRecord) As Task
         Dim payload = ParsePayload(job.PayloadJson)
-        Dim userEventId = GetPayloadText(payload, "user_event_id")
-        Dim assistantEventId = If(Not String.IsNullOrWhiteSpace(job.TargetId), job.TargetId, GetPayloadText(payload, "assistant_event_id"))
+        Dim sessionId = If(Not String.IsNullOrWhiteSpace(job.TargetId), job.TargetId, GetPayloadText(payload, "session_id"))
 
-        Dim userEvent = AgentMemoryRepository.GetConversationEventById(userEventId)
-        Dim assistantEvent = AgentMemoryRepository.GetConversationEventById(assistantEventId)
-        If userEvent Is Nothing AndAlso assistantEvent Is Nothing Then
-            Throw New InvalidOperationException("未找到可提取记忆的 conversation_event")
-        End If
+        Dim events = AgentMemoryRepository.GetUnprocessedConversationEventsBySession(sessionId)
+        If events Is Nothing OrElse events.Count = 0 Then Return
 
-        Dim events As New List(Of ConversationEventRecord)()
-        If userEvent IsNot Nothing Then events.Add(userEvent)
-        If assistantEvent IsNot Nothing Then events.Add(assistantEvent)
+        ' Anchor derived memories to the newest assistant event so a session delete can trace and
+        ' clean them through source_event_id even when the extractor did not populate it.
+        Dim anchorEventId = events.
+            LastOrDefault(Function(e) String.Equals(e.Role, "assistant", StringComparison.OrdinalIgnoreCase))?.EventId
+        If String.IsNullOrWhiteSpace(anchorEventId) Then anchorEventId = events(events.Count - 1).EventId
 
         Dim memories = Extractor.ExtractMemories(events, job.PayloadJson)
-        If memories Is Nothing OrElse memories.Count = 0 Then Return
+        If memories IsNot Nothing Then
+            For Each memory In memories
+                If String.IsNullOrWhiteSpace(memory.SourceEventId) Then memory.SourceEventId = anchorEventId
+                Dim memoryId = AgentMemoryRepository.UpsertMemoryItemMerged(memory)
+                Dim embedPayload As New JObject()
+                embedPayload("memory_id") = memoryId
+                AgentMemoryRepository.EnqueueJob(New MemoryJobRecord With {
+                    .JobType = "embed_memory",
+                    .TargetId = memoryId,
+                    .PayloadJson = embedPayload.ToString(Newtonsoft.Json.Formatting.None),
+                    .Status = "pending"
+                })
+            Next
+        End If
 
-        For Each memory In memories
-            Dim memoryId = AgentMemoryRepository.UpsertMemoryItemMerged(memory)
-            Dim embedPayload As New JObject()
-            embedPayload("memory_id") = memoryId
-            AgentMemoryRepository.EnqueueJob(New MemoryJobRecord With {
-                .JobType = "embed_memory",
-                .TargetId = memoryId,
-                .PayloadJson = embedPayload.ToString(Newtonsoft.Json.Formatting.None),
-                .Status = "pending"
-            })
+        For Each evt In events
+            AgentMemoryRepository.MarkConversationEventProcessed(evt.EventId)
         Next
-
-        If userEvent IsNot Nothing Then AgentMemoryRepository.MarkConversationEventProcessed(userEvent.EventId)
-        If assistantEvent IsNot Nothing Then AgentMemoryRepository.MarkConversationEventProcessed(assistantEvent.EventId)
 
         Await Task.CompletedTask
     End Function

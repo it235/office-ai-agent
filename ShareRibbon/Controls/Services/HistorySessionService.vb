@@ -90,4 +90,27 @@ Public Class HistorySessionService
         End Try
     End Sub
 
+    ''' <summary>
+    ''' 删除指定会话：级联清理其持久化行（事件/历史/摘要/记忆/队列/运行轨迹），
+    ''' 若删除的是当前会话则切到新会话并清空聊天区，最后刷新历史列表。
+    ''' </summary>
+    Public Async Sub HandleDeleteSession(jsonDoc As JObject)
+        Try
+            Dim sessionId As String = jsonDoc?("sessionId")?.ToString()
+            If String.IsNullOrEmpty(sessionId) Then Return
+            Await Task.Run(Sub() ConversationRepository.DeleteSessionCascade(sessionId))
+
+            If String.Equals(sessionId, _chatStateService.CurrentSessionId, StringComparison.OrdinalIgnoreCase) Then
+                _chatStateService.StartNewSession()
+                Await _executeScript("if(typeof clearChatContent==='function')clearChatContent();")
+            End If
+
+            GlobalStatusStrip.ShowInfo("已删除会话")
+            HandleGetSessionList()
+        Catch ex As Exception
+            Debug.WriteLine("HandleDeleteSession 失败: " & ex.Message)
+            GlobalStatusStrip.ShowWarning("删除会话失败")
+        End Try
+    End Sub
+
 End Class

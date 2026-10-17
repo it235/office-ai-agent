@@ -525,6 +525,9 @@ CREATE INDEX IF NOT EXISTS idx_prompt_template_scenario ON prompt_template(scena
         EnsureAtomicMemoryColumns(conn)
         EnsureUserProfileSchema(conn)
         EnsureAgentMemorySchema(conn)
+        ' conversation_event is now the single source of truth for chat history; keep the
+        ' collection flag on it too so the UI can star an assistant turn without a parallel table.
+        EnsureColumn(conn, "conversation_event", "is_collected", "is_collected INTEGER NOT NULL DEFAULT 0")
         EnsureAgentRunTraceSchema(conn)
         EnsureDataMigrationMarkers(conn)
         MigrateLegacySkillUsage(conn)

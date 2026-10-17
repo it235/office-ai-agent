@@ -698,6 +698,7 @@ Public MustInherit Class BaseChatControl
         router.Register("getSessionList", Sub(jsonDoc) HandleGetSessionList())
         router.Register("loadSession", Sub(jsonDoc) HandleLoadSession(jsonDoc))
         router.Register("newSession", Sub(jsonDoc) HandleNewSession())
+        router.Register("deleteSession", Sub(jsonDoc) HandleDeleteSession(jsonDoc))
         router.Register("getMcpConnections", Sub(jsonDoc) HandleGetMcpConnections())
         router.Register("saveMcpSettings", Sub(jsonDoc) HandleSaveMcpSettings(jsonDoc))
         router.Register("clearContext", Sub(jsonDoc) ClearChatContext())
@@ -1152,6 +1153,10 @@ Public MustInherit Class BaseChatControl
 
     Protected Sub HandleNewSession()
         HistorySessionSvc.HandleNewSession()
+    End Sub
+
+    Protected Sub HandleDeleteSession(jsonDoc As JObject)
+        HistorySessionSvc.HandleDeleteSession(jsonDoc)
     End Sub
 
     Protected Overridable Sub HandleCheckedChange(jsonDoc As JObject)

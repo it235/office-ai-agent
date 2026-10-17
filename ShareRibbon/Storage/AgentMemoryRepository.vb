@@ -172,6 +172,35 @@ Public Class AgentMemoryRepository
         Return Nothing
     End Function
 
+    ''' <summary>
+    ''' Returns this session's chat_message events that extraction has not processed yet, oldest
+    ''' first. With ChatStateService as the single writer of chat history, extraction is driven by
+    ''' this session backlog instead of the event ids the recorder used to stamp into each job.
+    ''' </summary>
+    Public Shared Function GetUnprocessedConversationEventsBySession(sessionId As String, Optional limit As Integer = 40) As List(Of ConversationEventRecord)
+        Dim results As New List(Of ConversationEventRecord)()
+        If String.IsNullOrWhiteSpace(sessionId) Then Return results
+        OfficeAiDatabase.EnsureInitialized()
+
+        Using conn As New SQLiteConnection(OfficeAiDatabase.GetConnectionString())
+            conn.Open()
+            Using cmd As New SQLiteCommand(
+                "SELECT event_id, session_id, app_type, document_id, event_type, role, content, metadata_json, created_at, processed_at " &
+                "FROM conversation_event WHERE session_id = @sid AND event_type = 'chat_message' AND processed_at IS NULL " &
+                "ORDER BY created_at ASC LIMIT @limit", conn)
+                cmd.Parameters.AddWithValue("@sid", sessionId)
+                cmd.Parameters.AddWithValue("@limit", Math.Max(1, limit))
+                Using rdr = cmd.ExecuteReader()
+                    While rdr.Read()
+                        results.Add(ReadConversationEvent(rdr))
+                    End While
+                End Using
+            End Using
+        End Using
+
+        Return results
+    End Function
+
     Public Shared Sub MarkConversationEventProcessed(eventId As String)
         If String.IsNullOrWhiteSpace(eventId) Then Return
         OfficeAiDatabase.EnsureInitialized()
