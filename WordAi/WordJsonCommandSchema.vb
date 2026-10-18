@@ -25,6 +25,26 @@ Public Class WordJsonCommandSchema
     }
 
     ''' <summary>
+    ''' 只读命令：注册表（ShareRibbon/Tools/word/*.json）已经把它们发给 Planner，执行器也确实实现了。
+    ''' 之前它们不在白名单里，于是 Agent 规划出 ListParagraphs 后被宿主判成"不支持的命令"，
+    ''' 还按 JSON 格式错误自动修复了 3 次——格式从来不是问题，两套能力清单不一致才是。
+    ''' </summary>
+    Public Shared ReadOnly SupportedReadCommands As String() = {
+        "ListParagraphs",
+        "GetParagraphInfo"
+    }
+
+    Public Shared Function IsReadCommand(command As String) As Boolean
+        Return SupportedReadCommands.Any(Function(c) c.Equals(command, StringComparison.OrdinalIgnoreCase))
+    End Function
+
+    Public Shared Function IsSupportedCommand(command As String) As Boolean
+        If String.IsNullOrEmpty(command) Then Return False
+        If SupportedCommands.Any(Function(c) c.Equals(command, StringComparison.OrdinalIgnoreCase)) Then Return True
+        Return IsReadCommand(command)
+    End Function
+
+    ''' <summary>
     ''' 获取严格的JSON Schema定义（用于约束大模型输出）
     ''' </summary>
     Public Shared Function GetStrictJsonSchemaPrompt() As String
@@ -57,7 +77,7 @@ Public Class WordJsonCommandSchema
 - 禁止 {""command"": ""xxx"", ""content"": ""...""} (缺少params包装)
 - 禁止 {""operations"": [...]}
 
-【Word支持的9个命令】
+【Word支持的11个命令】
 
 === 基础文本操作 (4个) ===
 1. InsertText - 插入文本 {content:必需, position:cursor/start/end}
@@ -67,7 +87,7 @@ Public Class WordJsonCommandSchema
 
 === 段落和样式 (2个) ===
 5. ApplyStyle - 应用样式 {styleName:必需如""标题 1""/""正文"", range:selection/paragraph}
-6. SetParagraphFormat - 段落格式 {alignment:left/center/right/justify, firstLineIndent:可选, beforeSpacing/afterSpacing:可选}
+6. SetParagraphFormat - 段落格式 {paragraphIndex:必需从1开始, alignment:left/center/right/justify, firstLineIndent:缩进字符数, beforeSpacing/afterSpacing:磅}
 
 === 表格操作 (1个) ===
 7. InsertTable - 插入表格 {rows:必需, cols:必需, data:可选二维数组, style:可选}
@@ -78,10 +98,16 @@ Public Class WordJsonCommandSchema
 === 文档美化 (1个) ===
 9. BeautifyDocument - 美化文档 {theme:{h1/h2/body字体设置}, margins:{top/bottom/left/right}}
 
+=== 只读命令 (2个，不改文档) ===
+10. ListParagraphs - 列出段落 {maxCount:可选，默认50}，返回段落序号、文本摘要、样式和格式
+11. GetParagraphInfo - 读取单段详情 {paragraphIndex:必需从1开始}
+
 【重要决策规则】
-1. 只能使用上述9个已实现命令处理用户需求
+1. 只能使用上述11个已实现命令处理用户需求；10、11只读，用来先看清文档再规划，不能作为最终交付
 2. 翻译需求请告知用户使用工具栏的""翻译""按钮
-3. 如果用户需求不明确，直接用中文询问"
+3. 如果用户需求不明确，直接用中文询问
+4. InsertText 的 position:end 只把文本追加到当前最后一段，不会新建段落；要得到多段结构必须在 content 里自带换行。SetParagraphFormat 的 paragraphIndex 指向文档当时的真实段落序号，同批次里靠前的命令会改变段落数，不要按""插了几段就是第几段""预先编号
+5. paragraphIndex 必须是文档当前真实存在的序号：上下文里的文档结构会给出「共 N 段」，只能取 1..N。不确定就先用 ListParagraphs 读一次再规划。禁止 999、0、-1 这类占位或""指向最后一段""式的猜法；越界会直接失败并把实际段落数回给你"
     End Function
 
     ''' <summary>
@@ -242,15 +268,20 @@ Public Class WordJsonCommandSchema
                 Return False
             End If
             
-            If Not SupportedCommands.Any(Function(c) c.Equals(command, StringComparison.OrdinalIgnoreCase)) Then
-                errorMessage = $"不支持的命令: {command}。支持的命令: {String.Join(", ", SupportedCommands)}"
+            If Not IsSupportedCommand(command) Then
+                errorMessage = $"不支持的命令: {command}。支持的命令: {String.Join(", ", SupportedCommands.Concat(SupportedReadCommands))}"
                 Return False
             End If
-            
+
             Dim params = json("params")
             If params Is Nothing Then
-                errorMessage = "缺少params字段"
-                Return False
+                ' 只读命令允许不带 params（ListParagraphs 走默认值），写命令仍然必须有参包装
+                If IsReadCommand(command) Then
+                    json("params") = New JObject()
+                Else
+                    errorMessage = "缺少params字段"
+                    Return False
+                End If
             End If
             
             ' 根据命令类型校验参数
@@ -380,9 +411,20 @@ Public Class WordJsonCommandSchema
     End Function
 
     Private Shared Function ValidateSetParagraphFormat(params As JToken, ByRef errorMessage As String) As Boolean
+        ' 执行器按段落序号定位，缺 paragraphIndex 只会退化成布尔失败，模型拿不到可修的原因
+        Dim paragraphIndex = params("paragraphIndex")
+        If paragraphIndex Is Nothing OrElse paragraphIndex.Type = JTokenType.Null OrElse
+           paragraphIndex.Value(Of Integer)() < 1 Then
+            errorMessage = "SetParagraphFormat需要paragraphIndex(整数,从1开始,指向文档当前真实段落序号)"
+            Return False
+        End If
+
         ' 至少需要一个段落格式属性
         If params("alignment") Is Nothing AndAlso params("firstLineIndent") Is Nothing AndAlso
-           params("beforeSpacing") Is Nothing AndAlso params("afterSpacing") Is Nothing Then
+           params("beforeSpacing") Is Nothing AndAlso params("afterSpacing") Is Nothing AndAlso
+           params("fontSize") Is Nothing AndAlso params("fontName") Is Nothing AndAlso
+           params("bold") Is Nothing AndAlso params("italic") Is Nothing AndAlso
+           params("color") Is Nothing Then
             errorMessage = "SetParagraphFormat至少需要一个格式属性"
             Return False
         End If

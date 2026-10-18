@@ -777,6 +777,9 @@ End Function
     ' 执行JavaScript代码
     Protected Overrides Function ExecuteJavaScript(jsCode As String, preview As Boolean) As Boolean
         Try
+            ' ScriptControl 会把完整 Office 应用对象暴露给脚本，执行前必须过与 Agent 路径同一道安全门
+            If Not CodeExecutionService.ConfirmScriptExecution(jsCode, "BaseDoubaoChat") Then Return False
+
             ' 获取Office应用对象
             Dim appObject As Object = GetOfficeApplicationObject()
             If appObject Is Nothing Then

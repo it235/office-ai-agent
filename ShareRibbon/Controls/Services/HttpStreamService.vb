@@ -394,8 +394,9 @@ Public Class HttpStreamService
 
             ' 输出内容
             If Not String.IsNullOrEmpty(contentText) Then
+                ' 只喂 _currentMarkdownBuffer：FlushBufferAsync 负责把同一段搬进明文缓冲，
+                ' 在此再 append 一次会让非流式路径的历史正文整段重复。
                 _currentMarkdownBuffer.Append(contentText)
-                _stateService.PlainMarkdownBuffer.Append(contentText)
                 Await FlushBufferAsync("content", uuid, True)
                 _onAgentContent?.Invoke(contentText)
             End If
@@ -522,7 +523,7 @@ Public Class HttpStreamService
                             Do
                                 If StopStream OrElse requestCts.IsCancellationRequested Then
                                     _currentMarkdownBuffer.Clear()
-                                    _stateService.MarkdownBuffer.Clear()
+                                    _stateService.PlainMarkdownBuffer.Clear()
                                     Exit Do
                                 End If
 
@@ -781,7 +782,7 @@ Public Class HttpStreamService
             ' BaseChatControl 负责完整的历史保存逻辑
             FinalizeCallback.Invoke(addHistory, originQuestion)
         ElseIf addHistory Then
-            _stateService.AddMessage("assistant", $"这是大模型基于用户问题的答复作为历史参考：{_stateService.MarkdownBuffer.ToString()}")
+            _stateService.AddMessage("assistant", $"这是大模型基于用户问题的答复作为历史参考：{_stateService.PlainMarkdownBuffer.ToString()}")
         End If
 
         _stateService.ClearBuffers()
@@ -908,7 +909,9 @@ Public Class HttpStreamService
         End If
 
         Dim plainContent As String = _currentMarkdownBuffer.ToString()
-        Dim escapedContent = HttpUtility.JavaScriptStringEncode(_currentMarkdownBuffer.ToString())
+        ' 转义只服务于 JS 字符串字面量这一条通道；历史与记忆一律读明文缓冲，
+        ' 否则落库正文会多一层转义、真实换行全变成字面 \n。
+        Dim escapedContent = HttpUtility.JavaScriptStringEncode(plainContent)
         _currentMarkdownBuffer.Clear()
         _lastFlushUtc = DateTime.UtcNow
 
@@ -917,7 +920,6 @@ Public Class HttpStreamService
             js = $"appendReasoning('{uuid}','{escapedContent}');"
         Else
             js = $"appendRenderer('{uuid}','{escapedContent}');"
-            _stateService.MarkdownBuffer.Append(escapedContent)
             _stateService.PlainMarkdownBuffer.Append(plainContent)
         End If
 
@@ -1267,7 +1269,7 @@ Public Class HttpStreamService
                             Do
                                 If StopStream OrElse requestCts.IsCancellationRequested Then
                                     _currentMarkdownBuffer.Clear()
-                                    _stateService.MarkdownBuffer.Clear()
+                                    _stateService.PlainMarkdownBuffer.Clear()
                                     Exit Do
                                 End If
 

@@ -2,7 +2,7 @@
 Partial Class WebDataCapturePane
     Inherits ShareRibbon.BaseDataCapturePane
 
-    'UserControl ��д Dispose������������б���
+    'UserControl 重写 Dispose，以清理组件列表。
     <System.Diagnostics.DebuggerNonUserCode()>
     Protected Overrides Sub Dispose(ByVal disposing As Boolean)
         Try
@@ -14,22 +14,22 @@ Partial Class WebDataCapturePane
         End Try
     End Sub
 
-    'Windows ����������������
+    'Windows 窗体设计器所必需的
     Private Shadows components As System.ComponentModel.IContainer
 
-    'ע��: ���¹����� Windows ����������������
-    '����ʹ�� Windows ����������޸�����
-    '��Ҫʹ�ô���༭���޸�����
+    '注意: 以下过程是 Windows 窗体设计器所必需的
+    '可以使用 Windows 窗体设计器修改它。
+    '不要使用代码编辑器修改它。
     <System.Diagnostics.DebuggerStepThrough()>
     Private Overloads Sub InitializeComponent()
-        ' ���û���ĳ�ʼ��
+        ' 调用基类的初始化
         MyBase.InitializeComponent()
 
-        ' Word �ض��ĳ�ʼ��
-        'Me.ChatBrowser.ZoomFactor = 1.25R  ' Word ������Ҫ��������ű���
+        ' Word 特定的初始化
+        'Me.ChatBrowser.ZoomFactor = 1.25R  ' Word 可能需要更大的缩放比例
         Me.Name = "WordDataCapturePane"
 
-        ' �������� Word ���еĿؼ�
+        ' 可以添加 Word 特有的控件
         ' ...
 
         Me.ResumeLayout(False)

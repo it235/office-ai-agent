@@ -25,8 +25,8 @@ Public Class ChatStateService
         ' 上下文限制
         Private _contextLimit As Integer = 10
 
-        ' Markdown 缓冲区
-        Private ReadOnly _markdownBuffer As New StringBuilder()
+        ' Markdown 缓冲区：只保留明文一份。转义是 JS 字面量通道的局部细节，
+        ' 一旦成为可被历史/记忆读到的属性，就会被误当成正文落库。
         Private ReadOnly _plainMarkdownBuffer As New StringBuilder()
 
         ' Token 统计
@@ -83,15 +83,6 @@ Public Class ChatStateService
             Set(value As Nullable(Of TokenInfo))
                 _lastTokenInfo = value
             End Set
-        End Property
-
-        ''' <summary>
-        ''' 获取 Markdown 缓冲区
-        ''' </summary>
-        Public ReadOnly Property MarkdownBuffer As StringBuilder
-            Get
-                Return _markdownBuffer
-            End Get
         End Property
 
         ''' <summary>
@@ -293,7 +284,6 @@ Public Class ChatStateService
         ''' 清空所有缓冲区
         ''' </summary>
         Public Sub ClearBuffers()
-            _markdownBuffer.Clear()
             _plainMarkdownBuffer.Clear()
         End Sub
 

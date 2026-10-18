@@ -53,23 +53,7 @@ $assemblyInfoFiles = @(
     'PowerPointAi\My Project\AssemblyInfo.vb'
 )
 
-$optionalAssemblyInfoFiles = @(
-    'OfficeAgentSetupCustomActions\My Project\AssemblyInfo.vb'
-)
-
 foreach ($relativePath in $assemblyInfoFiles) {
-    Test-FileValue $relativePath '<Assembly:\s*AssemblyVersion\("([^"]+)"\)>' $expectedAssemblyVersion 'AssemblyVersion'
-    Test-FileValue $relativePath '<Assembly:\s*AssemblyFileVersion\("([^"]+)"\)>' $expectedFileVersion 'AssemblyFileVersion'
-    Test-FileValue $relativePath '<Assembly:\s*AssemblyInformationalVersion\("([^"]+)"\)>' $expectedInformationalVersion 'AssemblyInformationalVersion'
-}
-
-foreach ($relativePath in $optionalAssemblyInfoFiles) {
-    $path = Join-Path $repoRoot $relativePath
-    if (-not (Test-Path -LiteralPath $path)) {
-        Write-Host "Skipped optional missing file $relativePath"
-        continue
-    }
-
     Test-FileValue $relativePath '<Assembly:\s*AssemblyVersion\("([^"]+)"\)>' $expectedAssemblyVersion 'AssemblyVersion'
     Test-FileValue $relativePath '<Assembly:\s*AssemblyFileVersion\("([^"]+)"\)>' $expectedFileVersion 'AssemblyFileVersion'
     Test-FileValue $relativePath '<Assembly:\s*AssemblyInformationalVersion\("([^"]+)"\)>' $expectedInformationalVersion 'AssemblyInformationalVersion'

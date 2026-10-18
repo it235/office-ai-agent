@@ -30,7 +30,6 @@ AiHelper/
 ├── PowerPointAi/                        # PowerPoint VSTO 插件
 ├── ShareRibbon/                         # 共享组件库，所有 Office 插件引用
 ├── OfficeAgent/                         # Visual Studio Installer 安装包项目 (.vdproj)
-├── OfficeAgentSetupCustomActions/        # 安装包自定义动作项目（如存在）
 ├── docs/                                # 调试、迁移、说明文档
 ├── openspec/                            # 需求/变更规格与归档
 ├── packages/                            # NuGet packages 还原目录
@@ -87,9 +86,6 @@ msbuild ShareRibbon/ShareRibbon.vbproj
 msbuild ExcelAi/ExcelAi.vbproj
 msbuild WordAi/WordAi.vbproj
 msbuild PowerPointAi/PowerPointAi.vbproj
-
-# 构建安装自定义动作项目（目录存在时）
-msbuild OfficeAgentSetupCustomActions/OfficeAgentSetupCustomActions.vbproj
 ```
 
 ### Debug
@@ -107,7 +103,6 @@ msbuild OfficeAgentSetupCustomActions/OfficeAgentSetupCustomActions.vbproj
 - `WordAi/` 只放 Word 特定逻辑：文档、段落、翻译、续写、OpenXml 等。
 - `PowerPointAi/` 只放 PowerPoint 特定逻辑：演示文稿、幻灯片、形状、续写、翻译等。
 - `OfficeAgent/` 是安装包项目，`.vdproj` 慎改。
-- `OfficeAgentSetupCustomActions/` 如存在，放安装过程自定义动作，比直接大改 `.vdproj` 更适合承载安装逻辑。
 - `openspec/` 放需求、变更规格与归档，不是运行时代码。
 
 ### 共享与应用边界
@@ -199,7 +194,6 @@ Chat 相关 HTML/JS/CSS 通过 Office Virtual Server 加载，是用户交互入
 ## Installer / vdproj Rules
 
 - `OfficeAgent/*.vdproj` 自动修改后容易加载失败；除非必要，避免大范围编辑。
-- 修改安装逻辑时，优先评估是否应放在 `OfficeAgentSetupCustomActions/`（如存在）。
 - 如必须修改 `.vdproj`，保持最小 diff，不做格式化，不批量重排。
 - 出现安装包加载失败时，优先回退最近的 `.vdproj` 改动。
 

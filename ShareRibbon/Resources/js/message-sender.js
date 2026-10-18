@@ -130,7 +130,7 @@ function sendChatMessage() {
 
     // Add user typed text (parsed as markdown)
     if (userTypedText) {
-        htmlContent += marked.parse(userTypedText);
+        htmlContent += sanitizeHtml(marked.parse(userTypedText));
     }
 
     // Add collapsible selected content reference

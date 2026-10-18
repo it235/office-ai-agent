@@ -7,6 +7,16 @@ Imports System.Collections.Generic
 Public Class AgentMemoryRepository
     Implements IMemoryEventStore
 
+    ''' <summary>
+    ''' 单个任务最多被领取执行几次；用尽后落 dead-letter，不再无限重投。
+    ''' </summary>
+    Public Const MaxJobAttempts As Integer = 3
+
+    ''' <summary>
+    ''' 失败重试退避的封顶分钟数，避免长尾退避把队列拖死。
+    ''' </summary>
+    Private Const JobBackoffCapMinutes As Integer = 30
+
     Private Shared Function NewId() As String
         Return Guid.NewGuid().ToString("D")
     End Function
@@ -225,7 +235,9 @@ Public Class AgentMemoryRepository
                 "(memory_id, source_event_id, scope, app_type, document_id, project_id, memory_type, content, summary, confidence, importance, status, expires_at, last_verified_at) " &
                 "VALUES (@memory_id, @source_event_id, @scope, @app_type, @document_id, @project_id, @memory_type, @content, @summary, @confidence, @importance, @status, @expires_at, @last_verified_at) " &
                 "ON CONFLICT(memory_id) DO UPDATE SET " &
-                "source_event_id = excluded.source_event_id, scope = excluded.scope, app_type = excluded.app_type, document_id = excluded.document_id, " &
+                "source_event_id = CASE WHEN IFNULL(memory_item.source_event_id, '') <> '' " &
+                "  THEN memory_item.source_event_id ELSE excluded.source_event_id END, " &
+                "scope = excluded.scope, app_type = excluded.app_type, document_id = excluded.document_id, " &
                 "project_id = excluded.project_id, memory_type = excluded.memory_type, content = excluded.content, summary = excluded.summary, " &
                 "confidence = excluded.confidence, importance = excluded.importance, status = excluded.status, expires_at = excluded.expires_at, " &
                 "last_verified_at = excluded.last_verified_at, updated_at = datetime('now', 'localtime')", conn)
@@ -256,7 +268,11 @@ Public Class AgentMemoryRepository
         If duplicate IsNot Nothing Then
             Dim oldContent = If(duplicate.Content, "")
             record.MemoryId = duplicate.MemoryId
-            record.SourceEventId = If(String.IsNullOrWhiteSpace(record.SourceEventId), duplicate.SourceEventId, record.SourceEventId)
+            ' 证据锚点遵循先到原则：合并命中已有记忆时沿用旧锚点，避免记忆被后来者改绑、
+            ' 从而在原始会话删除时被误判定为本会话产物。
+            If Not String.IsNullOrWhiteSpace(duplicate.SourceEventId) Then
+                record.SourceEventId = duplicate.SourceEventId
+            End If
             record.Content = If(If(record.Content, "").Length >= oldContent.Length, record.Content, duplicate.Content)
             record.Summary = If(String.IsNullOrWhiteSpace(record.Summary), duplicate.Summary, record.Summary)
             record.Confidence = Math.Max(record.Confidence, duplicate.Confidence)
@@ -511,21 +527,34 @@ Public Class AgentMemoryRepository
         OfficeAiDatabase.EnsureInitialized()
         If record Is Nothing Then Throw New ArgumentNullException(NameOf(record))
 
+        Dim jobType = DbRequiredText(record.JobType, "extract_memory")
+        Dim status = DbRequiredText(record.Status, "pending")
         Dim jobId = DbRequiredText(record.JobId, NewId())
         Using conn As New SQLiteConnection(OfficeAiDatabase.GetConnectionString())
             conn.Open()
+            ' 幂等入队：(job_type, target_id) 上存在未终结任务时由部分唯一索引挡住重复投递，
+            ' 这里回读那条在队任务并复用它的 id，同一批事件不会被抽取两次。
             Using cmd As New SQLiteCommand(
-                "INSERT INTO memory_job (job_id, job_type, target_id, payload_json, status, attempt_count, last_error, next_run_at) " &
+                "INSERT OR IGNORE INTO memory_job (job_id, job_type, target_id, payload_json, status, attempt_count, last_error, next_run_at) " &
                 "VALUES (@job_id, @job_type, @target_id, @payload_json, @status, @attempt_count, @last_error, @next_run_at)", conn)
                 cmd.Parameters.AddWithValue("@job_id", jobId)
-                cmd.Parameters.AddWithValue("@job_type", DbRequiredText(record.JobType, "extract_memory"))
+                cmd.Parameters.AddWithValue("@job_type", jobType)
                 cmd.Parameters.AddWithValue("@target_id", DbText(record.TargetId))
                 cmd.Parameters.AddWithValue("@payload_json", DbText(record.PayloadJson))
-                cmd.Parameters.AddWithValue("@status", DbRequiredText(record.Status, "pending"))
+                cmd.Parameters.AddWithValue("@status", status)
                 cmd.Parameters.AddWithValue("@attempt_count", record.AttemptCount)
                 cmd.Parameters.AddWithValue("@last_error", DbText(record.LastError))
                 cmd.Parameters.AddWithValue("@next_run_at", DbText(record.NextRunAt))
-                cmd.ExecuteNonQuery()
+                If cmd.ExecuteNonQuery() > 0 Then Return jobId
+            End Using
+
+            Using sel As New SQLiteCommand(
+                "SELECT job_id FROM memory_job WHERE job_type = @job_type AND target_id = @target_id " &
+                "AND status IN ('pending', 'processing') ORDER BY created_at ASC LIMIT 1", conn)
+                sel.Parameters.AddWithValue("@job_type", jobType)
+                sel.Parameters.AddWithValue("@target_id", DbText(record.TargetId))
+                Dim existing = sel.ExecuteScalar()
+                If existing IsNot Nothing Then Return CStr(existing)
             End Using
         End Using
         Return jobId
@@ -604,25 +633,80 @@ Public Class AgentMemoryRepository
     End Function
 
     Public Shared Sub MarkJobProcessing(jobId As String)
-        UpdateJobStatus(jobId, "processing", Nothing, False)
+        UpdateJobStatus(jobId, "processing", Nothing)
     End Sub
 
     Public Shared Sub MarkJobCompleted(jobId As String)
-        UpdateJobStatus(jobId, "completed", Nothing, False)
+        UpdateJobStatus(jobId, "completed", Nothing)
     End Sub
 
-    Public Shared Sub MarkJobFailed(jobId As String, errorMessage As String)
-        UpdateJobStatus(jobId, "failed", errorMessage, True)
-    End Sub
+    ''' <summary>
+    ''' 失败不再一次定终态：还有重试额度时带退避回到 pending，用尽才落 failed（dead-letter）。
+    ''' attempt_count 在 ClaimPendingJobs 领取时已自增，这里只判断剩余额度。
+    ''' 返回任务的新状态（"pending" 表示还会重试，"failed" 表示已放弃）。
+    ''' </summary>
+    Public Shared Function MarkJobFailed(jobId As String,
+                                        errorMessage As String,
+                                        Optional maxAttempts As Integer = MaxJobAttempts) As String
+        If String.IsNullOrWhiteSpace(jobId) Then Return Nothing
 
-    Private Shared Sub UpdateJobStatus(jobId As String, status As String, errorMessage As String, incrementAttempt As Boolean)
+        OfficeAiDatabase.EnsureInitialized()
+        Dim cap = Math.Max(1, maxAttempts)
+        Using conn As New SQLiteConnection(OfficeAiDatabase.GetConnectionString())
+            conn.Open()
+            Using tx = conn.BeginTransaction()
+                Dim attempts As Integer = 0
+                Using sel As New SQLiteCommand("SELECT IFNULL(attempt_count, 0) FROM memory_job WHERE job_id = @job_id", conn)
+                    sel.Transaction = tx
+                    sel.Parameters.AddWithValue("@job_id", jobId)
+                    Dim value = sel.ExecuteScalar()
+                    If value IsNot Nothing Then attempts = Convert.ToInt32(value)
+                End Using
+
+                Dim exhausted = attempts >= cap
+                Dim backoffMinutes = Math.Min(JobBackoffCapMinutes, 2 ^ Math.Max(0, attempts - 1))
+                Using upd As New SQLiteCommand(
+                    "UPDATE memory_job SET status = @status, last_error = @last_error, " &
+                    "next_run_at = datetime('now', 'localtime', @window), " &
+                    "updated_at = datetime('now', 'localtime') WHERE job_id = @job_id", conn)
+                    upd.Transaction = tx
+                    upd.Parameters.AddWithValue("@status", If(exhausted, "failed", "pending"))
+                    upd.Parameters.AddWithValue("@last_error", DbText(errorMessage))
+                    upd.Parameters.AddWithValue("@window", $"+{If(exhausted, 0, backoffMinutes)} minutes")
+                    upd.Parameters.AddWithValue("@job_id", jobId)
+                    upd.ExecuteNonQuery()
+                End Using
+                tx.Commit()
+                Return If(exhausted, "failed", "pending")
+            End Using
+        End Using
+    End Function
+
+    ''' <summary>
+    ''' 重试次数用尽、或压根跑不完的任务写回 failed，避免回收时反复重投。
+    ''' </summary>
+    Public Shared Function DeadLetterJob(jobId As String, errorMessage As String) As Boolean
+        If String.IsNullOrWhiteSpace(jobId) Then Return False
+        OfficeAiDatabase.EnsureInitialized()
+        Using conn As New SQLiteConnection(OfficeAiDatabase.GetConnectionString())
+            conn.Open()
+            Using cmd As New SQLiteCommand(
+                "UPDATE memory_job SET status = 'failed', last_error = @last_error, " &
+                "updated_at = datetime('now', 'localtime') WHERE job_id = @job_id", conn)
+                cmd.Parameters.AddWithValue("@last_error", DbText(errorMessage))
+                cmd.Parameters.AddWithValue("@job_id", jobId)
+                Return cmd.ExecuteNonQuery() > 0
+            End Using
+        End Using
+    End Function
+
+    Private Shared Sub UpdateJobStatus(jobId As String, status As String, errorMessage As String)
         If String.IsNullOrWhiteSpace(jobId) Then Return
         OfficeAiDatabase.EnsureInitialized()
         Using conn As New SQLiteConnection(OfficeAiDatabase.GetConnectionString())
             conn.Open()
-            Dim attemptSql = If(incrementAttempt, "attempt_count = attempt_count + 1,", "")
             Using cmd As New SQLiteCommand(
-                "UPDATE memory_job SET status = @status, " & attemptSql & " last_error = @last_error, updated_at = datetime('now', 'localtime') WHERE job_id = @job_id", conn)
+                "UPDATE memory_job SET status = @status, last_error = @last_error, updated_at = datetime('now', 'localtime') WHERE job_id = @job_id", conn)
                 cmd.Parameters.AddWithValue("@status", status)
                 cmd.Parameters.AddWithValue("@last_error", DbText(errorMessage))
                 cmd.Parameters.AddWithValue("@job_id", jobId)
@@ -671,7 +755,8 @@ Public Class AgentMemoryRepository
                 Dim idList = String.Join(",", placeholders)
 
                 Using upd As New SQLiteCommand(
-                    "UPDATE memory_job SET status = 'processing', updated_at = datetime('now', 'localtime') " &
+                    "UPDATE memory_job SET status = 'processing', attempt_count = attempt_count + 1, " &
+                    "updated_at = datetime('now', 'localtime') " &
                     "WHERE status = 'pending' AND job_id IN (" & idList & ")", conn)
                     upd.Transaction = tx
                     For i = 0 To ids.Count - 1
@@ -704,18 +789,43 @@ Public Class AgentMemoryRepository
     ''' <summary>
     ''' Returns jobs left stuck in 'processing' (crash, host closed mid-run) back to 'pending'
     ''' once they are older than <paramref name="staleMinutes"/>, so the queue self-heals.
+    ''' 重试次数已用尽的卡死任务不再回到 pending，而是直接落 failed（dead-letter），
+    ''' 否则一条永远跑不完的任务会被反复回收，把队列容量吃光。
     ''' </summary>
-    Public Shared Function ReclaimStaleProcessingJobs(Optional staleMinutes As Integer = 30) As Integer
+    Public Shared Function ReclaimStaleProcessingJobs(Optional staleMinutes As Integer = 30,
+                                                      Optional maxAttempts As Integer = MaxJobAttempts) As Integer
         OfficeAiDatabase.EnsureInitialized()
+        Dim cap = Math.Max(1, maxAttempts)
+        Dim window = "-" & Math.Max(1, staleMinutes) & " minutes"
+        Dim recovered As Integer = 0
+
         Using conn As New SQLiteConnection(OfficeAiDatabase.GetConnectionString())
             conn.Open()
-            Using cmd As New SQLiteCommand(
-                "UPDATE memory_job SET status = 'pending', updated_at = datetime('now', 'localtime') " &
-                "WHERE status = 'processing' AND updated_at < datetime('now', 'localtime', @window)", conn)
-                cmd.Parameters.AddWithValue("@window", "-" & Math.Max(1, staleMinutes) & " minutes")
-                Return cmd.ExecuteNonQuery()
+            Using tx = conn.BeginTransaction()
+                Using dead As New SQLiteCommand(
+                    "UPDATE memory_job SET status = 'failed', " &
+                    "last_error = IFNULL(last_error, 'stale: attempt budget exhausted'), " &
+                    "updated_at = datetime('now', 'localtime') " &
+                    "WHERE status = 'processing' AND updated_at < datetime('now', 'localtime', @window) " &
+                    "AND IFNULL(attempt_count, 0) >= @cap", conn)
+                    dead.Transaction = tx
+                    dead.Parameters.AddWithValue("@window", window)
+                    dead.Parameters.AddWithValue("@cap", cap)
+                    recovered += dead.ExecuteNonQuery()
+                End Using
+
+                Using requeue As New SQLiteCommand(
+                    "UPDATE memory_job SET status = 'pending', updated_at = datetime('now', 'localtime') " &
+                    "WHERE status = 'processing' AND updated_at < datetime('now', 'localtime', @window)", conn)
+                    requeue.Transaction = tx
+                    requeue.Parameters.AddWithValue("@window", window)
+                    recovered += requeue.ExecuteNonQuery()
+                End Using
+
+                tx.Commit()
             End Using
         End Using
+        Return recovered
     End Function
 
     Public Shared Sub UpsertSkillRegistry(record As SkillRegistryRecord)

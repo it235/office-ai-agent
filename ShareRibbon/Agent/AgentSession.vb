@@ -109,18 +109,15 @@ Namespace Agent
         Public Property Message As String
         Public Property SessionId As String
         Public Property IterationsCompleted As Integer
-        Public Property FinalOutput As String
         ''' <summary>用户协作式停止产生的终态，区别于普通失败。</summary>
         Public Property IsCancelled As Boolean
 
         Public Shared Function SuccessResult(sessionId As String,
-                                              Optional message As String = "",
-                                              Optional finalOutput As String = "") As AgentResult
+                                             Optional message As String = "") As AgentResult
             Return New AgentResult With {
                 .Success = True,
                 .SessionId = sessionId,
-                .Message = message,
-                .FinalOutput = finalOutput
+                .Message = message
             }
         End Function
 

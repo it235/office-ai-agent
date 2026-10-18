@@ -25,10 +25,6 @@ $assemblyInfoFiles = @(
     'PowerPointAi\My Project\AssemblyInfo.vb'
 )
 
-$optionalAssemblyInfoFiles = @(
-    'OfficeAgentSetupCustomActions\My Project\AssemblyInfo.vb'
-)
-
 foreach ($relativePath in $assemblyInfoFiles) {
     $path = Join-Path $repoRoot $relativePath
     $content = Get-Content -LiteralPath $path -Raw -Encoding Default
@@ -46,30 +42,6 @@ foreach ($relativePath in $assemblyInfoFiles) {
 
     Set-Content -LiteralPath $path -Value $content -Encoding Default -NoNewline
     Write-Host "Updated $relativePath"
-}
-
-foreach ($relativePath in $optionalAssemblyInfoFiles) {
-    $path = Join-Path $repoRoot $relativePath
-    if (-not (Test-Path -LiteralPath $path)) {
-        Write-Host "Skipped optional missing file $relativePath"
-        continue
-    }
-
-    $content = Get-Content -LiteralPath $path -Raw -Encoding Default
-    $content = [regex]::Replace($content, 'AssemblyVersion\(".*?"\)', "AssemblyVersion(""$assemblyVersion"")")
-    $content = [regex]::Replace($content, 'AssemblyFileVersion\(".*?"\)', "AssemblyFileVersion(""$fileVersion"")")
-
-    if ($content -match 'AssemblyInformationalVersion\(".*?"\)') {
-        $content = [regex]::Replace($content, 'AssemblyInformationalVersion\(".*?"\)', "AssemblyInformationalVersion(""$informationalVersion"")")
-    } else {
-        $content = [regex]::Replace(
-            $content,
-            '(<Assembly:\s*AssemblyFileVersion\(".*?"\)>\s*)',
-            "`$1`r`n<Assembly: AssemblyInformationalVersion(""$informationalVersion"")>`r`n")
-    }
-
-    Set-Content -LiteralPath $path -Value $content -Encoding Default -NoNewline
-    Write-Host "Updated optional $relativePath"
 }
 
 $vstoProjects = @(

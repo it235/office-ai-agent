@@ -1071,7 +1071,7 @@ Public Class ChatControl
             ' 通知前端移除操作按钮
             Dim uuid As String = If(jsonDoc("uuid") IsNot Nothing, jsonDoc("uuid").ToString(), String.Empty)
             If Not String.IsNullOrEmpty(uuid) Then
-                ExecuteJavaScriptAsyncJS($"removeContinuationActions('{uuid}');")
+                ExecuteJavaScriptAsyncJS($"removeContinuationActions({UtilsService.ToJsStringLiteral(uuid)});")
             End If
 
         Catch ex As Exception
@@ -1117,7 +1117,7 @@ Public Class ChatControl
             ' 通知前端移除操作按钮
             Dim uuid As String = If(jsonDoc("uuid") IsNot Nothing, jsonDoc("uuid").ToString(), String.Empty)
             If Not String.IsNullOrEmpty(uuid) Then
-                ExecuteJavaScriptAsyncJS($"removeTemplateActions('{uuid}');")
+                ExecuteJavaScriptAsyncJS($"removeTemplateActions({UtilsService.ToJsStringLiteral(uuid)});")
             End If
 
         Catch ex As Exception
@@ -1302,9 +1302,28 @@ Public Class ChatControl
             End If
             Dim beforeSnapshot = CapturePowerPointCommandSnapshot(envelope)
             Dim success = ExecuteJsonCommandCore(jsonCode, preview)
+            ' 预览被用户拒绝时核心返回 True（UI 语义：取消不是错误），但 ToolResult 不能据此报成功。
+            If ConsumePreviewCancelled() Then
+                Return Agent.ToolResult.PreviewCancelled(toolId)
+            End If
             Dim afterSnapshot = CapturePowerPointCommandSnapshot(envelope)
             Dim observation = BuildPowerPointCommandObservation(toolId, success, beforeSnapshot, afterSnapshot)
             Dim summary = If(observation?("summary")?.ToString(), $"{toolId} 执行完成")
+            Dim observationError = If(afterSnapshot?("captureError")?.ToString(),
+                                      beforeSnapshot?("captureError")?.ToString())
+
+            ' 快照采集失败时 changed 恒为 False，成功回执其实没有任何证据支撑；
+            ' 更不能让 Loop 把它当成“无变化”去重放，重放会在已改过的文稿上再改一次。
+            If success AndAlso Not String.IsNullOrWhiteSpace(observationError) Then
+                observation("rollback") = BuildPowerPointRollbackNote(True)
+                Return Agent.ToolResult.Failed(
+                    toolId,
+                    $"PowerPoint 命令可能已执行，但结果观察失败: {observationError}",
+                    errorCode:=ExceptionClassifier.CodeObservationFailed,
+                    userMessage:="PowerPoint 操作可能已经完成，但插件无法安全验证结果；已停止自动重试",
+                    recoverable:=False,
+                    observation:=observation)
+            End If
 
             If success Then
                 Return Agent.ToolResult.Succeed(toolId,
@@ -1313,15 +1332,38 @@ Public Class ChatControl
                                                 observation:=observation)
             End If
 
+            ' 通用 PPT 命令没有逐命令事务边界（只有 CreateSlides 链按标记删页）：
+            ' 失败时若文稿已经变化，只能如实上报半应用并掐断自动重放。
+            Dim partialApply = observation.Value(Of Boolean)("changed")
+            observation("rollback") = BuildPowerPointRollbackNote(partialApply)
+            Dim failureMessage = If(partialApply, $"{summary}；文稿已被部分修改且未回滚", summary)
             Return Agent.ToolResult.Failed(toolId,
-                                           summary,
-                                           errorCode:=ExceptionClassifier.CodeUnknown,
-                                           userMessage:=summary,
-                                           recoverable:=True,
+                                           failureMessage,
+                                           errorCode:=If(partialApply,
+                                                         ExceptionClassifier.CodePartialApply,
+                                                         ExceptionClassifier.CodeUnknown),
+                                           userMessage:=If(partialApply,
+                                                           "PowerPoint 操作部分完成，插件无法自动撤销，请检查文稿后再继续",
+                                                           failureMessage),
+                                           recoverable:=Not partialApply,
                                            observation:=observation)
         Catch ex As Exception
             Return Agent.ToolResult.FromException(toolId, ex)
         End Try
+    End Function
+
+    ''' <summary>
+    ''' 通用 PPT 命令不会自动撤销：attempted=False 表示根本没尝试回滚，
+    ''' 避免 Agent 以为文稿已还原而继续规划（CreateSlides 链有自己的真实回滚）。
+    ''' </summary>
+    Private Shared Function BuildPowerPointRollbackNote(partialApply As Boolean) As JObject
+        Return New JObject From {
+            {"succeeded", False},
+            {"attempted", False},
+            {"verified", False},
+            {"partialApply", partialApply},
+            {"error", If(partialApply, "通用 PowerPoint 命令不支持安全地自动撤销本轮改动，请人工检查或手动撤销", "本轮未检测到文稿变化，无需回滚")}
+        }
     End Function
 
     Private Shared Function ParsePowerPointCommandEnvelope(jsonCode As String) As JObject
@@ -1558,6 +1600,7 @@ Public Class ChatControl
             If preview Then
                 If Not ShareRibbon.CommandPreviewForm.ShowPreview($"PPT命令预览 - 共 {commands.Count} 个命令", commandsArray) Then
                     ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
+                    NotifyPreviewCancelled()
                     Return True
                 End If
             End If
@@ -1603,6 +1646,7 @@ Public Class ChatControl
             If preview Then
                 If Not ShareRibbon.CommandPreviewForm.ShowPreview("PPT命令预览", commandJson) Then
                     ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
+                    NotifyPreviewCancelled()
                     Return True
                 End If
             End If

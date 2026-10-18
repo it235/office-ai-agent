@@ -3,7 +3,6 @@
 .omc
 logs
 packages
-OfficeAgentSetupCustomActions
 
 #*.gitignore
 rebel.xml

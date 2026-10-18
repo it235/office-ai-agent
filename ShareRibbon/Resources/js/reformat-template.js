@@ -397,8 +397,7 @@ window.previewStyleGuide = function(guideId) {
     
     // 使用marked.js渲染Markdown
     try {
-        const htmlContent = marked.parse(guide.GuideContent || '暂无内容');
-        previewContent.innerHTML = htmlContent;
+        renderMarkdown(previewContent, guide.GuideContent || '暂无内容');
         
         // 应用代码高亮
         document.querySelectorAll('#styleguide-preview-content pre code').forEach((block) => {
@@ -408,7 +407,7 @@ window.previewStyleGuide = function(guideId) {
         });
     } catch (e) {
         console.error('[ReformatTemplate] Markdown渲染错误:', e);
-        previewContent.innerHTML = `<pre>${escapeHtml(guide.GuideContent || '暂无内容')}</pre>`;
+        previewContent.textContent = guide.GuideContent || '暂无内容';
     }
     
     // 显示预览对话框
@@ -514,11 +513,7 @@ window.saveStyleGuideEdit = function() {
     // 刷新预览区域为新内容
     const previewContent = document.getElementById('styleguide-preview-content');
     if (previewContent) {
-        try {
-            previewContent.innerHTML = marked.parse(newContent || '暂无内容');
-        } catch (e) {
-            previewContent.innerHTML = `<pre>${escapeHtml(newContent)}</pre>`;
-        }
+        renderMarkdown(previewContent, newContent || '暂无内容');
     }
 
     };
@@ -570,14 +565,10 @@ function toggleEditButtons(editing) {
  */
 function renderEditorPreview(mdText, previewEl) {
     if (!previewEl) return;
-    try {
-        previewEl.innerHTML = marked.parse(mdText || '');
-        previewEl.querySelectorAll('pre code').forEach(block => {
-            if (typeof hljs !== 'undefined') hljs.highlightElement(block);
-        });
-    } catch (e) {
-        previewEl.innerHTML = `<pre>${escapeHtml(mdText || '')}</pre>`;
-    }
+    renderMarkdown(previewEl, mdText || '');
+    previewEl.querySelectorAll('pre code').forEach(block => {
+        if (typeof hljs !== 'undefined') hljs.highlightElement(block);
+    });
 }
 
 /**

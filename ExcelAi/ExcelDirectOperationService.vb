@@ -1561,6 +1561,9 @@ Public Class ExcelDirectOperationService
             ' 处理转义字符
             code = code.Replace("\n", vbCrLf).Replace("\t", vbTab).Replace("\""", """")
 
+            ' 直接注入 VBA 工程并 Run，必须先过与 Agent 工具路径同一道安全门
+            If Not ShareRibbon.CodeExecutionService.ConfirmScriptExecution(code, "ExcelAi.ExecuteVBA") Then Return False
+
             ' 获取VBProject
             Dim vbProj As Microsoft.Vbe.Interop.VBProject = Nothing
             Try

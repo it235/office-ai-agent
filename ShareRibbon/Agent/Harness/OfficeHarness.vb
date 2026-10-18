@@ -3,7 +3,7 @@ Imports System.Threading.Tasks
 
 Namespace Agent.Harness
 
-    Public Class OfficeHarness
+    Public Partial Class OfficeHarness
         Implements IOfficeHarness
 
         Private ReadOnly _kernel As AgentKernel
@@ -11,6 +11,17 @@ Namespace Agent.Harness
         Private _currentRunId As String = ""
         Private ReadOnly _runLock As New Object()
         Private ReadOnly _pendingRuns As New Dictionary(Of String, PendingHarnessRun)(StringComparer.OrdinalIgnoreCase)
+
+        ''' <summary>
+        ''' 审批等待的最长时长。超时后按"拒绝"收敛，绝不因为没人点按钮就把会话永久锁在
+        ''' 一个未决的高风险操作上；默认值宽松，留出人工确认的时间。
+        ''' </summary>
+        Public Property ApprovalTimeout As TimeSpan = TimeSpan.FromMinutes(10)
+
+        ''' <summary>
+        ''' 撤销待决审批后，等待 Loop 在安全点收敛的时间上限。
+        ''' </summary>
+        Private Shared ReadOnly ApprovalSettleGrace As TimeSpan = TimeSpan.FromSeconds(5)
 
         Public Event PhaseChanged As EventHandler(Of HarnessPhaseChangedEventArgs) Implements IOfficeHarness.PhaseChanged
         Public Event StepChanged As EventHandler(Of HarnessStepChangedEventArgs) Implements IOfficeHarness.StepChanged
@@ -33,18 +44,35 @@ Namespace Agent.Harness
             Dim startedAt = DateTime.Now
             Dim keepPending As Boolean = False
 
+            Dim superseded As PendingHarnessRun = Nothing
             SyncLock _runLock
-                If _pendingRuns.Values.Any(Function(item) Not item.IsCompleted) Then
-                    Return New HarnessRunResult With {
-                        .RunId = runId,
-                        .Status = HarnessRunStatus.Failed,
-                        .UserMessage = "当前会话已有正在执行或等待审批的任务",
-                        .DebugMessage = "RUN_ALREADY_ACTIVE",
-                        .StartedAt = startedAt,
-                        .FinishedAt = DateTime.Now
-                    }
+                Dim active = _pendingRuns.Values.FirstOrDefault(Function(item) Not item.IsCompleted)
+                If active IsNot Nothing Then
+                    ' 只有"等待用户裁决"的 run 能被新一轮对话放弃；正在操作宿主的必须拒绝，
+                    ' 否则两个任务会并发抢占同一个单例 AgentKernel。
+                    If Not active.AwaitingApproval Then
+                        Return BlockedResult(runId, startedAt, "当前会话已有正在执行的任务，请先停止或等待它结束")
+                    End If
+                    superseded = active
                 End If
             End SyncLock
+
+            If superseded IsNot Nothing Then
+                ' 用户没有点批准/拒绝而是直接说了新需求：视为放弃上一轮未确认的操作。
+                ' 未确认的写操作绝不擅自执行，按拒绝收敛后才能腾出 kernel 跑新一轮。
+                Dim settled = Await SettleApprovalAsync(superseded,
+                                                        False,
+                                                        "superseded",
+                                                        "用户发起了新一轮对话，上一轮未确认的操作已放弃",
+                                                        ExceptionClassifier.CodeCancelled)
+                If settled.HasValue Then
+                    ReleaseAbandonedRun(superseded, "用户发起了新一轮对话，上一轮未确认的操作已放弃",
+                                        ExceptionClassifier.CodeCancelled)
+                End If
+                If HasActiveRun() Then
+                    Return BlockedResult(runId, startedAt, "上一轮任务正在收尾，请稍后再试")
+                End If
+            End If
 
             If turn Is Nothing Then
                 Return New HarnessRunResult With {
@@ -185,18 +213,12 @@ Namespace Agent.Harness
             End If
 
             cancellationToken.ThrowIfCancellationRequested()
-            Dim callback = pending.ApprovalCallback
-            pending.ApprovalCallback = Nothing
-            If callback Is Nothing Then Return MissingRunResult(runId)
-            SafeAppendApprovalStep(runId,
-                                   -2,
-                                   "approval.decision",
-                                   If(approved, "approved", "rejected"),
-                                   If(approved, "用户已批准高风险操作", "用户已拒绝高风险操作"),
-                                   If(approved, "", ExceptionClassifier.CodeSafetyBlocked),
-                                   New With {.approved = approved},
-                                   DateTime.Now)
-            callback(approved)
+            Dim settled = Await SettleApprovalAsync(pending,
+                                                    approved,
+                                                    If(approved, "approved", "rejected"),
+                                                    If(approved, "用户已批准高风险操作", "用户已拒绝高风险操作"),
+                                                    If(approved, "", ExceptionClassifier.CodeSafetyBlocked))
+            If Not settled.HasValue Then Return MissingRunResult(runId)
             SafeSetRunStatus(runId, "running", If(approved, "审批通过，继续执行", "审批拒绝，正在收敛执行结果"), "")
 
             Dim agentResult = Await pending.AgentTask
@@ -297,48 +319,6 @@ Namespace Agent.Harness
             End Try
         End Sub
 
-        Private Sub HandleKernelRequestApproval(message As String, callback As Action(Of Boolean))
-            Dim pending = GetPendingRun(_currentRunId)
-            If pending Is Nothing Then
-                callback(False)
-                Return
-            End If
-            pending.ApprovalMessage = If(message, "该操作需要用户确认")
-            pending.ApprovalCallback = callback
-            SafeAppendApprovalStep(pending.RunId,
-                                   -1,
-                                   "approval.request",
-                                   "awaiting_approval",
-                                   pending.ApprovalMessage,
-                                   ExceptionClassifier.CodeSafetyNeedsApproval,
-                                   New With {.message = pending.ApprovalMessage},
-                                   DateTime.Now)
-            pending.ApprovalSignal.TrySetResult(True)
-        End Sub
-
-        Private Sub SafeAppendApprovalStep(runId As String,
-                                           seq As Integer,
-                                           toolId As String,
-                                           status As String,
-                                           message As String,
-                                           errorCode As String,
-                                           observation As Object,
-                                           occurredAt As DateTime)
-            Try
-                _runTraceStore.AppendStep(runId,
-                                          seq,
-                                          toolId,
-                                          status,
-                                          message,
-                                          errorCode,
-                                          observation,
-                                          occurredAt,
-                                          occurredAt)
-            Catch ex As Exception
-                AppLogger.Warn("OfficeHarness", $"Append approval trace failed: {AppLogger.Redact(ex.Message)}")
-            End Try
-        End Sub
-
         Private Function GetPendingRun(runId As String) As PendingHarnessRun
             If String.IsNullOrWhiteSpace(runId) Then Return Nothing
             SyncLock _runLock
@@ -354,14 +334,21 @@ Namespace Agent.Harness
             End SyncLock
         End Sub
 
-        Private Shared Function MissingRunResult(runId As String) As HarnessRunResult
+        Private Shared Function BlockedResult(runId As String, startedAt As DateTime, message As String) As HarnessRunResult
             Return New HarnessRunResult With {
-                .RunId = If(runId, ""),
+                .RunId = runId,
                 .Status = HarnessRunStatus.Failed,
-                .UserMessage = "未找到等待审批的任务",
-                .DebugMessage = "RUN_NOT_AWAITING_APPROVAL",
+                .UserMessage = message,
+                .DebugMessage = "RUN_ALREADY_ACTIVE",
+                .StartedAt = startedAt,
                 .FinishedAt = DateTime.Now
             }
+        End Function
+
+        Private Function HasActiveRun() As Boolean
+            SyncLock _runLock
+                Return _pendingRuns.Values.Any(Function(item) Not item.IsCompleted)
+            End SyncLock
         End Function
 
         Private Class PendingHarnessRun
@@ -373,6 +360,10 @@ Namespace Agent.Harness
             Public Property ApprovalCallback As Action(Of Boolean)
             Public Property ApprovalMessage As String = ""
             Public Property IsCompleted As Boolean
+            ''' <summary>
+            ''' 仅表示"当前正卡在等用户裁决"，是新一轮对话能否放弃它的选择性依据。
+            ''' </summary>
+            Public Property AwaitingApproval As Boolean
         End Class
 
         Private Sub SafeStartRun(runId As String, turn As UserTurn, startedAt As DateTime)

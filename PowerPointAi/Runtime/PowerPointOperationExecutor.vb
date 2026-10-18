@@ -73,7 +73,7 @@ Namespace OfficeRuntime
                             {"message", ex.Message}
                         })
                         If batch.Atomic AndAlso succeededCount > 0 Then
-                            warnings.Add("Atomic batch partially applied; automatic rollback was not guaranteed by PowerPoint COM")
+                            warnings.Add("声明式批次部分成功后失败；PowerPoint COM 不保证自动回滚，已停止自动重放")
                         End If
                         Dim afterFailure = PowerPointOperationObserver.CaptureState(batch, targetRefs)
                         Dim failureObservation = PowerPointOperationObserver.BuildObservation(batch,
@@ -82,13 +82,18 @@ Namespace OfficeRuntime
                                                                                              afterFailure,
                                                                                              targetRefs,
                                                                                              warnings)
-                        Dim code = If(succeededCount > 0, ExceptionClassifier.CodePartialApply, ex.ErrorCode)
+                        ' 已有步骤落笔 = 半应用。重放整批会把成功的步骤再做一遍，所以这里必须掐断。
+                        Dim partialApplied = succeededCount > 0
+                        failureObservation("rollback") = BuildOperationBatchRollbackNote(partialApplied)
+                        Dim code = If(partialApplied, ExceptionClassifier.CodePartialApply, ex.ErrorCode)
                         Return ToolResult.Failed(toolId,
                                                  ex.Message,
                                                  data:=New JObject From {{"targetRefs", JArray.FromObject(targetRefs)}},
                                                  errorCode:=code,
-                                                 userMessage:="PowerPoint 声明式操作未全部完成",
-                                                 recoverable:=ex.Recoverable,
+                                                 userMessage:=If(partialApplied,
+                                                                 "PowerPoint 声明式操作已部分应用，插件无法自动撤销，请检查文稿后再继续",
+                                                                 "PowerPoint 声明式操作未全部完成"),
+                                                 recoverable:=If(partialApplied, False, ex.Recoverable),
                                                  observation:=failureObservation)
                     Catch ex As Exception
                         Dim baseException = If(TypeOf ex Is TargetInvocationException AndAlso ex.InnerException IsNot Nothing,
@@ -103,7 +108,9 @@ Namespace OfficeRuntime
                             {"errorCode", classified.ErrorCode},
                             {"message", classified.UserMessage}
                         })
-                        If batch.Atomic AndAlso succeededCount > 0 Then warnings.Add("Atomic batch partially applied")
+                        If batch.Atomic AndAlso succeededCount > 0 Then
+                            warnings.Add("声明式批次部分成功后异常中断；PowerPoint COM 不保证自动回滚，已停止自动重放")
+                        End If
                         Dim afterFailure = PowerPointOperationObserver.CaptureState(batch, targetRefs)
                         Dim failureObservation = PowerPointOperationObserver.BuildObservation(batch,
                                                                                              operationResults,
@@ -111,12 +118,14 @@ Namespace OfficeRuntime
                                                                                              afterFailure,
                                                                                              targetRefs,
                                                                                              warnings)
+                        Dim crashedPartially = succeededCount > 0
+                        failureObservation("rollback") = BuildOperationBatchRollbackNote(crashedPartially)
                         Return ToolResult.Failed(toolId,
                                                  classified.DebugDetail,
                                                  data:=New JObject From {{"targetRefs", JArray.FromObject(targetRefs)}},
-                                                 errorCode:=If(succeededCount > 0, ExceptionClassifier.CodePartialApply, classified.ErrorCode),
+                                                 errorCode:=If(crashedPartially, ExceptionClassifier.CodePartialApply, classified.ErrorCode),
                                                  userMessage:=classified.UserMessage,
-                                                 recoverable:=classified.Recoverable,
+                                                 recoverable:=If(crashedPartially, False, classified.Recoverable),
                                                  observation:=failureObservation)
                     End Try
                 Next
@@ -154,6 +163,20 @@ Namespace OfficeRuntime
             Catch ex As Exception
                 Return ToolResult.FromException(toolId, ex)
             End Try
+        End Function
+
+        ''' <summary>
+        ''' 声明式批次没有事务边界：已落笔的步骤无法整批撤销，所以只如实上报 attempted=False，
+        ''' 让 Agent 知道文稿处于半应用状态，而不是以为已经回到执行前。
+        ''' </summary>
+        Private Shared Function BuildOperationBatchRollbackNote(partiallyApplied As Boolean) As JObject
+            Return New JObject From {
+                {"succeeded", False},
+                {"attempted", False},
+                {"verified", False},
+                {"partialApply", partiallyApplied},
+                {"error", If(partiallyApplied, "声明式操作批次不支持安全地自动撤销已成功的步骤，请人工检查或手动撤销", "本轮未检测到已应用的步骤，无需回滚")}
+            }
         End Function
 
         Private Shared Function ExecuteOperation(operation As OfficeOperation) As OperationExecutionResult

@@ -30,6 +30,16 @@
       "expectedHostCalls": 0
     },
     {
+      "id": "S-argument-required",
+      "kind": "tool_execution",
+      "appType": "Word",
+      "toolId": "SetParagraphFormat",
+      "allowedTools": ["SetParagraphFormat"],
+      "params": {"alignment": "center", "afterSpacing": 12},
+      "expectedErrorCode": "ARGUMENT_ERROR",
+      "expectedHostCalls": 0
+    },
+    {
       "id": "S-approval-resume",
       "kind": "tool_execution",
       "appType": "Word",

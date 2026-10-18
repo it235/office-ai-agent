@@ -4,7 +4,7 @@ description: Use for Word tasks that need document context, proofreading, format
 application: Word
 default_for_application: true
 tags: word, docx, document, proofread, format, heading, numbering, style, translate, writing
-allowed-tools: ListParagraphs, GetParagraphInfo, SetParagraphFormat, FormatText, ApplyStyle, BeautifyDocument, ReplaceText, InsertText, GenerateTOC, InsertTable
+allowed-tools: ListParagraphs, GetParagraphInfo, InsertText, FormatText, ReplaceText, DeleteText, ApplyStyle, SetParagraphFormat, InsertTable, GenerateTOC, BeautifyDocument
 intent_types: proofread, formatting, numbering, heading, writing, translation
 ---
 

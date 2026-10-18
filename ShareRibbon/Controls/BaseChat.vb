@@ -378,12 +378,16 @@ Public MustInherit Class BaseChat
     ' 执行VBA代码 - 子类必须实现' 执行前端传来的 VBA 代码片段
     Protected Function ExecuteVBACode(vbaCode As String, preview As Boolean) As Boolean
 
+        ' 注入宿主 VBA 工程前先过与 Agent 路径同一道安全门
         If preview Then
+            If CodeExecutionService.ScriptSafetyBlocked(vbaCode, "BaseChat") Then Return False
             ' 返回是否需要执行，accept-True，reject-False
             If Not RunCodePreview(vbaCode, preview) Then
                 Return True
             End If
             ' 如果预览模式，直接返回
+        ElseIf Not CodeExecutionService.ConfirmScriptExecution(vbaCode, "BaseChat") Then
+            Return False
         End If
 
         ' 获取 VBA 项目

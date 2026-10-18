@@ -381,7 +381,7 @@
     <ManifestKeyFile>ExcelAi_TemporaryKey.pfx</ManifestKeyFile>
   </PropertyGroup>
   <PropertyGroup>
-    <ManifestCertificateThumbprint>253F597F6214F29DEDFC7F2C1AE2FA7D2726F6B7</ManifestCertificateThumbprint>
+    <ManifestCertificateThumbprint>5F0EA91859F446BC270658E33044067DDB2BBC93</ManifestCertificateThumbprint>
   </PropertyGroup>
   <!-- PostBuild: copy unsigned Markdig.dll to output (avoids VSTO manifest signing error MSB3178) -->
   <Target Name="CopyUnsignedDllsAfterBuild" AfterTargets="Build">

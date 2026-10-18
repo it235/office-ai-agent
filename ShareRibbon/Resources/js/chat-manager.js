@@ -1,4 +1,4 @@
-﻿﻿/**
+﻿/**
  * chat-manager.js - Chat Section Management
  * Functions for creating and managing chat message sections
  */
@@ -186,6 +186,51 @@ window.appendRenderer = function (uuid, text) {
     }
 };
 
+// VB 侧回填消息正文：只接收纯文本，由 textContent 落地，禁止拼接 HTML 片段
+window.setSectionPlainText = function (uuid, text) {
+    const contentEl = document.getElementById('content-' + uuid);
+    if (!contentEl) return false;
+    const paragraph = document.createElement('p');
+    paragraph.style.whiteSpace = 'pre-wrap';
+    paragraph.textContent = text === null || text === undefined ? '' : String(text);
+    contentEl.replaceChildren(paragraph);
+    contentScroll();
+    return true;
+};
+
+// Agent 思考态状态行：同样是纯文本通道
+window.setThinkingStatusText = function (uuid, text) {
+    const thinkingDiv = document.getElementById('content-' + uuid);
+    if (!thinkingDiv) return false;
+    const status = document.createElement('div');
+    status.style.padding = '8px 0';
+    status.style.color = '#2563eb';
+    status.textContent = text === null || text === undefined ? '' : String(text);
+    thinkingDiv.replaceChildren(status);
+    return true;
+};
+
+// Agent 思考态占位：结构由前端持有，VB 只传 uuid 和纯文本标签
+window.showThinkingIndicator = function (uuid, statusText) {
+    const thinkingDiv = document.getElementById('content-' + uuid);
+    if (!thinkingDiv) return false;
+    const dots = document.createElement('div');
+    dots.className = 'thinking-dots';
+    for (let i = 0; i < 3; i++) {
+        dots.appendChild(document.createElement('span'));
+    }
+    const label = document.createElement('span');
+    label.textContent = statusText ? String(statusText) : '正在分析您的需求...';
+    label.style.marginLeft = '12px';
+    label.style.color = '#6c757d';
+    const status = document.createElement('div');
+    status.className = 'thinking-indicator';
+    status.appendChild(dots);
+    status.appendChild(label);
+    thinkingDiv.replaceChildren(status);
+    return true;
+};
+
 // Append reasoning content
 window.appendReasoning = function (uuid, text) {
     if (!uuid) {
@@ -262,12 +307,8 @@ window.setChatMessages = function (messages) {
             createChatSection(sender, createTime, uuid);
         }
         const contentEl = document.getElementById('content-' + uuid);
-        if (contentEl && typeof marked !== 'undefined') {
-            try {
-                contentEl.innerHTML = marked.parse(m.content || '');
-            } catch (e) {
-                contentEl.textContent = m.content || '';
-            }
+        if (contentEl) {
+            renderMarkdown(contentEl, m.content || '');
         }
     }
     if (window.autoScrollEnabled !== false && chatContainer.lastElementChild) {

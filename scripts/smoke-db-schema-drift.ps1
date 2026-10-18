@@ -40,7 +40,9 @@ function Invoke-SqlFile {
         [string]$Path
     )
 
-    $sql = Get-Content -LiteralPath $Path -Raw
+    # 与生产端 OfficeAiDatabase 的 File.ReadAllText 保持一致，按 UTF-8 读取，
+    # 否则 PowerShell 5.1 会用系统 ANSI 码页解码，注释里的中文会破坏语句切分。
+    $sql = [System.IO.File]::ReadAllText($Path)
     if ([string]::IsNullOrWhiteSpace($sql)) {
         return
     }

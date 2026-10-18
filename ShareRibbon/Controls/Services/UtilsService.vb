@@ -3,6 +3,7 @@
 
 Imports System.Text
 Imports System.Text.RegularExpressions
+Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 
 ''' <summary>
@@ -35,7 +36,31 @@ Public Class UtilsService
                      Replace("""", "\""").
                      Replace(vbCr, "\r").
                      Replace(vbLf, "\n").
-                     Replace(vbTab, "\t")
+                     Replace(vbTab, "\t").
+                     Replace(ChrW(&H2028), "\u2028").
+                     Replace(ChrW(&H2029), "\u2029")
+    End Function
+
+    ''' <summary>
+    ''' 生成可直接嵌入 ExecuteScriptAsync 脚本的 JS 字符串字面量（含引号），调用方不要再自己加引号
+    ''' </summary>
+    Public Shared Function ToJsStringLiteral(input As String) As String
+        Return EscapeJsonForScriptEmbedding(JsonConvert.SerializeObject(If(input, String.Empty)))
+    End Function
+
+    ''' <summary>
+    ''' 序列化对象为可安全拼进 JS 源码的 JSON 文本
+    ''' </summary>
+    Public Shared Function SerializeForScript(value As Object) As String
+        Return EscapeJsonForScriptEmbedding(JsonConvert.SerializeObject(value))
+    End Function
+
+    ''' <summary>
+    ''' U+2028/U+2029 在 JSON 里合法，但在 JS 源码中是行终止符，嵌入脚本前必须转义
+    ''' </summary>
+    Public Shared Function EscapeJsonForScriptEmbedding(text As String) As String
+        If String.IsNullOrEmpty(text) Then Return text
+        Return text.Replace(ChrW(&H2028), "\u2028").Replace(ChrW(&H2029), "\u2029")
     End Function
 
     ''' <summary>
@@ -174,6 +199,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const container = this.closest('.reasoning-container');
             if (container) container.classList.toggle('collapsed');
         };
+    });
+    // 代码块操作按钮使用 data-code-action 标记；导出历史不加载应用脚本，这里只恢复复制
+    document.querySelectorAll('[data-code-action=""copy""]').forEach(btn => {
+        btn.onclick = function() { copyCode(btn); };
     });
 });
 

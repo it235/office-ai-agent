@@ -175,7 +175,7 @@ function editCode(button) {
     saveButton.innerHTML = '保存';
     saveButton.onclick = function () {
         const newCode = textarea.value;
-        const newCodeHtml = marked.parse('```' + language + '\n' + newCode + '\n```');
+        const newCodeHtml = sanitizeHtml(marked.parse('```' + language + '\n' + newCode + '\n```'));
 
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = newCodeHtml;
@@ -213,6 +213,21 @@ function editCode(button) {
     textarea.focus();
     editorContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
+
+// 代码块操作按钮由 core.js 渲染为 data-code-action；
+// markdown 渲染结果会被 HTML 清洗剔除 on* 属性，所以处理器只能委托绑定。
+const CODE_ACTION_HANDLERS = {
+    copy: copyCode,
+    execute: executeCode,
+    edit: editCode
+};
+
+document.addEventListener('click', function (event) {
+    const button = event.target.closest ? event.target.closest('[data-code-action]') : null;
+    if (!button) return;
+    const handler = CODE_ACTION_HANDLERS[button.dataset.codeAction];
+    if (handler) handler(button);
+});
 
 // Process stream complete - handle UI updates after message completion
 function processStreamComplete(uuid, totalTokens) {

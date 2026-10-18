@@ -404,7 +404,7 @@ Public Class PromptManager
 {""commands"": [{""command"": ""InsertText"", ""params"": {""content"": ""标题""}}, {""command"": ""FormatText"", ""params"": {""range"": ""selection"", ""bold"": true}}]}
 ```
 
-【Word支持的9个命令】
+【Word支持的11个命令】
 
 === 基础文本操作 (4个) ===
 1. InsertText - 插入文本 {content:必需, position:cursor/start/end}
@@ -414,7 +414,7 @@ Public Class PromptManager
 
 === 段落和样式 (2个) ===
 5. ApplyStyle - 应用样式 {styleName:必需如""标题 1"", range:selection/paragraph}
-6. SetParagraphFormat - 段落格式 {alignment:left/center/right/justify, firstLineIndent/beforeSpacing/afterSpacing}
+6. SetParagraphFormat - 段落格式 {paragraphIndex:必需,从1开始; alignment:left/center/right/justify; firstLineIndent:缩进字符数; beforeSpacing/afterSpacing:磅}
 
 === 表格操作 (1个) ===
 7. InsertTable - 插入表格 {rows:必需, cols:必需, data:可选}
@@ -425,15 +425,20 @@ Public Class PromptManager
 === 文档美化 (1个) ===
 9. BeautifyDocument - 美化 {theme:{h1/h2/body设置}, margins:{top/bottom/left/right}}
 
+=== 只读命令 (2个，不改文档) ===
+10. ListParagraphs - 列出段落 {maxCount:可选，默认50}
+11. GetParagraphInfo - 读取单段详情 {paragraphIndex:必需从1开始}
+
 【绝对禁止】
 - 禁止使用 actions/operations 数组
 - 禁止省略 params 包装
 - 禁止使用Excel/PowerPoint专属命令
 
 【决策优先级】
-1. 只能使用上述9个已实现命令
+1. 只能使用上述11个已实现命令；10、11只读，用来先看清文档再规划
 2. 翻译用工具栏按钮
-3. 需求不明确时中文询问"
+3. 需求不明确时中文询问
+4. SetParagraphFormat 的 paragraphIndex 只能是文档当前真实存在的序号（1..共N段），不确定时先用 ListParagraphs 读一次；禁止 999、0、-1 这类占位或""最后一段""式猜法"
     End Function
     
     ''' <summary>

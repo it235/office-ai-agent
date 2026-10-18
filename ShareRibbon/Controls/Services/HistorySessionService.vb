@@ -25,13 +25,13 @@ Public Class HistorySessionService
     End Sub
 
     ''' <summary>
-    ''' 获取近期会话列表（来自 session_summary），供历史侧边栏展示
+    ''' 获取近期会话列表（由权威历史表 conversation_event 聚合），供历史侧边栏展示
     ''' </summary>
     Public Async Sub HandleGetSessionList()
         Dim errorScript As String = Nothing
         Try
             Dim limit As Integer = 50
-            Dim summaries = MemoryRepository.GetRecentSessionSummaries(limit)
+            Dim summaries = ConversationRepository.GetRecentSessions(limit)
             Dim list As New List(Of Object)()
             For Each s In summaries
                 list.Add(New With {

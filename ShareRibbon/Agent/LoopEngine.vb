@@ -59,6 +59,8 @@ Namespace Agent
                 Else
                     AppLogger.Info("LoopEngine", $"Use precomputed TaskSpec goal={AppLogger.Redact(session.Spec.Goal)}")
                 End If
+                ' 分析/规划各是一次模型请求：用户已停止就到此收敛，不再把预算花在还没有执行者的计划上。
+                If cancellationToken.IsCancellationRequested Then Return FinishCancelled(session)
 
                 ' Phase 2: 生成计划
                 OnStatusChanged?.Invoke("正在制定执行计划...")
@@ -100,6 +102,8 @@ Namespace Agent
                     session.Status = AgentStatus.Thinking
                     OnStatusChanged?.Invoke($"步骤 {stepIndex + 1}/{session.Plan.Steps.Count}: {planStep.Description}")
                     Dim thought = Await ThinkAsync(session, planStep, systemPrompt)
+                    ' 模型刚返回的这一步不得再变成宿主写操作：停止必须拦在 ACT 之前。
+                    If cancellationToken.IsCancellationRequested Then Return FinishCancelled(session)
 
                     ' --- PARSE ACTION ---
                     Dim toolCall = ParseToolCall(thought)
@@ -391,11 +395,14 @@ Namespace Agent
 
                 ' 完成
                 session.Status = AgentStatus.Completed
-                Dim finalMsg = $"任务完成，共执行 {session.CurrentIteration} 个迭代"
+                Dim finalMsg = BuildCompletionMessage(session)
                 OnStatusChanged?.Invoke(finalMsg)
                 AppLogger.Info("LoopEngine", finalMsg)
                 Return AgentResult.SuccessResult(session.Id, finalMsg)
 
+            Catch ex As OperationCanceledException When cancellationToken.IsCancellationRequested
+                ' 在途模型请求被"停止"掐断：这是用户主动终止，不能按执行失败收敛。
+                Return FinishCancelled(session)
             Catch ex As Exception
                 session.Status = AgentStatus.Failed
                 Dim classified = ExceptionClassifier.Classify(ex)
@@ -405,6 +412,33 @@ Namespace Agent
             End Try
         End Function
 
+
+        ''' <summary>
+        ''' 终稿正文由已落地步骤的观察拼出来。迭代计数是内部记账，直接当回复会让用户
+        ''' 只看到"任务完成，共执行 1 个迭代"这种无法核对结果的句子（真机第一轮即此形态）。
+        ''' </summary>
+        Private Shared Function BuildCompletionMessage(session As AgentSession) As String
+            Dim lines As New List(Of String)()
+            If session.Plan IsNot Nothing Then
+                For Each planStep In session.Plan.Steps
+                    If planStep.Status <> StepStatus.Completed Then Continue For
+                    Dim explanation = planStep.LastExplanation
+                    Dim detail = explanation?.Message
+                    If String.IsNullOrWhiteSpace(detail) Then detail = explanation?.AfterSummary
+                    If String.IsNullOrWhiteSpace(detail) Then detail = planStep.Description
+                    If String.IsNullOrWhiteSpace(detail) Then Continue For
+                    detail = detail.Replace(vbCr, " ").Replace(vbLf, " ").Trim()
+                    If detail.Length > 120 Then detail = detail.Substring(0, 120) & "…"
+                    Dim label = explanation?.ToolId
+                    If String.IsNullOrWhiteSpace(label) Then label = "步骤" & planStep.StepNumber.ToString()
+                    lines.Add($"{lines.Count + 1}. {label}: {detail}")
+                    If lines.Count >= 8 Then Exit For
+                Next
+            End If
+
+            If lines.Count = 0 Then Return "任务完成，本轮没有修改文档的操作。"
+            Return "已完成 " & lines.Count & " 个操作：" & vbCrLf & String.Join(vbCrLf, lines)
+        End Function
 
         ''' <summary>
         ''' 协作式停止的收敛出口：只在不打断进行中宿主操作的安全点调用。

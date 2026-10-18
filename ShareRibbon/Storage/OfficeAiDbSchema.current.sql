@@ -168,6 +168,11 @@ CREATE TABLE IF NOT EXISTS memory_job (
 CREATE INDEX IF NOT EXISTS idx_memory_job_pending ON memory_job(status, next_run_at, created_at);
 CREATE INDEX IF NOT EXISTS idx_memory_job_type ON memory_job(job_type, status);
 
+-- 同一 job_type 加 target_id 只允许一个未终结任务，重复入队由这里挡住
+CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_job_active_unique
+    ON memory_job(job_type, target_id)
+    WHERE status IN ('pending', 'processing');
+
 CREATE TABLE IF NOT EXISTS skills_registry (
     skill_name TEXT PRIMARY KEY,
     file_path TEXT NOT NULL,

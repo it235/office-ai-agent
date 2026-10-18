@@ -31,21 +31,13 @@ class MarkdownStreamRenderer {
             return;
         }
 
-        // Check if marked is available
-        if (typeof marked === 'undefined') {
-            console.error('[MarkdownStreamRenderer.append] marked库未加载');
-            this.output.textContent = this.fullContent;
-            return;
-        }
-
         // Use full content render
         try {
-            const parsed = marked.parse(this.fullContent);
-            this.output.innerHTML = parsed;
+            renderMarkdown(this.output, this.fullContent);
             // Process template JSON code blocks and render as cards
             this._processTemplateCards();
         } catch (e) {
-            console.error('[MarkdownStreamRenderer.append] marked.parse出错:', e);
+            console.error('[MarkdownStreamRenderer.append] 渲染出错:', e);
             this.output.textContent = this.fullContent;
         }
 
@@ -85,8 +77,20 @@ class MarkdownStreamRenderer {
             // 替换代码块为卡片
             const preElement = codeBlock.parentElement;
             const cardContainer = document.createElement('div');
-            cardContainer.innerHTML = cardHtml;
-            preElement.replaceWith(cardContainer.firstElementChild);
+            cardContainer.innerHTML = sanitizeHtml(cardHtml);
+            const cardElement = cardContainer.firstElementChild;
+            if (!cardElement) return;
+
+            // JSON 负载通过 dataset 属性赋值挂载，避免把模型内容拼进可执行字符串
+            const payload = JSON.stringify(template);
+            cardElement.querySelectorAll('[data-template-action]').forEach((btn) => {
+                const action = btn.dataset.templateAction;
+                if (action === 'save' || action === 'preview') btn.dataset.templateJson = payload;
+            });
+            const jsonPanel = cardElement.querySelector('.template-card-json-panel');
+            if (jsonPanel) jsonPanel.style.display = 'none';
+
+            preElement.replaceWith(cardElement);
         });
     }
 
@@ -111,9 +115,6 @@ class MarkdownStreamRenderer {
      * 创建模板卡片HTML
      */
     _createTemplateCard(template, cardIndex) {
-        const templateJson = JSON.stringify(template);
-        const escapedJson = templateJson.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-        
         // 构建版式元素列表
         let layoutElementsHtml = '';
         if (template.Layout && template.Layout.Elements && template.Layout.Elements.length > 0) {
@@ -148,7 +149,8 @@ class MarkdownStreamRenderer {
             const ps = template.PageSettings;
             const items = [];
             if (ps.Margins) {
-                items.push(`边距: ${ps.Margins.Top || 2.54}/${ps.Margins.Bottom || 2.54}/${ps.Margins.Left || 3.18}/${ps.Margins.Right || 3.18}cm`);
+                const marginValue = (value, fallback) => this._escapeHtml(String(value == null ? fallback : value));
+                items.push(`边距: ${marginValue(ps.Margins.Top, 2.54)}/${marginValue(ps.Margins.Bottom, 2.54)}/${marginValue(ps.Margins.Left, 3.18)}/${marginValue(ps.Margins.Right, 3.18)}cm`);
             }
             if (ps.PageNumber && ps.PageNumber.Enabled) {
                 items.push('页码: 开启');
@@ -193,7 +195,7 @@ class MarkdownStreamRenderer {
                 ` : ''}
             </div>
             <div class="template-card-actions">
-                <button class="template-card-btn template-card-btn-primary" onclick="TemplateCardActions.save('${escapedJson}')">
+                <button class="template-card-btn template-card-btn-primary" data-template-action="save">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                         <polyline points="17 21 17 13 7 13 7 21"></polyline>
@@ -201,14 +203,14 @@ class MarkdownStreamRenderer {
                     </svg>
                     保存模板
                 </button>
-                <button class="template-card-btn" onclick="TemplateCardActions.preview('${escapedJson}')">
+                <button class="template-card-btn" data-template-action="preview">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                         <circle cx="12" cy="12" r="3"></circle>
                     </svg>
                     预览效果
                 </button>
-                <button class="template-card-btn" onclick="TemplateCardActions.toggleJson(this)">
+                <button class="template-card-btn" data-template-action="toggle">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="16 18 22 12 16 6"></polyline>
                         <polyline points="8 6 2 12 8 18"></polyline>
@@ -216,7 +218,7 @@ class MarkdownStreamRenderer {
                     查看JSON
                 </button>
             </div>
-            <div class="template-card-json-panel" style="display: none;">
+            <div class="template-card-json-panel">
                 <pre><code class="language-json">${this._escapeHtml(JSON.stringify(template, null, 2))}</code></pre>
             </div>
         </div>`;
@@ -245,7 +247,7 @@ const TemplateCardActions = {
      */
     save(templateJson) {
         try {
-            const template = JSON.parse(templateJson.replace(/&quot;/g, '"'));
+            const template = JSON.parse(templateJson);
             // 发送消息到VB端保存
             if (window.chrome && window.chrome.webview) {
                 window.chrome.webview.postMessage({
@@ -267,7 +269,7 @@ const TemplateCardActions = {
      */
     preview(templateJson) {
         try {
-            const template = JSON.parse(templateJson.replace(/&quot;/g, '"'));
+            const template = JSON.parse(templateJson);
             // 发送消息到VB端预览
             if (window.chrome && window.chrome.webview) {
                 window.chrome.webview.postMessage({
@@ -315,3 +317,15 @@ const TemplateCardActions = {
         }
     }
 };
+
+// 卡片按钮通过 data-template-action 委托绑定：卡片 HTML 经过 HTML 清洗，内联 on* 会被剔除
+document.addEventListener('click', function (event) {
+    const btn = event.target.closest ? event.target.closest('[data-template-action]') : null;
+    if (!btn) return;
+    const action = btn.dataset.templateAction;
+    if (action === 'toggle') {
+        TemplateCardActions.toggleJson(btn);
+    } else if (btn.dataset.templateJson) {
+        TemplateCardActions[action] && TemplateCardActions[action](btn.dataset.templateJson);
+    }
+});

@@ -165,7 +165,14 @@ Public Class ChatFormatterAgent
         Dim jsonPayload As New JObject()
         jsonPayload("uuid") = uuid
         jsonPayload("html") = html
-        Await _executeScript($"appendFormattingCard({jsonPayload.ToString(Newtonsoft.Json.Formatting.None)});")
+        Await _executeScript($"appendFormattingCard({UtilsService.SerializeForScript(jsonPayload)});")
+    End Function
+
+    ''' <summary>
+    ''' 卡片HTML里的文本一律转义：模型输出的名称/类型不能当成标记写进 innerHTML
+    ''' </summary>
+    Private Shared Function Esc(value As String) As String
+        Return System.Web.HttpUtility.HtmlEncode(If(value, String.Empty))
     End Function
 
     Private Shared Function ShouldShowDocumentType(plan As ReformatPreviewPlan) As Boolean
@@ -201,10 +208,10 @@ Public Class ChatFormatterAgent
             sb.AppendLine($"    <div class=""formatting-info-row"">文本段落: <strong>{plan.TextParagraphCount}</strong> / 总段落 {plan.TotalParagraphs}</div>")
         End If
         If ShouldShowDocumentType(plan) Then
-            sb.AppendLine($"    <div class=""formatting-info-row"">文档类型: <strong>{GetDocumentTypeLabel(plan)}</strong> (置信度{Math.Round(plan.TypeConfidence * 100)}%)</div>")
+            sb.AppendLine($"    <div class=""formatting-info-row"">文档类型: <strong>{Esc(GetDocumentTypeLabel(plan))}</strong> (置信度{Math.Round(plan.TypeConfidence * 100)}%)</div>")
         End If
         If Not String.IsNullOrEmpty(plan.StandardName) Then
-            sb.AppendLine($"    <div class=""formatting-info-row"">排版标准: <strong>{plan.StandardName}</strong></div>")
+            sb.AppendLine($"    <div class=""formatting-info-row"">排版标准: <strong>{Esc(plan.StandardName)}</strong></div>")
         End If
 
         ' AI标注摘要
@@ -262,10 +269,10 @@ Public Class ChatFormatterAgent
 
         ' 文档类型与标准
         If ShouldShowDocumentType(plan) Then
-            sb.AppendLine($"    <div class=""formatting-info-row"">文档类型: <strong>{GetDocumentTypeLabel(plan)}</strong></div>")
+            sb.AppendLine($"    <div class=""formatting-info-row"">文档类型: <strong>{Esc(GetDocumentTypeLabel(plan))}</strong></div>")
         End If
         If Not String.IsNullOrEmpty(plan.StandardName) Then
-            sb.AppendLine($"    <div class=""formatting-info-row"">排版标准: <strong>{plan.StandardName}</strong></div>")
+            sb.AppendLine($"    <div class=""formatting-info-row"">排版标准: <strong>{Esc(plan.StandardName)}</strong></div>")
         End If
 
         ' 变更列表
@@ -328,10 +335,10 @@ Public Class ChatFormatterAgent
 
         ' 文档类型与标准
         If ShouldShowDocumentType(plan) Then
-            sb.AppendLine($"    <div class=""formatting-info-row"">文档类型: <strong>{GetDocumentTypeLabel(plan)}</strong> (置信度{Math.Round(plan.TypeConfidence * 100)}%)</div>")
+            sb.AppendLine($"    <div class=""formatting-info-row"">文档类型: <strong>{Esc(GetDocumentTypeLabel(plan))}</strong> (置信度{Math.Round(plan.TypeConfidence * 100)}%)</div>")
         End If
         If Not String.IsNullOrEmpty(plan.StandardName) Then
-            sb.AppendLine($"    <div class=""formatting-info-row"">推荐标准: <strong>{plan.StandardName}</strong></div>")
+            sb.AppendLine($"    <div class=""formatting-info-row"">推荐标准: <strong>{Esc(plan.StandardName)}</strong></div>")
         End If
         If Not String.IsNullOrWhiteSpace(plan.StandardDescription) Then
             sb.AppendLine($"    <div class=""formatting-info-row"">方案说明: <strong>{System.Web.HttpUtility.HtmlEncode(plan.StandardDescription)}</strong></div>")

@@ -84,6 +84,54 @@ Public Class ConversationRepository
     End Function
 
     ''' <summary>
+    ''' 会话列表：直接从权威历史表按会话聚合，标题取首条用户消息、摘要取末条消息。
+    ''' 曾由普通聊天路径单独写 session_summary，Agent 主路径的会话因此不在列表里；
+    ''' 现在无论走哪条链路，只要有消息就能出现在列表中。
+    ''' </summary>
+    Public Shared Function GetRecentSessions(limit As Integer) As List(Of SessionSummaryRecord)
+        OfficeAiDatabase.EnsureInitialized()
+        Dim list As New List(Of SessionSummaryRecord)()
+        If limit <= 0 Then Return list
+
+        Using conn As New SQLiteConnection(OfficeAiDatabase.GetConnectionString())
+            conn.Open()
+            Using cmd As New SQLiteCommand(
+                "SELECT e.session_id, MIN(e.created_at), " &
+                "  (SELECT f.content FROM conversation_event f WHERE f.session_id = e.session_id " &
+                "   AND f.event_type = 'chat_message' AND f.role = 'user' ORDER BY f.created_at, f.rowid LIMIT 1), " &
+                "  (SELECT g.content FROM conversation_event g WHERE g.session_id = e.session_id " &
+                "   AND g.event_type = 'chat_message' ORDER BY g.created_at DESC, g.rowid DESC LIMIT 1) " &
+                "FROM conversation_event e " &
+                "WHERE e.event_type = 'chat_message' AND IFNULL(e.session_id, '') <> '' " &
+                "GROUP BY e.session_id ORDER BY MAX(e.created_at) DESC LIMIT @limit", conn)
+                cmd.Parameters.AddWithValue("@limit", limit)
+                Using rdr = cmd.ExecuteReader()
+                    While rdr.Read()
+                        list.Add(New SessionSummaryRecord With {
+                            .Id = 0,
+                            .SessionId = rdr.GetString(0),
+                            .Title = Truncate(ReadText(rdr, 2), 80),
+                            .Snippet = Truncate(ReadText(rdr, 3), 200),
+                            .CreatedAt = ReadText(rdr, 1)
+                        })
+                    End While
+                End Using
+            End Using
+        End Using
+        Return list
+    End Function
+
+    Private Shared Function ReadText(rdr As SQLiteDataReader, ordinal As Integer) As String
+        Return If(rdr.IsDBNull(ordinal), "", rdr.GetString(ordinal))
+    End Function
+
+    Private Shared Function Truncate(value As String, maxLen As Integer) As String
+        Dim text = If(value, "").Replace(vbCr, " "c).Replace(vbLf, " "c)
+        If text.Length <= maxLen Then Return text
+        Return text.Substring(0, maxLen) & "..."
+    End Function
+
+    ''' <summary>
     ''' Authoritative single-transaction cleanup of every persisted row owned by one session:
     ''' conversation events, legacy conversation rows, the session summary, run traces, legacy
     ''' atomic memories, plus the memory items derived from the session's events and their
@@ -97,17 +145,23 @@ Public Class ConversationRepository
         Using conn As New SQLiteConnection(OfficeAiDatabase.GetConnectionString())
             conn.Open()
             Using tx = conn.BeginTransaction()
-                ' Order: leaf evidence (embeddings) -> jobs -> derived memory -> events -> session-level rows.
+                ' Order: leaf evidence (embeddings) -> jobs -> session-scoped memory -> run steps
+                ' -> events -> session-level rows.
+                ' 只删本会话独占的 session 作用域记忆：共享记忆（user/document/project）是跨会话沉淀，
+                ' 删一个会话不得连带删掉别的会话积累的记忆。
+                Dim sessionEvents As String =
+                    "(SELECT event_id FROM conversation_event WHERE session_id = @sid)"
+                Dim sessionMemories As String =
+                    $"(SELECT memory_id FROM memory_item WHERE scope = 'session' AND source_event_id IN {sessionEvents})"
+                ' 共享记忆只解绑不删除：source_event_id 是指向 conversation_event 的外键，
+                ' 置空串会当场触发约束，NULL 才是合法的"无锚点"表示。
                 Dim statements As String() = {
-                    "DELETE FROM memory_embedding WHERE memory_id IN (" &
-                    "  SELECT memory_id FROM memory_item WHERE source_event_id IN (" &
-                    "    SELECT event_id FROM conversation_event WHERE session_id = @sid))",
-                    "DELETE FROM memory_job WHERE target_id = @sid OR target_id IN (" &
-                    "  SELECT event_id FROM conversation_event WHERE session_id = @sid) OR target_id IN (" &
-                    "  SELECT memory_id FROM memory_item WHERE source_event_id IN (" &
-                    "    SELECT event_id FROM conversation_event WHERE session_id = @sid))",
-                    "DELETE FROM memory_item WHERE source_event_id IN (" &
-                    "  SELECT event_id FROM conversation_event WHERE session_id = @sid)",
+                    "DELETE FROM memory_embedding WHERE memory_id IN " & sessionMemories,
+                    "DELETE FROM memory_job WHERE target_id = @sid OR target_id IN " & sessionEvents &
+                    " OR target_id IN " & sessionMemories,
+                    "DELETE FROM memory_item WHERE scope = 'session' AND source_event_id IN " & sessionEvents,
+                    "UPDATE memory_item SET source_event_id = NULL WHERE source_event_id IN " & sessionEvents,
+                    "DELETE FROM agent_run_step WHERE run_id IN (SELECT run_id FROM agent_run WHERE session_id = @sid)",
                     "DELETE FROM conversation_event WHERE session_id = @sid",
                     "DELETE FROM conversation WHERE session_id = @sid",
                     "DELETE FROM session_summary WHERE session_id = @sid",

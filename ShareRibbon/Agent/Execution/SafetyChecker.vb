@@ -6,39 +6,53 @@ Namespace Agent.Execution
     Public Class SafetyChecker
 
         ''' <summary>
-        ''' 危险操作黑名单（绝对禁止执行）
+        ''' 危险操作黑名单（绝对禁止执行）。全部使用去空白后的小写片段，
+        ''' 避免 "Kill (""a.txt"")"、"Shell (" 这类加空格或改大小写的绕过。
         ''' </summary>
         Private Shared ReadOnly DANGEROUS() As String = {
-            "Kill ",
-            "Shell(",
-            "Shell ",
-            "CreateObject(""WScript",
-            "CreateObject(""Scripting.FileSystemObject",
-            ".DeleteFile",
-            ".DeleteFolder",
-            "Environ(",
-            "RegWrite",
-            "RegDelete",
-            "Application.Quit",
-            "ActiveWorkbook.Close False",
-            "Documents.Close",
-            "Presentation.Close"
+            "kill(",
+            "kill""",
+            "shell(",
+            "shell""",
+            "shell.application",
+            "wscript.shell",
+            "createobject(""wscript",
+            "createobject(""scripting.filesystemobject",
+            "scriptcontrol",
+            ".run(",
+            ".deletefile",
+            ".deletefolder",
+            ".movehere",
+            ".quit(",
+            "environ(",
+            "regwrite",
+            "regdelete",
+            "application.quit",
+            "activeworkbook.closefalse",
+            "documents.close",
+            "presentation.close"
         }
 
         ''' <summary>
         ''' 需要用户确认的操作（允许但需确认）
         ''' </summary>
         Private Shared ReadOnly NEEDS_CONFIRM() As String = {
-            ".Delete",
-            ".Clear",
-            ".ClearContents",
-            "Workbooks.Close",
-            ".SaveAs",
-            "ActiveDocument.Close",
-            "Selection.Delete",
-            "Range.Delete",
-            "Worksheet.Delete",
-            "Slide.Delete"
+            ".delete(",
+            ".delete",
+            ".clear",
+            ".clearcontents",
+            "workbooks.close",
+            ".saveas",
+            ".savecopyas",
+            "activedocument.close",
+            "selection.delete",
+            "range.delete",
+            "worksheet.delete",
+            "slide.delete",
+            ".export(",
+            ".printout(",
+            ".sendmail(",
+            ".protect"
         }
 
         ''' <summary>
@@ -51,22 +65,40 @@ Namespace Agent.Execution
                 Return SafetyResult.Safe()
             End If
 
+            Dim normalized = Normalize(code)
+            Dim matchedNeedConfirm As String = Nothing
+
             ' 1. 检测危险操作（绝对禁止）
             For Each danger In DANGEROUS
-                If code.IndexOf(danger, StringComparison.OrdinalIgnoreCase) >= 0 Then
+                If normalized.Contains(danger) Then
                     Return SafetyResult.Blocked($"检测到危险操作: {danger}")
                 End If
             Next
 
             ' 2. 检测需要确认的操作
             For Each item In NEEDS_CONFIRM
-                If code.IndexOf(item, StringComparison.OrdinalIgnoreCase) >= 0 Then
-                    Return SafetyResult.NeedConfirm($"将执行: {item}")
+                If normalized.Contains(item) Then
+                    If matchedNeedConfirm Is Nothing Then matchedNeedConfirm = item
                 End If
             Next
 
+            If matchedNeedConfirm IsNot Nothing Then
+                Return SafetyResult.NeedConfirm($"将执行: {matchedNeedConfirm}")
+            End If
+
             ' 3. 通过安全检查
             Return SafetyResult.Safe()
+        End Function
+
+        ''' <summary>
+        ''' 去掉空白并转小写，使黑名单无法用空格或大小写绕过
+        ''' </summary>
+        Private Shared Function Normalize(code As String) As String
+            Dim builder As New Text.StringBuilder(code.Length)
+            For Each ch In code
+                If Not Char.IsWhiteSpace(ch) Then builder.Append(Char.ToLowerInvariant(ch))
+            Next
+            Return builder.ToString()
         End Function
 
     End Class

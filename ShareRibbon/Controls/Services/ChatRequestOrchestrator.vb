@@ -5,7 +5,6 @@ Imports System.Diagnostics
 ''' </summary>
 Public Class ChatRequestOrchestrator
     Private ReadOnly _conversationRuntime As IConversationRuntime
-    Private ReadOnly _chatStateService As ChatStateService
     Private ReadOnly _historyMessages As List(Of HistoryMessage)
     Private ReadOnly _selectionPendingMap As Dictionary(Of String, SelectionInfo)
     Private ReadOnly _getApplication As Func(Of ApplicationInfo)
@@ -13,21 +12,18 @@ Public Class ChatRequestOrchestrator
 
     Public Sub New(
         conversationRuntime As IConversationRuntime,
-        chatStateService As ChatStateService,
         historyMessages As List(Of HistoryMessage),
         selectionPendingMap As Dictionary(Of String, SelectionInfo),
         getApplication As Func(Of ApplicationInfo),
         manageHistoryMessageSize As Action)
 
         If conversationRuntime Is Nothing Then Throw New ArgumentNullException(NameOf(conversationRuntime))
-        If chatStateService Is Nothing Then Throw New ArgumentNullException(NameOf(chatStateService))
         If historyMessages Is Nothing Then Throw New ArgumentNullException(NameOf(historyMessages))
         If selectionPendingMap Is Nothing Then Throw New ArgumentNullException(NameOf(selectionPendingMap))
         If getApplication Is Nothing Then Throw New ArgumentNullException(NameOf(getApplication))
         If manageHistoryMessageSize Is Nothing Then Throw New ArgumentNullException(NameOf(manageHistoryMessageSize))
 
         _conversationRuntime = conversationRuntime
-        _chatStateService = chatStateService
         _historyMessages = historyMessages
         _selectionPendingMap = selectionPendingMap
         _getApplication = getApplication
@@ -88,7 +84,7 @@ Public Class ChatRequestOrchestrator
             .content = question
         })
 
+        ' 这里只维护发给模型的上下文；会话历史的 user 事件由 BaseChatControl.Send 单点落库
         _manageHistoryMessageSize()
-        _chatStateService.AddMessage("user", question)
     End Sub
 End Class

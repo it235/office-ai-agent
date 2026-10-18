@@ -34,7 +34,6 @@ AiHelper/
 ├── PowerPointAi/                        # PowerPoint VSTO 插件
 ├── ShareRibbon/                         # 共享组件库
 ├── OfficeAgent/                         # 安装包项目 (.vdproj)
-├── OfficeAgentSetupCustomActions/        # 安装自定义动作 VB.NET 项目（如存在）
 ├── docs/                                # 调试、迁移、说明文档
 ├── openspec/                            # 需求/变更规格与归档
 ├── packages/                            # NuGet packages 目录
@@ -54,7 +53,6 @@ AiHelper/
 | PowerPoint 功能 | `PowerPointAi/` | 演示文稿、幻灯片、形状、续写、翻译 |
 | PowerPoint Professional Design Agent | `PowerPointAi/Design/` | Scene 语义、设计系统、专业构图、COM 渲染、视觉验证与安全回滚 |
 | 安装包定义 | `OfficeAgent/` | `.vdproj` 安装项目，慎改，保持最小 diff |
-| 安装自定义动作 | `OfficeAgentSetupCustomActions/`（如存在） | 安装流程辅助逻辑，优先在这里承载可代码化安装行为 |
 | 调试/迁移文档 | `docs/` | Visual Studio/VSTO 调试、迁移指南等 |
 | 需求/变更规格 | `openspec/` | 变更说明、规格草案、归档记录 |
 | AI Native Harness 总设计 | `docs/ai-native-harness-design.md` | 对标 Copilot/Claude/Cursor 的平台设计与细化清单 |
@@ -125,11 +123,11 @@ AiHelper/
 
 不要访问 Excel 或 Word 对象模型。
 
-### OfficeAgent 与 OfficeAgentSetupCustomActions
+### OfficeAgent
 
 - `OfficeAgent/` 的 `.vdproj` 是安装包定义，自动化修改风险高，除非必要不要大范围编辑。
-- **当前仓库不存在** `OfficeAgentSetupCustomActions/`；文档中的「如存在」表示可选扩展位。
-- 若需要自定义安装逻辑，应新建该 VB.NET 自定义动作项目，再接入安装包，避免直接重写 `.vdproj`。
+- 仓库曾有 `OfficeAgentSetupCustomActions/`，它未被解决方案和安装包引用、也不参与任何构建校验，已于 2026-10-18 删除。
+- 若将来需要可代码化的安装动作，新建自定义动作项目并同时接入 `AiHelper.sln` 与 `.vdproj` 的 `CustomAction` 节点，否则等于写了一套永不验证的代码。
 - 打 MSI 前必须先 `build-installer-prep`（Release 代码 + SourcePath 审计），见 `docs/build-and-installer.md`。
 
 ## AI Native Architecture Rules
@@ -281,7 +279,6 @@ msbuild WordAi/WordAi.vbproj
 msbuild PowerPointAi/PowerPointAi.vbproj
 
 # 安装包 MSI：在 Visual Studio 中打开 OfficeAgent/OfficeAgent.vdproj 并 Build（需 Installer Projects 扩展）
-# OfficeAgentSetupCustomActions/ 当前仓库不存在；若需自定义安装逻辑再新建该项目
 
 # 本地 VSTO 开发证书（*.pfx 不入库；克隆后若清单签名失败请运行）
 powershell -File .\scripts\ensure-vsto-temp-keys.ps1

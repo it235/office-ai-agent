@@ -57,8 +57,9 @@ renderer.code = function (token) {
     }
     
     // 只为可执行代码显示执行按钮
+    // 处理器一律由 code-handler.js 委托绑定：markdown 渲染结果会被 HTML 清洗剔除 on* 属性
     const executeButton = isExecutable ? `
-                <button class="code-button execute-button" onclick="executeCode(this)">
+                <button class="code-button execute-button" data-code-action="execute">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polygon points="5 3 19 12 5 21 5 3"></polygon>
                     </svg>
@@ -70,14 +71,14 @@ renderer.code = function (token) {
         <div class="code-block">
             ${codeHtml}
             <div class="code-buttons">
-                <button class="code-button copy-button" onclick="copyCode(this)">
+                <button class="code-button copy-button" data-code-action="copy">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                     </svg>
                     复制
                 </button>
-                <button class="code-button edit-button" onclick="editCode(this)">
+                <button class="code-button edit-button" data-code-action="edit">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>

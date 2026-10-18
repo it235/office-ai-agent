@@ -11,7 +11,6 @@ Imports Newtonsoft.Json.Linq
 Public Class ReformatService
 
     Private ReadOnly _executeScript As Func(Of String, Task)
-    Private ReadOnly _escapeJs As Func(Of String, String)
     Private ReadOnly _invokeOnUiThread As Action(Of Action)
     Private ReadOnly _showTemplateEditor As Func(Of ReformatTemplate, Boolean)
     Private ReadOnly _getStylePreviewCallback As Func(Of PreviewStyleCallback)
@@ -41,7 +40,6 @@ Public Class ReformatService
 
     Public Sub New(
         executeScript As Func(Of String, Task),
-        escapeJs As Func(Of String, String),
         invokeOnUiThread As Action(Of Action),
         showTemplateEditor As Func(Of ReformatTemplate, Boolean),
         getStylePreviewCallback As Func(Of PreviewStyleCallback),
@@ -49,7 +47,6 @@ Public Class ReformatService
         Optional textAnalyzer As Func(Of String, String, Task(Of String)) = Nothing)
 
         _executeScript = executeScript
-        _escapeJs = escapeJs
         _invokeOnUiThread = invokeOnUiThread
         _showTemplateEditor = showTemplateEditor
         _getStylePreviewCallback = getStylePreviewCallback
@@ -67,7 +64,19 @@ Public Class ReformatService
             Dim templates = ReformatTemplateManager.Instance.Templates
             Dim allItems As New List(Of Object)()
             For Each t In templates
-                allItems.Add(t)
+                ' 面板只渲染展示字段：缩略图Base64与源文档正文留在存储层，不进 WebView
+                allItems.Add(New With {
+                    .Id = t.Id,
+                    .Name = t.Name,
+                    .Description = t.Description,
+                    .Category = t.Category,
+                    .IsPreset = t.IsPreset,
+                    .CreatedAt = t.CreatedAt,
+                    .Layout = t.Layout,
+                    .BodyStyles = t.BodyStyles,
+                    .PageSettings = t.PageSettings,
+                    .AiGuidance = t.AiGuidance
+                })
             Next
 
             For Each m In SemanticMappingManager.Instance.Mappings
@@ -86,7 +95,7 @@ Public Class ReformatService
                 End If
             Next
 
-            Dim json = JsonConvert.SerializeObject(allItems, Formatting.None)
+            Dim json = UtilsService.SerializeForScript(allItems)
             _executeScript($"loadReformatTemplateList({json});")
         Catch ex As Exception
             Debug.WriteLine($"HandleGetReformatTemplates 出错: {ex.Message}")
@@ -259,21 +268,6 @@ Public Class ReformatService
 #Region "AI模板编辑器"
 
     ''' <summary>
-    ''' 进入AI模板编辑模式
-    ''' </summary>
-    Public Sub EnterAiTemplateEditorMode(Optional template As ReformatTemplate = Nothing)
-        Try
-            Dim templateJson As String = ""
-            If template IsNot Nothing Then
-                templateJson = JsonConvert.SerializeObject(template)
-            End If
-            _executeScript($"enterAiTemplateEditor('{_escapeJs(templateJson)}');")
-        Catch ex As Exception
-            Debug.WriteLine($"EnterAiTemplateEditorMode 出错: {ex.Message}")
-        End Try
-    End Sub
-
-    ''' <summary>
     ''' 处理保存AI模板
     ''' </summary>
     Public Sub HandleSaveAiTemplate(jsonDoc As JObject)
@@ -320,7 +314,7 @@ Public Class ReformatService
     Public Sub HandleGetStyleGuides()
         Try
             Dim guides = StyleGuideManager.Instance.GetAllStyleGuides()
-            Dim json = JsonConvert.SerializeObject(guides, Formatting.None)
+            Dim json = UtilsService.SerializeForScript(guides)
             _executeScript($"loadStyleGuideList({json});")
         Catch ex As Exception
             Debug.WriteLine($"HandleGetStyleGuides 出错: {ex.Message}")

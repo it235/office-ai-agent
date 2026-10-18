@@ -161,14 +161,20 @@ foreach ($case in $catalog.cases) {
 
     $params = New-Object Newtonsoft.Json.Linq.JObject
     if ($null -ne $case.params) {
-        $params = [Newtonsoft.Json.Linq.JObject]::FromObject($case.params)
+        # JObject.FromObject() on a PSCustomObject serializes PowerShell's wrapper and yields a
+        # single "CliXml" property, so fixture params never reached the tool. Flatten first.
+        $paramBag = [System.Collections.Generic.Dictionary[string, object]]::new()
+        foreach ($prop in $case.params.PSObject.Properties) {
+            $paramBag[$prop.Name] = $prop.Value
+        }
+        $params = [Newtonsoft.Json.Linq.JObject]::FromObject($paramBag)
     }
 
     $task = $registry.ExecuteToolAsync($context, [string]$case.toolId, $params)
     $result = $task.GetAwaiter().GetResult()
     $expectedSuccess = ($case.expectedSuccess -eq $true)
     if ($result.Success -ne $expectedSuccess) {
-        throw "Golden case $($case.id) expected success=$expectedSuccess, got $($result.Success)"
+        throw "Golden case $($case.id) expected success=$expectedSuccess, got $($result.Success) code=$($result.ErrorCode) message=$($result.Message)"
     }
     if (-not $expectedSuccess -and $result.ErrorCode -ne $case.expectedErrorCode) {
         throw "Golden case $($case.id) expected $($case.expectedErrorCode), got $($result.ErrorCode)"

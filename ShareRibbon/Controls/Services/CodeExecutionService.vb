@@ -185,19 +185,26 @@ Public Class CodeExecutionService
                                                recoverable:=False)
             End If
 
+            If CancelledByUser() Then
+                Return Agent.ToolResult.PreviewCancelled(toolId)
+            End If
+
+            ' 脚本路径没有宿主快照：成功只说明 COM 调用没抛异常，失败也不能假定文档未被动过。
             Dim observation = New With {
                 .kind = "code_execution",
-                .summary = If(ok, $"{toolId} 执行成功", $"{toolId} 执行失败"),
+                .summary = If(ok, $"{toolId} 执行完成（无快照校验）", $"{toolId} 执行失败"),
                 .changed = ok,
                 .targetRefs = New String() {"Office:ActiveDocument"},
-                .warnings = New String() {}
+                .warnings = New String() {"no_host_observer"}
             }
             If ok Then Return Agent.ToolResult.Succeed(toolId, observation.summary, observation:=observation)
+            ' VBA/JS 可能在抛异常前已经改了文档，宿主既没有观察也没有回滚手段；
+            ' recoverable=False 掐断自动重放，避免在已改过的文档上再跑一遍。
             Return Agent.ToolResult.Failed(toolId,
                                            observation.summary,
                                            errorCode:=ExceptionClassifier.CodeUnknown,
-                                           userMessage:=observation.summary,
-                                           recoverable:=True,
+                                           userMessage:="脚本执行失败，可能已部分修改文档且无法自动撤销，请检查文档后再继续",
+                                           recoverable:=False,
                                            observation:=observation)
         End Function
 
@@ -205,6 +212,16 @@ Public Class CodeExecutionService
         ''' JSON命令执行委托（由子类设置）
         ''' </summary>
         Public Property JsonCommandExecutorWithResult As Func(Of String, Boolean, Agent.ToolResult) = Nothing
+
+        ''' <summary>
+        ''' 宿主预览被用户拒绝时，Boolean 接口返回 True 表示“正常取消、不是错误”，
+        ''' 但 ToolResult 合同不能据此回执成功。取消标记由宿主控件持有，这里只负责读取并清一次。
+        ''' </summary>
+        Public Property PreviewCancelledReader As Func(Of Boolean) = Nothing
+
+        Private Function CancelledByUser() As Boolean
+            Return PreviewCancelledReader IsNot Nothing AndAlso PreviewCancelledReader.Invoke()
+        End Function
 
         Public Function ExecuteJsonCommandWithToolResult(jsonCode As String, preview As Boolean) As Agent.ToolResult
             Debug.WriteLine($"[CodeExecutionService] ExecuteJsonCommand (tool backend) preview={preview}")
@@ -240,7 +257,16 @@ Public Class CodeExecutionService
                         End Try
                     End If
 
-                    Dim result = JsonCommandExecutorWithResult.Invoke(currentJsonCode, preview)
+                    Dim result As Agent.ToolResult = Nothing
+                    ' 面板"执行"进来的 JSON 命令不经过 AgentKernel，日志全打成 cid=-，无法把工具失败归到某一次执行。
+                    ' 已有作用域（Agent 主链正在跑）时既不覆盖也不替它清理。
+                    Dim ownsLogScope = AppLogger.CorrelationId = "-"
+                    If ownsLogScope Then AppLogger.BeginScope()
+                    Try
+                        result = JsonCommandExecutorWithResult.Invoke(currentJsonCode, preview)
+                    Finally
+                        If ownsLogScope Then AppLogger.ClearScope()
+                    End Try
                     Debug.WriteLine($"[CodeExecutionService] JSON命令执行结果: {If(result Is Nothing, "null", result.ToObserveSummary())}")
                     If result Is Nothing Then Return Agent.ToolResult.Failed("", "JSON命令执行器未返回结果")
                     Return result
@@ -261,32 +287,47 @@ Public Class CodeExecutionService
 #Region "VBA 代码执行"
 
         ''' <summary>
+        ''' 所有脚本落笔点共用的前置门：与 Agent 工具路径同一个 SafetyGate 裁决。
+        ''' Deny 直接拦截；NeedConfirm 走用户确认。宿主 UI、JSON 命令、旧聊天面板都必须先过这里。
+        ''' </summary>
+        Public Shared Function ConfirmScriptExecution(code As String, source As String) As Boolean
+            If ScriptSafetyBlocked(code, source) Then Return False
+
+            Dim decision = Agent.Execution.SafetyGate.EvaluateScript(code)
+            If decision.Action = Agent.Execution.SafetyAction.RequireApproval Then
+                If MessageBox.Show($"{decision.Reason}{vbCrLf}{vbCrLf}是否继续执行？",
+                                   "需要确认",
+                                   MessageBoxButtons.YesNo,
+                                   MessageBoxIcon.Question) <> DialogResult.Yes Then
+                    Debug.WriteLine($"[{source}] 用户取消了需确认的脚本操作")
+                    Return False
+                End If
+            End If
+            Return True
+        End Function
+
+        ''' <summary>
+        ''' 调用方已有自己的预览/确认界面时使用：只拦危险操作，不重复弹窗确认。
+        ''' </summary>
+        Public Shared Function ScriptSafetyBlocked(code As String, source As String) As Boolean
+            Dim decision = Agent.Execution.SafetyGate.EvaluateScript(code)
+            If decision.Action = Agent.Execution.SafetyAction.Deny Then
+                MessageBox.Show($"安全拦截: {decision.Reason}{vbCrLf}{vbCrLf}该代码包含危险操作，禁止执行。",
+                                "安全拦截",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Warning)
+                Debug.WriteLine($"[{source}] 安全检查拦截: {decision.Reason}")
+                Return True
+            End If
+            Return False
+        End Function
+
+        ''' <summary>
         ''' 执行 VBA 代码（增强版 - 集成安全检查）
         ''' </summary>
         Public Function ExecuteVBACode(vbaCode As String, preview As Boolean) As Boolean
             Try
-                ' 新增：安全检查
-                Dim safety = Agent.Execution.SafetyChecker.Check(vbaCode)
-                If Not safety.IsSafe Then
-                    MessageBox.Show($"安全拦截: {safety.Reason}{vbCrLf}{vbCrLf}该代码包含危险操作，禁止执行。",
-                                    "安全拦截",
-                                    MessageBoxButtons.OK,
-                                    MessageBoxIcon.Warning)
-                    Debug.WriteLine($"[CodeExecutionService] 安全检查拦截: {safety.Reason}")
-                    Return False
-                End If
-
-                If safety.NeedsConfirm Then
-                    Dim result = MessageBox.Show(
-                        $"{safety.Reason}{vbCrLf}{vbCrLf}是否继续执行？",
-                        "需要确认",
-                        MessageBoxButtons.YesNo,
-                        MessageBoxIcon.Question)
-                    If result <> DialogResult.Yes Then
-                        Debug.WriteLine("[CodeExecutionService] 用户取消了需确认的操作")
-                        Return False
-                    End If
-                End If
+                If Not ConfirmScriptExecution(vbaCode, "CodeExecutionService") Then Return False
 
                 If preview Then
                     If Not _runCodePreview(vbaCode, preview) Then
@@ -418,6 +459,9 @@ Public Class CodeExecutionService
         ''' </summary>
         Public Function ExecuteJavaScript(jsCode As String, preview As Boolean) As Boolean
             Try
+                ' 脚本引擎会把完整 Application 对象暴露给脚本，必须先过与 Agent 路径同一道门
+                If Not ConfirmScriptExecution(jsCode, "CodeExecutionService") Then Return False
+
                 Dim appObject As Object = _getOfficeApplication()
                 If appObject Is Nothing Then
                     GlobalStatusStrip.ShowWarning("无法获取Office应用程序对象")

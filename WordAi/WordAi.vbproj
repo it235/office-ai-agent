@@ -414,7 +414,7 @@
     <ManifestKeyFile>WordAi_TemporaryKey.pfx</ManifestKeyFile>
   </PropertyGroup>
   <PropertyGroup>
-    <ManifestCertificateThumbprint>D8233E3F77CB5CC5022B1ED279AA27F17869478A</ManifestCertificateThumbprint>
+    <ManifestCertificateThumbprint>BDC1F2E8E6ECFD9FE0F8D753F1D70035062B5659</ManifestCertificateThumbprint>
   </PropertyGroup>
   <!-- PostBuild: copy unsigned Markdig.dll to output (avoids VSTO manifest signing error MSB3178) -->
   <Target Name="CopyUnsignedDllsAfterBuild" AfterTargets="Build">

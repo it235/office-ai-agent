@@ -136,6 +136,32 @@ Namespace Agent
                           classified.Recoverable)
         End Function
 
+        ''' <summary>
+        ''' 用户拒绝预览：本轮一次都没执行。不能回执成功，也不能让 Loop 自动重放（重放只会再弹一次确认）。
+        ''' </summary>
+        Public Shared Function PreviewCancelled(toolId As String,
+                                                 Optional message As String = "用户取消执行") As ToolResult
+            Dim observation = New JObject From {
+                {"kind", "write"},
+                {"summary", message},
+                {"changed", False},
+                {"targetRefs", New JArray()},
+                {"warnings", New JArray("preview_cancelled_by_user")},
+                {"rollback", New JObject From {
+                    {"succeeded", False},
+                    {"attempted", False},
+                    {"verified", False},
+                    {"error", "本轮未执行，无需回滚"}
+                }}
+            }
+            Return Failed(toolId,
+                          message,
+                          errorCode:=ExceptionClassifier.CodeCancelled,
+                          userMessage:="已取消，未做任何修改",
+                          recoverable:=False,
+                          observation:=observation)
+        End Function
+
         ''' <summary>供 Loop observe/repair 使用的紧凑摘要。</summary>
         Public Function ToObserveSummary() As String
             If Success Then
@@ -706,6 +732,15 @@ Namespace Agent
                                          recoverable:=True)
             End If
 
+            ' 参数契约只在注册表校验一次：宿主执行器各自的 Boolean 失败会把缺参塌成 UNKNOWN，
+            ' 模型拿不到原因就无法修复（真机 SetParagraphFormat 缺 paragraphIndex 即此形态）。
+            ' 放在审批消费之前，避免为一个必然失败的调用烧掉一次性审批令牌。
+            Dim argumentFailure = BuildArgumentFailure(tool, params)
+            If argumentFailure IsNot Nothing Then
+                sw.Stop()
+                Return argumentFailure
+            End If
+
             If safetyDecision IsNot Nothing AndAlso
                safetyDecision.Action = Execution.SafetyAction.RequireApproval AndAlso
                executionContext IsNot Nothing AndAlso
@@ -964,6 +999,44 @@ Namespace Agent
                                      message,
                                      decision.Reason,
                                      recoverable:=False)
+        End Function
+
+        ''' <summary>
+        ''' 按工具声明的 required 参数做前置校验，返回带 ARGUMENT_ERROR 的失败结果；参数齐备时返回 Nothing。
+        ''' </summary>
+        Private Shared Function BuildArgumentFailure(tool As ToolDescriptor, params As JObject) As ToolResult
+            If tool Is Nothing OrElse tool.Parameters Is Nothing OrElse tool.Parameters.Count = 0 Then
+                Return Nothing
+            End If
+
+            Dim missing As New List(Of String)()
+            For Each p In tool.Parameters
+                If Not p.Required OrElse String.IsNullOrWhiteSpace(p.Name) Then Continue For
+                Dim token = If(params Is Nothing, Nothing, params.Property(p.Name, StringComparison.OrdinalIgnoreCase)?.Value)
+                If token Is Nothing OrElse
+                   token.Type = JTokenType.Null OrElse
+                   (token.Type = JTokenType.String AndAlso String.IsNullOrWhiteSpace(token.Value(Of String)())) Then
+                    missing.Add(p.Name)
+                End If
+            Next
+            If missing.Count = 0 Then Return Nothing
+
+            Dim declared = String.Join(", ", tool.Parameters.Select(Function(p)
+                                                                        Return If(p.Required, p.Name & "(必填)", p.Name)
+                                                                    End Function))
+            Dim message = $"工具 {tool.Id} 缺少必填参数: {String.Join(", ", missing)}；该工具声明的参数: {declared}"
+            Return ToolResult.Failed(tool.Id,
+                                     message,
+                                     New With {.missingParameters = missing, .declaredParameters = declared},
+                                     ExceptionClassifier.CodeArgument,
+                                     message,
+                                     message,
+                                     recoverable:=True)
+        End Function
+
+        Private Shared Function IsIndexParam(name As String) As Boolean
+            Return name.EndsWith("Index", StringComparison.OrdinalIgnoreCase) OrElse
+                   String.Equals(name, "slideIndex", StringComparison.OrdinalIgnoreCase)
         End Function
 
         Private Async Function ExecuteMemoryToolAsync(toolId As String, params As JObject) As Task(Of ToolResult)

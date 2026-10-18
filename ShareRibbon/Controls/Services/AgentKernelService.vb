@@ -7,10 +7,9 @@ Imports Newtonsoft.Json.Linq
 ''' AgentKernel 服务：统一智能体服务，替代 RalphAgentService + RalphLoopService
 ''' 封装 AgentKernel 的初始化和事件处理，提供与 BaseChatControl 兼容的接口
 ''' </summary>
-Public Class AgentKernelService
+Public Partial Class AgentKernelService
 
     Private ReadOnly _executeScript As Func(Of String, Task)
-    Private ReadOnly _escapeJs As Func(Of String, String)
     Private ReadOnly _sendAiRequest As Func(Of String, String, List(Of HistoryMessage), Task(Of String))
     Private ReadOnly _executeCodeWithToolResult As Func(Of String, String, Boolean, Agent.ToolResult)
     Private ReadOnly _chatStateService As ChatStateService
@@ -24,6 +23,7 @@ Public Class AgentKernelService
 
     ' Agent 状态字段（供 BaseChatControl 访问）
     Public Property AgentThinkingUuid As String = Nothing
+    Public Property AgentThinkingLabel As String = Nothing
     Public Property AgentOriginalUserRequest As String = Nothing
     Public Property AgentFullUserMessage As String = Nothing
     Public Property CurrentAgentSessionId As String = Nothing
@@ -34,7 +34,6 @@ Public Class AgentKernelService
 
     Public Sub New(
         executeScript As Func(Of String, Task),
-        escapeJs As Func(Of String, String),
         sendAiRequest As Func(Of String, String, List(Of HistoryMessage), Task(Of String)),
         executeCodeWithToolResult As Func(Of String, String, Boolean, Agent.ToolResult),
         chatStateService As ChatStateService,
@@ -43,7 +42,6 @@ Public Class AgentKernelService
         getOfficeAppType As Func(Of String))
 
         _executeScript = executeScript
-        _escapeJs = escapeJs
         _sendAiRequest = sendAiRequest
         If executeCodeWithToolResult Is Nothing Then Throw New ArgumentNullException(NameOf(executeCodeWithToolResult))
         _executeCodeWithToolResult = executeCodeWithToolResult
@@ -100,10 +98,22 @@ Public Class AgentKernelService
         Try
             EnsureInitialized()
 
-            ' 保存原始请求
-            AgentOriginalUserRequest = userRequest
-            AgentFullUserMessage = userRequest
+            ' 本轮可能被 harness 拒绝（上一轮仍在途），先留底，拒绝时原样交还，
+            ' 避免把在途 run 的会话标识、思考卡和取消令牌清掉。
+            Dim carriedSessionId = CurrentAgentSessionId
+            Dim carriedThinkingUuid = AgentThinkingUuid
+            Dim carriedOriginalRequest = AgentOriginalUserRequest
+            Dim carriedFullMessage = AgentFullUserMessage
+
+            ' 保存原始请求：调用方已登记用户可见原文时不得覆盖，否则重放与历史会带上注入后的膨胀上下文
+            If String.IsNullOrWhiteSpace(AgentOriginalUserRequest) Then AgentOriginalUserRequest = userRequest
+            If String.IsNullOrWhiteSpace(AgentFullUserMessage) Then AgentFullUserMessage = userRequest
             CurrentAgentSessionId = Guid.NewGuid().ToString()
+
+            ' Agent 回合的 user 事件在此单点落库，任务失败或被取消时也留有用户原文
+            If Not String.IsNullOrWhiteSpace(AgentOriginalUserRequest) Then
+                _chatStateService?.AddMessage("user", AgentOriginalUserRequest)
+            End If
 
             ' 显示思考状态
             ShowThinkingStatus()
@@ -126,15 +136,25 @@ Public Class AgentKernelService
                 .TaskSpec = taskSpec,
                 .SelectedSkills = If(selectedSkills, New List(Of SkillFileDefinition)())
             }
-            _runCts = New Threading.CancellationTokenSource()
-            Dim result = Await _officeHarness.RunAsync(turn, _runCts.Token)
+            ' 本轮可能因上一轮仍在途而被拒绝：先留住旧令牌，被拒绝时原样交还，
+            ' 否则上一轮任务就再也无法通过"停止"取消。
+            Dim carriedCts = _runCts
+            Dim runCts As New Threading.CancellationTokenSource()
+            _runCts = runCts
+            Dim result As Agent.Harness.HarnessRunResult
+            ' 回合作用域只服务于这一轮真人在等的模型请求；"停止"要掐断在途请求，而不是等步骤边界。
+            Using Agent.AgentCancellationScope.Enter(runCts.Token)
+                result = Await _officeHarness.RunAsync(turn, runCts.Token)
+            End Using
 
             If result Is Nothing Then
                 AppLogger.Warn("AgentKernelService", "StartAgentAsync returned null result")
-                Return False
+                Return RefuseUnstartedRun(carriedSessionId, carriedThinkingUuid, carriedOriginalRequest,
+                                          carriedFullMessage, carriedCts, runCts, "Agent 启动失败，请重试")
             End If
-            CurrentHarnessRunId = result.RunId
             If result.Status = Agent.Harness.HarnessRunStatus.AwaitingApproval Then
+                ' 只有真正挂起等待裁决的 run 才登记审批句柄；未启动的 run 不能覆盖它。
+                CurrentHarnessRunId = result.RunId
                 AppLogger.Info("AgentKernelService", $"Harness run awaiting approval: {result.RunId}")
                 Return True
             End If
@@ -142,6 +162,12 @@ Public Class AgentKernelService
                 AppLogger.Info("AgentKernelService", $"Harness run cancelled: {result.UserMessage}")
                 CurrentHarnessRunId = Nothing
                 Return False
+            End If
+            If result.DebugMessage = "RUN_ALREADY_ACTIVE" Then
+                ' 上一轮仍在途：本轮从未启动，交还它的会话与取消令牌，只提示不接管。
+                AppLogger.Info("AgentKernelService", $"Turn refused, previous run still active: {result.UserMessage}")
+                Return RefuseUnstartedRun(carriedSessionId, carriedThinkingUuid, carriedOriginalRequest,
+                                          carriedFullMessage, carriedCts, runCts, result.UserMessage)
             End If
             If result.Status <> Agent.Harness.HarnessRunStatus.Succeeded Then
                 AppLogger.Warn("AgentKernelService", $"StartAgentAsync agent failed: {result.UserMessage}")
@@ -160,86 +186,6 @@ Public Class AgentKernelService
         End Try
     End Function
 
-    ''' <summary>
-    ''' 终止当前 Agent 任务：触发协作式取消，等待循环在安全点收敛，而不是伪造"已终止"。
-    ''' </summary>
-    Public Sub AbortAgent()
-        Try
-            Dim signaledRunning = False
-            If _runCts IsNot Nothing AndAlso Not _runCts.IsCancellationRequested Then
-                _runCts.Cancel()
-                signaledRunning = True
-            End If
-
-            ' 若正卡在等待审批，取消令牌无法立刻唤醒，需主动拒绝以释放挂起回调。
-            Dim hadPendingApproval = False
-            If Not String.IsNullOrWhiteSpace(CurrentHarnessRunId) Then
-                hadPendingApproval = True
-                CancelHarnessRunAsync(CurrentHarnessRunId)
-            End If
-
-            If signaledRunning OrElse hadPendingApproval Then
-                OnKernelStatusChanged("正在停止，等待当前步骤安全结束…")
-                Return
-            End If
-
-            ' 没有正在运行的任务：直接复位 UI。
-            Dim sessionId = CurrentAgentSessionId
-            AgentThinkingUuid = Nothing
-            AgentOriginalUserRequest = Nothing
-            AgentFullUserMessage = Nothing
-            CurrentAgentSessionId = Nothing
-            CurrentHarnessRunId = Nothing
-
-            _executeScript($"completeAgent('{sessionId}', false, '已终止')")
-            GlobalStatusStrip.ShowInfo("已终止Agent")
-        Catch ex As Exception
-            AppLogger.Error("AgentKernelService", "AbortAgent exception", ex)
-        End Try
-    End Sub
-
-    ''' <summary>
-    ''' 用户批准当前计划或步骤
-    ''' </summary>
-    Public Sub Approve()
-        ResolveHarnessApprovalAsync(True)
-    End Sub
-
-    ''' <summary>
-    ''' 用户拒绝当前计划或步骤
-    ''' </summary>
-    Public Sub Reject()
-        ResolveHarnessApprovalAsync(False)
-    End Sub
-
-    Private Async Sub ResolveHarnessApprovalAsync(approved As Boolean)
-        If _officeHarness Is Nothing OrElse String.IsNullOrWhiteSpace(CurrentHarnessRunId) Then Return
-        Try
-            Dim result = Await _officeHarness.ApproveAsync(CurrentHarnessRunId, approved, Threading.CancellationToken.None)
-            If result IsNot Nothing AndAlso result.Status <> Agent.Harness.HarnessRunStatus.AwaitingApproval Then
-                CurrentHarnessRunId = Nothing
-            End If
-        Catch ex As Exception
-            AppLogger.Error("AgentKernelService", "Resolve harness approval failed", ex)
-        End Try
-    End Sub
-
-    Private Async Sub CancelHarnessRunAsync(runId As String)
-        Try
-            Dim result = Await _officeHarness.CancelAsync(runId, Threading.CancellationToken.None)
-            ' 运行中无法安全抢占宿主 COM 属预期：真正停止由 _runCts 在步骤边界收敛；此处仅如实记录。
-            If result Is Nothing Then
-                AppLogger.Warn("AgentKernelService", "Cancel harness run returned null")
-            ElseIf result.Status = Agent.Harness.HarnessRunStatus.Cancelled OrElse
-                   result.Status = Agent.Harness.HarnessRunStatus.Succeeded OrElse
-                   result.Status = Agent.Harness.HarnessRunStatus.Failed Then
-                AppLogger.Info("AgentKernelService", $"Cancel harness run: status={result.Status} debug={result.DebugMessage}")
-            End If
-        Catch ex As Exception
-            AppLogger.Warn("AgentKernelService", $"Cancel harness run threw: {AppLogger.Redact(ex.Message)}")
-        End Try
-    End Sub
-
 #End Region
 
 #Region "Event Handlers"
@@ -250,8 +196,8 @@ Public Class AgentKernelService
         If Not String.IsNullOrWhiteSpace(e.RunId) Then CurrentHarnessRunId = e.RunId
         If String.IsNullOrWhiteSpace(e.ContextPackJson) Then Return
         Try
-            Dim escaped = _escapeJs(e.ContextPackJson)
-            _executeScript($"window.officeAiContextPack = JSON.parse('{escaped}'); if (typeof updateContextPackTrace === 'function') updateContextPackTrace(window.officeAiContextPack);")
+            Dim literal = UtilsService.ToJsStringLiteral(e.ContextPackJson)
+            _executeScript($"window.officeAiContextPack = JSON.parse({literal}); if (typeof updateContextPackTrace === 'function') updateContextPackTrace(window.officeAiContextPack);")
         Catch ex As Exception
             AppLogger.Warn("AgentKernelService", $"ContextPack UI trace failed: {AppLogger.Redact(ex.Message)}")
         End Try
@@ -266,7 +212,7 @@ Public Class AgentKernelService
 
             ' 更新思考状态 div
             If Not String.IsNullOrEmpty(AgentThinkingUuid) Then
-                _executeScript($"var thinkingDiv = document.getElementById('content-{AgentThinkingUuid}'); if(thinkingDiv) thinkingDiv.innerHTML = '<div style=""padding: 8px 0; color: #2563eb;"">{_escapeJs(status)}</div>';")
+                _executeScript($"setThinkingStatusText({UtilsService.ToJsStringLiteral(AgentThinkingUuid)}, {UtilsService.ToJsStringLiteral(status)})")
             End If
         Catch ex As Exception
             Debug.WriteLine($"[AgentKernelService] OnStatusChanged 出错: {ex.Message}")
@@ -280,14 +226,14 @@ Public Class AgentKernelService
         Try
             If iteration Is Nothing Then Return
 
-            Dim iterationJson = JObject.FromObject(New With {
+            Dim iterationJson = UtilsService.SerializeForScript(JObject.FromObject(New With {
                 .index = iteration.Index,
                 .thought = If(iteration.Thought, ""),
                 .action = If(iteration.Action?.ToolId, ""),
                 .observation = If(iteration.Observation, ""),
                 .explanation = iteration.Explanation
-            }).ToString(Formatting.None)
-            _executeScript($"updateAgentIteration('{CurrentAgentSessionId}', {iterationJson})")
+            }))
+            _executeScript($"updateAgentIteration({UtilsService.ToJsStringLiteral(CurrentAgentSessionId)}, {iterationJson})")
         Catch ex As Exception
             Debug.WriteLine($"[AgentKernelService] OnIterationUpdate 出错: {ex.Message}")
         End Try
@@ -299,7 +245,7 @@ Public Class AgentKernelService
     Private Sub OnKernelStepCompleted(stepIndex As Integer, success As Boolean, message As String)
         Try
             Dim stepStatus = If(success, "completed", "failed")
-            _executeScript($"updateAgentStep('{CurrentAgentSessionId}', {stepIndex}, '{stepStatus}', '{_escapeJs(message)}')")
+            _executeScript($"updateAgentStep({UtilsService.ToJsStringLiteral(CurrentAgentSessionId)}, {stepIndex}, {UtilsService.ToJsStringLiteral(stepStatus)}, {UtilsService.ToJsStringLiteral(message)})")
         Catch ex As Exception
             Debug.WriteLine($"[AgentKernelService] OnStepCompleted 出错: {ex.Message}")
         End Try
@@ -308,8 +254,8 @@ Public Class AgentKernelService
     Private Sub OnKernelExecutionExplained(explanation As Agent.ExecutionExplanation)
         Try
             If explanation Is Nothing OrElse String.IsNullOrWhiteSpace(CurrentAgentSessionId) Then Return
-            Dim explanationJson = JObject.FromObject(explanation).ToString(Formatting.None)
-            _executeScript($"showAgentExecutionExplanation('{CurrentAgentSessionId}', {explanationJson})")
+            Dim explanationJson = UtilsService.SerializeForScript(JObject.FromObject(explanation))
+            _executeScript($"showAgentExecutionExplanation({UtilsService.ToJsStringLiteral(CurrentAgentSessionId)}, {explanationJson})")
         Catch ex As Exception
             Debug.WriteLine($"[AgentKernelService] OnExecutionExplained 出错: {ex.Message}")
         End Try
@@ -321,7 +267,7 @@ Public Class AgentKernelService
     Private Sub OnKernelRequestApproval(message As String, callback As Action(Of Boolean))
         Try
             ' 显示审批 UI
-            _executeScript($"showAgentApproval('{CurrentAgentSessionId}', '{_escapeJs(message)}')")
+            _executeScript($"showAgentApproval({UtilsService.ToJsStringLiteral(CurrentAgentSessionId)}, {UtilsService.ToJsStringLiteral(message)})")
         Catch ex As Exception
             Debug.WriteLine($"[AgentKernelService] OnRequestApproval 出错: {ex.Message}")
         End Try
@@ -334,17 +280,24 @@ Public Class AgentKernelService
         Try
             If plan Is Nothing Then Return
 
-            ' 构建步骤 JSON
-            Dim stepsJson As New StringBuilder()
-            stepsJson.Append("[")
-            For i = 0 To plan.Steps.Count - 1
-                If i > 0 Then stepsJson.Append(",")
-                Dim s = plan.Steps(i)
-                stepsJson.Append($"{{""description"":""{_escapeJs(s.Description)}"",""code"":""{_escapeJs(If(s.Code, ""))}"",""language"":""{s.Language}"",""status"":""pending""}}")
+            ' 构建步骤 JSON：一律交给序列化器，避免把模型文本手拼进 JS 源码
+            Dim steps As New JArray()
+            For Each s In plan.Steps
+                steps.Add(New JObject From {
+                    {"description", If(s.Description, "")},
+                    {"code", If(s.Code, "")},
+                    {"language", If(s.Language, "")},
+                    {"status", "pending"}
+                })
             Next
-            stepsJson.Append("]")
 
-            Dim planJson = $"{{""sessionId"":""{CurrentAgentSessionId}"",""understanding"":""{_escapeJs(If(plan.Understanding, ""))}"",""steps"":{stepsJson.ToString()},""summary"":""{_escapeJs(If(plan.Summary, ""))}"",""replaceThinkingUuid"":""{AgentThinkingUuid}""}}"
+            Dim planJson = UtilsService.SerializeForScript(New JObject From {
+                {"sessionId", If(CurrentAgentSessionId, "")},
+                {"understanding", If(plan.Understanding, "")},
+                {"steps", steps},
+                {"summary", If(plan.Summary, "")},
+                {"replaceThinkingUuid", If(AgentThinkingUuid, "")}
+            })
 
             _executeScript($"showAgentPlanCard({planJson})")
             Dim planTrace As New ChatContextTrace With {
@@ -361,7 +314,7 @@ Public Class AgentKernelService
                     .Language = If(stepItem.Language, "")
                 })
             Next
-            Dim traceJson = JObject.FromObject(planTrace).ToString(Formatting.None)
+            Dim traceJson = UtilsService.SerializeForScript(JObject.FromObject(planTrace))
             _executeScript($"showContextHints({{ trace: {traceJson} }})")
             _executeScript("var planningCard = document.getElementById('planning-status-card'); if(planningCard) planningCard.remove();")
             AgentThinkingUuid = Nothing
@@ -380,12 +333,12 @@ Public Class AgentKernelService
             Dim userMsgForHistory = If(Not String.IsNullOrWhiteSpace(AgentFullUserMessage), AgentFullUserMessage, AgentOriginalUserRequest)
 
             If Not String.IsNullOrWhiteSpace(userMsgForHistory) Then
+                ' 只补充发给模型的完整上下文用于后续追问；会话历史的 user 事件已在 StartAgentAsync 落库
                 _historyMessages.Add(New HistoryMessage With {
                     .role = "user",
                     .content = userMsgForHistory
                 })
                 _manageHistorySize()
-                _chatStateService?.AddMessage("user", userMsgForHistory)
             End If
 
             Dim assistantReply = terminalMessage
@@ -423,7 +376,8 @@ Public Class AgentKernelService
             .Platform = ConfigSettings.platform,
             .ReasoningMode = ConfigSettings.ReasoningMode,
             .Messages = messages,
-            .TimeoutSeconds = 90
+            .TimeoutSeconds = 90,
+            .Cancellation = Agent.AgentCancellationScope.Current
         })
         If response Is Nothing OrElse Not response.Success Then
             Throw New InvalidOperationException(If(response?.ErrorMessage, "Multimodal AI request failed"))
@@ -435,7 +389,7 @@ Public Class AgentKernelService
         Dim sessionId = If(CurrentAgentSessionId, "")
         Dim thinkingUuid = If(AgentThinkingUuid, "")
         Try
-            _executeScript($"completeAgent('{_escapeJs(sessionId)}', {success.ToString().ToLowerInvariant()}, '{_escapeJs(If(message, ""))}', '{_escapeJs(thinkingUuid)}')")
+            _executeScript($"completeAgent({UtilsService.ToJsStringLiteral(sessionId)}, {success.ToString().ToLowerInvariant()}, {UtilsService.ToJsStringLiteral(message)}, {UtilsService.ToJsStringLiteral(thinkingUuid)})")
         Catch ex As Exception
             AppLogger.Warn("AgentKernelService", $"FinalizeAgentUi failed: {AppLogger.Redact(ex.Message)}")
             ' 即使主终态函数不存在，也直接执行最小按钮/规划卡复位。
@@ -467,8 +421,9 @@ Public Class AgentKernelService
             End If
 
             Dim timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
-            _executeScript($"createChatSection('AI', '{timestamp}', '{AgentThinkingUuid}')")
-            _executeScript($"var thinkingDiv = document.getElementById('content-{AgentThinkingUuid}'); if(thinkingDiv) thinkingDiv.innerHTML = '<div class=""thinking-indicator""><div class=""thinking-dots""><span></span><span></span><span></span></div><span style=""margin-left: 12px; color: #6c757d;"">正在分析您的需求...</span></div>';")
+            _executeScript($"createChatSection({UtilsService.ToJsStringLiteral("AI")}, {UtilsService.ToJsStringLiteral(timestamp)}, {UtilsService.ToJsStringLiteral(AgentThinkingUuid)})")
+            _executeScript($"showThinkingIndicator({UtilsService.ToJsStringLiteral(AgentThinkingUuid)}, {UtilsService.ToJsStringLiteral(AgentThinkingLabel)})")
+            AgentThinkingLabel = Nothing
         Catch ex As Exception
             Debug.WriteLine($"[AgentKernelService] ShowThinkingStatus 出错: {ex.Message}")
         End Try

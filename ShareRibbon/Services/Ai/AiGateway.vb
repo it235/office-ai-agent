@@ -23,6 +23,12 @@ Public Class AiRequestOptions
     Public Property MaxTokens As Integer?
     Public Property TimeoutSeconds As Integer
 
+    ''' <summary>
+    ''' 调用方自己的取消来源（例如用户点了"停止"）。默认 None：
+    ''' 记忆沉淀、embedding 等后台链路不传，就不会被回合取消连带掐断。
+    ''' </summary>
+    Public Property Cancellation As CancellationToken
+
     Public Sub New()
         ReasoningMode = ReasoningRequestHelper.ReasoningDefault
         TimeoutSeconds = 60
@@ -61,7 +67,8 @@ Public Class AiGateway
                 ApplyHeaders(request, options.ApiKey, isAnthropic)
                 request.Content = New StringContent(requestBody.ToString(Formatting.None), Encoding.UTF8, "application/json")
 
-                Using cts As New CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds))
+                Using cts As CancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(options.Cancellation)
+                    cts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds))
                     Using response = Await _httpClient.SendAsync(request, cts.Token)
                         Dim responseText = Await response.Content.ReadAsStringAsync()
                         If Not response.IsSuccessStatusCode Then
@@ -84,6 +91,8 @@ Public Class AiGateway
                     End Using
                 End Using
             End Using
+        Catch ex As OperationCanceledException When options.Cancellation.IsCancellationRequested
+            Throw
         Catch ex As TaskCanceledException
             Dim errorMessage = $"Request timed out after {timeoutSeconds} seconds."
             Debug.WriteLine($"[AiGateway] {errorMessage} {ex.Message}")

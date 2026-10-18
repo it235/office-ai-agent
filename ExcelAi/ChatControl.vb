@@ -591,6 +591,7 @@ Public Class ChatControl
                         If dialog.ShowPreview(previewResult) <> DialogResult.OK Then
                             ShareRibbon.GlobalStatusStrip.ShowInfo("用户取消执行")
                             ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
+                            NotifyPreviewCancelled()
                             Return True
                         End If
                     End Using
@@ -621,6 +622,7 @@ Public Class ChatControl
 
                     If MessageBox.Show(previewMsg.ToString(), "批量命令预览", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) <> DialogResult.OK Then
                         ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
+                        NotifyPreviewCancelled()
                         Return True
                     End If
                 End Try
@@ -800,6 +802,7 @@ Public Class ChatControl
                             ShareRibbon.GlobalStatusStrip.ShowInfo("用户取消执行")
                             ' 通知前端用户取消了执行（恢复按钮可点击状态）
                             ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
+                            NotifyPreviewCancelled()
                             Return True ' 返回True表示正常取消，而非错误
                         End If
                     End Using
@@ -819,6 +822,7 @@ Public Class ChatControl
                     If MessageBox.Show(previewMsg, "JSON命令预览", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) <> DialogResult.OK Then
                         ' 通知前端用户取消了执行
                         ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
+                        NotifyPreviewCancelled()
                         Return True
                     End If
                 End Try
@@ -1152,12 +1156,17 @@ Public Class ChatControl
     Protected Overrides Function ExecuteJsonCommandWithToolResult(jsonCode As String, preview As Boolean) As Agent.ToolResult
         Dim commandEnvelope As JObject = Nothing
         Dim toolId As String = "ExcelCommands"
+        Dim beforeSnapshot As JObject = Nothing
 
         Try
             commandEnvelope = ParseExcelCommandEnvelope(jsonCode)
             toolId = GetEnvelopeToolId(commandEnvelope, "ExcelCommands")
-            Dim beforeSnapshot = CaptureExcelCommandSnapshot(commandEnvelope)
+            beforeSnapshot = CaptureExcelCommandSnapshot(commandEnvelope)
             Dim success = ExecuteJsonCommandCore(jsonCode, preview)
+            ' 预览被用户拒绝时核心返回 True（UI 语义：取消不是错误），但 ToolResult 不能据此报成功。
+            If ConsumePreviewCancelled() Then
+                Return Agent.ToolResult.PreviewCancelled(toolId)
+            End If
             Dim afterSnapshot = CaptureExcelCommandSnapshot(commandEnvelope)
             Dim observation = BuildExcelCommandObservation(toolId, commandEnvelope, success, beforeSnapshot, afterSnapshot)
             Dim summary = If(observation?("summary")?.ToString(), $"{toolId} 执行完成")
@@ -1167,6 +1176,7 @@ Public Class ChatControl
             ' A write may already have succeeded even when observation fails. Never
             ' repeat it automatically, because a second execution could duplicate data.
             If success AndAlso Not String.IsNullOrWhiteSpace(observationError) Then
+                observation("rollback") = BuildExcelRollbackNote(True)
                 Return Agent.ToolResult.Failed(
                     toolId,
                     $"Excel 命令可能已执行，但结果观察失败: {observationError}",
@@ -1183,14 +1193,66 @@ Public Class ChatControl
                                                 observation:=observation)
             End If
 
+            ' 失败但工作表确实被改过：Excel 无法安全自动撤销，只能把半应用状态如实报给 Agent，
+            ' 并用 recoverable=False 掐断自动重放——重放会在已改过的表上再改一次。
+            Dim partialApply = observation.Value(Of Boolean)("changed")
+            observation("rollback") = BuildExcelRollbackNote(partialApply)
+            Dim failureMessage = If(partialApply, $"{summary}；工作表已被部分修改且未回滚", summary)
             Return Agent.ToolResult.Failed(toolId,
-                                           summary,
-                                           errorCode:=ExceptionClassifier.CodeUnknown,
-                                           userMessage:=summary,
-                                           recoverable:=True,
+                                           failureMessage,
+                                           errorCode:=If(partialApply,
+                                                         ExceptionClassifier.CodePartialApply,
+                                                         ExceptionClassifier.CodeUnknown),
+                                           userMessage:=If(partialApply,
+                                                           "Excel 操作部分完成，插件无法自动撤销，请检查工作表后再继续",
+                                                           failureMessage),
+                                           recoverable:=Not partialApply,
                                            observation:=observation)
         Catch ex As Exception
-            Return Agent.ToolResult.FromException(toolId, ex)
+            Dim crashResult = Agent.ToolResult.FromException(toolId, ex)
+            Dim crashObservation = BuildExcelCrashObservation(commandEnvelope, beforeSnapshot)
+            If crashObservation IsNot Nothing Then
+                crashResult.Observation = crashObservation
+                crashResult.Recoverable = Not crashObservation.Value(Of Boolean)("changed")
+            End If
+            Return crashResult
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' Excel 没有“一条命令 = 一个撤销记录”的事务边界：Application.Undo 会连带撤掉用户此前的操作，
+    ''' 所以宿主只做诚实上报——attempted=False 表示根本没尝试回滚，不让 Agent 误以为文档已还原。
+    ''' </summary>
+    Private Shared Function BuildExcelRollbackNote(partialApply As Boolean) As JObject
+        Return New JObject From {
+            {"succeeded", False},
+            {"attempted", False},
+            {"verified", False},
+            {"partialApply", partialApply},
+            {"error", If(partialApply, "Excel 不支持安全地自动撤销本轮改动，请人工检查或手动撤销", "本轮未检测到工作表变化，无需回滚")}
+        }
+    End Function
+
+    Private Function BuildExcelCrashObservation(envelope As JObject, beforeSnapshot As JObject) As JObject
+        Try
+            If envelope Is Nothing OrElse beforeSnapshot Is Nothing Then Return Nothing
+            Dim afterSnapshot = CaptureExcelCommandSnapshot(envelope)
+            Dim changed = Not JToken.DeepEquals(beforeSnapshot, afterSnapshot)
+            Dim observation As New JObject From {
+                {"kind", "write"},
+                {"summary", "Excel 命令执行中抛出异常"},
+                {"changed", changed},
+                {"targetRefs", New JArray("Excel:ActiveSheet")},
+                {"before", beforeSnapshot},
+                {"after", afterSnapshot},
+                {"warnings", New JArray()}
+            }
+            If changed Then CType(observation("warnings"), JArray).Add("异常发生在工作表已发生变化之后，本轮改动未回滚")
+            observation("rollback") = BuildExcelRollbackNote(changed)
+            Return observation
+        Catch ex As Exception
+            Debug.WriteLine($"[Excel] 异常路径观察采集失败: {ex.Message}")
+            Return Nothing
         End Try
     End Function
 

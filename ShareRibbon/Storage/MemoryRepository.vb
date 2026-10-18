@@ -493,50 +493,6 @@ Public Class MemoryRepository
     End Function
 
     ''' <summary>
-    ''' 获取近期会话摘要
-    ''' </summary>
-    Public Shared Function GetRecentSessionSummaries(limit As Integer) As List(Of SessionSummaryRecord)
-        OfficeAiDatabase.EnsureInitialized()
-        Dim list As New List(Of SessionSummaryRecord)()
-        Using conn As New SQLiteConnection(OfficeAiDatabase.GetConnectionString())
-            conn.Open()
-            Using cmd As New SQLiteCommand(
-                "SELECT id, session_id, title, snippet, created_at FROM session_summary ORDER BY created_at DESC LIMIT @limit", conn)
-                cmd.Parameters.AddWithValue("@limit", limit)
-                Using rdr = cmd.ExecuteReader()
-                    While rdr.Read()
-                        list.Add(New SessionSummaryRecord With {
-                            .Id = rdr.GetInt64(0),
-                            .SessionId = rdr.GetString(1),
-                            .Title = If(rdr.IsDBNull(2), "", rdr.GetString(2)),
-                            .Snippet = If(rdr.IsDBNull(3), "", rdr.GetString(3)),
-                            .CreatedAt = rdr.GetString(4)
-                        })
-                    End While
-                End Using
-            End Using
-        End Using
-        Return list
-    End Function
-
-    ''' <summary>
-    ''' 插入会话摘要
-    ''' </summary>
-    Public Shared Sub InsertSessionSummary(sessionId As String, title As String, snippet As String)
-        OfficeAiDatabase.EnsureInitialized()
-        Using conn As New SQLiteConnection(OfficeAiDatabase.GetConnectionString())
-            conn.Open()
-            Using cmd As New SQLiteCommand(
-                "INSERT INTO session_summary (session_id, title, snippet) VALUES (@sid, @title, @snippet)", conn)
-                cmd.Parameters.AddWithValue("@sid", sessionId)
-                cmd.Parameters.AddWithValue("@title", If(title, ""))
-                cmd.Parameters.AddWithValue("@snippet", If(snippet, ""))
-                cmd.ExecuteNonQuery()
-            End Using
-        End Using
-    End Sub
-
-    ''' <summary>
     ''' 插入原子记忆（增强版，支持新字段）
     ''' </summary>
     Public Shared Function InsertMemory(content As String, Optional embedding As String = Nothing, Optional sessionId As String = Nothing, Optional appType As String = Nothing, Optional memoryType As String = "long_term", Optional importance As Double = 0.5, Optional sourceType As String = "general") As Long

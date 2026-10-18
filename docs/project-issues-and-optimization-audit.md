@@ -596,7 +596,7 @@ Chat / Ribbon / 快捷入口
 
 ### P2-12 文档与导航轻微过时
 
-- `AGENTS.md` 仍写 `OfficeAgentSetupCustomActions/`（如存在）  
+- `AGENTS.md` 曾写 `OfficeAgentSetupCustomActions/`（如存在）；该目录未被 sln/vdproj 引用，已于 2026-10-18 删除并同步文档  
 - `README_DATABASE.md` 路径错误  
 - 局部 AGENTS 需与真实目录对齐  
 - `ShareRibbon/AGENTS.md` 关于 Office interop 边界的表述与根规则冲突，应改为“共享层承载抽象，具体宿主 COM 实现留在对应 Office 项目”  

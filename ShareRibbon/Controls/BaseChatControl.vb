@@ -113,10 +113,9 @@ Public MustInherit Class BaseChatControl
             If _chatRequestOrchestrator Is Nothing Then
                 _chatRequestOrchestrator = New ChatRequestOrchestrator(
                     ConversationRuntime,
-                    _chatStateService,
                     systemHistoryMessageData,
                     _selectionPendingMap,
-                    AddressOf GetApplication,
+                    Function() RunUiFuncSync(Function() GetApplication()),
                     AddressOf ManageHistoryMessageSize)
             End If
             Return _chatRequestOrchestrator
@@ -139,7 +138,6 @@ Public MustInherit Class BaseChatControl
             If _reformatService Is Nothing Then
                 _reformatService = New ReformatService(
                     AddressOf ExecuteJavaScriptAsyncJS,
-                    AddressOf EscapeJavaScriptString,
                     AddressOf RunUiAction,
                     AddressOf ShowTemplateEditorPane,
                     AddressOf GetStylePreviewCallback,
@@ -157,7 +155,6 @@ Public MustInherit Class BaseChatControl
             If _agentKernelService Is Nothing Then
                 _agentKernelService = New AgentKernelService(
                     AddressOf ExecuteJavaScriptAsyncJS,
-                    AddressOf EscapeJavaScriptString,
                     AddressOf SendAndGetResponseAsync,
                     Function(c, l, p) CodeExecutionService.ExecuteCodeWithToolResult(c, l, p),
                     _chatStateService,
@@ -218,8 +215,14 @@ Public MustInherit Class BaseChatControl
                     AddressOf GetOfficeApplicationObject,
                     AddressOf GetApplication,
                     AddressOf RunCode,
-                    AddressOf RunCodePreview,
+                    Function(vbaCode As String, preview As Boolean) As Boolean
+                        Dim approved = RunCodePreview(vbaCode, preview)
+                        If Not approved Then NotifyPreviewCancelled()
+                        Return approved
+                    End Function,
                     AddressOf EvaluateFormula)
+                ' 脚本预览拒绝走的是 Boolean 合同（取消≠错误），ToolResult 侧必须能读到同一标记
+                _codeExecutionService.PreviewCancelledReader = AddressOf ConsumePreviewCancelled
                 ' Agent/Loop 可在后台线程运行。所有 native JSON 命令在唯一宿主入口
                 ' 统一切回 UI/STA 线程，避免各 Office Executor 自行分散 Invoke。
                 _codeExecutionService.JsonCommandExecutorWithResult =
@@ -316,6 +319,9 @@ Public MustInherit Class BaseChatControl
     ' ai的历史回复
     Protected systemHistoryMessageData As New List(Of HistoryMessage)
 
+    ' 输入框入口登记的"本回合用户可见文本"，由执行漏斗认领后落库并置空，保证每回合只写一条 user 历史
+    Private _pendingUserVisibleText As String
+
     Protected loadingPictureBox As PictureBox
 
     ' 选区对比相关字段
@@ -353,10 +359,35 @@ Public MustInherit Class BaseChatControl
     ''' <summary>
     ''' Background → UI marshal without async GetResult (P0-3). Prefer RunUiAction/async when possible.
     ''' </summary>
-    Private Sub RunUiActionSync(action As Action)
+    Protected Sub RunUiActionSync(action As Action)
         If action Is Nothing Then Return
         UiDispatcher.InvokeSync(Me, action)
     End Sub
+
+    ''' <summary>
+    ''' 读取宿主对象模型必须在 UI/STA 线程：Office COM 是套间绑定的，线程池直读要跨套间排队，
+    ''' 既慢又可能死锁。这里只允许包住纯读取，网络与记忆检索留在后台线程。
+    ''' </summary>
+    Protected Function RunUiFuncSync(Of T)(reader As Func(Of T)) As T
+        If reader Is Nothing Then Return Nothing
+        Return UiDispatcher.InvokeSync(Me, reader)
+    End Function
+
+    ''' <summary>
+    ''' 预览被用户拒绝时登记。旧的 Boolean 执行链把取消当“不是错误”返回 True（UI 只需恢复按钮），
+    ''' 但 ToolResult 合同不能据此回执成功，所以宿主在布尔取消点登记、在 ToolResult 入口消费一次。
+    ''' </summary>
+    Private _previewCancelledByUser As Boolean
+
+    Protected Sub NotifyPreviewCancelled()
+        _previewCancelledByUser = True
+    End Sub
+
+    Protected Function ConsumePreviewCancelled() As Boolean
+        Dim cancelled = _previewCancelledByUser
+        _previewCancelledByUser = False
+        Return cancelled
+    End Function
 
     Protected Async Function InitializeWebView2() As Task
         ' 确保在 UI 线程上执行
@@ -1289,7 +1320,7 @@ Public MustInherit Class BaseChatControl
                                  ' 更新进度
                                  RunUiActionSync(Sub()
                                                GlobalStatusStrip.ShowInfo($"正在解析文件 ({processedFiles}/{totalFiles}): {Path.GetFileName(filePath)}")
-                                               ExecuteJavaScriptAsyncJS($"updateFileParsingProgress({processedFiles}, {totalFiles}, '{EscapeJavaScriptString(Path.GetFileName(filePath))}')")
+                                               ExecuteJavaScriptAsyncJS($"updateFileParsingProgress({processedFiles}, {totalFiles}, {UtilsService.ToJsStringLiteral(Path.GetFileName(filePath))})")
                                            End Sub)
 
                                  ' 确定完整文件路径
@@ -1402,8 +1433,9 @@ Public MustInherit Class BaseChatControl
 
         ' 首先保存用户消息到历史记录（确保即便是意图预览模式，用户消息也会被保存）
         If Not String.IsNullOrWhiteSpace(originalQuestion) Then
-            _chatStateService?.AddMessage("user", originalQuestion)
-            Debug.WriteLine($"已保存用户消息到ChatStateService: {originalQuestion}")
+            ' 可见文本交给执行漏斗单点落库，避免入口和 Send/Agent 各写一条 user
+            _pendingUserVisibleText = originalQuestion
+            Debug.WriteLine($"已登记本回合用户可见文本: {originalQuestion}")
         End If
 
         stopReaderStream = False ' Reset stop flag before sending new message
@@ -1469,22 +1501,24 @@ Public MustInherit Class BaseChatControl
     End Function
 
     Private Function IChatRoutingHost_GetContextSnapshot() As JObject Implements IChatRoutingHost.GetContextSnapshot
-        Return GetContextSnapshot()
+        ' 路由编排跑在后台线程，快照是纯 COM 读取：在宿主适配边界收口到 UI/STA
+        Return RunUiFuncSync(Function() GetContextSnapshot())
     End Function
 
     Private Sub IChatRoutingHost_EnrichContextForIntent(snapshot As JObject,
                                                         originalQuestion As String,
                                                         filePaths As List(Of String),
                                                         selectedContents As List(Of SendMessageReferenceContentItem)) Implements IChatRoutingHost.EnrichContextForIntent
+        ' 这里只做 RAG 检索，不读宿主对象模型；留在后台线程，别把 5s 超时压到 UI 上
         EnrichContextForIntent(snapshot, originalQuestion, filePaths, selectedContents)
     End Sub
 
     Private Function IChatRoutingHost_GetApplicationType() As String Implements IChatRoutingHost.GetApplicationType
-        Return GetApplicationType()
+        Return RunUiFuncSync(Function() GetApplicationType())
     End Function
 
     Private Function IChatRoutingHost_CaptureOfficeContext(appType As String) As Agent.Context.OfficeContext Implements IChatRoutingHost.CaptureOfficeContext
-        Return CaptureOfficeContext(appType)
+        Return RunUiFuncSync(Function() CaptureOfficeContext(appType))
     End Function
 
     Private Function IChatRoutingHost_AnalyzeAiNativeAsync(request As Agent.AiNativeRequest) As Task(Of Agent.AiNativeRuntimeResult) Implements IChatRoutingHost.AnalyzeAiNativeAsync
@@ -1503,17 +1537,12 @@ Public MustInherit Class BaseChatControl
 
     Private Sub IChatRoutingHost_ShowContextHints(ragCount As Integer, intentDescription As String, contextTrace As ChatContextTrace) Implements IChatRoutingHost.ShowContextHints
         Dim intentText = If(intentDescription, "")
-        Dim intentEscaped = intentText.Replace("\", "\\").Replace("'", "\'").Replace(vbCr, " ").Replace(vbLf, " ")
-        Dim traceJson = If(contextTrace Is Nothing, "{}", JObject.FromObject(contextTrace).ToString(Formatting.None))
-        ExecuteJavaScriptAsyncJS($"showContextHints({{ ragCount: {ragCount}, intent: '{intentEscaped}', trace: {traceJson} }});")
+        Dim traceJson = If(contextTrace Is Nothing, "{}", UtilsService.SerializeForScript(JObject.FromObject(contextTrace)))
+        ExecuteJavaScriptAsyncJS($"showContextHints({{ ragCount: {ragCount}, intent: {UtilsService.ToJsStringLiteral(intentText)}, trace: {traceJson} }});")
     End Sub
 
     Private Sub IChatRoutingHost_ShowWarning(message As String) Implements IChatRoutingHost.ShowWarning
         GlobalStatusStrip.ShowWarning(message)
-    End Sub
-
-    Private Sub IChatRoutingHost_ShowIdentifyingStatus() Implements IChatRoutingHost.ShowIdentifyingStatus
-        ExecuteJavaScriptAsyncJS("showIdentifyingStatus()")
     End Sub
 
     Private Sub IChatRoutingHost_SendChatMessage(message As String) Implements IChatRoutingHost.SendChatMessage
@@ -1545,15 +1574,19 @@ Public MustInherit Class BaseChatControl
                                        Optional analysis As Agent.AiNativeRuntimeResult = Nothing)
         AgentKernelSvc.AgentFullUserMessage = message
         AgentKernelSvc.AgentOriginalUserRequest = If(intent?.OriginalInput, message)
+        ' Agent 回合的用户事件由 AgentKernelService 落库，这里丢弃待写文本，避免后续 Send 误用
+        _pendingUserVisibleText = Nothing
 
         Task.Run(Async Function()
                      Try
                          Dim goal = If(String.IsNullOrWhiteSpace(intent.OriginalInput), intent.UserFriendlyDescription, intent.OriginalInput)
-                         Dim appType = GetApplicationType()
+                         ' 宿主对象模型只能在 UI/STA 读取，先取快照再把耗时的规划/检索留在后台线程
+                         Dim appType = RunUiFuncSync(Function() GetApplicationType())
 
                          GlobalStatusStrip.ShowInfo("正在规划任务...")
 
-                         Dim currentContent = GetCurrentOfficeContent()
+                         Dim currentContent = RunUiFuncSync(Function() GetCurrentOfficeContent())
+                         Dim officeContext = RunUiFuncSync(Function() CaptureOfficeContext(appType))
                          Dim historyMessages As New List(Of Tuple(Of String, String))()
                          For Each msg In systemHistoryMessageData
                              If msg.role = "user" OrElse msg.role = "assistant" Then
@@ -1566,7 +1599,7 @@ Public MustInherit Class BaseChatControl
                              appType,
                              currentContent,
                              historyMessages,
-                             CaptureOfficeContext(appType),
+                             officeContext,
                              analysis?.TaskSpec,
                              analysis?.SelectedSkills)
 
@@ -1614,6 +1647,7 @@ Public MustInherit Class BaseChatControl
 
             Debug.WriteLine($"[AgentKernel] 启动Agent，需求: {request}")
             AgentKernelSvc.AgentOriginalUserRequest = request
+            _pendingUserVisibleText = Nothing
 
             ' 解析文件路径和选中内容
             Dim filePaths As New List(Of String)()
@@ -1634,8 +1668,8 @@ Public MustInherit Class BaseChatControl
             AgentKernelSvc.AgentThinkingUuid = Guid.NewGuid().ToString()
             Dim now = DateTime.Now
             Dim timestamp = now.ToString("yyyy-MM-dd HH:mm:ss")
-            ExecuteJavaScriptAsyncJS($"createChatSection('AI', '{timestamp}', '{AgentKernelSvc.AgentThinkingUuid}')")
-            ExecuteJavaScriptAsyncJS($"var thinkingDiv = document.getElementById('content-{AgentKernelSvc.AgentThinkingUuid}'); if(thinkingDiv) thinkingDiv.innerHTML = '<div class=""thinking-indicator""><div class=""thinking-dots""><span></span><span></span><span></span></div><span style=""margin-left: 12px; color: #6c757d;"">正在分析您的需求...</span></div>';")
+            ExecuteJavaScriptAsyncJS($"createChatSection({UtilsService.ToJsStringLiteral("AI")}, {UtilsService.ToJsStringLiteral(timestamp)}, {UtilsService.ToJsStringLiteral(AgentKernelSvc.AgentThinkingUuid)})")
+            ExecuteJavaScriptAsyncJS($"showThinkingIndicator({UtilsService.ToJsStringLiteral(AgentKernelSvc.AgentThinkingUuid)})")
 
             Dim originalQuestion As String = request
             Dim finalMessageToLLM As String = request
@@ -1702,7 +1736,7 @@ Public MustInherit Class BaseChatControl
                                  ' 更新进度
                                  RunUiActionSync(Sub()
                                                GlobalStatusStrip.ShowInfo($"正在解析文件 ({processedFiles}/{totalFiles}): {Path.GetFileName(filePath)}")
-                                               ExecuteJavaScriptAsyncJS($"updateFileParsingProgress({processedFiles}, {totalFiles}, '{EscapeJavaScriptString(Path.GetFileName(filePath))}')")
+                                               ExecuteJavaScriptAsyncJS($"updateFileParsingProgress({processedFiles}, {totalFiles}, {UtilsService.ToJsStringLiteral(Path.GetFileName(filePath))})")
                                            End Sub)
 
                                  ' 确定完整文件路径
@@ -1807,11 +1841,14 @@ Public MustInherit Class BaseChatControl
 
         AgentKernelSvc.AgentFullUserMessage = finalMessageToLLM
         AgentKernelSvc.AgentOriginalUserRequest = originalQuestion
+        _pendingUserVisibleText = Nothing
 
         Task.Run(Async Function()
                      Try
-                         Dim appType = GetApplicationType()
-                         Dim currentContent = GetCurrentOfficeContent()
+                         ' 同上：COM 快照取回 UI/STA，模型请求与检索继续跑在后台线程
+                         Dim appType = RunUiFuncSync(Function() GetApplicationType())
+                         Dim currentContent = RunUiFuncSync(Function() GetCurrentOfficeContent())
+                         Dim officeContext = RunUiFuncSync(Function() CaptureOfficeContext(appType))
 
                          Dim historyMessages As New List(Of Tuple(Of String, String))()
                          For Each msg In systemHistoryMessageData
@@ -1821,7 +1858,7 @@ Public MustInherit Class BaseChatControl
                          Next
 
                          GlobalStatusStrip.ShowInfo("正在分析您的需求...")
-                         Dim success = Await AgentKernelSvc.StartAgentAsync(finalMessageToLLM, appType, currentContent, historyMessages, CaptureOfficeContext(appType))
+                         Dim success = Await AgentKernelSvc.StartAgentAsync(finalMessageToLLM, appType, currentContent, historyMessages, officeContext)
 
                          If Not success Then
                              GlobalStatusStrip.ShowWarning("无法分析您的需求，请重试")
@@ -1904,14 +1941,11 @@ Public MustInherit Class BaseChatControl
             End If
             If Not String.IsNullOrEmpty(feedback) Then
                 Debug.WriteLine($"[AgentKernel] 用户请求修改计划: {feedback}")
-                ExecuteJavaScriptAsyncJS("addThinkingMessage('正在根据您的意见重新规划...')")
                 Dim request = AgentKernelSvc.AgentOriginalUserRequest
                 If Not String.IsNullOrEmpty(request) Then
                     Dim refinedRequest = request & vbCrLf & "[用户修改意见] " & feedback
                     AgentKernelSvc.AgentThinkingUuid = Guid.NewGuid().ToString()
-                    Dim now = DateTime.Now
-                    Dim timestamp = now.ToString("yyyy-MM-dd HH:mm:ss")
-                    ExecuteJavaScriptAsyncJS($"createChatSection('AI', '{timestamp}', '{AgentKernelSvc.AgentThinkingUuid}')")
+                    AgentKernelSvc.AgentThinkingLabel = "正在根据您的意见重新规划..."
                     HandleStartAgentCore(refinedRequest, request, "")
                 End If
             End If
@@ -1973,26 +2007,30 @@ Public MustInherit Class BaseChatControl
 
         ' 获取Office内容信息
         Try
-            Dim appInfo = GetApplication()
-            If appInfo IsNot Nothing Then
-                Select Case appInfo.Type.ToString().ToLower()
-                    Case "word"
-                        context.OfficeAppType = OfficeAppType.Word
-                    Case "excel"
-                        context.OfficeAppType = OfficeAppType.Excel
-                    Case "powerpoint"
-                        context.OfficeAppType = OfficeAppType.PowerPoint
-                End Select
-            End If
+            ' 这段是纯 COM 读取，调用方可能在后台线程；RAG/网络不在这里，不会把等待压到 UI 上
+            RunUiActionSync(
+                Sub()
+                    Dim appInfo = GetApplication()
+                    If appInfo IsNot Nothing Then
+                        Select Case appInfo.Type.ToString().ToLower()
+                            Case "word"
+                                context.OfficeAppType = OfficeAppType.Word
+                            Case "excel"
+                                context.OfficeAppType = OfficeAppType.Excel
+                            Case "powerpoint"
+                                context.OfficeAppType = OfficeAppType.PowerPoint
+                        End Select
+                    End If
 
-            Dim contentInfo As New OfficeContentInfo()
-            Dim selInfo = CaptureCurrentSelectionInfo("")
-            If selInfo IsNot Nothing Then
-                contentInfo.SelectedParagraphs = New List(Of String) From {selInfo.SelectedText}
-                context.SelectionInfo = selInfo
-                context.RequiresSelection = Not String.IsNullOrEmpty(selInfo.SelectedText)
-            End If
-            context.OfficeContent = contentInfo
+                    Dim contentInfo As New OfficeContentInfo()
+                    Dim selInfo = CaptureCurrentSelectionInfo("")
+                    If selInfo IsNot Nothing Then
+                        contentInfo.SelectedParagraphs = New List(Of String) From {selInfo.SelectedText}
+                        context.SelectionInfo = selInfo
+                        context.RequiresSelection = Not String.IsNullOrEmpty(selInfo.SelectedText)
+                    End If
+                    context.OfficeContent = contentInfo
+                End Sub)
         Catch ex As Exception
             Debug.WriteLine($"[BuildExecutionContextAsync] 获取Office内容失败: {ex.Message}")
         End Try
@@ -2009,6 +2047,8 @@ Public MustInherit Class BaseChatControl
     ''' 非流式 AI 请求，直接获取完整响应（供 AgentKernel 使用）
     ''' </summary>
     Private Async Function SendAndGetResponseAsync(prompt As String, systemPrompt As String, historyMessages As List(Of HistoryMessage)) As Task(Of String)
+        ' Agent 回合的"停止"要能掐断在途请求；不在回合作用域内时为 None，其它调用方行为不变。
+        Dim ambientCancellation = Agent.AgentCancellationScope.Current
         Try
             Dim messagesArray As New JArray()
             If Not String.IsNullOrEmpty(systemPrompt) Then
@@ -2048,7 +2088,9 @@ Public MustInherit Class BaseChatControl
 
                 request.Content = New StringContent(requestBody, Encoding.UTF8, "application/json")
 
-                Using timeoutCts As New System.Threading.CancellationTokenSource(TimeSpan.FromMinutes(2))
+                Dim timeoutCts = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(ambientCancellation)
+                timeoutCts.CancelAfter(TimeSpan.FromMinutes(2))
+                Using timeoutCts
                     Using response As HttpResponseMessage = Await client.SendAsync(request, timeoutCts.Token)
                         response.EnsureSuccessStatusCode()
                         Dim jsonContent As String = Await response.Content.ReadAsStringAsync()
@@ -2077,6 +2119,9 @@ Public MustInherit Class BaseChatControl
                     End Using
                 End Using
             End Using
+        Catch ex As OperationCanceledException When ambientCancellation.IsCancellationRequested
+            ' 用户点了停止：取消必须继续向上传播，让循环按"已停止"收敛，而不是被当成请求失败吞掉。
+            Throw
         Catch ex As Exception
             Debug.WriteLine($"[SendAndGetResponseAsync] 请求失败: {ex.Message}")
             Return ""
@@ -2116,7 +2161,7 @@ Public MustInherit Class BaseChatControl
                     Next
 
                     ' 发送给前端
-                    ExecuteJavaScriptAsyncJS($"addFilesFromDialog({filesArray.ToString(Formatting.None)})")
+                    ExecuteJavaScriptAsyncJS($"addFilesFromDialog({UtilsService.SerializeForScript(filesArray)})")
                     Debug.WriteLine($"选择了 {dialog.FileNames.Length} 个文件")
                 End If
             End Using
@@ -2164,7 +2209,7 @@ Public MustInherit Class BaseChatControl
     ''' </summary>
     Protected Sub HandleGetCurrentAppInfo()
         Try
-            ExecuteJavaScriptAsyncJS($"window.currentOfficeAppName = '{EscapeJavaScriptString(GetOfficeApplicationName())}';")
+            ExecuteJavaScriptAsyncJS($"window.currentOfficeAppName = {UtilsService.ToJsStringLiteral(GetOfficeApplicationName())};")
         Catch ex As Exception
             Debug.WriteLine($"HandleGetCurrentAppInfo failed: {ex.Message}")
         End Try
@@ -2408,13 +2453,6 @@ Public MustInherit Class BaseChatControl
     ' ========== AI模板编辑器功能 ==========
 
     ''' <summary>
-    ''' 进入AI模板编辑模式（供外部调用）
-    ''' </summary>
-    Public Sub EnterAiTemplateEditorMode(Optional template As ReformatTemplate = Nothing)
-        ReformatSvc.EnterAiTemplateEditorMode(template)
-    End Sub
-
-    ''' <summary>
     ''' 处理保存AI模板
     ''' </summary>
     Protected Sub HandleSaveAiTemplate(jsonDoc As JObject)
@@ -2475,8 +2513,7 @@ Public MustInherit Class BaseChatControl
             Debug.WriteLine($"HandleExecuteCode 执行出错: {ex.Message}")
             ' 执行失败后通知前端（恢复按钮可点击）
             If Not String.IsNullOrEmpty(responseUuid) Then
-                Dim escapedMsg = ex.Message.Replace("'", "\'").Replace(vbCrLf, " ")
-                ExecuteJavaScriptAsyncJS($"handleExecutionError('{responseUuid}', '{escapedMsg}')")
+                ExecuteJavaScriptAsyncJS($"handleExecutionError({UtilsService.ToJsStringLiteral(responseUuid)}, {UtilsService.ToJsStringLiteral(ex.Message)})")
             End If
         End Try
     End Sub
@@ -2597,6 +2634,15 @@ Public MustInherit Class BaseChatControl
             Return
         End If
 
+        ' 会话历史的 user 回合在本函数单点落库：输入框路径已登记用户可见原文，宿主 Ribbon 路径用本次问题原文
+        ' 只在 addHistory 的成对回合落库：False 路径（续写/模板/校对）传的是合成提示词，答复也不入库，
+        ' 写进来就留下一条没有答复的 user 行，既污染会话列表，又会被下一轮当作用户原话读回。
+        Dim userTurnText = If(String.IsNullOrWhiteSpace(_pendingUserVisibleText), question, _pendingUserVisibleText)
+        _pendingUserVisibleText = Nothing
+        If addHistory AndAlso Not String.IsNullOrWhiteSpace(userTurnText) Then
+            _chatStateService?.AddMessage("user", userTurnText)
+        End If
+
         Dim uuid As String = If(responseUuid, Guid.NewGuid().ToString())
         ' 这里生成 requestUuid（用于绑定选区）
         Dim requestUuid As String = Guid.NewGuid().ToString()
@@ -2607,7 +2653,8 @@ Public MustInherit Class BaseChatControl
             If PendingSelectionInfo Is Nothing Then
                 Dim captured As SelectionInfo = Nothing
                 Try
-                    captured = CaptureCurrentSelectionInfo(responseMode)
+                    ' Send 可能由后台线程发起（意图路由/流式路径），选区读取要回到 UI/STA
+                    captured = RunUiFuncSync(Function() CaptureCurrentSelectionInfo(responseMode))
                 Catch ex As Exception
                     Debug.WriteLine("CaptureCurrentSelectionInfo 异常: " & ex.Message)
                 End Try
@@ -2630,7 +2677,9 @@ Public MustInherit Class BaseChatControl
         End Try
 
         Try
-            systemPrompt = SystemPromptResolver.ResolveSystemPrompt(systemPrompt, GetApplication(), CurrentIntentResult, responseMode)
+            ' Send 会从线程池发起（意图路由/流式），宿主信息读取回到 UI/STA
+            Dim appInfoForPrompt = RunUiFuncSync(Function() GetApplication())
+            systemPrompt = SystemPromptResolver.ResolveSystemPrompt(systemPrompt, appInfoForPrompt, CurrentIntentResult, responseMode)
 
             ' ragCount 由 CreateRequestBody 通过 ByRef 返回，无需再次查询记忆
             Dim ragCount As Integer = 0
@@ -2646,7 +2695,7 @@ Public MustInherit Class BaseChatControl
             Dim capturedQuestion = question
             Dim capturedAddHistory = addHistory
             HttpStreamSvc.FinalizeCallback = Sub(ah, oq)
-                                                 Dim answerContent = _chatStateService.MarkdownBuffer.ToString()
+                                                 Dim answerContent = _chatStateService.PlainMarkdownBuffer.ToString()
                                                  Dim answer = New HistoryMessage() With {
                                                      .role = "assistant",
                                                      .content = answerContent
@@ -2657,18 +2706,6 @@ Public MustInherit Class BaseChatControl
                                                      _chatStateService.AddMessage("assistant", answer.content)
                                                      MemoryService.SaveConversationTurnAsync(oq, answer.content, _chatStateService.CurrentSessionId, GetOfficeAppType())
                                                      MemoryTurnRecorder.RecordConversationTurn(oq, answer.content, _chatStateService.CurrentSessionId, responseMode, ah, GetOfficeAppType())
-                                                     If systemHistoryMessageData.Count = 3 Then
-                                                         Dim sid = _chatStateService.CurrentSessionId
-                                                         Dim title = If(oq?.Length > 80, oq.Substring(0, 80) & "...", If(oq, ""))
-                                                         Dim snippet = If(oq?.Length > 200, oq.Substring(0, 200) & "...", If(oq, ""))
-                                                         If Not String.IsNullOrWhiteSpace(sid) AndAlso Not String.IsNullOrWhiteSpace(title) Then
-                                                             Try
-                                                                 MemoryService.SaveSessionSummary(sid, title, snippet)
-                                                             Catch ex As Exception
-                                                                 Debug.WriteLine("SaveSessionSummary 失败: " & ex.Message)
-                                                             End Try
-                                                         End If
-                                                     End If
                                                  End If
                                              End Sub
 
@@ -2773,9 +2810,6 @@ Public MustInherit Class BaseChatControl
 
     Private Async Function WaitForRendererMapAsync(uuid As String) As Task
         Await WebViewBridge.WaitForRendererMapAsync(uuid)
-    End Function
-    Private Function EscapeJavaScriptString(input As String) As String
-        Return UtilsService.EscapeJavaScriptString(input)
     End Function
 
 

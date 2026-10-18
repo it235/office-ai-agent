@@ -603,13 +603,18 @@ Public Class ChatControl
 
     Public Async Function TriggerSmartReformat() As Task
         Try
-            Dim wordApp = Globals.ThisAddIn.Application
-
             Dim targetRange As Microsoft.Office.Interop.Word.Range = Nothing
+            Dim job As ReformatJob = Nothing
             Dim scopeKind As ReformatScopeKind = ReformatScopeKind.Selection
-            targetRange = ResolveReformatTargetRange(wordApp, "", scopeKind)
 
-            Dim job = CreateReformatJobFromRange(targetRange, scopeKind)
+            ' 采集阶段是逐段读取 Word 对象模型，只能在 UI/STA；后面的分析/模型请求留在调用线程
+            RunUiActionSync(
+                Sub()
+                    Dim wordApp = Globals.ThisAddIn.Application
+                    targetRange = ResolveReformatTargetRange(wordApp, "", scopeKind)
+                    job = CreateReformatJobFromRange(targetRange, scopeKind)
+                End Sub)
+
             If job Is Nothing OrElse Not job.HasUsableParagraphs() Then
                 GlobalStatusStrip.ShowWarning("没有找到有效段落。")
                 Return
@@ -648,13 +653,13 @@ Public Class ChatControl
         Dim html = agent.GenerateFormattingCardHtml(plan)
         Dim responseUuid As String = Guid.NewGuid().ToString()
 
-        Dim jsCreate As String = $"createChatSection('AI排版助手', formatDateTime(new Date()), '{responseUuid}');"
+        Dim jsCreate As String = $"createChatSection('AI排版助手', formatDateTime(new Date()), {UtilsService.ToJsStringLiteral(responseUuid)});"
         Await ExecuteJavaScriptAsyncJS(jsCreate)
 
         Dim jsonPayload As New JObject()
         jsonPayload("uuid") = responseUuid
         jsonPayload("html") = html
-        Await ExecuteJavaScriptAsyncJS($"appendFormattingCard({jsonPayload.ToString(Newtonsoft.Json.Formatting.None)});")
+        Await ExecuteJavaScriptAsyncJS($"appendFormattingCard({UtilsService.SerializeForScript(jsonPayload)});")
     End Function
 
     Private Sub AttachReformatJobMetadata(plan As ReformatPreviewPlan, job As ReformatJob)
@@ -829,7 +834,7 @@ Public Class ChatControl
                 Dim jsonPayload As New JObject()
                 jsonPayload("uuid") = responseUuid
                 jsonPayload("html") = html
-                Await ExecuteJavaScriptAsyncJS($"appendFormattingCard({jsonPayload.ToString(Newtonsoft.Json.Formatting.None)});")
+                Await ExecuteJavaScriptAsyncJS($"appendFormattingCard({UtilsService.SerializeForScript(jsonPayload)});")
                 GlobalStatusStrip.ShowInfo("排版方案已微调。")
             Else
                 GlobalStatusStrip.ShowWarning("微调失败，请尝试更明确的指令。")
@@ -882,7 +887,7 @@ Public Class ChatControl
                     Dim jsonPayload As New JObject()
                     jsonPayload("uuid") = responseUuid
                     jsonPayload("html") = html
-                    Await ExecuteJavaScriptAsyncJS($"appendFormattingCard({jsonPayload.ToString(Newtonsoft.Json.Formatting.None)});")
+                    Await ExecuteJavaScriptAsyncJS($"appendFormattingCard({UtilsService.SerializeForScript(jsonPayload)});")
                     GlobalStatusStrip.ShowInfo($"已切换到备选排版方案: {plan.StandardName}")
                 End If
             Else
@@ -920,10 +925,9 @@ Public Class ChatControl
             End If
 
             Dim responseUuid As String = Guid.NewGuid().ToString()
-            Dim jsCreate As String = $"createChatSection('排版对比', formatDateTime(new Date()), '{responseUuid}');"
+            Dim jsCreate As String = $"createChatSection({UtilsService.ToJsStringLiteral("排版对比")}, formatDateTime(new Date()), {UtilsService.ToJsStringLiteral(responseUuid)});"
             Await ExecuteJavaScriptAsyncJS(jsCreate)
-            Dim escapedText = sb.ToString().Replace("\", "\\").Replace("'", "\'").Replace(vbCr, "\n").Replace(vbLf, "")
-            Await ExecuteJavaScriptAsyncJS($"appendRenderer('{responseUuid}','{escapedText}');")
+            Await ExecuteJavaScriptAsyncJS($"appendRenderer({UtilsService.ToJsStringLiteral(responseUuid)}, {UtilsService.ToJsStringLiteral(sb.ToString())});")
         Catch ex As Exception
             Debug.WriteLine($"HandlePreviewReformatCompare error: {ex.Message}")
             GlobalStatusStrip.ShowWarning($"预览对比失败: {ex.Message}")
@@ -1116,8 +1120,8 @@ Public Class ChatControl
     Private Async Sub HandleNumberingCommand(userMessage As String, originalJsonDoc As JObject, plan As Services.WordActionPlan)
         Try
             Dim userMsgUuid = Guid.NewGuid().ToString()
-            Await ExecuteJavaScriptAsyncJS($"createChatSection('你', formatDateTime(new Date()), '{userMsgUuid}');")
-            Await ExecuteJavaScriptAsyncJS($"document.getElementById('content-{userMsgUuid}').innerHTML = '<p>{EscapeHtmlForInline(userMessage)}</p>';")
+            Await ExecuteJavaScriptAsyncJS($"createChatSection('你', formatDateTime(new Date()), {UtilsService.ToJsStringLiteral(userMsgUuid)});")
+            Await ExecuteJavaScriptAsyncJS($"setSectionPlainText({UtilsService.ToJsStringLiteral(userMsgUuid)}, {UtilsService.ToJsStringLiteral(userMessage)});")
 
             Dim agent As New Services.WordNumberingAgent(Globals.ThisAddIn.Application)
             Dim result = agent.RebuildSequentialNumbering(userMessage)
@@ -1134,15 +1138,14 @@ Public Class ChatControl
                     result,
                     recoverable:=True))
                 Dim failureResponseUuid = Guid.NewGuid().ToString()
-                Await ExecuteJavaScriptAsyncJS($"createChatSection('AI编号助手', formatDateTime(new Date()), '{failureResponseUuid}');")
-                Dim escapedReason = reason.Replace("\", "\\").Replace("'", "\'").Replace(vbCr, "").Replace(vbLf, "\n")
-                Await ExecuteJavaScriptAsyncJS($"appendRenderer('{failureResponseUuid}','没有执行自动编号重排：{escapedReason}');")
+                Await ExecuteJavaScriptAsyncJS($"createChatSection('AI编号助手', formatDateTime(new Date()), {UtilsService.ToJsStringLiteral(failureResponseUuid)});")
+                Await ExecuteJavaScriptAsyncJS($"appendRenderer({UtilsService.ToJsStringLiteral(failureResponseUuid)}, {UtilsService.ToJsStringLiteral("没有执行自动编号重排：" & reason)});")
                 GlobalStatusStrip.ShowWarning(reason)
                 Return
             End If
 
             Dim responseUuid = Guid.NewGuid().ToString()
-            Await ExecuteJavaScriptAsyncJS($"createChatSection('AI编号助手', formatDateTime(new Date()), '{responseUuid}');")
+            Await ExecuteJavaScriptAsyncJS($"createChatSection('AI编号助手', formatDateTime(new Date()), {UtilsService.ToJsStringLiteral(responseUuid)});")
             Dim summary = result.ToHumanReadableSummary()
             ReportWordCapabilityResult(plan, Services.WordCapabilityExecutionResult.FromPlan(
                 plan,
@@ -1151,8 +1154,7 @@ Public Class ChatControl
                 summary,
                 summary,
                 result))
-            Dim escapedSummary = summary.Replace("\", "\\").Replace("'", "\'").Replace(vbCr, "").Replace(vbLf, "\n")
-            Await ExecuteJavaScriptAsyncJS($"appendRenderer('{responseUuid}','已完成自动编号重排：{escapedSummary}');")
+            Await ExecuteJavaScriptAsyncJS($"appendRenderer({UtilsService.ToJsStringLiteral(responseUuid)}, {UtilsService.ToJsStringLiteral("已完成自动编号重排：" & summary)});")
             GlobalStatusStrip.ShowSuccess("自动编号已重排为连续递增")
         Catch ex As Exception
             Debug.WriteLine($"HandleNumberingCommand error: {ex.Message}")
@@ -1181,12 +1183,18 @@ Public Class ChatControl
         Try
             If showUserMessage Then
                 Dim userMsgUuid = Guid.NewGuid().ToString()
-                Await ExecuteJavaScriptAsyncJS($"createChatSection('你', formatDateTime(new Date()), '{userMsgUuid}');")
-                Await ExecuteJavaScriptAsyncJS($"document.getElementById('content-{userMsgUuid}').innerHTML = '<p>{EscapeHtmlForInline(userMessage)}</p>';")
+                Await ExecuteJavaScriptAsyncJS($"createChatSection('你', formatDateTime(new Date()), {UtilsService.ToJsStringLiteral(userMsgUuid)});")
+                Await ExecuteJavaScriptAsyncJS($"setSectionPlainText({UtilsService.ToJsStringLiteral(userMsgUuid)}, {UtilsService.ToJsStringLiteral(userMessage)});")
             End If
 
-            Dim agent As New Services.WordFormattingAgent(Globals.ThisAddIn.Application)
-            Dim result = agent.RunDirectFormatting(userMessage)
+            ' 格式调整是纯确定性 COM 写入（含 UndoRecord），没有模型请求：整段回到 UI/STA 执行，
+            ' 既不跨套间封送，也不会让 UI 空等网络。
+            Dim result As Services.WordFormattingAgentResult = Nothing
+            RunUiActionSync(
+                Sub()
+                    Dim agent As New Services.WordFormattingAgent(Globals.ThisAddIn.Application)
+                    result = agent.RunDirectFormatting(userMessage)
+                End Sub)
             _activeWordFormattingTaskPlan = result?.TaskPlan
 
             If result Is Nothing OrElse Not result.Success Then
@@ -1196,10 +1204,9 @@ Public Class ChatControl
             End If
 
             Dim responseUuid = Guid.NewGuid().ToString()
-            Await ExecuteJavaScriptAsyncJS($"createChatSection('AI排版助手', formatDateTime(new Date()), '{responseUuid}');")
+            Await ExecuteJavaScriptAsyncJS($"createChatSection('AI排版助手', formatDateTime(new Date()), {UtilsService.ToJsStringLiteral(responseUuid)});")
             Dim unifiedSummary = FormatWordFormattingTaskSummary(result.TaskPlan, result.ToHumanReadableSummary())
-            Dim escapedSummary = unifiedSummary.Replace("\", "\\").Replace("'", "\'").Replace(vbCr, "").Replace(vbLf, "\n")
-            Await ExecuteJavaScriptAsyncJS($"appendRenderer('{responseUuid}','已应用格式调整：{escapedSummary}');")
+            Await ExecuteJavaScriptAsyncJS($"appendRenderer({UtilsService.ToJsStringLiteral(responseUuid)}, {UtilsService.ToJsStringLiteral("已应用格式调整：" & unifiedSummary)});")
             GlobalStatusStrip.ShowSuccess("格式调整已应用")
             Return True
         Catch ex As Exception
@@ -1218,8 +1225,8 @@ Public Class ChatControl
     Private Async Sub HandleMixedProofreadFormattingCommand(userMessage As String, originalJsonDoc As JObject)
         Try
             Dim userMsgUuid = Guid.NewGuid().ToString()
-            Await ExecuteJavaScriptAsyncJS($"createChatSection('你', formatDateTime(new Date()), '{userMsgUuid}');")
-            Await ExecuteJavaScriptAsyncJS($"document.getElementById('content-{userMsgUuid}').innerHTML = '<p>{EscapeHtmlForInline(userMessage)}</p>';")
+            Await ExecuteJavaScriptAsyncJS($"createChatSection('你', formatDateTime(new Date()), {UtilsService.ToJsStringLiteral(userMsgUuid)});")
+            Await ExecuteJavaScriptAsyncJS($"setSectionPlainText({UtilsService.ToJsStringLiteral(userMsgUuid)}, {UtilsService.ToJsStringLiteral(userMessage)});")
 
             _pendingPostProofreadFormattingRequest = ExtractPostProofreadFormattingRequest(userMessage)
             GlobalStatusStrip.ShowInfo("已识别组合任务：先校对，再排版。")
@@ -1268,7 +1275,7 @@ Public Class ChatControl
         Try
             Dim compiler As New Services.ProofreadIntentCompiler()
             Dim plan = compiler.Compile(If(String.IsNullOrWhiteSpace(message), "校对", message),
-                                        HasUsableProofreadSelection(Globals.ThisAddIn.Application))
+                                        RunUiFuncSync(Function() HasUsableProofreadSelection(Globals.ThisAddIn.Application)))
             Await ExecuteProofreadAsync(plan, message)
         Catch ex As Exception
             Debug.WriteLine($"[Word] 校对路由失败: {ex.Message}")
@@ -1290,12 +1297,15 @@ Public Class ChatControl
                 If applied Then Return
             End If
 
-            Dim wordApp = Globals.ThisAddIn.Application
             Dim hasSelection As Boolean = False
             Try
-                If wordApp IsNot Nothing AndAlso wordApp.Selection IsNot Nothing AndAlso wordApp.Selection.Range IsNot Nothing Then
-                    hasSelection = Not String.IsNullOrWhiteSpace(wordApp.Selection.Range.Text)
-                End If
+                Dim probeSelection As Func(Of Boolean) =
+                    Function()
+                        Dim wordApp = Globals.ThisAddIn.Application
+                        If wordApp Is Nothing OrElse wordApp.Selection Is Nothing OrElse wordApp.Selection.Range Is Nothing Then Return False
+                        Return Not String.IsNullOrWhiteSpace(wordApp.Selection.Range.Text)
+                    End Function
+                hasSelection = RunUiFuncSync(probeSelection)
             Catch
             End Try
 
@@ -1321,8 +1331,8 @@ Public Class ChatControl
     Private Async Sub HandleProofreadCommand(userMessage As String, originalJsonDoc As JObject, plan As Services.WordActionPlan)
         Try
             Dim userMsgUuid = Guid.NewGuid().ToString()
-            Await ExecuteJavaScriptAsyncJS($"createChatSection('你', formatDateTime(new Date()), '{userMsgUuid}');")
-            Await ExecuteJavaScriptAsyncJS($"document.getElementById('content-{userMsgUuid}').innerHTML = '<p>{EscapeHtmlForInline(userMessage)}</p>';")
+            Await ExecuteJavaScriptAsyncJS($"createChatSection('你', formatDateTime(new Date()), {UtilsService.ToJsStringLiteral(userMsgUuid)});")
+            Await ExecuteJavaScriptAsyncJS($"setSectionPlainText({UtilsService.ToJsStringLiteral(userMsgUuid)}, {UtilsService.ToJsStringLiteral(userMessage)});")
 
             Dim wordApp = Globals.ThisAddIn.Application
             Dim compiler As New Services.ProofreadIntentCompiler()
@@ -1355,11 +1365,6 @@ Public Class ChatControl
             End Try
         End Try
     End Sub
-
-    Private Function EscapeHtmlForInline(value As String) As String
-        If value Is Nothing Then Return ""
-        Return WebUtility.HtmlEncode(value).Replace("\", "\\").Replace("'", "\'").Replace(vbCr, "").Replace(vbLf, "<br>")
-    End Function
 
     ''' <summary>
     ''' 判断是否为明确的排版指令（比IsFormattingRelated更严格）
@@ -1439,10 +1444,9 @@ Public Class ChatControl
 
             ' 3. 显示用户消息到Chat（普通气泡）
             Dim userMsgUuid = Guid.NewGuid().ToString()
-            Dim jsUserMsg = $"createChatSection('你', formatDateTime(new Date()), '{userMsgUuid}');"
+            Dim jsUserMsg = $"createChatSection('你', formatDateTime(new Date()), {UtilsService.ToJsStringLiteral(userMsgUuid)});"
             Await ExecuteJavaScriptAsyncJS(jsUserMsg)
-            Dim escapedMsg = userMessage.Replace("\", "\\").Replace("'", "\'").Replace(vbCr, "\n").Replace(vbLf, "")
-            Await ExecuteJavaScriptAsyncJS($"document.getElementById('content-{userMsgUuid}').innerHTML = '<p>{escapedMsg}</p>';")
+            Await ExecuteJavaScriptAsyncJS($"setSectionPlainText({UtilsService.ToJsStringLiteral(userMsgUuid)}, {UtilsService.ToJsStringLiteral(userMessage)});")
 
             ' 4. 通过编排器解析意图并推荐标准（增强版，传入Word富文本信息）
             GlobalStatusStrip.ShowInfo("正在分析文档...")
@@ -1495,13 +1499,13 @@ Public Class ChatControl
             ' 7. 生成排版卡片并推送到Chat
             Dim html = agent.GenerateFormattingCardHtml(plan)
             Dim responseUuid = Guid.NewGuid().ToString()
-            Dim jsCreate = $"createChatSection('AI排版助手', formatDateTime(new Date()), '{responseUuid}');"
+            Dim jsCreate = $"createChatSection('AI排版助手', formatDateTime(new Date()), {UtilsService.ToJsStringLiteral(responseUuid)});"
             Await ExecuteJavaScriptAsyncJS(jsCreate)
 
             Dim jsonPayload As New JObject()
             jsonPayload("uuid") = responseUuid
             jsonPayload("html") = html
-            Await ExecuteJavaScriptAsyncJS($"appendFormattingCard({jsonPayload.ToString(Newtonsoft.Json.Formatting.None)});")
+            Await ExecuteJavaScriptAsyncJS($"appendFormattingCard({UtilsService.SerializeForScript(jsonPayload)});")
 
             ReportWordCapabilityResult(planContext, Services.WordCapabilityExecutionResult.FromPlan(
                 planContext,
@@ -1562,34 +1566,27 @@ Public Class ChatControl
 
     ''' <summary>
     ''' 处理校对专注模式的消息
+    ''' 校对修正是 WebView2 调用 + Word 文档写操作，必须留在 UI/STA 线程：
+    ''' 之前用 Task.Run 抛到线程池，COM 跨套间且异常被 fire-and-forget 吞掉。
     ''' </summary>
-    Protected Overrides Sub HandleProofreadFocusMode(jsonDoc As JObject)
+    Protected Overrides Async Sub HandleProofreadFocusMode(jsonDoc As JObject)
         Try
             Dim action As String = If(jsonDoc("action")?.ToString(), "")
             Dim proofreadMode = GetProofreadFocusMode()
+            Dim issueId As String = If(jsonDoc("issueId")?.ToString(), "")
 
             Select Case action
                 Case "accept"
-                    Dim issueId As String = If(jsonDoc("issueId")?.ToString(), "")
-                    Task.Run(Async Function()
-                                 Await proofreadMode.AcceptCorrectionAsync(issueId)
-                             End Function)
+                    Await proofreadMode.AcceptCorrectionAsync(issueId)
 
                 Case "ignore"
-                    Dim issueId As String = If(jsonDoc("issueId")?.ToString(), "")
-                    Task.Run(Async Function()
-                                 Await proofreadMode.IgnoreIssueAsync(issueId)
-                             End Function)
+                    Await proofreadMode.IgnoreIssueAsync(issueId)
 
                 Case "acceptAll"
-                    Task.Run(Async Function()
-                                 Await proofreadMode.AcceptAllAsync()
-                             End Function)
+                    Await proofreadMode.AcceptAllAsync()
 
                 Case "exit"
-                    Task.Run(Async Function()
-                                 Await proofreadMode.ExitAsync()
-                             End Function)
+                    Await proofreadMode.ExitAsync()
             End Select
         Catch ex As Exception
             Debug.WriteLine($"HandleProofreadFocusMode 出错: {ex.Message}")
@@ -1599,38 +1596,36 @@ Public Class ChatControl
     ''' <summary>
     ''' 将修正应用到Word文档（限定在选区内搜索替换）
     ''' </summary>
-    Private Async Function ApplyCorrectionToWord(original As String, corrected As String) As Task(Of Boolean)
-        Return Await Task.Run(Function()
-                                  Try
-                                      Dim wordApp = Globals.ThisAddIn.Application
-                                      If wordApp Is Nothing Then Return False
+    Private Function ApplyCorrectionToWord(original As String, corrected As String) As Task(Of Boolean)
+        Try
+            Dim wordApp = Globals.ThisAddIn.Application
+            If wordApp Is Nothing Then Return Task.FromResult(False)
 
-                                      ' 使用存储的选区范围进行替换，避免替换文档中其他位置
-                                      Dim searchRange = TryCast(_proofreadSelectionRange, Microsoft.Office.Interop.Word.Range)
-                                      If searchRange Is Nothing Then
-                                          ' 回退到当前选中范围
-                                          searchRange = TryCast(wordApp.Selection.Range, Microsoft.Office.Interop.Word.Range)
-                                      End If
-                                      If searchRange Is Nothing Then Return False
+            ' 使用存储的选区范围进行替换，避免替换文档中其他位置
+            Dim searchRange = TryCast(_proofreadSelectionRange, Microsoft.Office.Interop.Word.Range)
+            If searchRange Is Nothing Then
+                ' 回退到当前选中范围
+                searchRange = TryCast(wordApp.Selection.Range, Microsoft.Office.Interop.Word.Range)
+            End If
+            If searchRange Is Nothing Then Return Task.FromResult(False)
 
-                                      ' 在选区内查找并替换
-                                      With searchRange.Find
-                                          .Text = original
-                                          .Replacement.Text = corrected
-                                          .Forward = True
-                                          .Wrap = Microsoft.Office.Interop.Word.WdFindWrap.wdFindStop
-                                          .Format = False
-                                          .MatchCase = True
-                                          .MatchWholeWord = False
+            ' 在选区内查找并替换
+            With searchRange.Find
+                .Text = original
+                .Replacement.Text = corrected
+                .Forward = True
+                .Wrap = Microsoft.Office.Interop.Word.WdFindWrap.wdFindStop
+                .Format = False
+                .MatchCase = True
+                .MatchWholeWord = False
 
-                                          Dim replaced As Boolean = .Execute(Replace:=Microsoft.Office.Interop.Word.WdReplace.wdReplaceOne)
-                                          Return replaced
-                                      End With
-                                  Catch ex As Exception
-                                      Debug.WriteLine($"ApplyCorrectionToWord 出错: {ex.Message}")
-                                      Return False
-                                  End Try
-                              End Function)
+                Dim replaced As Boolean = .Execute(Replace:=Microsoft.Office.Interop.Word.WdReplace.wdReplaceOne)
+                Return Task.FromResult(replaced)
+            End With
+        Catch ex As Exception
+            Debug.WriteLine($"ApplyCorrectionToWord 出错: {ex.Message}")
+            Return Task.FromResult(False)
+        End Try
     End Function
 
     ''' <summary>
@@ -1639,34 +1634,48 @@ Public Class ChatControl
     Public Async Function ExecuteProofreadAsync(Optional plan As Services.ProofreadIntentPlan = Nothing,
                                                  Optional userRequest As String = "") As Task(Of Boolean)
         Try
-            Dim wordApp = Globals.ThisAddIn.Application
-            If wordApp Is Nothing Then Return False
+            ' 遍历 Word 对象模型只能在 UI/STA：整篇逐段读取放在线程池时，每个属性访问都要跨套间封送，
+            ' 既慢又可能拿到不一致的文档状态。采集完成后，模型请求仍留在调用方线程异步等待。
+            Dim wordApp As Object = Nothing
+            Dim selRange As Microsoft.Office.Interop.Word.Range = Nothing
+            Dim hasRangeContent As Boolean = False
+            Dim paragraphs As New List(Of String)()
+            Dim sb As New StringBuilder()
+            Dim selectedTextPreview As String = Nothing
 
-            If plan Is Nothing Then
-                Dim compiler As New Services.ProofreadIntentCompiler()
-                plan = compiler.Compile(If(String.IsNullOrWhiteSpace(userRequest), "校对", userRequest), HasUsableProofreadSelection(wordApp))
-            End If
+            RunUiActionSync(
+                Sub()
+                    wordApp = Globals.ThisAddIn.Application
+                    If wordApp Is Nothing Then Return
 
-            Dim selRange = ResolveProofreadRange(wordApp, plan)
-            If selRange Is Nothing OrElse String.IsNullOrWhiteSpace(If(selRange.Text, "")) Then
+                    If plan Is Nothing Then
+                        Dim compiler As New Services.ProofreadIntentCompiler()
+                        plan = compiler.Compile(If(String.IsNullOrWhiteSpace(userRequest), "校对", userRequest), HasUsableProofreadSelection(wordApp))
+                    End If
+
+                    selRange = ResolveProofreadRange(wordApp, plan)
+                    hasRangeContent = selRange IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(If(selRange.Text, ""))
+                    If Not hasRangeContent Then Return
+
+                    sb.AppendLine("以下是需要校对的内容（按段落编号）：")
+                    sb.AppendLine("校对计划：" & plan.ToHumanReadableSummary())
+                    sb.AppendLine()
+
+                    For Each p In selRange.Paragraphs
+                        Dim paraText As String = If(p.Range.Text IsNot Nothing, p.Range.Text.ToString().TrimEnd(vbCr, vbLf), String.Empty)
+                        If Not String.IsNullOrWhiteSpace(paraText) Then
+                            paragraphs.Add(paraText)
+                            sb.AppendLine($"[段落{paragraphs.Count - 1}] {paraText}")
+                        End If
+                    Next
+
+                    selectedTextPreview = If(selRange.Text, "")
+                End Sub)
+
+            If wordApp Is Nothing OrElse selRange Is Nothing OrElse Not hasRangeContent Then
                 GlobalStatusStrip.ShowWarning("当前文档没有可校对的文本内容。")
                 Return False
             End If
-
-            ' 按段落收集文本
-            Dim paragraphs As New List(Of String)()
-            Dim sb As New StringBuilder()
-            sb.AppendLine("以下是需要校对的内容（按段落编号）：")
-            sb.AppendLine("校对计划：" & plan.ToHumanReadableSummary())
-            sb.AppendLine()
-
-            For Each p In selRange.Paragraphs
-                Dim paraText As String = If(p.Range.Text IsNot Nothing, p.Range.Text.ToString().TrimEnd(vbCr, vbLf), String.Empty)
-                If Not String.IsNullOrWhiteSpace(paraText) Then
-                    paragraphs.Add(paraText)
-                    sb.AppendLine($"[段落{paragraphs.Count - 1}] {paraText}")
-                End If
-            Next
 
             If paragraphs.Count = 0 Then
                 GlobalStatusStrip.ShowWarning("选中的内容没有有效段落。")
@@ -1679,17 +1688,15 @@ Public Class ChatControl
             _proofreadSelectionRange = selRange
 
             ' 将选中文本传递到JS端，供校对模式下聊天时注入上下文
-            Dim selectedTextPreview = selRange.Text
             If selectedTextPreview IsNot Nothing AndAlso selectedTextPreview.Length > 200 Then
                 selectedTextPreview = selectedTextPreview.Substring(0, 200) & "..."
             End If
-            Dim escapedText = selectedTextPreview.Replace("\", "\\").Replace("'", "\'").Replace(vbCr, " ").Replace(vbLf, " ").Replace("""", "\""")
-            Await ExecuteJavaScriptAsyncJS($"window.proofreadSelectedText = '{escapedText}';")
+            Await ExecuteJavaScriptAsyncJS($"window.proofreadSelectedText = {UtilsService.ToJsStringLiteral(selectedTextPreview)};")
 
             ' 进入校对专注模式
             Dim proofreadMode = GetProofreadFocusMode()
             Await proofreadMode.EnterAsync()
-            Await ExecuteJavaScriptAsyncJS($"updateProofreadPlanSummary({Newtonsoft.Json.JsonConvert.SerializeObject(plan.ToHumanReadableSummary())});")
+            Await ExecuteJavaScriptAsyncJS($"updateProofreadPlanSummary({UtilsService.ToJsStringLiteral(plan.ToHumanReadableSummary())});")
 
             ' 显示加载中提示
             Await ExecuteJavaScriptAsyncJS("showProofreadModeIndicator(); showProofreadLoading();")
@@ -1812,8 +1819,8 @@ Public Class ChatControl
     Private Async Sub ContinuePostProofreadFormattingAsync(formattingRequest As String)
         Try
             Dim responseUuid = Guid.NewGuid().ToString()
-            Await ExecuteJavaScriptAsyncJS($"createChatSection('AI排版助手', formatDateTime(new Date()), '{responseUuid}');")
-            Await ExecuteJavaScriptAsyncJS($"appendRenderer('{responseUuid}','校对步骤已完成，继续执行后续排版任务。');")
+            Await ExecuteJavaScriptAsyncJS($"createChatSection('AI排版助手', formatDateTime(new Date()), {UtilsService.ToJsStringLiteral(responseUuid)});")
+            Await ExecuteJavaScriptAsyncJS($"appendRenderer({UtilsService.ToJsStringLiteral(responseUuid)}, '校对步骤已完成，继续执行后续排版任务。');")
 
             If Services.SmartFormatter.LooksLikeDirectFormattingCommand(formattingRequest) Then
                 Dim applied = Await ExecuteDirectFormattingCommandAsync(formattingRequest, False)
@@ -1858,6 +1865,10 @@ Public Class ChatControl
     Private _smartFormatter As Services.SmartFormatter
     ' 段落服务实例
     Private _paragraphService As Services.ParagraphService
+
+    ' 宿主执行器只能回 Boolean 时，具名失败原因走这条单线程通道回到 ToolResult；
+    ' 每条命令开始前清空，只有失败分支读取，不会串到下一轮。
+    Private _lastWordWriteFailure As Newtonsoft.Json.Linq.JObject
 
     '获取选中的内容
     Protected Overrides Sub GetSelectionContent(target As Object)
@@ -3092,7 +3103,7 @@ Public Class ChatControl
             ' 推送排版结果到前端（含内置撤销按钮）
             If renderResult IsNot Nothing Then
                 Dim resultJson = renderResult.ToJson()
-                Await ExecuteJavaScriptAsyncJS($"showReformatResult({resultJson.ToString(Formatting.None)});")
+                Await ExecuteJavaScriptAsyncJS($"showReformatResult({UtilsService.SerializeForScript(resultJson)});")
                 Dim observationSummary = BuildSemanticReformatObservationSummary(effectiveTags, _reformatMapping, reformatResult, validation.AutoFixedCount, repairCount)
                 If Not String.IsNullOrWhiteSpace(observationSummary) Then
                     Await ShowSemanticReformatObservation(observationSummary)
@@ -3252,8 +3263,8 @@ Public Class ChatControl
 
     Private Async Function ShowSemanticReformatObservation(summary As String) As Task
         Dim responseUuid As String = Guid.NewGuid().ToString()
-        Await ExecuteJavaScriptAsyncJS($"createChatSection('AI排版观察', formatDateTime(new Date()), '{responseUuid}');")
-        Await ExecuteJavaScriptAsyncJS($"appendRenderer('{responseUuid}', {JsonConvert.SerializeObject(summary)});")
+        Await ExecuteJavaScriptAsyncJS($"createChatSection('AI排版观察', formatDateTime(new Date()), {UtilsService.ToJsStringLiteral(responseUuid)});")
+        Await ExecuteJavaScriptAsyncJS($"appendRenderer({UtilsService.ToJsStringLiteral(responseUuid)}, {UtilsService.ToJsStringLiteral(summary)});")
     End Function
 
     ''' <summary>
@@ -3265,7 +3276,7 @@ Public Class ChatControl
                 {"success", False},
                 {"error", errorMsg}
             }
-            Await ExecuteJavaScriptAsyncJS($"showReformatResult({errorJson.ToString(Formatting.None)});")
+            Await ExecuteJavaScriptAsyncJS($"showReformatResult({UtilsService.SerializeForScript(errorJson)});")
         Catch ex As Exception
             Debug.WriteLine($"ShowReformatError 出错: {ex.Message}")
         End Try
@@ -3334,7 +3345,7 @@ Public Class ChatControl
 
             SemanticMappingManager.Instance.AddMapping(mapping)
 
-            Dim json = JsonConvert.SerializeObject(mapping, Formatting.None)
+            Dim json = UtilsService.SerializeForScript(mapping)
             ExecuteJavaScriptAsyncJS($"showMappingPreview({json});")
 
             GlobalStatusStrip.ShowInfo($"格式克隆完成，已提取 {mapping.SemanticTags.Count} 个语义标签")
@@ -3469,7 +3480,7 @@ Public Class ChatControl
             ' 通知前端移除操作按钮
             Dim uuid As String = If(jsonDoc("uuid") IsNot Nothing, jsonDoc("uuid").ToString(), String.Empty)
             If Not String.IsNullOrEmpty(uuid) Then
-                ExecuteJavaScriptAsyncJS($"removeContinuationActions('{uuid}');")
+                ExecuteJavaScriptAsyncJS($"removeContinuationActions({UtilsService.ToJsStringLiteral(uuid)});")
             End If
 
         Catch ex As Exception
@@ -3515,7 +3526,7 @@ Public Class ChatControl
             ' 通知前端移除操作按钮
             Dim uuid As String = If(jsonDoc("uuid") IsNot Nothing, jsonDoc("uuid").ToString(), String.Empty)
             If Not String.IsNullOrEmpty(uuid) Then
-                ExecuteJavaScriptAsyncJS($"removeTemplateActions('{uuid}');")
+                ExecuteJavaScriptAsyncJS($"removeTemplateActions({UtilsService.ToJsStringLiteral(uuid)});")
             End If
 
         Catch ex As Exception
@@ -3653,9 +3664,23 @@ Public Class ChatControl
                 End If
             End If
 
-            Dim ok = ExecuteJsonCommandCore(jsonCode, preview)
-            If ok Then Return Agent.ToolResult.Succeed("", "执行成功")
-            Return Agent.ToolResult.Failed("", "JSON命令执行失败")
+            ' 兜底：命令结构没被识别，只能走旧执行器。取消不能算成功，没有宿主快照也不能声称文档已改。
+            Dim fallbackOk = ExecuteJsonCommandCore(jsonCode, preview)
+            If ConsumePreviewCancelled() Then
+                Return Agent.ToolResult.PreviewCancelled("WordCommand")
+            End If
+            If fallbackOk Then
+                Return Agent.ToolResult.Failed("WordCommand",
+                                               "Word 命令已提交，但这条路径没有快照可对比，无法验证文档是否变化",
+                                               errorCode:=ExceptionClassifier.CodeObservationFailed,
+                                               userMessage:="Word 命令已提交，但结果未经验证；已停止自动重试",
+                                               recoverable:=False)
+            End If
+            Return Agent.ToolResult.Failed("WordCommand",
+                                           "JSON命令执行失败",
+                                           errorCode:=ExceptionClassifier.CodeUnknown,
+                                           userMessage:="JSON命令执行失败",
+                                           recoverable:=True)
 
         Catch ex As Newtonsoft.Json.JsonReaderException
             Return Agent.ToolResult.Failed("", $"JSON格式无效: {ex.Message}",
@@ -3684,7 +3709,7 @@ Public Class ChatControl
                 Dim previewObj As New JObject From {{"commands", commandsArray}}
                 If Not ShareRibbon.CommandPreviewForm.ShowPreview("Word命令预览", previewObj) Then
                     ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
-                    Return Agent.ToolResult.Succeed("WordCommands", "用户取消执行")
+                    Return Agent.ToolResult.PreviewCancelled("WordCommands")
                 End If
             End If
 
@@ -3735,10 +3760,40 @@ Public Class ChatControl
                                                 observation:=aggregateObservation)
             End If
 
+            ' 二元 If(a, b) 不是 ??：这里必须显式判空，否则首条失败的具体错误码无法稳定透传
+            Dim firstFailureCode = If(firstFailure Is Nothing,
+                                      ExceptionClassifier.CodeUnknown,
+                                      If(String.IsNullOrWhiteSpace(firstFailure.ErrorCode), ExceptionClassifier.CodeUnknown, firstFailure.ErrorCode))
+            Dim firstFailureReason = If(String.IsNullOrWhiteSpace(firstFailure?.Message), "未知失败", firstFailure.Message)
+
+            If successCount > 0 Then
+                ' 部分应用必须自报家门：4 成功 1 失败却整批报 NOT_FOUND，等于宣称文档没动，
+                ' 而 Loop 拿到 recoverable 会重放整批，已落地的 InsertText 会被再插一遍。
+                Dim partialMessage = $"批量命令部分应用：{successCount} 条已写入文档，{failCount} 条失败（首个失败：{firstFailureReason}）。" &
+                                     "已写入的改动未回滚，重放整批会造成重复内容。"
+                aggregateObservation("rollback") = New JObject From {
+                    {"attempted", False},
+                    {"succeeded", False},
+                    {"reason", "批量路径没有整批撤销记录，已成功的命令保持生效"}
+                }
+                aggregateObservation("partialApply") = New JObject From {
+                    {"applied", successCount},
+                    {"failed", failCount}
+                }
+                Return Agent.ToolResult.Failed("WordCommands",
+                                               partialMessage,
+                                               errorCode:=ExceptionClassifier.CodePartialApply,
+                                               userMessage:=partialMessage,
+                                               recoverable:=False,
+                                               observation:=aggregateObservation)
+            End If
+
             Return Agent.ToolResult.Failed("WordCommands",
-                                           $"批量执行完成: {successCount} 成功, {failCount} 失败",
-                                           errorCode:=If(firstFailure?.ErrorCode, ExceptionClassifier.CodeUnknown),
-                                           userMessage:=If(firstFailure?.UserMessage, $"批量执行完成: {successCount} 成功, {failCount} 失败"),
+                                           $"批量执行完成: {successCount} 成功, {failCount} 失败；首个失败: {firstFailureReason}",
+                                           errorCode:=firstFailureCode,
+                                           userMessage:=If(String.IsNullOrWhiteSpace(firstFailure?.UserMessage),
+                                                           $"批量执行完成: {successCount} 成功, {failCount} 失败；首个失败: {firstFailureReason}",
+                                                           firstFailure.UserMessage),
                                            recoverable:=True,
                                            observation:=aggregateObservation)
         Catch ex As Exception
@@ -3754,28 +3809,57 @@ Public Class ChatControl
             Return ExecuteWordReadCommandWithToolResult(commandJson)
         End If
 
-        Try
-            Dim params = commandJson("params")
-            Dim normalizedToolId = NormalizeWordToolId(command)
-            If String.IsNullOrWhiteSpace(normalizedToolId) Then normalizedToolId = If(command, "WordCommand")
-            Dim doc = Globals.ThisAddIn.Application.ActiveDocument
-            Dim selection = Globals.ThisAddIn.Application.Selection
-            Dim beforeSnapshot = CaptureWordWriteSnapshot(normalizedToolId, params, doc, selection)
-            Dim success As Boolean = False
+        Dim normalizedToolId = If(command, "WordCommand")
+        Dim wordApp As Object = Nothing
+        Dim doc As Object = Nothing
+        Dim selection As Object = Nothing
+        Dim params As JToken = Nothing
+        Dim beforeSnapshot As JObject = Nothing
+        Dim undoStarted As Boolean = False
 
-            Select Case command.Trim().ToLowerInvariant()
-                Case "inserttext"
-                    success = ExecuteInsertText(params, selection)
-                Case "formattext"
-                    success = ExecuteFormatText(params, selection)
-                Case "replacetext"
-                    success = ExecuteReplaceText(params, doc)
-                Case "deletetext"
-                    success = ExecuteDeleteText(params, doc, selection)
-                Case Else
-                    ' 其余 Word 原生命令继续复用已有执行器，但不再退化为空 ToolId 的 Boolean 假成功。
-                    success = ExecuteWordSingleCommand(commandJson, commandJson.ToString(Formatting.None), False)
-            End Select
+        Try
+            params = commandJson("params")
+            Dim idFromCommand = NormalizeWordToolId(command)
+            If Not String.IsNullOrWhiteSpace(idFromCommand) Then normalizedToolId = idFromCommand
+            wordApp = Globals.ThisAddIn.Application
+            doc = wordApp.ActiveDocument
+            selection = wordApp.Selection
+            beforeSnapshot = CaptureWordWriteSnapshot(normalizedToolId, params, doc, selection)
+
+            ' 一条写命令 = 一个自定义撤销记录：命令失败却已经改了文档时整条撤回，
+            ' 否则 Agent 会带着“半应用”的文档继续规划（PowerPoint 生成链已有同等回滚合同）。
+            Try
+                wordApp.UndoRecord.StartCustomRecord("AI命令:" & normalizedToolId)
+                undoStarted = True
+            Catch ex As Exception
+                Debug.WriteLine($"[Word] UndoRecord 起始失败: {ex.Message}")
+            End Try
+
+            Dim success As Boolean = False
+            _lastWordWriteFailure = Nothing
+            Try
+                Select Case command.Trim().ToLowerInvariant()
+                    Case "inserttext"
+                        success = ExecuteInsertText(params, selection)
+                    Case "formattext"
+                        success = ExecuteFormatText(params, selection)
+                    Case "replacetext"
+                        success = ExecuteReplaceText(params, doc)
+                    Case "deletetext"
+                        success = ExecuteDeleteText(params, doc, selection)
+                    Case Else
+                        ' 其余 Word 原生命令继续复用已有执行器，但不再退化为空 ToolId 的 Boolean 假成功。
+                        success = ExecuteWordSingleCommand(commandJson, commandJson.ToString(Formatting.None), False)
+                End Select
+            Finally
+                If undoStarted Then
+                    Try
+                        wordApp.UndoRecord.EndCustomRecord()
+                    Catch ex As Exception
+                        Debug.WriteLine($"[Word] UndoRecord 结束失败: {ex.Message}")
+                    End Try
+                End If
+            End Try
 
             Dim afterSnapshot = CaptureWordWriteSnapshot(normalizedToolId, params, doc, selection)
             Dim observation = BuildWordWriteObservation(normalizedToolId, params, success, beforeSnapshot, afterSnapshot)
@@ -3787,16 +3871,95 @@ Public Class ChatControl
                                                 observation:=observation)
             End If
 
+            ' 失败但文档已被改动：先回滚，回滚不成才按部分应用上报
+            Dim rollback = TryRollbackWordWrite(normalizedToolId, params, doc, selection, beforeSnapshot, undoStarted)
+            observation("rollback") = rollback
+            Dim rolledBack = rollback.Value(Of Boolean)("succeeded")
+            Dim rollbackAttempted = rollback.Value(Of Boolean)("attempted")
+            Dim failureMessage = If(String.IsNullOrWhiteSpace(summary), $"{normalizedToolId} 执行失败", summary)
+            ' 执行器给出具名原因时优先用它：UNKNOWN 让 Loop 无从修复，NOT_FOUND/ARGUMENT_ERROR 才能改计划
+            Dim hostCode = ExceptionClassifier.CodeUnknown
+            If _lastWordWriteFailure IsNot Nothing Then
+                Dim hostReason = _lastWordWriteFailure.Value(Of String)("message")
+                Dim codeFromHost = _lastWordWriteFailure.Value(Of String)("code")
+                If Not String.IsNullOrWhiteSpace(hostReason) Then
+                    failureMessage = hostReason
+                    observation("hostReason") = _lastWordWriteFailure
+                End If
+                If Not String.IsNullOrWhiteSpace(codeFromHost) Then hostCode = codeFromHost
+            End If
+            If rolledBack Then
+                failureMessage &= "；本轮已对文档的改动已回滚"
+            ElseIf rollbackAttempted Then
+                failureMessage &= "；回滚未完成，文档可能保留部分改动"
+                hostCode = ExceptionClassifier.CodePartialApply
+            End If
+
             Return Agent.ToolResult.Failed(normalizedToolId,
-                                           $"{normalizedToolId} 执行失败",
-                                           errorCode:=ExceptionClassifier.CodeUnknown,
-                                           userMessage:=$"{normalizedToolId} 执行失败",
+                                           failureMessage,
+                                           errorCode:=hostCode,
+                                           userMessage:=failureMessage,
                                            recoverable:=True,
                                            observation:=observation)
         Catch ex As Exception
             Debug.WriteLine($"ExecuteWordCommandWithToolResult 出错: {ex.Message}")
-            Return Agent.ToolResult.FromException(If(command, ""), ex)
+            ' 异常可能停在写入中途：同样只撤销本轮记录，避免把半路的改动留给下一轮
+            Dim exceptionRollback = TryRollbackWordWrite(normalizedToolId, params, doc, selection, beforeSnapshot, undoStarted)
+            Dim exceptionResult = Agent.ToolResult.FromException(normalizedToolId, ex)
+            If exceptionResult.Observation IsNot Nothing AndAlso TypeOf exceptionResult.Observation Is JObject Then
+                CType(exceptionResult.Observation, JObject)("rollback") = exceptionRollback
+            End If
+            Return exceptionResult
         End Try
+    End Function
+
+    ''' <summary>
+    ''' 撤销本轮写命令对文档造成的改动。没有本轮自定义撤销记录就绝不 Undo——那会撤掉用户此前的操作；
+    ''' 文档相对执行前没有变化时也不 Undo，理由相同。
+    ''' </summary>
+    Private Function TryRollbackWordWrite(toolId As String,
+                                          params As JToken,
+                                          doc As Object,
+                                          selection As Object,
+                                          beforeSnapshot As JObject,
+                                          undoStarted As Boolean) As JObject
+        Dim rollback As New JObject From {
+            {"succeeded", False},
+            {"attempted", False},
+            {"verified", False},
+            {"error", ""}
+        }
+
+        If Not undoStarted Then
+            rollback("error") = "本轮未开启自定义撤销记录，跳过自动回滚"
+            Return rollback
+        End If
+        If doc Is Nothing OrElse beforeSnapshot Is Nothing Then
+            rollback("error") = "缺少回滚上下文"
+            Return rollback
+        End If
+
+        Try
+            Dim current = CaptureWordWriteSnapshot(toolId, params, doc, selection)
+            If Not SnapshotDiffChanged(BuildWordSnapshotDiff(beforeSnapshot, current)) Then
+                rollback("error") = "执行后文档未变化，无需回滚"
+                Return rollback
+            End If
+
+            rollback("attempted") = True
+            Dim rawUndo = doc.Undo(1)
+            Dim undone = rawUndo IsNot Nothing AndAlso CBool(rawUndo)
+            rollback("succeeded") = undone
+            If Not undone Then rollback("error") = "Word 拒绝撤销本轮改动"
+
+            Dim restored = CaptureWordWriteSnapshot(toolId, params, doc, selection)
+            rollback("verified") = Not SnapshotDiffChanged(BuildWordSnapshotDiff(beforeSnapshot, restored))
+        Catch ex As Exception
+            Debug.WriteLine($"[Word] 写命令回滚失败: {ex.Message}")
+            rollback("error") = ex.Message
+        End Try
+
+        Return rollback
     End Function
 
     Private Function ExecuteWordReadCommandWithToolResult(commandJson As JObject) As Agent.ToolResult
@@ -3880,8 +4043,14 @@ Public Class ChatControl
             Case "DeleteText"
                 Dim rangeName = If(params?("range")?.ToString(), "selection")
                 Return $"{prefix}删除 {DescribeWordRange(rangeName)} 文本"
+            Case "SetParagraphFormat"
+                Dim paragraphIndex = params?("paragraphIndex")?.ToString()
+                If String.IsNullOrWhiteSpace(paragraphIndex) Then paragraphIndex = "?"
+                Return $"{prefix}设置第 {paragraphIndex} 段段落格式"
             Case Else
-                Return $"{prefix}{toolId} 执行完成"
+                ' 失败分支不能沿用“执行完成”，否则日志里出现“未完成：X 执行完成”这种自相矛盾的原因行
+                If commandSucceeded Then Return $"{toolId} 执行完成"
+                Return $"{toolId} 未执行成功"
         End Select
     End Function
 
@@ -4162,6 +4331,7 @@ Public Class ChatControl
                 End Try
                 If Not ShareRibbon.CommandPreviewForm.ShowPreview($"DSL指令预览 - 共 {instructions.Count} 条指令", previewJson) Then
                     ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
+                    NotifyPreviewCancelled()
                     Return True
                 End If
             End If
@@ -4434,6 +4604,7 @@ Public Class ChatControl
                 ' 使用增强的预览表单
                 If Not ShareRibbon.CommandPreviewForm.ShowPreview($"Word命令预览 - 共 {commands.Count} 个命令", commandsArray) Then
                     ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
+                    NotifyPreviewCancelled()
                     Return True
                 End If
             End If
@@ -4479,6 +4650,7 @@ Public Class ChatControl
             If preview Then
                 If Not ShareRibbon.CommandPreviewForm.ShowPreview("Word命令预览", commandJson) Then
                     ExecuteJavaScriptAsyncJS("handleExecutionCancelled('')")
+                    NotifyPreviewCancelled()
                     Return True
                 End If
             End If
@@ -5002,16 +5174,24 @@ Public Class ChatControl
         Try
             If _paragraphService Is Nothing Then
                 Debug.WriteLine("[ExecuteSetParagraphFormat] ParagraphService 未初始化")
+                _lastWordWriteFailure = Newtonsoft.Json.Linq.JObject.FromObject(
+                    New With {.code = ExceptionClassifier.CodeHostUnsupported,
+                              .message = "Word 段落服务尚未初始化，无法设置段落格式"})
                 Return False
             End If
 
             Dim paragraphIndex As Integer = params("paragraphIndex")?.Value(Of Integer)()
             If paragraphIndex < 1 Then
                 Debug.WriteLine("[ExecuteSetParagraphFormat] 无效的段落索引")
+                _lastWordWriteFailure = Newtonsoft.Json.Linq.JObject.FromObject(
+                    New With {.code = ExceptionClassifier.CodeArgument,
+                              .message = "SetParagraphFormat需要paragraphIndex(整数,从1开始)"})
                 Return False
             End If
 
-            Dim success As Boolean = _paragraphService.SetParagraphFormat(paragraphIndex, CType(params, JObject))
+            Dim hostFailure As Newtonsoft.Json.Linq.JObject = Nothing
+            Dim success As Boolean = _paragraphService.SetParagraphFormat(paragraphIndex, CType(params, JObject), hostFailure)
+            _lastWordWriteFailure = hostFailure
 
             If success Then
                 ShareRibbon.GlobalStatusStrip.ShowInfo($"段落 {paragraphIndex} 格式已更新")
@@ -5166,7 +5346,7 @@ Public Class ChatControl
             SemanticMappingManager.Instance.AddMapping(mapping)
 
             ' 序列化为JSON并推送前端预览
-            Dim json = Newtonsoft.Json.JsonConvert.SerializeObject(mapping, Newtonsoft.Json.Formatting.None)
+            Dim json = UtilsService.SerializeForScript(mapping)
             ExecuteJavaScriptAsyncJS($"showMappingPreview({json});")
 
             GlobalStatusStrip.ShowInfo($"模板「{mapping.Name}」解析完成，提取到 {mapping.SemanticTags.Count} 个语义标签")

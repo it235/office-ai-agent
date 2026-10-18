@@ -424,8 +424,7 @@ Public Class Ribbon1
                 Return
             End If
 
-            Dim requestJson = JsonConvert.SerializeObject(request)
-            Await chatCtrl.ExecuteJavaScriptAsyncJS($"sendMessageToServer({{ type: 'startAgent', request: {requestJson} }});")
+            Await chatCtrl.ExecuteJavaScriptAsyncJS($"sendMessageToServer({{ type: 'startAgent', request: {UtilsService.ToJsStringLiteral(request)} }});")
         Catch ex As Exception
             GlobalStatusStripAll.ShowWarning($"启动 AI Agent 失败: {ex.Message}")
         End Try

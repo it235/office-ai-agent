@@ -65,6 +65,87 @@ try {
     $memories = [ShareRibbon.AgentMemoryRepository]::RetrieveMemoryItems("official document FangSong", "Word", "", "", 10)
     $skills = [ShareRibbon.AgentMemoryRepository]::RetrieveSkillRegistry("", "", "Word", 5)
 
+    # ---- queue semantics: idempotent enqueue, backoff retry, dead-letter ----
+    $queueConn = New-Object System.Data.SQLite.SQLiteConnection([ShareRibbon.OfficeAiDatabase]::GetConnectionString())
+    $queueConn.Open()
+    try {
+        function Get-QueueScalar([string]$sql) {
+            $c = $script:queueConn.CreateCommand()
+            $c.CommandText = $sql
+            $v = $c.ExecuteScalar()
+            $c.Dispose()
+            return $v
+        }
+
+        function Set-QueueSql([string]$sql) {
+            $c = $script:queueConn.CreateCommand()
+            $c.CommandText = $sql
+            [void]$c.ExecuteNonQuery()
+            $c.Dispose()
+        }
+
+        $target = "smoke-queue-" + [Guid]::NewGuid().ToString("N")
+        function New-QueueJob([string]$forTarget) {
+            $j = New-Object ShareRibbon.MemoryJobRecord
+            $j.JobType = "extract_memory"
+            $j.TargetId = $forTarget
+            $j.PayloadJson = "{}"
+            $j.Status = "pending"
+            return $j
+        }
+
+        $firstId = [ShareRibbon.AgentMemoryRepository]::EnqueueJob((New-QueueJob $target))
+        $secondId = [ShareRibbon.AgentMemoryRepository]::EnqueueJob((New-QueueJob $target))
+        if ($firstId -ne $secondId) {
+            throw "duplicate enqueue must reuse the still-active job, got $firstId and $secondId"
+        }
+        if ([int](Get-QueueScalar "SELECT COUNT(1) FROM memory_job WHERE job_id = '$firstId' AND status IN ('pending','processing')") -ne 1) {
+            throw "exactly one active job is expected per (job_type, target_id)"
+        }
+
+        $dupRejected = $false
+        try {
+            Set-QueueSql "INSERT INTO memory_job (job_id, job_type, target_id, status, payload_json) VALUES ('smoke-dup-row', 'extract_memory', '$target', 'pending', '{}')"
+        } catch {
+            $dupRejected = $true
+        }
+        if (-not $dupRejected) {
+            throw "the partial unique index must reject a second active job for the same target"
+        }
+
+        Set-QueueSql "UPDATE memory_job SET status = 'processing', attempt_count = 1, next_run_at = NULL, updated_at = datetime('now','localtime') WHERE job_id = '$firstId'"
+        if ([ShareRibbon.AgentMemoryRepository]::MarkJobFailed($firstId, "transient failure") -ne "pending") {
+            throw "a job that still has retry budget must go back to pending"
+        }
+        if ([int](Get-QueueScalar "SELECT (next_run_at > datetime('now','localtime')) FROM memory_job WHERE job_id = '$firstId'") -ne 1) {
+            throw "a retried job must be rescheduled with backoff"
+        }
+
+        Set-QueueSql "UPDATE memory_job SET status = 'processing', attempt_count = 3, updated_at = datetime('now','localtime') WHERE job_id = '$firstId'"
+        if ([ShareRibbon.AgentMemoryRepository]::MarkJobFailed($firstId, "still failing") -ne "failed") {
+            throw "a job out of retry budget must be dead-lettered"
+        }
+
+        $staleId = [ShareRibbon.AgentMemoryRepository]::EnqueueJob((New-QueueJob $target))
+        Set-QueueSql "UPDATE memory_job SET status = 'processing', attempt_count = 3, updated_at = datetime('now','localtime','-40 minutes') WHERE job_id = '$staleId'"
+        $requeuedId = [ShareRibbon.AgentMemoryRepository]::EnqueueJob((New-QueueJob ($target + "-requeue")))
+        Set-QueueSql "UPDATE memory_job SET status = 'processing', attempt_count = 1, updated_at = datetime('now','localtime','-40 minutes') WHERE job_id = '$requeuedId'"
+        [void][ShareRibbon.AgentMemoryRepository]::ReclaimStaleProcessingJobs(30)
+        if ([string](Get-QueueScalar "SELECT status FROM memory_job WHERE job_id = '$staleId'") -ne "failed") {
+            throw "a stale job out of retry budget must be dead-lettered, not left in processing"
+        }
+        if ([string](Get-QueueScalar "SELECT status FROM memory_job WHERE job_id = '$requeuedId'") -ne "pending") {
+            throw "a stale job with retry budget left must return to pending"
+        }
+
+        Set-QueueSql "DELETE FROM memory_job WHERE job_id IN ('$firstId', '$staleId', '$requeuedId')"
+    }
+    finally {
+        if ($queueConn) {
+            $queueConn.Dispose()
+        }
+    }
+
     $result = [pscustomobject]@{
         Database = $dbPath
         Session = $session
@@ -73,6 +154,9 @@ try {
         MemoryCount = $memories.Count
         FirstMemory = $(if ($memories.Count -gt 0) { $memories[0].Content } else { "" })
         SkillRegistryRows = $skills.Count
+        QueueIdempotent = $true
+        QueueBackoffRetry = $true
+        QueueDeadLetter = $true
     }
 
     $result | Format-List

@@ -3,7 +3,6 @@ Imports System.Drawing
 Imports System.Runtime.InteropServices
 Imports System.Text
 Imports System.Text.RegularExpressions
-Imports System.Threading.Tasks
 Imports System.Windows.Forms
 Imports Microsoft.Office.Interop.Excel
 Imports Microsoft.Vbe.Interop
@@ -15,7 +14,7 @@ Imports ScrollBars = System.Windows.Forms.ScrollBars
 Imports TextBox = System.Windows.Forms.TextBox
 
 Public Class EnhancedPreviewAndConfirm
-    ' ���ڱ��湤����״̬��Ϣ����
+    ' 用于保存工作表状态信息的类
     Private Class WorksheetState
         Public Name As String
         Public Cells As Dictionary(Of String, Object)
@@ -29,13 +28,13 @@ Public Class EnhancedPreviewAndConfirm
         End Sub
     End Class
 
-    ' ���ڱ�ʾ��Ԫ��������
+    ' 用于表示单元格差异的类
     Private Class CellDifference
         Public Address As String
         Public SheetName As String
         Public OldValue As Object
         Public NewValue As Object
-        Public ChangeType As String ' "����", "�޸�", "ɾ��"
+        Public ChangeType As String ' "添加", "修改", "删除"
 
         Public Sub New(sheetName As String, address As String, oldValue As Object, newValue As Object, changeType As String)
             Me.SheetName = sheetName
@@ -46,10 +45,10 @@ Public Class EnhancedPreviewAndConfirm
         End Sub
     End Class
 
-    ' ���ڱ�ʾ�������������
+    ' 用于表示工作表差异的类
     Private Class SheetDifference
         Public SheetName As String
-        Public ChangeType As String ' "����", "ɾ��", "�޸�"
+        Public ChangeType As String ' "添加", "删除", "修改"
 
         Public Sub New(sheetName As String, changeType As String)
             Me.SheetName = sheetName
@@ -58,57 +57,58 @@ Public Class EnhancedPreviewAndConfirm
     End Class
 
 
-    ' ʹ���첽��ʽ������������濨��
-    Public Async Function PreviewAndConfirmVbaExecutionAsync(vbaCode As String) As Task(Of Boolean)
+    ' Excel 对象模型是套间绑定的：预览必须在 UI/STA 线程上直接执行，
+    ' 用 Task.Run 把 COM 调用甩到线程池反而会把结果送回主线程排队，白绕一圈。
+    Private Function RunPreviewOnMainThread(vbaCode As String) As Boolean
         Dim application As Microsoft.Office.Interop.Excel.Application = Globals.ThisAddIn.Application
         Dim originalWorkbook As Workbook = application.ActiveWorkbook
 
         If originalWorkbook Is Nothing Then
-            MessageBox.Show("û�д򿪵Ĺ��������޷�Ԥ�������", "Ԥ������", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("没有打开的工作簿，无法预览变更。", "预览错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
             Return False
         End If
 
-        ' ����1: ����ǰ������״̬
-        Dim beforeState = Await Task.Run(Function() CaptureWorkbookState(originalWorkbook))
+        ' 步骤1: 捕获当前工作簿状态
+        Dim beforeState = CaptureWorkbookState(originalWorkbook)
 
-        ' ����2: ������ʱ������������ִ�д���
+        ' 步骤2: 创建临时工作簿副本来执行代码
         Dim tempWorkbookPath As String = Nothing
         Dim tempWorkbook As Workbook = Nothing
         Dim tempFileName As String = IO.Path.GetTempFileName()
 
         Try
-            ' ʹ��SaveCopyAs����SaveAs����������ı�ԭʼ��������·��
+            ' 使用SaveCopyAs代替SaveAs，这样不会改变原始工作簿的路径
             tempWorkbookPath = IO.Path.ChangeExtension(tempFileName, ".xlsx")
             application.DisplayAlerts = False
             originalWorkbook.SaveCopyAs(tempWorkbookPath)
             application.DisplayAlerts = True
 
-            ' �򿪸ոմ����ĸ���
+            ' 打开刚刚创建的副本
             tempWorkbook = application.Workbooks.Open(tempWorkbookPath)
-            tempWorkbook.Activate() ' ȷ����������ʱ��������ִ��
+            tempWorkbook.Activate() ' 确保操作在临时工作簿上执行
 
-            ' �첽ִ��VBA
-            Dim executionResult = Await Task.Run(Function() ExecuteCodeInTemporaryModule(tempWorkbook, vbaCode))
+            ' 异步执行VBA
+            Dim executionResult = ExecuteCodeInTemporaryModule(tempWorkbook, vbaCode)
             If Not executionResult Then Return False
 
-            ' ����4: ����ִ�к��״̬
-            Dim afterState = Await Task.Run(Function() CaptureWorkbookState(tempWorkbook))
+            ' 步骤4: 捕获执行后的状态
+            Dim afterState = CaptureWorkbookState(tempWorkbook)
 
-            ' ����5: �Ƚ�״̬
+            ' 步骤5: 比较状态
             Dim cellDifferences As New List(Of CellDifference)()
             Dim sheetDifferences As New List(Of SheetDifference)()
             CompareWorkbookStates(beforeState, afterState, cellDifferences, sheetDifferences)
 
-            ' ����6: ��ʾ�Ż����Ԥ������
+            ' 步骤6: 显示优化后的预览弹窗
             Dim userConfirmed = ShowDifferencePreview(vbaCode, cellDifferences, sheetDifferences)
             Return userConfirmed
 
         Catch ex As Exception
-            MessageBox.Show("Ԥ������ִ��ʱ����: " & ex.Message, "Ԥ������", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("预览代码执行时出错: " & ex.Message, "预览错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
             Return False
         Finally
             application.DisplayAlerts = False
-            ' �ر���ʱ������
+            ' 关闭临时工作簿
             If tempWorkbook IsNot Nothing Then
                 Try
                     tempWorkbook.Close(SaveChanges:=False)
@@ -117,17 +117,17 @@ Public Class EnhancedPreviewAndConfirm
                 End Try
             End If
 
-            ' ���¼���ԭʼ������
+            ' 重新激活原始工作簿
             If originalWorkbook IsNot Nothing Then
                 Try
                     originalWorkbook.Activate()
                 Catch
-                    ' ���Լ������
+                    ' 忽略激活错误
                 End Try
             End If
             application.DisplayAlerts = True
 
-            ' ɾ����ʱ�ļ�
+            ' 删除临时文件
             Try
                 If tempWorkbookPath IsNot Nothing AndAlso IO.File.Exists(tempWorkbookPath) Then
                     IO.File.Delete(tempWorkbookPath)
@@ -136,22 +136,26 @@ Public Class EnhancedPreviewAndConfirm
                     IO.File.Delete(tempFileName)
                 End If
             Catch
-                ' ����ɾ����ʱ�ļ��Ĵ���
+                ' 忽略删除临时文件的错误
             End Try
         End Try
     End Function
 
-    ' ��ԭ��ͬ��������Ϊ�����첽���������⿨UI
     Public Function PreviewAndConfirmVbaExecution(vbaCode As String) As Boolean
-        Dim ok = ShareRibbon.SyncOverAsync.Run(Function() PreviewAndConfirmVbaExecutionAsync(vbaCode), 300000)
-        Return ok
+        ' 预览阶段就会在临时副本里真实运行代码，危险操作必须先进安全门；
+        ' 是否需要落笔由后面的差异预览对话框确认，这里不重复弹确认框。
+        If ShareRibbon.CodeExecutionService.ScriptSafetyBlocked(vbaCode, "ExcelAi.Preview") Then Return False
+
+        ' 调用方本就是 UI 线程：直接同步执行。此前用 SyncOverAsync 阻塞主线程等线程池里的
+        ' COM 调用回主线程排队，最坏会僵住五分钟并留下没关掉的临时工作簿。
+        Return RunPreviewOnMainThread(vbaCode)
     End Function
-    ' �Ż�Ԥ����������
+    ' 优化预览弹窗布局
     Private Function ShowDifferencePreview(code As String,
                                           cellDifferences As List(Of CellDifference),
                                           sheetDifferences As List(Of SheetDifference)) As Boolean
         Dim previewForm As New Form() With {
-            .Text = "VBA����ִ��Ԥ��",
+            .Text = "VBA代码执行预览",
             .Size = New Size(950, 650),
             .StartPosition = FormStartPosition.CenterScreen,
             .MinimizeBox = False,
@@ -159,13 +163,13 @@ Public Class EnhancedPreviewAndConfirm
             .FormBorderStyle = FormBorderStyle.Sizable
         }
 
-        ' ��TabControl����
+        ' 主TabControl容器
         Dim tabControl As New TabControl() With {
             .Dock = DockStyle.Fill
         }
 
-        ' ������
-        Dim codeTab As New TabPage("VBA����")
+        ' 代码区
+        Dim codeTab As New TabPage("VBA代码")
         Dim codeTextBox As New TextBox() With {
             .Multiline = True,
             .ReadOnly = True,
@@ -177,76 +181,76 @@ Public Class EnhancedPreviewAndConfirm
         }
         codeTab.Controls.Add(codeTextBox)
 
-        ' ���������
-        Dim sheetTab As New TabPage("���������")
+        ' 工作表变更
+        Dim sheetTab As New TabPage("工作表变更")
         Dim sheetListView As New ListView() With {
             .View = View.Details,
             .FullRowSelect = True,
             .GridLines = True,
             .Dock = DockStyle.Fill
         }
-        sheetListView.Columns.Add("����������", 150)
-        sheetListView.Columns.Add("�������", 100)
+        sheetListView.Columns.Add("工作表名称", 150)
+        sheetListView.Columns.Add("变更类型", 100)
 
         For Each diff In sheetDifferences
             Dim item As New ListViewItem(diff.SheetName)
             item.SubItems.Add(diff.ChangeType)
             Select Case diff.ChangeType
-                Case "����"
+                Case "添加"
                     item.BackColor = Color.LightGreen
-                Case "ɾ��"
+                Case "删除"
                     item.BackColor = Color.LightPink
             End Select
             sheetListView.Items.Add(item)
         Next
         If sheetDifferences.Count = 0 Then
-            sheetListView.Items.Add(New ListViewItem("�޹��������"))
+            sheetListView.Items.Add(New ListViewItem("无工作表变更"))
         End If
         sheetTab.Controls.Add(sheetListView)
 
-        ' ��Ԫ����
-        Dim cellTab As New TabPage("��Ԫ����")
+        ' 单元格变更
+        Dim cellTab As New TabPage("单元格变更")
         Dim cellListView As New ListView() With {
             .View = View.Details,
             .FullRowSelect = True,
             .GridLines = True,
             .Dock = DockStyle.Fill
         }
-        cellListView.Columns.Add("������", 80)
-        cellListView.Columns.Add("��Ԫ��", 80)
-        cellListView.Columns.Add("�������", 80)
-        cellListView.Columns.Add("ԭֵ", 150)
-        cellListView.Columns.Add("��ֵ", 150)
+        cellListView.Columns.Add("工作表", 80)
+        cellListView.Columns.Add("单元格", 80)
+        cellListView.Columns.Add("变更类型", 80)
+        cellListView.Columns.Add("原值", 150)
+        cellListView.Columns.Add("新值", 150)
 
         For Each diff In cellDifferences
             Dim item As New ListViewItem(diff.SheetName)
             item.SubItems.Add(diff.Address)
             item.SubItems.Add(diff.ChangeType)
-            item.SubItems.Add(If(diff.OldValue Is Nothing, "(��)", diff.OldValue.ToString()))
-            item.SubItems.Add(If(diff.NewValue Is Nothing, "(��)", diff.NewValue.ToString()))
+            item.SubItems.Add(If(diff.OldValue Is Nothing, "(空)", diff.OldValue.ToString()))
+            item.SubItems.Add(If(diff.NewValue Is Nothing, "(空)", diff.NewValue.ToString()))
             Select Case diff.ChangeType
-                Case "����"
+                Case "添加"
                     item.BackColor = Color.LightGreen
-                Case "ɾ��"
+                Case "删除"
                     item.BackColor = Color.LightPink
-                Case "�޸�"
+                Case "修改"
                     item.BackColor = Color.LightYellow
             End Select
             cellListView.Items.Add(item)
         Next
         If cellDifferences.Count = 0 Then
-            cellListView.Items.Add(New ListViewItem("�޵�Ԫ����"))
+            cellListView.Items.Add(New ListViewItem("无单元格变更"))
         End If
         cellTab.Controls.Add(cellListView)
 
-        ' ժҪ
-        Dim summaryTab As New TabPage("���ժҪ")
+        ' 摘要
+        Dim summaryTab As New TabPage("变更摘要")
         Dim summaryTextBox As New TextBox() With {
             .Multiline = True,
             .ReadOnly = True,
             .ScrollBars = ScrollBars.Vertical,
             .Dock = DockStyle.Fill,
-            .Font = New Font("΢���ź�", 10)
+            .Font = New Font("微软雅黑", 10)
         }
         summaryTextBox.Text = GenerateSummary(sheetDifferences, cellDifferences)
         summaryTab.Controls.Add(summaryTextBox)
@@ -261,7 +265,7 @@ Public Class EnhancedPreviewAndConfirm
             .Height = 50
         }
 
-        ' �� buttonPanel ��һ�� FlowLayoutPanel���򻯰�ť����
+        ' 给 buttonPanel 加一个 FlowLayoutPanel，简化按钮布局
         Dim flowLayout As New FlowLayoutPanel() With {
             .FlowDirection = FlowDirection.RightToLeft,
             .Dock = DockStyle.Fill
@@ -269,26 +273,26 @@ Public Class EnhancedPreviewAndConfirm
         buttonPanel.Controls.Add(flowLayout)
 
         Dim acceptButton As New Button() With {
-            .Text = "Ӧ�ñ��",
+            .Text = "应用变更",
             .DialogResult = DialogResult.Yes,
             .AutoSize = True
         }
         Dim cancelButton As New Button() With {
-            .Text = "ȡ��",
+            .Text = "取消",
             .DialogResult = DialogResult.No,
             .AutoSize = True
         }
 
-        ' ��ʽ�����´�����������
+        ' 流式布局下从右至左添加
         flowLayout.Controls.Add(cancelButton)
         flowLayout.Controls.Add(acceptButton)
 
-        ' ���ν� panel��tabControl �ŵ� form
+        ' 依次将 panel、tabControl 放到 form
         previewForm.Controls.Add(buttonPanel)
         previewForm.Controls.Add(tabControl)
 
 
-        ' �Զ���λ
+        ' 自动定位
         'acceptButton.Anchor = AnchorStyles.Right Or AnchorStyles.Top
         'cancelButton.Anchor = AnchorStyles.Right Or AnchorStyles.Top
         'acceptButton.Location = New Point(previewForm.ClientSize.Width - 240, 10)
@@ -299,20 +303,20 @@ Public Class EnhancedPreviewAndConfirm
         'previewForm.Controls.Add(buttonPanel)
         'previewForm.Controls.Add(tabControl)
 
-        ' Ĭ��ȷ�ϰ�ť
+        ' 默认确认按钮
         previewForm.AcceptButton = cancelButton
-        ' ��ʾ�Ի�������û��㡰Ӧ�ñ�����򷵻� True
+        ' 显示对话框后，若用户点“应用变更”则返回 True
         Return (previewForm.ShowDialog() = DialogResult.Yes)
     End Function
 
     Private Function GenerateSummary(sheetDiffs As List(Of SheetDifference),
                                     cellDiffs As List(Of CellDifference)) As String
         Dim sb As New StringBuilder()
-        sb.AppendLine("# ���ժҪ")
+        sb.AppendLine("# 变更摘要")
         sb.AppendLine()
 
         If sheetDiffs.Count > 0 Then
-            sb.AppendLine("## ���������")
+            sb.AppendLine("## 工作表变更")
             For Each diff In sheetDiffs
                 sb.AppendLine($"- {diff.SheetName}: {diff.ChangeType}")
             Next
@@ -321,34 +325,34 @@ Public Class EnhancedPreviewAndConfirm
 
         If cellDiffs.Count > 0 Then
             Dim grouped = cellDiffs.GroupBy(Function(d) d.SheetName)
-            sb.AppendLine("## ��Ԫ����")
+            sb.AppendLine("## 单元格变更")
             For Each group In grouped
-                sb.AppendLine($"### ������: {group.Key}")
-                Dim addCount = group.Count(Function(d) d.ChangeType = "����")
-                Dim modifyCount = group.Count(Function(d) d.ChangeType = "�޸�")
-                Dim deleteCount = group.Count(Function(d) d.ChangeType = "ɾ��")
+                sb.AppendLine($"### 工作表: {group.Key}")
+                Dim addCount = group.Count(Function(d) d.ChangeType = "添加")
+                Dim modifyCount = group.Count(Function(d) d.ChangeType = "修改")
+                Dim deleteCount = group.Count(Function(d) d.ChangeType = "删除")
 
                 If addCount > 0 Then
-                    sb.AppendLine($"- ����: {addCount} ����Ԫ��")
+                    sb.AppendLine($"- 添加: {addCount} 个单元格")
                 End If
                 If modifyCount > 0 Then
-                    sb.AppendLine($"- �޸�: {modifyCount} ����Ԫ��")
+                    sb.AppendLine($"- 修改: {modifyCount} 个单元格")
                 End If
                 If deleteCount > 0 Then
-                    sb.AppendLine($"- ɾ��: {deleteCount} ����Ԫ��")
+                    sb.AppendLine($"- 删除: {deleteCount} 个单元格")
                 End If
                 sb.AppendLine()
             Next
         End If
 
         If sheetDiffs.Count = 0 AndAlso cellDiffs.Count = 0 Then
-            sb.AppendLine("�˴���ִ�к�û�з������ݱ��.")
+            sb.AppendLine("此代码执行后没有发现数据变更.")
         End If
         Return sb.ToString()
     End Function
 
 
-    ' ����ģ���еĵ�һ��������
+    ' 查找模块中的第一个过程名
     Private Function FindFirstProcedureName(comp As VBComponent) As String
         Try
             Dim codeModule As CodeModule = comp.CodeModule
@@ -365,7 +369,7 @@ Public Class EnhancedPreviewAndConfirm
 
             Return String.Empty
         Catch
-            ' �������������ʹ���������ʽ�Ӵ�������ȡ
+            ' 如果出错，尝试使用正则表达式从代码中提取
             Dim code As String = comp.CodeModule.Lines(1, comp.CodeModule.CountOfLines)
             Dim match As Match = Regex.Match(code, "^\s*(Sub|Function)\s+(\w+)", RegexOptions.Multiline Or RegexOptions.IgnoreCase)
 
@@ -378,18 +382,18 @@ Public Class EnhancedPreviewAndConfirm
     End Function
 
 
-    ' �������Ƿ������������
+    ' 检查代码是否包含过程声明
     Private Function ContainsProcedureDeclaration(code As String) As Boolean
-        ' ʹ�ü򵥵��������ʽ����Ƿ���� Sub �� Function ����
+        ' 使用简单的正则表达式检查是否包含 Sub 或 Function 声明
         Return Regex.IsMatch(code, "^\s*(Sub|Function)\s+\w+", RegexOptions.Multiline Or RegexOptions.IgnoreCase)
     End Function
 
-    ' ִ��ǰ�˴����� VBA ����Ƭ��
+    ' 执行前端传来的 VBA 代码片段
     Private Function ExecuteCodeInTemporaryModule(workbook As Workbook, vbaCode As String)
-        ' ��ȡ VBA ��Ŀ
+        ' 获取 VBA 项目
         Dim vbProj As VBProject = workbook.VBProject
 
-        ' ���ӿ�ֵ���
+        ' 添加空值检查
         If vbProj Is Nothing Then
             Return Nothing
         End If
@@ -398,61 +402,61 @@ Public Class EnhancedPreviewAndConfirm
         Dim tempModuleName As String = "TempPreviewMod" & DateTime.Now.Ticks.ToString().Substring(0, 8)
 
         Try
-            ' ������ʱģ��
+            ' 创建临时模块
             vbComp = vbProj.VBComponents.Add(vbext_ComponentType.vbext_ct_StdModule)
             vbComp.Name = tempModuleName
 
-            ' �������Ƿ��Ѱ��� Sub/Function ����
+            ' 检查代码是否已包含 Sub/Function 声明
             If ContainsProcedureDeclaration(vbaCode) Then
-                ' �����Ѱ�������������ֱ������
+                ' 代码已包含过程声明，直接添加
                 vbComp.CodeModule.AddFromString(vbaCode)
 
-                ' ���ҵ�һ����������ִ��
+                ' 查找第一个过程名并执行
                 Dim procName As String = FindFirstProcedureName(vbComp)
                 If Not String.IsNullOrEmpty(procName) Then
                     workbook.Application.Run(tempModuleName & "." & procName)
                 Else
-                    'MessageBox.Show("�޷��ڴ������ҵ���ִ�еĹ���")
-                    GlobalStatusStrip.ShowWarning("�޷��ڴ������ҵ���ִ�еĹ���")
+                    'MessageBox.Show("无法在代码中找到可执行的过程")
+                    GlobalStatusStrip.ShowWarning("无法在代码中找到可执行的过程")
                 End If
             Else
-                ' ���벻�������������������װ�� Auto_Run ������
+                ' 代码不包含过程声明，将其包装在 Auto_Run 过程中
                 Dim wrappedCode As String = "Sub Auto_Run()" & vbNewLine &
                                            vbaCode & vbNewLine &
                                            "End Sub"
                 vbComp.CodeModule.AddFromString(wrappedCode)
 
-                ' ִ�� Auto_Run ����
+                ' 执行 Auto_Run 过程
                 workbook.Application.Run(tempModuleName & ".Auto_Run")
             End If
 
         Catch ex As Exception
-            MessageBox.Show("ִ�� ��ʱVBA ����ʱ����: " & ex.Message, "����", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("执行 临时VBA 代码时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         Finally
-            ' ���۳ɹ�����ʧ�ܣ���ɾ����ʱģ��
+            ' 无论成功还是失败，都删除临时模块
             Try
                 If vbProj IsNot Nothing AndAlso vbComp IsNot Nothing Then
                     vbProj.VBComponents.Remove(vbComp)
                 End If
             Catch
-                ' ������������
+                ' 忽略清理错误
             End Try
         End Try
         Return True
     End Function
 
-    ' ��������״̬
+    ' 捕获工作簿状态
     Private Function CaptureWorkbookState(workbook As Workbook) As Dictionary(Of String, WorksheetState)
         Dim state As New Dictionary(Of String, WorksheetState)
 
         For Each worksheet As Worksheet In workbook.Worksheets
             Dim sheetState As New WorksheetState(worksheet.Name)
 
-            ' ��ȡʹ�÷�Χ
+            ' 获取使用范围
             Dim usedRange As Range = worksheet.UsedRange
             sheetState.UsedRangeAddress = usedRange.Address
 
-            ' �������е�Ԫ���ֵ
+            ' 捕获所有单元格的值
             For Each cell As Range In usedRange
                 Dim address As String = cell.Address(RowAbsolute:=False, ColumnAbsolute:=False)
                 sheetState.Cells(address) = cell.Value2
@@ -464,36 +468,36 @@ Public Class EnhancedPreviewAndConfirm
         Return state
     End Function
 
-    ' �ȽϹ�����״̬
+    ' 比较工作簿状态
     Private Sub CompareWorkbookStates(
         beforeState As Dictionary(Of String, WorksheetState),
         afterState As Dictionary(Of String, WorksheetState),
         cellDifferences As List(Of CellDifference),
         sheetDifferences As List(Of SheetDifference))
 
-        ' ��鹤��������ĸ��ģ�����/ɾ����������
+        ' 检查工作表级别的更改（添加/删除工作表）
         For Each beforeSheet In beforeState.Values
             If Not afterState.ContainsKey(beforeSheet.Name) Then
-                ' ��������ɾ��
-                sheetDifferences.Add(New SheetDifference(beforeSheet.Name, "ɾ��"))
+                ' 工作表被删除
+                sheetDifferences.Add(New SheetDifference(beforeSheet.Name, "删除"))
             End If
         Next
 
         For Each afterSheet In afterState.Values
             If Not beforeState.ContainsKey(afterSheet.Name) Then
-                ' ������������
-                sheetDifferences.Add(New SheetDifference(afterSheet.Name, "����"))
+                ' 工作表被添加
+                sheetDifferences.Add(New SheetDifference(afterSheet.Name, "添加"))
 
-                ' ���������¹������ĵ�Ԫ����Ϊ"����"
+                ' 添加所有新工作表的单元格作为"添加"
                 For Each cell In afterSheet.Cells
                     cellDifferences.Add(New CellDifference(
-                        afterSheet.Name, cell.Key, Nothing, cell.Value, "����"))
+                        afterSheet.Name, cell.Key, Nothing, cell.Value, "添加"))
                 Next
             Else
-                ' ����������������״̬�У��Ƚϵ�Ԫ��
+                ' 工作表存在于两个状态中，比较单元格
                 Dim beforeSheet = beforeState(afterSheet.Name)
 
-                ' ��鵥Ԫ�����
+                ' 检查单元格更改
                 For Each afterCell In afterSheet.Cells
                     Dim address As String = afterCell.Key
                     Dim newValue As Object = afterCell.Value
@@ -501,31 +505,31 @@ Public Class EnhancedPreviewAndConfirm
                     If beforeSheet.Cells.ContainsKey(address) Then
                         Dim oldValue As Object = beforeSheet.Cells(address)
 
-                        ' �Ƚ�ֵ�Ƿ����
+                        ' 比较值是否相等
                         If Not AreValuesEqual(oldValue, newValue) Then
                             cellDifferences.Add(New CellDifference(
-                                afterSheet.Name, address, oldValue, newValue, "�޸�"))
+                                afterSheet.Name, address, oldValue, newValue, "修改"))
                         End If
                     Else
-                        ' �����ӵĵ�Ԫ��
+                        ' 新添加的单元格
                         cellDifferences.Add(New CellDifference(
-                            afterSheet.Name, address, Nothing, newValue, "����"))
+                            afterSheet.Name, address, Nothing, newValue, "添加"))
                     End If
                 Next
 
-                ' ���ɾ���ĵ�Ԫ��
+                ' 检查删除的单元格
                 For Each beforeCell In beforeSheet.Cells
                     Dim address As String = beforeCell.Key
                     If Not afterSheet.Cells.ContainsKey(address) Then
                         cellDifferences.Add(New CellDifference(
-                            beforeSheet.Name, address, beforeCell.Value, Nothing, "ɾ��"))
+                            beforeSheet.Name, address, beforeCell.Value, Nothing, "删除"))
                     End If
                 Next
             End If
         Next
     End Sub
 
-    ' �Ƚ�����ֵ�Ƿ����
+    ' 比较两个值是否相等
     Private Function AreValuesEqual(value1 As Object, value2 As Object) As Boolean
         If value1 Is Nothing AndAlso value2 Is Nothing Then
             Return True

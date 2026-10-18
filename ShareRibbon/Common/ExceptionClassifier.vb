@@ -27,6 +27,7 @@ Public NotInheritable Class ExceptionClassifier
     Public Const CodeHostUnsupported As String = "HOST_UNSUPPORTED"
     Public Const CodeSafetyBlocked As String = "SAFETY_BLOCKED"
     Public Const CodeSafetyNeedsApproval As String = "SAFETY_NEEDS_APPROVAL"
+    Public Const CodeApprovalTimeout As String = "APPROVAL_TIMEOUT"
     Public Const CodeVbaDisabled As String = "VBA_DISABLED"
     Public Const CodeCancelled As String = "CANCELLED"
     Public Const CodeIo As String = "IO_ERROR"

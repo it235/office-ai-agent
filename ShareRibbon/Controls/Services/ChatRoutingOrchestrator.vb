@@ -27,7 +27,6 @@ Public Interface IChatRoutingHost
     Function PreSendCheckAsync(execContext As ExecutionContext) As Task(Of ContextCheckResult)
     Sub ShowContextHints(ragCount As Integer, intentDescription As String, contextTrace As ChatContextTrace)
     Sub ShowWarning(message As String)
-    Sub ShowIdentifyingStatus()
     Sub SendChatMessage(message As String)
     Sub SendChatMessageWithIntent(message As String, intent As IntentResult)
     Sub StartAgentPlanningFlow(message As String, intent As IntentResult, analysis As Agent.AiNativeRuntimeResult)
@@ -183,7 +182,6 @@ Public Class ChatRoutingOrchestrator
 
             ' Primary product path always uses AgentKernel.
             Debug.WriteLine($"[ChatRoutingOrchestrator] primary path AgentKernel intent={intent.OfficeIntent}, confidence={intent.Confidence:F2}")
-            _host.ShowIdentifyingStatus()
             _host.StartAgentPlanningFlow(finalMessageToLLM, intent, aiNativeResult)
             Return ChatRouteDecision.AgentKernel
 

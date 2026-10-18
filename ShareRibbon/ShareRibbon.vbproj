@@ -267,6 +267,7 @@
     <Compile Include="ConversationRuntime\DefaultContextComposer.vb" />
     <Compile Include="ConversationRuntime\McpToolBroker.vb" />
     <Compile Include="ConversationRuntime\DefaultConversationRuntime.vb" />
+    <Compile Include="Agent\AgentCancellationScope.vb" />
     <Compile Include="Agent\AgentKernel.vb" />
     <Compile Include="Agent\AiNativeRuntime.vb" />
     <Compile Include="Agent\ExecutionPathPolicy.vb" />
@@ -283,6 +284,7 @@
     <Compile Include="Agent\Harness\HarnessModels.vb" />
     <Compile Include="Agent\Harness\IOfficeHarness.vb" />
     <Compile Include="Agent\Harness\OfficeHarness.vb" />
+    <Compile Include="Agent\Harness\OfficeHarness.Approvals.vb" />
     <Compile Include="Agent\Harness\RunTraceStore.vb" />
     <Compile Include="Agent\Harness\HostCapabilityRunRecorder.vb" />
     <Compile Include="Agent\ToolRegistry.vb" />
@@ -394,6 +396,7 @@
     <Compile Include="Controls\Services\HistorySessionService.vb" />
     <Compile Include="Controls\Services\ChatCommandRouter.vb" />
     <Compile Include="Controls\Services\AgentKernelService.vb" />
+    <Compile Include="Controls\Services\AgentKernelService.RunControl.vb" />
     <Compile Include="Controls\Services\MemoryService.vb" />
     <Compile Include="Controls\Services\McpService.vb" />
     <Compile Include="Controls\Services\OfficeCompletionService.vb" />

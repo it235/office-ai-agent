@@ -172,23 +172,40 @@ Namespace Agent.Execution
             End If
 
             Dim code = If(params?("code")?.ToString(), "")
-            Dim subResult = SafetyChecker.Check(code)
-            If subResult IsNot Nothing AndAlso Not subResult.IsSafe Then
-                Return SafetyDecision.Deny(subResult.Reason,
+            ' Agent 自主执行即使用户开启了 VBA 工具，也保持"一律确认"，不得因黑名单通过就自动落笔。
+            Return EvaluateScript(code, risk, alwaysConfirm:=True)
+        End Function
+
+        ''' <summary>
+        ''' 脚本类执行的唯一裁决入口：Agent 工具路径与宿主 UI/JSON 执行路径共用，
+        ''' 避免同一份代码在两套调用链里得到不同等级的安全判定。
+        ''' </summary>
+        Public Shared Function EvaluateScript(code As String,
+                                              Optional riskLevel As String = "risky",
+                                              Optional alwaysConfirm As Boolean = False) As SafetyDecision
+            Dim result = SafetyChecker.Check(code)
+            If result Is Nothing Then
+                Return SafetyDecision.RequireApproval("脚本安全检查不可用", "该操作需要用户确认后才能执行", riskLevel)
+            End If
+
+            If Not result.IsSafe Then
+                Return SafetyDecision.Deny(result.Reason,
                                            ExceptionClassifier.CodeSafetyBlocked,
-                                           subResult.ToUserMessage(),
-                                           risk)
+                                           result.ToUserMessage(),
+                                           riskLevel)
             End If
 
-            If subResult IsNot Nothing AndAlso subResult.NeedsConfirm Then
-                Return SafetyDecision.RequireApproval(subResult.Reason,
-                                                      subResult.ToUserMessage(),
-                                                      risk)
+            If result.NeedsConfirm Then
+                Return SafetyDecision.RequireApproval(result.Reason, result.ToUserMessage(), riskLevel)
             End If
 
-            Return SafetyDecision.RequireApproval($"VBA 工具 {toolId} 需要用户确认",
-                                                  $"VBA 工具 {toolId} 需要确认后才能执行",
-                                                  risk)
+            If alwaysConfirm Then
+                Return SafetyDecision.RequireApproval("脚本执行需要用户确认",
+                                                      "该脚本会修改宿主文档，需要确认后执行",
+                                                      riskLevel)
+            End If
+
+            Return SafetyDecision.Allow(If(riskLevel, "risky"))
         End Function
 
         Private Function IsDestructiveTool(toolId As String, params As JObject) As Boolean

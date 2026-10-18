@@ -491,7 +491,24 @@ CREATE INDEX IF NOT EXISTS idx_prompt_template_scenario ON prompt_template(scena
              ");" &
              "CREATE INDEX IF NOT EXISTS idx_agent_run_step_run ON agent_run_step(run_id, seq);" &
              "CREATE INDEX IF NOT EXISTS idx_agent_run_step_status ON agent_run_step(status, error_code);" &
-             "UPDATE schema_version SET version = 11;"}
+             "UPDATE schema_version SET version = 11;"},
+            {12, "INSERT INTO conversation_event (event_id, session_id, event_type, role, content, created_at) " &
+             "SELECT lower(hex(randomblob(16))), c.session_id, 'chat_message', c.role, c.content, c.create_time " &
+             "FROM conversation c " &
+             "WHERE IFNULL(c.session_id, '') <> '' " &
+             "AND NOT EXISTS (SELECT 1 FROM conversation_event e " &
+             "  WHERE e.session_id = c.session_id AND e.event_type = 'chat_message');" &
+             "UPDATE schema_version SET version = 12;"},
+            {13, "DELETE FROM memory_job WHERE job_id IN (" &
+             "  SELECT j.job_id FROM memory_job j" &
+             "  WHERE j.status IN ('pending', 'processing') AND IFNULL(j.target_id, '') <> ''" &
+             "  AND EXISTS (SELECT 1 FROM memory_job k" &
+             "    WHERE k.job_type = j.job_type AND k.target_id = j.target_id" &
+             "    AND k.status IN ('pending', 'processing')" &
+             "    AND (k.created_at < j.created_at OR (k.created_at = j.created_at AND k.job_id < j.job_id))));" &
+             "CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_job_active_unique ON memory_job(job_type, target_id) " &
+             "WHERE status IN ('pending', 'processing');" &
+             "UPDATE schema_version SET version = 13;"}
         }
 
         For Each kvp In migrations.OrderBy(Function(x) x.Key)
