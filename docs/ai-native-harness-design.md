@@ -797,7 +797,7 @@ Idle → Analyzing → Planning → AwaitingApproval?
 | D14 | 无 Skill | 全 app 工具 + Safety |
 | D15 | 阈值 | Safety T1/T2 权威 |
 | — | UseNewAgentKernel | 废弃，始终 Harness |
-| — | 云端索引 / 多 Agent 并行 | 暂缓 |
+| — | 云端索引 / 通用多 Agent 并行 | 暂缓；只读分诊子任务见执行计划 E17（写操作仍串行） |
 
 ---
 
