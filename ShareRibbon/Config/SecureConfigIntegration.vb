@@ -57,30 +57,16 @@ Public Class SecureConfigIntegration
                     If Not String.IsNullOrEmpty(apiKey) Then
                         item.key = apiKey
                         System.Diagnostics.Debug.WriteLine(String.Format("[SecureConfigIntegration] 已加载 {0} 的加密 API Key", item.platform))
+                    Else
+                        ' 占位符不是 Key：加密存储里没有这台服务商时，内存里必须回到空，
+                        ' 否则配置闸门以为已配置，实际把 "[encrypted]" 当 Bearer 发出去。
+                        item.key = ""
                     End If
                 End If
             Next
 
         Catch ex As Exception
             System.Diagnostics.Debug.WriteLine(String.Format("[SecureConfigIntegration] 加载加密 API Key 失败: {0}", ex.Message))
-        End Try
-    End Sub
-
-    ''' <summary>
-    ''' 保存配置时将 API Key 存储到加密存储
-    ''' </summary>
-    Public Shared Sub SaveSecureApiKeys(configData As List(Of ConfigManager.ConfigItem))
-        Try
-            For Each item In configData
-                If Not String.IsNullOrEmpty(item.key) AndAlso item.key <> "[encrypted]" Then
-                    ' 保存到加密存储
-                    SecureConfigManager.SaveApiKey(item.key, item.platform)
-                    System.Diagnostics.Debug.WriteLine(String.Format("[SecureConfigIntegration] 已保存 {0} 的加密 API Key", item.platform))
-                End If
-            Next
-
-        Catch ex As Exception
-            System.Diagnostics.Debug.WriteLine(String.Format("[SecureConfigIntegration] 保存加密 API Key 失败: {0}", ex.Message))
         End Try
     End Sub
 

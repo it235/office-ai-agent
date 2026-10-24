@@ -16,7 +16,7 @@ Public Partial Class AgentKernelService
                 signaledRunning = True
             End If
 
-            ' 若正卡在等待审批，取消令牌无法立刻唤醒，需主动拒绝以释放挂起回调。
+            ' 若正卡在等待审批，取消令牌无法立刻唤醒，需主动放弃审批以释放挂起回调。
             Dim hadPendingApproval = False
             If Not String.IsNullOrWhiteSpace(CurrentHarnessRunId) Then
                 hadPendingApproval = True
@@ -44,23 +44,30 @@ Public Partial Class AgentKernelService
     End Sub
 
     ''' <summary>
-    ''' 用户批准当前计划或步骤
+    ''' 用户允许一次当前高风险操作
     ''' </summary>
     Public Sub Approve()
-        ResolveHarnessApprovalAsync(True)
+        ResolveHarnessApprovalAsync(Agent.ApprovalDecision.Once)
     End Sub
 
     ''' <summary>
-    ''' 用户拒绝当前计划或步骤
+    ''' 用户允许本轮会话内该工具的所有调用
     ''' </summary>
-    Public Sub Reject()
-        ResolveHarnessApprovalAsync(False)
+    Public Sub ApproveForSession()
+        ResolveHarnessApprovalAsync(Agent.ApprovalDecision.Session)
     End Sub
 
-    Private Async Sub ResolveHarnessApprovalAsync(approved As Boolean)
+    ''' <summary>
+    ''' 用户拒绝当前操作（只跳过当前步骤）
+    ''' </summary>
+    Public Sub Reject()
+        ResolveHarnessApprovalAsync(Agent.ApprovalDecision.Deny)
+    End Sub
+
+    Private Async Sub ResolveHarnessApprovalAsync(decision As Agent.ApprovalDecision)
         If _officeHarness Is Nothing OrElse String.IsNullOrWhiteSpace(CurrentHarnessRunId) Then Return
         Try
-            Dim result = Await _officeHarness.ApproveAsync(CurrentHarnessRunId, approved, Threading.CancellationToken.None)
+            Dim result = Await _officeHarness.DecideAsync(CurrentHarnessRunId, decision, Threading.CancellationToken.None)
             If result IsNot Nothing AndAlso result.Status <> Agent.Harness.HarnessRunStatus.AwaitingApproval Then
                 CurrentHarnessRunId = Nothing
             End If

@@ -403,6 +403,20 @@ Public Class ChatControl
         Return "PowerPoint"
     End Function
 
+    ''' <summary>
+    ''' 会话绑定的文档：只在 UI 线程读取活动演示文稿完整路径，未保存演示文稿按通用会话处理。
+    ''' </summary>
+    Protected Overrides Function GetSessionDocument() As SessionDocument
+        Try
+            Dim pres = Globals.ThisAddIn.Application.ActivePresentation
+            If pres Is Nothing Then Return Nothing
+            Return SessionDocument.FromFullPath(pres.FullName)
+        Catch ex As Exception
+            AppLogger.Debug("PowerPointAi", "读取活动演示文稿标识失败", ex)
+            Return Nothing
+        End Try
+    End Function
+
     ' 提供PowerPoint应用程序对象
     Protected Overrides Function GetOfficeApplicationObject() As Object
         Return Globals.ThisAddIn.Application
@@ -2420,29 +2434,157 @@ Public Class ChatControl
     End Function
 
     ''' <summary>
-    ''' 设置幻灯片版式
+    ''' 解析命令目标幻灯片：缺省取当前编辑页，越界返回 Nothing。
+    ''' </summary>
+    Private Function ResolveTargetSlide(params As JToken, pres As Object) As Object
+        Dim slideIndex As Integer = If(params("slideIndex") IsNot Nothing, params("slideIndex").Value(Of Integer)(), -1)
+        If slideIndex = -1 OrElse slideIndex = 0 Then
+            Try
+                Return Globals.ThisAddIn.Application.ActiveWindow.View.Slide
+            Catch ex As Exception
+                Debug.WriteLine($"ResolveTargetSlide 取当前页失败: {ex.Message}")
+                Return Nothing
+            End Try
+        End If
+        If slideIndex >= 1 AndAlso slideIndex <= pres.Slides.Count Then
+            Return pres.Slides(slideIndex)
+        End If
+        Return Nothing
+    End Function
+
+    Private Shared Function NormalizeLayoutKey(value As String) As String
+        If String.IsNullOrWhiteSpace(value) Then Return ""
+        Dim sb As New StringBuilder()
+        For Each ch In value.Trim().ToLowerInvariant()
+            If Char.IsWhiteSpace(ch) OrElse ch = "-"c OrElse ch = "_"c Then Continue For
+            sb.Append(ch)
+        Next
+        Return sb.ToString()
+    End Function
+
+    ''' <summary>
+    ''' PowerPoint 会把换行统一成段落标记并去掉行尾空白，读回比较前先归一化。
+    ''' </summary>
+    Private Shared Function NormalizeTextForCompare(value As String) As String
+        If value Is Nothing Then Return ""
+        Return value.Replace(vbCrLf, vbCr).Replace(vbLf, vbCr).TrimEnd()
+    End Function
+
+    ''' <summary>
+    ''' 按名称在当前演示文稿的母版版式中查找自定义版式；找不到返回 Nothing。
+    ''' </summary>
+    Private Function FindCustomLayout(pres As Object, layoutName As String) As Object
+        Dim key = NormalizeLayoutKey(layoutName)
+        If key.Length = 0 Then Return Nothing
+
+        Dim designs As Object = Nothing
+        Try
+            designs = pres.Designs
+            If designs Is Nothing Then Return Nothing
+            For d As Integer = 1 To designs.Count
+                Dim design As Object = Nothing
+                Dim master As Object = Nothing
+                Dim layouts As Object = Nothing
+                Try
+                    design = designs(d)
+                    master = design.SlideMaster
+                    layouts = master.CustomLayouts
+                    For i As Integer = 1 To layouts.Count
+                        Dim layout As Object = Nothing
+                        Try
+                            layout = layouts(i)
+                            If NormalizeLayoutKey(If(layout.Name, "")) = key Then
+                                Dim found As Object = layout
+                                layout = Nothing
+                                Return found
+                            End If
+                        Finally
+                            If layout IsNot Nothing Then ComObjectHelper.ReleaseComObject(layout)
+                        End Try
+                    Next
+                Finally
+                    ComObjectHelper.ReleaseComObject(layouts)
+                    ComObjectHelper.ReleaseComObject(master)
+                    ComObjectHelper.ReleaseComObject(design)
+                End Try
+            Next
+        Finally
+            ComObjectHelper.ReleaseComObject(designs)
+        End Try
+        Return Nothing
+    End Function
+
+    Private Function TryMapBuiltInLayout(layoutName As String, ByRef layoutIndex As Integer) As Boolean
+        Select Case NormalizeLayoutKey(layoutName)
+            Case "title", "titleslide", "标题"
+                layoutIndex = CInt(Microsoft.Office.Interop.PowerPoint.PpSlideLayout.ppLayoutTitle)
+            Case "titleandcontent", "titleandbody", "content", "标题和内容"
+                layoutIndex = CInt(Microsoft.Office.Interop.PowerPoint.PpSlideLayout.ppLayoutText)
+            Case "titleonly", "仅标题"
+                layoutIndex = CInt(Microsoft.Office.Interop.PowerPoint.PpSlideLayout.ppLayoutTitleOnly)
+            Case "blank", "空白"
+                layoutIndex = CInt(Microsoft.Office.Interop.PowerPoint.PpSlideLayout.ppLayoutBlank)
+            Case Else
+                layoutIndex = -1
+                Return False
+        End Select
+        Return True
+    End Function
+
+    ''' <summary>
+    ''' 设置幻灯片版式：优先按名称匹配自定义版式，否则回退到内置版式，并读回验证结果。
     ''' </summary>
     Private Function ExecuteSetSlideLayout(params As JToken, pres As Object) As Boolean
         Try
-            Dim layoutName = If(params("layout")?.ToString(), "titleandcontent").ToLower()
-            Dim slideIndex As Integer = If(params("slideIndex") IsNot Nothing, params("slideIndex").Value(Of Integer)(), -1)
-            Dim targetSlide As Object
-            If slideIndex = -1 OrElse slideIndex = 0 Then
-                targetSlide = Globals.ThisAddIn.Application.ActiveWindow.View.Slide
-            ElseIf slideIndex >= 1 AndAlso slideIndex <= pres.Slides.Count Then
-                targetSlide = pres.Slides(slideIndex)
-            Else
+            Dim layoutName = If(params("layout")?.ToString(), "titleandcontent")
+            Dim targetSlide As Object = ResolveTargetSlide(params, pres)
+            If targetSlide Is Nothing Then Return False
+
+            Try
+                Dim customLayout As Object = FindCustomLayout(pres, layoutName)
+                If customLayout IsNot Nothing Then
+                    Try
+                        Dim requestedName = If(customLayout.Name, "")
+                        targetSlide.CustomLayout = customLayout
+                        Dim appliedName As String = ""
+                        Try
+                            appliedName = If(targetSlide.CustomLayout.Name, "")
+                        Catch ex As Exception
+                            Debug.WriteLine($"ExecuteSetSlideLayout 读回版式失败: {ex.Message}")
+                        End Try
+                        If String.Equals(appliedName, requestedName, StringComparison.OrdinalIgnoreCase) Then
+                            GlobalStatusStrip.ShowInfo($"已应用版式 '{appliedName}'")
+                            Return True
+                        End If
+                        GlobalStatusStrip.ShowWarning($"版式 '{layoutName}' 应用后未能确认结果")
+                        Return False
+                    Finally
+                        ComObjectHelper.ReleaseComObject(customLayout)
+                    End Try
+                End If
+
+                Dim layoutIndex As Integer = -1
+                If Not TryMapBuiltInLayout(layoutName, layoutIndex) Then
+                    GlobalStatusStrip.ShowWarning($"无法识别版式 '{layoutName}'，请检查演示文稿中的版式名称")
+                    Return False
+                End If
+
+                targetSlide.Layout = layoutIndex
+                Dim appliedLayout As Integer = Integer.MinValue
+                Try
+                    appliedLayout = Convert.ToInt32(targetSlide.Layout)
+                Catch ex As Exception
+                    Debug.WriteLine($"ExecuteSetSlideLayout 读回内置版式失败: {ex.Message}")
+                End Try
+                If appliedLayout = layoutIndex Then
+                    GlobalStatusStrip.ShowInfo($"已应用版式 '{layoutName}'")
+                    Return True
+                End If
+                GlobalStatusStrip.ShowWarning($"版式 '{layoutName}' 应用后未能确认结果")
                 Return False
-            End If
-            Dim layoutIndex As Integer = 2
-            Select Case layoutName
-                Case "title" : layoutIndex = 1
-                Case "titleandcontent", "titleandbody" : layoutIndex = 2
-                Case "blank" : layoutIndex = 12
-                Case "titleonly" : layoutIndex = 11
-            End Select
-            targetSlide.Layout = layoutIndex
-            Return True
+            Finally
+                ComObjectHelper.ReleaseComObject(targetSlide)
+            End Try
         Catch ex As Exception
             Debug.WriteLine($"ExecuteSetSlideLayout 出错: {ex.Message}")
             Return False
@@ -2450,18 +2592,31 @@ Public Class ChatControl
     End Function
 
     ''' <summary>
-    ''' 应用主题
+    ''' 应用主题。内置主题名称无法通过 COM 直接应用，过去只提示手动操作却返回成功，
+    ''' 会让 Agent 误判主题已生效；现在只有真实应用 .thmx 文件才返回成功。
     ''' </summary>
     Private Function ExecuteApplyTheme(params As JToken, pres As Object) As Boolean
         Try
-            Dim themeFile = If(params("themeFile")?.ToString(), "")
-            Dim themeName = If(params("themeName")?.ToString(), "")
-            If Not String.IsNullOrEmpty(themeFile) AndAlso IO.File.Exists(themeFile) Then
+            Dim themeFile = If(params("themeFile")?.ToString(), "").Trim()
+            Dim themeName = If(params("themeName")?.ToString(), "").Trim()
+
+            If themeFile.Length > 0 Then
+                If Not IO.File.Exists(themeFile) Then
+                    GlobalStatusStrip.ShowWarning("主题文件不存在: " & themeFile)
+                    Return False
+                End If
                 pres.ApplyTheme(themeFile)
-            ElseIf Not String.IsNullOrEmpty(themeName) Then
-                GlobalStatusStrip.ShowInfo($"内置主题 '{themeName}' 请通过 WPS/PPT 设计菜单手动应用")
+                GlobalStatusStrip.ShowInfo("已应用主题: " & IO.Path.GetFileName(themeFile))
+                Return True
             End If
-            Return True
+
+            If themeName.Length > 0 Then
+                GlobalStatusStrip.ShowWarning($"无法直接应用内置主题 '{themeName}'：请提供 .thmx 主题文件，或在 PowerPoint 设计菜单中手动应用")
+                Return False
+            End If
+
+            GlobalStatusStrip.ShowWarning("未提供 themeFile 或 themeName，未应用任何主题")
+            Return False
         Catch ex As Exception
             Debug.WriteLine($"ExecuteApplyTheme 出错: {ex.Message}")
             Return False
@@ -2469,23 +2624,82 @@ Public Class ChatControl
     End Function
 
     ''' <summary>
-    ''' 添加演讲备注
+    ''' 添加演讲备注：按占位符类型定位备注正文，写后读回验证，避免写错形状也报成功。
     ''' </summary>
     Private Function ExecuteAddSpeakerNotes(params As JToken, pres As Object) As Boolean
         Try
             Dim notes = If(params("notes")?.ToString(), "")
-            Dim slideIndex As Integer = If(params("slideIndex") IsNot Nothing, params("slideIndex").Value(Of Integer)(), -1)
-            Dim targetSlide As Object
-            If slideIndex = -1 OrElse slideIndex = 0 Then
-                targetSlide = Globals.ThisAddIn.Application.ActiveWindow.View.Slide
-            ElseIf slideIndex >= 1 AndAlso slideIndex <= pres.Slides.Count Then
-                targetSlide = pres.Slides(slideIndex)
-            Else
-                Return False
-            End If
-            targetSlide.NotesPage.Shapes(2).TextFrame.TextRange.Text = notes
-            GlobalStatusStrip.ShowInfo("已添加演讲备注")
-            Return True
+            Dim targetSlide As Object = ResolveTargetSlide(params, pres)
+            If targetSlide Is Nothing Then Return False
+
+            Try
+                Dim notesPage As Object = Nothing
+                Dim shapes As Object = Nothing
+                Dim body As Object = Nothing
+                Try
+                    notesPage = targetSlide.NotesPage
+                    shapes = notesPage.Shapes
+                    For i As Integer = 1 To shapes.Count
+                        Dim shape As Object = Nothing
+                        Try
+                            shape = shapes(i)
+                            If shape.Type = Microsoft.Office.Core.MsoShapeType.msoPlaceholder AndAlso
+                               shape.PlaceholderFormat.Type = Microsoft.Office.Interop.PowerPoint.PpPlaceholderType.ppPlaceholderBody Then
+                                body = shape
+                                shape = Nothing
+                                Exit For
+                            End If
+                        Finally
+                            If shape IsNot Nothing Then ComObjectHelper.ReleaseComObject(shape)
+                        End Try
+                    Next
+
+                    ' 少数模板的备注页不含标准正文占位符，回退到第 2 个带文本框的形状
+                    If body Is Nothing AndAlso shapes.Count >= 2 Then
+                        Dim fallback As Object = Nothing
+                        Try
+                            fallback = shapes(2)
+                            If fallback.HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                                body = fallback
+                                fallback = Nothing
+                            End If
+                        Finally
+                            If fallback IsNot Nothing Then ComObjectHelper.ReleaseComObject(fallback)
+                        End Try
+                    End If
+
+                    If body Is Nothing Then
+                        GlobalStatusStrip.ShowWarning("未找到备注占位符，无法写入演讲备注")
+                        Return False
+                    End If
+
+                    Dim textRange As Object = Nothing
+                    Try
+                        textRange = body.TextFrame.TextRange
+                        textRange.Text = notes
+                        Dim applied As String = ""
+                        Try
+                            applied = If(textRange.Text, "")
+                        Catch ex As Exception
+                            Debug.WriteLine($"ExecuteAddSpeakerNotes 读回备注失败: {ex.Message}")
+                        End Try
+                        If String.Equals(NormalizeTextForCompare(applied), NormalizeTextForCompare(notes), StringComparison.Ordinal) Then
+                            GlobalStatusStrip.ShowInfo("已添加演讲备注")
+                            Return True
+                        End If
+                        GlobalStatusStrip.ShowWarning("演讲备注写入后未能确认结果")
+                        Return False
+                    Finally
+                        ComObjectHelper.ReleaseComObject(textRange)
+                    End Try
+                Finally
+                    ComObjectHelper.ReleaseComObject(body)
+                    ComObjectHelper.ReleaseComObject(shapes)
+                    ComObjectHelper.ReleaseComObject(notesPage)
+                End Try
+            Finally
+                ComObjectHelper.ReleaseComObject(targetSlide)
+            End Try
         Catch ex As Exception
             Debug.WriteLine($"ExecuteAddSpeakerNotes 出错: {ex.Message}")
             Return False

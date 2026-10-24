@@ -34,6 +34,7 @@ Public MustInherit Class BaseChatControl
     Private _webViewBridge As WebViewBridge = Nothing
     Private _systemPromptResolver As ChatSystemPromptResolver = Nothing
     Private _sendValidator As ChatSendValidator = Nothing
+    Private _modelConfigGate As ModelConfigGate = Nothing
     Private _memoryTurnRecorder As MemoryTurnRecorder = Nothing
     Private _aiNativeRuntime As Agent.IAiNativeRuntime = Nothing
     Private _chatRequestOrchestrator As ChatRequestOrchestrator = Nothing
@@ -84,6 +85,29 @@ Public MustInherit Class BaseChatControl
             Return _memoryTurnRecorder
         End Get
     End Property
+
+    Private ReadOnly Property ConfigGate As ModelConfigGate
+        Get
+            If _modelConfigGate Is Nothing Then
+                _modelConfigGate = New ModelConfigGate()
+            End If
+            Return _modelConfigGate
+        End Get
+    End Property
+
+    ''' <summary>
+    ''' E3-03：配置缺失时阻断，并在面板内给出可点的 CTA，而不是只在状态栏报错。
+    ''' 聊天和 Agent 两条入口共用，返回 True 表示本轮已经拦下。
+    ''' </summary>
+    Protected Function IsBlockedByModelConfig(blockedAction As String, Optional validation As ChatSendValidationResult = Nothing) As Boolean
+        Dim prompt = If(validation Is Nothing,
+                        ConfigGate.Evaluate(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, blockedAction),
+                        ConfigGate.Evaluate(validation, blockedAction))
+        If prompt Is Nothing Then Return False
+
+        ExecuteJavaScriptAsyncJS(ConfigGate.BuildShowScript(prompt))
+        Return True
+    End Function
 
     Protected ReadOnly Property AiNativeRuntime As Agent.IAiNativeRuntime
         Get
@@ -199,9 +223,24 @@ Public MustInherit Class BaseChatControl
                     AddressOf ExecuteJavaScriptAsyncJS,
                     _chatStateService,
                     AddressOf GetOfficeAppType,
+                    AddressOf ResolveSessionDocument,
                     AddressOf RunUiAction)
             End If
             Return _historySessionService
+        End Get
+    End Property
+
+    ' 延迟初始化的首次引导服务（E3-01）
+    Private _onboardingService As OnboardingService = Nothing
+    Protected ReadOnly Property OnboardingSvc As OnboardingService
+        Get
+            If _onboardingService Is Nothing Then
+                _onboardingService = New OnboardingService(
+                    AddressOf ExecuteJavaScriptAsyncJS,
+                    AddressOf GetOfficeAppType,
+                    AddressOf UpdateModelDisplayInUI)
+            End If
+            Return _onboardingService
         End Get
     End Property
 
@@ -398,6 +437,12 @@ Public MustInherit Class BaseChatControl
                 End Function)
             Return
         End If
+
+        ' 会话持久化需要宿主类型；此时子类已完成构造，取虚方法安全
+        If _chatStateService.AppTypeProvider Is Nothing Then
+            _chatStateService.AppTypeProvider = AddressOf GetOfficeAppType
+        End If
+        RefreshSessionDocumentContext()
 
         Await _webViewInitSemaphore.WaitAsync()
         Try
@@ -726,10 +771,11 @@ Public MustInherit Class BaseChatControl
         router.Register("stopMessage", Sub(jsonDoc) HandleStopMessage(jsonDoc))
         router.Register("executeCode", Sub(jsonDoc) HandleExecuteCode(jsonDoc))
         router.Register("saveSettings", Sub(jsonDoc) HandleSaveSettings(jsonDoc))
-        router.Register("getSessionList", Sub(jsonDoc) HandleGetSessionList())
+        router.Register("getSessionList", Sub(jsonDoc) HandleGetSessionList(ReadSessionScope(jsonDoc)))
         router.Register("loadSession", Sub(jsonDoc) HandleLoadSession(jsonDoc))
         router.Register("newSession", Sub(jsonDoc) HandleNewSession())
-        router.Register("deleteSession", Sub(jsonDoc) HandleDeleteSession(jsonDoc))
+        router.Register("deleteSession", Sub(jsonDoc) HandleDeleteSession(jsonDoc, ReadSessionScope(jsonDoc)))
+        router.Register("renameSession", Sub(jsonDoc) HandleRenameSession(jsonDoc, ReadSessionScope(jsonDoc)))
         router.Register("getMcpConnections", Sub(jsonDoc) HandleGetMcpConnections())
         router.Register("saveMcpSettings", Sub(jsonDoc) HandleSaveMcpSettings(jsonDoc))
         router.Register("clearContext", Sub(jsonDoc) ClearChatContext())
@@ -758,9 +804,15 @@ Public MustInherit Class BaseChatControl
         router.Register("agent:approvePlan", Sub(jsonDoc) HandleAgentApprovePlan(jsonDoc))
         router.Register("agent:rejectPlan", Sub(jsonDoc) HandleAgentRejectPlan(jsonDoc))
         router.Register("agent:approveStep", Sub(jsonDoc) HandleAgentApproveStep(jsonDoc))
+        router.Register("agent:approveToolSession", Sub(jsonDoc) HandleAgentApproveToolSession(jsonDoc))
         router.Register("agent:refinePlan", Sub(jsonDoc) HandleAgentRefinePlan(jsonDoc))
+        router.Register("agent:undoRun", Sub(jsonDoc) HandleAgentUndoRun(jsonDoc))
         router.Register("openFileDialog", Sub(jsonDoc) HandleOpenFileDialog())
         router.Register("openApiConfigForm", Sub(jsonDoc) HandleOpenApiConfigForm())
+        ' E3-01 首次引导：只有"隐私确认 + 示例任务"两步，配置动作走 openApiConfigForm
+        router.Register("getOnboardingState", Sub(jsonDoc) OnboardingSvc.HandleGetState())
+        router.Register("onboardingSetPrivacy", Sub(jsonDoc) OnboardingSvc.HandleSetPrivacy(jsonDoc))
+        router.Register("onboardingFinish", Sub(jsonDoc) OnboardingSvc.HandleFinish())
         router.Register("getCurrentAppInfo", Sub(jsonDoc) HandleGetCurrentAppInfo())
         router.Register("getCurrentModel", Sub(jsonDoc) HandleGetCurrentModel())
         router.Register("getReformatTemplates", Sub(jsonDoc) HandleGetReformatTemplates())
@@ -1174,9 +1226,20 @@ Public MustInherit Class BaseChatControl
         McpService.InitializeMcpSettings()
     End Sub
 
-    Protected Sub HandleGetSessionList()
-        HistorySessionSvc.HandleGetSessionList()
+    Protected Sub HandleGetSessionList(Optional scope As String = ConversationRepository.SessionScopeAll)
+        HistorySessionSvc.HandleGetSessionList(scope)
     End Sub
+
+    ''' <summary>
+    ''' 历史侧边栏的可见范围由前端带上；缺省按"全部（本文档优先）"处理。
+    ''' </summary>
+    Private Shared Function ReadSessionScope(jsonDoc As JObject) As String
+        Dim scope = jsonDoc?("scope")?.ToString()
+        If String.Equals((If(scope, "")).Trim(), ConversationRepository.SessionScopeDocument, StringComparison.OrdinalIgnoreCase) Then
+            Return ConversationRepository.SessionScopeDocument
+        End If
+        Return ConversationRepository.SessionScopeAll
+    End Function
 
     Protected Sub HandleLoadSession(jsonDoc As JObject)
         HistorySessionSvc.HandleLoadSession(jsonDoc)
@@ -1186,8 +1249,12 @@ Public MustInherit Class BaseChatControl
         HistorySessionSvc.HandleNewSession()
     End Sub
 
-    Protected Sub HandleDeleteSession(jsonDoc As JObject)
-        HistorySessionSvc.HandleDeleteSession(jsonDoc)
+    Protected Sub HandleDeleteSession(jsonDoc As JObject, scope As String)
+        HistorySessionSvc.HandleDeleteSession(jsonDoc, scope)
+    End Sub
+
+    Protected Sub HandleRenameSession(jsonDoc As JObject, scope As String)
+        HistorySessionSvc.HandleRenameSession(jsonDoc, scope)
     End Sub
 
     Protected Overridable Sub HandleCheckedChange(jsonDoc As JObject)
@@ -1572,6 +1639,8 @@ Public MustInherit Class BaseChatControl
     Private Sub StartAgentPlanningFlow(message As String,
                                        intent As IntentResult,
                                        Optional analysis As Agent.AiNativeRuntimeResult = Nothing)
+        ' 会话档案要在还在 UI 线程时就把当前文档读走，后台规划线程不能再碰 COM
+        RefreshSessionDocumentContext()
         AgentKernelSvc.AgentFullUserMessage = message
         AgentKernelSvc.AgentOriginalUserRequest = If(intent?.OriginalInput, message)
         ' Agent 回合的用户事件由 AgentKernelService 落库，这里丢弃待写文本，避免后续 Send 误用
@@ -1636,6 +1705,14 @@ Public MustInherit Class BaseChatControl
     ''' </summary>
     Protected Sub HandleStartAgent(jsonDoc As JObject)
         Try
+            ' Agent 主链没有配置时就启动，只会在半路失败并留下一个空思考气泡；这里用同一个 CTA 拦住
+            If IsBlockedByModelConfig(ModelConfigGate.ActionAgent) Then
+                ExecuteJavaScriptAsyncJS("changeSendButton()")
+                Return
+            End If
+
+            ' Agent 回合的用户事件由后台路径落库，文档标识必须此刻在 UI 线程取好
+            RefreshSessionDocumentContext()
             Dim request = jsonDoc("request")?.ToString()
             Dim filePathsToken = jsonDoc("filePaths")
             Dim selectedContentToken = jsonDoc("selectedContent")
@@ -1931,6 +2008,17 @@ Public MustInherit Class BaseChatControl
     End Sub
 
     ''' <summary>
+    ''' 处理“本会话允许该工具”的审批裁决
+    ''' </summary>
+    Protected Sub HandleAgentApproveToolSession(jsonDoc As JObject)
+        Try
+            AgentKernelSvc.ApproveForSession()
+        Catch ex As Exception
+            Debug.WriteLine($"HandleAgentApproveToolSession 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
     ''' 处理用户修改计划
     ''' </summary>
     Protected Sub HandleAgentRefinePlan(jsonDoc As JObject)
@@ -1953,6 +2041,45 @@ Public MustInherit Class BaseChatControl
             Debug.WriteLine($"HandleAgentRefinePlan 出错: {ex.Message}")
         End Try
     End Sub
+
+    ''' <summary>
+    ''' 撤销最近一轮 Agent 写入。每个宿主自行判定能否安全撤销，基类不做虚假承诺。
+    ''' </summary>
+    Protected Sub HandleAgentUndoRun(jsonDoc As JObject)
+        Dim runId = If(jsonDoc?("runId")?.ToString(), jsonDoc?("payload")?("runId")?.ToString())
+        Dim outcome As Agent.AgentRunUndoResult
+        If String.IsNullOrWhiteSpace(runId) Then
+            outcome = Agent.AgentRunUndoResult.Failed("缺少本轮运行标识，无法撤销")
+        Else
+            Try
+                outcome = PerformUndoAgentRun(runId)
+            Catch ex As Exception
+                outcome = Agent.AgentRunUndoResult.Failed($"撤销失败: {ex.Message}")
+            End Try
+        End If
+
+        If outcome.Success Then
+            GlobalStatusStrip.ShowInfo(outcome.Message)
+        Else
+            GlobalStatusStrip.ShowWarning(outcome.Message)
+        End If
+
+        Try
+            ExecuteJavaScriptAsyncJS($"setAgentUndoResult({UtilsService.ToJsStringLiteral(If(runId, ""))}, " &
+                                     $"{outcome.Success.ToString().ToLowerInvariant()}, " &
+                                     $"{UtilsService.ToJsStringLiteral(outcome.Message)}, " &
+                                     $"{outcome.Verified.ToString().ToLowerInvariant()})")
+        Catch ex As Exception
+            Debug.WriteLine($"HandleAgentUndoRun UI 回写失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 撤销某轮 Agent 写入。默认不支持；宿主具备安全撤销单元时覆写。
+    ''' </summary>
+    Protected Overridable Function PerformUndoAgentRun(runId As String) As Agent.AgentRunUndoResult
+        Return Agent.AgentRunUndoResult.Failed("当前应用不支持撤销本轮写入")
+    End Function
 
 #End Region
 
@@ -2184,8 +2311,11 @@ Public MustInherit Class BaseChatControl
 
             Dim configForm As New ConfigApiForm()
             If configForm.ShowDialog() = DialogResult.OK Then
-                ' 配置已更新，刷新前端显示
+                ' 配置已更新，刷新前端显示；面板内的"请先配置"卡片同时撤掉，否则用户会以为还没保存
+                ExecuteJavaScriptAsyncJS(ModelConfigGate.BuildHideScript())
                 UpdateModelDisplayInUI()
+                ' 引导卡片可能正停在"还没配置"这一步，不重推状态就会一直显示过期的第 1 步
+                OnboardingSvc.HandleGetState()
             End If
         Catch ex As Exception
             Debug.WriteLine($"HandleOpenApiConfigForm 出错: {ex.Message}")
@@ -2535,6 +2665,34 @@ Public MustInherit Class BaseChatControl
         Return "Unknown"
     End Function
 
+    ''' <summary>
+    ''' 宿主提供当前文档标识（一般取活动文档的完整路径）。共享层不碰 COM，
+    ''' 未覆写的宿主返回 Nothing，会话按"通用会话"处理而不是猜一个名字。
+    ''' </summary>
+    Protected Overridable Function GetSessionDocument() As SessionDocument
+        Return Nothing
+    End Function
+
+    ''' <summary>
+    ''' 在宿主 UI 线程读取当前文档并缓存进会话状态：消息落库跑在后台线程，
+    ''' 那时再回头读 COM 就是跨套间调用。
+    ''' </summary>
+    Protected Sub RefreshSessionDocumentContext()
+        Try
+            If _chatStateService IsNot Nothing Then
+                _chatStateService.SetCurrentDocument(GetSessionDocument())
+            End If
+        Catch ex As Exception
+            AppLogger.Warn("BaseChatControl", "刷新会话文档绑定失败，本轮按通用会话处理", ex)
+        End Try
+    End Sub
+
+    Private Function ResolveSessionDocument() As SessionDocument
+        RefreshSessionDocumentContext()
+        If _chatStateService Is Nothing Then Return Nothing
+        Return _chatStateService.CurrentDocument
+    End Function
+
     Protected MustOverride Function GetVBProject() As VBProject
     Protected MustOverride Function RunCodePreview(vbaCode As String, preview As Boolean) As Boolean
     Protected MustOverride Function RunCode(vbaCode As String)
@@ -2629,7 +2787,10 @@ Public MustInherit Class BaseChatControl
 
         Dim validation = SendValidator.Validate(apiUrl, apiKey, question)
         If Not validation.IsValid Then
-            GlobalStatusStrip.ShowWarning(GetSendValidationWarning(validation.Failure))
+            ' 配置缺失只给状态栏红字，用户看不到"下一步做什么"；这类失败走面板内 CTA
+            If Not IsBlockedByModelConfig(ModelConfigGate.ActionChat, validation) Then
+                GlobalStatusStrip.ShowWarning(GetSendValidationWarning(validation.Failure))
+            End If
             ExecuteJavaScriptAsyncJS($"changeSendButton()")
             Return
         End If
@@ -2640,6 +2801,8 @@ Public MustInherit Class BaseChatControl
         Dim userTurnText = If(String.IsNullOrWhiteSpace(_pendingUserVisibleText), question, _pendingUserVisibleText)
         _pendingUserVisibleText = Nothing
         If addHistory AndAlso Not String.IsNullOrWhiteSpace(userTurnText) Then
+            ' 落库在后台线程读 COM 会跨套间，文档标识只能在 UI 线程这里取
+            RefreshSessionDocumentContext()
             _chatStateService?.AddMessage("user", userTurnText)
         End If
 

@@ -46,7 +46,7 @@ Namespace Agent
         Public Event OnIterationUpdate(iteration As ReActIteration)
         Public Event OnStepCompleted(stepIndex As Integer, success As Boolean, message As String)
         Public Event OnExecutionExplained(explanation As ExecutionExplanation)
-        Public Event OnRequestApproval(message As String, callback As Action(Of Boolean))
+        Public Event OnRequestApproval(request As ApprovalRequest, callback As Action(Of ApprovalDecision))
         Public Event OnPlanGenerated(plan As ExecutionPlan)
         Public Event OnCompleted(result As AgentResult)
 
@@ -108,9 +108,9 @@ Namespace Agent
                                                    RaiseEvent OnExecutionExplained(explanation)
                                                End Sub
 
-            _loopEngine.OnRequestApproval = Async Function(msg)
-                                                Dim tcs As New TaskCompletionSource(Of Boolean)()
-                                                RaiseEvent OnRequestApproval(msg, Sub(approved) tcs.TrySetResult(approved))
+            _loopEngine.OnRequestApproval = Async Function(request)
+                                                Dim tcs As New TaskCompletionSource(Of ApprovalDecision)()
+                                                RaiseEvent OnRequestApproval(request, Sub(decision) tcs.TrySetResult(decision))
                                                 Return Await tcs.Task
                                             End Function
 
@@ -254,6 +254,7 @@ Namespace Agent
 
                 ' 执行 ReAct Loop
                 Dim result = Await _loopEngine.RunAsync(_session, systemPrompt, matchedSkill, cancellationToken)
+                result.ChangeLog = _session.ChangeLog
 
                 ' 保存记忆
                 _memory.AddTaskRecord(result)
@@ -272,8 +273,11 @@ Namespace Agent
             Catch ex As Exception
                 AppLogger.Error("AgentKernel", "ExecuteAsync unhandled exception", ex)
                 Dim classified = ExceptionClassifier.Classify(ex)
-                Dim failed = AgentResult.Failed(If(_session?.Id, Guid.NewGuid().ToString()),
-                                                $"执行异常: [{classified.ErrorCode}] {classified.UserMessage}")
+                Dim failedMessage = $"执行异常: [{classified.ErrorCode}] {classified.UserMessage}"
+                Dim written = If(_session Is Nothing OrElse _session.ChangeLog Is Nothing, 0, _session.ChangeLog.WrittenCount)
+                If written > 0 Then failedMessage &= $"（异常前已写入 {written} 处）"
+                Dim failed = AgentResult.Failed(If(_session?.Id, Guid.NewGuid().ToString()), failedMessage)
+                If _session IsNot Nothing Then failed.ChangeLog = _session.ChangeLog
                 RaiseEvent OnCompleted(failed)
                 Return failed
             Finally

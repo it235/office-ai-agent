@@ -19,6 +19,8 @@ Namespace Agent
         Public Property AllowedTools As HashSet(Of String)
         Public Property ApprovedTools As HashSet(Of String)
         Public Property ApprovedToolCalls As HashSet(Of String)
+        ''' <summary>本会话内放行的工具；与一次性审批不同，命中后不消费。</summary>
+        Public Property SessionApprovedTools As HashSet(Of String)
         Public Property EnforceAllowedTools As Boolean = True
 
         Public Shared Function FromSession(session As AgentSession, skill As AgentSkill) As ToolExecutionContext
@@ -30,6 +32,9 @@ Namespace Agent
                 .AllowedTools = New HashSet(Of String)(StringComparer.OrdinalIgnoreCase),
                 .ApprovedTools = New HashSet(Of String)(StringComparer.OrdinalIgnoreCase),
                 .ApprovedToolCalls = New HashSet(Of String)(StringComparer.OrdinalIgnoreCase),
+                .SessionApprovedTools = If(session?.SessionApprovedTools IsNot Nothing,
+                                            session.SessionApprovedTools,
+                                            New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)),
                 .EnforceAllowedTools = False
             }
 
@@ -73,6 +78,21 @@ Namespace Agent
             If ApprovedTools Is Nothing Then ApprovedTools = New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
             ApprovedTools.Add(toolId.Trim())
         End Sub
+
+        ''' <summary>允许本会话内该工具的所有调用；不做参数匹配，也不在放行后移除。</summary>
+        Public Sub ApproveToolForSession(toolId As String)
+            If String.IsNullOrWhiteSpace(toolId) Then Return
+            If SessionApprovedTools Is Nothing Then
+                SessionApprovedTools = New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+            End If
+            SessionApprovedTools.Add(toolId.Trim())
+        End Sub
+
+        Public Function IsToolApprovedForSession(toolId As String) As Boolean
+            Return SessionApprovedTools IsNot Nothing AndAlso
+                   Not String.IsNullOrWhiteSpace(toolId) AndAlso
+                   SessionApprovedTools.Contains(toolId.Trim())
+        End Function
 
         Public Function IsToolApproved(toolId As String, Optional params As JObject = Nothing) As Boolean
             If params IsNot Nothing AndAlso ApprovedToolCalls IsNot Nothing Then

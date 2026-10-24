@@ -16,6 +16,11 @@ window.createChatSection = function (sender, timestamp, uuid) {
     chatContainer.className = 'chat-container';
     chatContainer.id = 'chat-' + uuid;
 
+    // 模型已经能响应，说明配置可用；此前拦下来的"请先配置"卡片已经是过期信息
+    if (sender !== 'Me' && window.hideModelConfigRequired) {
+        window.hideModelConfigRequired();
+    }
+
     // Record sender for later reference
     chatContainer.dataset.sender = sender;
 
@@ -323,3 +328,87 @@ function toggleChatMessageReference(headerElement) {
         container.classList.toggle('collapsed');
     }
 }
+
+// ========== 模型配置缺失 CTA（E3-03） ==========
+//
+// 阻断发生在 VB 侧共享发送漏斗（ModelConfigGate），这里只负责把"下一步做什么"画出来。
+// 卡片用固定 id 复用：连点发送不会堆出第二张卡，也不会挡住配置后的正常流程。
+
+window.showModelConfigRequired = function (payload) {
+    const chatHistoryContainer = document.getElementById('chat-container');
+    if (!chatHistoryContainer) {
+        console.error('找不到 chat-container 元素，无法展示配置提示');
+        return;
+    }
+
+    const data = payload || {};
+    let card = document.getElementById('model-config-cta');
+    if (!card) {
+        card = document.createElement('div');
+        card.id = 'model-config-cta';
+        card.className = 'model-config-cta';
+        chatHistoryContainer.appendChild(card);
+    }
+
+    card.dataset.reason = data.reason || 'missing_api_key';
+    card.innerHTML = '';
+
+    const header = document.createElement('div');
+    header.className = 'model-config-cta-header';
+    const title = document.createElement('span');
+    title.className = 'model-config-cta-title';
+    title.textContent = data.title || '需要先配置大模型';
+    header.appendChild(title);
+
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'model-config-cta-close';
+    close.setAttribute('aria-label', '关闭提示');
+    close.textContent = '×';
+    close.addEventListener('click', window.hideModelConfigRequired);
+    header.appendChild(close);
+    card.appendChild(header);
+
+    const body = document.createElement('div');
+    body.className = 'model-config-cta-body';
+    body.textContent = data.message || '还没有可用的 API Key，消息没有发送，文档不会被修改。';
+    card.appendChild(body);
+
+    const actions = document.createElement('div');
+    actions.className = 'model-config-cta-actions';
+    const openButton = document.createElement('button');
+    openButton.type = 'button';
+    openButton.className = 'model-config-cta-action agent-btn agent-btn-execute';
+    openButton.textContent = data.actionLabel || '配置 API';
+    openButton.addEventListener('click', function () {
+        if (typeof openModelConfig === 'function') {
+            openModelConfig();
+        } else {
+            sendMessageToServer({ type: 'openApiConfigForm' });
+        }
+    });
+    actions.appendChild(openButton);
+
+    // 引导向导（E3-01）只补隐私确认和示例任务这两件配置窗口里没有的事，配置本身仍然由上面的按钮去
+    if (window.showOnboarding) {
+        const guideButton = document.createElement('button');
+        guideButton.type = 'button';
+        guideButton.className = 'model-config-cta-guide agent-btn agent-btn-approve-session';
+        guideButton.textContent = '查看使用引导';
+        guideButton.addEventListener('click', function () {
+            window.hideModelConfigRequired();
+            window.showOnboarding();
+        });
+        actions.appendChild(guideButton);
+    }
+    card.appendChild(actions);
+
+    card.scrollIntoView({ block: 'nearest' });
+};
+
+window.hideModelConfigRequired = function () {
+    const card = document.getElementById('model-config-cta');
+    if (card) {
+        card.remove();
+    }
+};

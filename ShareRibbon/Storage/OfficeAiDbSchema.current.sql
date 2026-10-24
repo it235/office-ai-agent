@@ -68,10 +68,17 @@ CREATE TABLE IF NOT EXISTS session_summary (
     session_id TEXT NOT NULL,
     title TEXT,
     snippet TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    app_type TEXT NOT NULL DEFAULT '',
+    document_id TEXT NOT NULL DEFAULT '',
+    document_name TEXT NOT NULL DEFAULT '',
+    custom_title TEXT,
+    updated_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_session_summary_session ON session_summary(session_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_session_summary_session_unique ON session_summary(session_id);
+CREATE INDEX IF NOT EXISTS idx_session_summary_document ON session_summary(app_type, document_id);
 
 CREATE TABLE IF NOT EXISTS conversation (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -317,3 +324,30 @@ CREATE TABLE IF NOT EXISTS agent_run_step (
 
 CREATE INDEX IF NOT EXISTS idx_agent_run_step_run ON agent_run_step(run_id, seq);
 CREATE INDEX IF NOT EXISTS idx_agent_run_step_status ON agent_run_step(status, error_code);
+
+CREATE TABLE IF NOT EXISTS agent_run_change (
+    change_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    session_id TEXT,
+    app_type TEXT,
+    seq INTEGER NOT NULL,
+    tool_id TEXT,
+    step_index INTEGER,
+    step_description TEXT,
+    summary TEXT,
+    target_refs_json TEXT,
+    changed INTEGER NOT NULL DEFAULT 0,
+    success INTEGER NOT NULL DEFAULT 0,
+    rolled_back INTEGER NOT NULL DEFAULT 0,
+    partial_apply INTEGER NOT NULL DEFAULT 0,
+    undo_available INTEGER NOT NULL DEFAULT 0,
+    undo_units INTEGER NOT NULL DEFAULT 0,
+    undo_point_id TEXT,
+    rollback_error TEXT,
+    doc_hash_before TEXT,
+    doc_hash_after TEXT,
+    observed_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_run_change_run ON agent_run_change(run_id, seq);
+CREATE INDEX IF NOT EXISTS idx_agent_run_change_session ON agent_run_change(session_id, observed_at);

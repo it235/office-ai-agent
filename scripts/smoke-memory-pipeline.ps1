@@ -32,19 +32,29 @@ try {
     $dbPath = [ShareRibbon.OfficeAiDatabase]::GetDatabasePath()
 
     $session = "smoke-" + [guid]::NewGuid().ToString("N")
+    # A per-run marker: retrieving by it proves this run's memory reached the store, instead of
+    # passing because some older memory happens to match a generic keyword.
+    $marker = "smokemem" + [guid]::NewGuid().ToString("N")
 
+    # The pipeline default is the LLM extractor, which needs a live key and a network. This gate
+    # checks the queue -> extractor -> memory_item -> retrieval chain, so pin the deterministic
+    # rule extractor and keep the result independent of model availability.
+    [ShareRibbon.AgentMemoryPipelineService]::Extractor = New-Object ShareRibbon.RuleBasedMemoryExtractor
+
+    # event_type must be 'chat_message': both the history read path and
+    # GetUnprocessedConversationEventsBySession filter on it, so any other value is invisible.
     $userEvent = New-Object ShareRibbon.ConversationEventRecord
     $userEvent.SessionId = $session
     $userEvent.AppType = "Word"
-    $userEvent.EventType = "message"
+    $userEvent.EventType = "chat_message"
     $userEvent.Role = "user"
-    $userEvent.Content = "Remember my default official document body style: FangSong No.3, first-line indent 2 chars, justified alignment."
+    $userEvent.Content = "Remember my default official document body style ($marker): FangSong No.3, first-line indent 2 chars, justified alignment."
     $userId = [ShareRibbon.AgentMemoryRepository]::AppendConversationEvent($userEvent)
 
     $assistantEvent = New-Object ShareRibbon.ConversationEventRecord
     $assistantEvent.SessionId = $session
     $assistantEvent.AppType = "Word"
-    $assistantEvent.EventType = "message"
+    $assistantEvent.EventType = "chat_message"
     $assistantEvent.Role = "assistant"
     $assistantEvent.Content = "I have saved your official document body formatting preference."
     $assistantId = [ShareRibbon.AgentMemoryRepository]::AppendConversationEvent($assistantEvent)
@@ -55,15 +65,31 @@ try {
 
     $job = New-Object ShareRibbon.MemoryJobRecord
     $job.JobType = "extract_memory"
-    $job.TargetId = $assistantId
+    # TargetId is the session id, matching MemoryTurnRecorder; the pipeline resolves the events
+    # through GetUnprocessedConversationEventsBySession.
+    $job.TargetId = $session
     $job.PayloadJson = $payload.ToString([Newtonsoft.Json.Formatting]::None)
     $job.Status = "pending"
     [ShareRibbon.AgentMemoryRepository]::EnqueueJob($job) | Out-Null
 
     [ShareRibbon.AgentMemoryPipelineService]::ProcessPendingJobsAsync(50).GetAwaiter().GetResult()
 
-    $memories = [ShareRibbon.AgentMemoryRepository]::RetrieveMemoryItems("official document FangSong", "Word", "", "", 10)
+    $memories = [ShareRibbon.AgentMemoryRepository]::RetrieveMemoryItems($marker, "Word", "", "", 10)
     $skills = [ShareRibbon.AgentMemoryRepository]::RetrieveSkillRegistry("", "", "Word", 5)
+
+    # ---- retrieval must respect TTL: an expired memory is invisible even when it matches ----
+    $ttlMarker = $marker + "-expired"
+    $expired = New-Object ShareRibbon.MemoryItemRecord
+    $expired.Scope = "user"
+    $expired.AppType = "Word"
+    $expired.MemoryType = "fact"
+    $expired.Content = "expired fixture memory $ttlMarker"
+    $expired.Status = "active"
+    $expired.ExpiresAt = (Get-Date).AddMinutes(-5).ToString("yyyy-MM-dd HH:mm:ss")
+    [void][ShareRibbon.AgentMemoryRepository]::UpsertMemoryItem($expired)
+    if (([ShareRibbon.AgentMemoryRepository]::RetrieveMemoryItems($ttlMarker, "Word", "", "", 10)).Count -ne 0) {
+        throw "an expired memory item must not be retrieved"
+    }
 
     # ---- queue semantics: idempotent enqueue, backoff retry, dead-letter ----
     $queueConn = New-Object System.Data.SQLite.SQLiteConnection([ShareRibbon.OfficeAiDatabase]::GetConnectionString())
@@ -149,6 +175,7 @@ try {
     $result = [pscustomobject]@{
         Database = $dbPath
         Session = $session
+        Marker = $marker
         UserEventId = $userId
         AssistantEventId = $assistantId
         MemoryCount = $memories.Count
@@ -157,6 +184,7 @@ try {
         QueueIdempotent = $true
         QueueBackoffRetry = $true
         QueueDeadLetter = $true
+        RetrievalHonorsTtl = $true
     }
 
     $result | Format-List
@@ -164,7 +192,37 @@ try {
     if ($memories.Count -lt 1) {
         throw "Smoke failed: the inserted structured memory was not retrieved."
     }
+    if (-not ($memories | Where-Object { $_.Content -like "*$marker*" })) {
+        throw "the retrieved memory must be the one this run extracted, got '$($memories[0].Content)'"
+    }
 }
 finally {
+    # This gate writes into the developer's real memory store, so the fixture must leave no trace:
+    # the session cascade removes the extracted session-scoped memory, and the marker delete catches
+    # the expired item, which has scope=user and no session to cascade from.
+    try {
+        if ($session) {
+            [void][ShareRibbon.ConversationRepository]::DeleteSessionCascade($session)
+        }
+        $clean = New-Object System.Data.SQLite.SQLiteConnection([ShareRibbon.OfficeAiDatabase]::GetConnectionString())
+        $clean.Open()
+        try {
+            $cmd = $clean.CreateCommand()
+            $cmd.CommandText = "DELETE FROM memory_embedding WHERE memory_id IN (SELECT memory_id FROM memory_item WHERE content LIKE '%smokemem%')"
+            [void]$cmd.ExecuteNonQuery()
+            $cmd.Dispose()
+            $cmd = $clean.CreateCommand()
+            $cmd.CommandText = "DELETE FROM memory_item WHERE content LIKE '%smokemem%'"
+            [void]$cmd.ExecuteNonQuery()
+            $cmd.Dispose()
+        }
+        finally {
+            $clean.Dispose()
+            [System.Data.SQLite.SQLiteConnection]::ClearAllPools()
+        }
+    }
+    catch {
+        Write-Warning "memory smoke fixture cleanup failed: $($_.Exception.Message)"
+    }
     Pop-Location
 }

@@ -364,17 +364,24 @@ function showAgentExecutionExplanation(sessionId, explanation) {
 /**
  * 显示审批请求 UI
  * @param {string} sessionId - 会话 ID
+ * @param {string} toolId - 待审批工具 ID
  * @param {string} message - 审批提示消息
+ * @param {string} riskLevel - 风险级别
  */
-function showAgentApproval(sessionId, message) {
+function showAgentApproval(sessionId, toolId, message, riskLevel) {
     try {
         const actionsEl = document.getElementById(`agent-actions-${sessionId}`);
         if (actionsEl) {
+            const safeToolId = toolId ? escapeHtml(toolId) : '';
+            const safeRisk = riskLevel ? escapeHtml(riskLevel) : '';
+            const toolText = safeToolId ? `<span class="approval-tool"><code>${safeToolId}</code></span>` : '';
+            const riskText = safeRisk ? `<span class="approval-risk">${safeRisk}</span>` : '';
             actionsEl.innerHTML = `
                 <div class="agent-approval-request">
-                    <span class="approval-msg">${escapeHtml(message)}</span>
-                    <button class="agent-btn agent-btn-execute" onclick="agentApprove('${sessionId}')">✅ 确认</button>
-                    <button class="agent-btn agent-btn-abort" onclick="agentReject('${sessionId}')">❌ 跳过</button>
+                    <span class="approval-msg">${escapeHtml(message)}${toolText}${riskText}</span>
+                    <button class="agent-btn agent-btn-execute" title="只放行这一次操作" onclick="agentApprove('${sessionId}')">允许一次</button>
+                    <button class="agent-btn agent-btn-approve-session" title="本轮任务内该工具不再询问，任务结束后失效" onclick="agentApproveSession('${sessionId}', '${toolId || ''}')">本会话允许此工具</button>
+                    <button class="agent-btn agent-btn-abort" title="只跳过当前这一步，后续步骤继续" onclick="agentReject('${sessionId}')">拒绝</button>
                 </div>
             `;
         }
@@ -411,6 +418,17 @@ function confirmAgentExecution(uuid) {
  */
 function agentApprove(sessionId) {
     requestApprove(sessionId);
+}
+
+/**
+ * 用户允许本会话内该工具的所有调用
+ */
+function agentApproveSession(sessionId, toolId) {
+    if (typeof requestApproveToolSession === 'function') {
+        requestApproveToolSession(sessionId, toolId || '');
+    } else {
+        requestApprove(sessionId);
+    }
 }
 
 /**
@@ -473,8 +491,10 @@ function updateAgentStatus(uuid, status, text) {
  * @param {string} uuid - 会话 UUID
  * @param {boolean} success - 是否成功
  * @param {string} message - 完成消息
+ * @param {string} thinkingUuid - 思考消息 UUID
+ * @param {Object} undo - 可撤销描述 { canUndo, runId, units, writtenCount }
  */
-function completeAgent(uuid, success, message, thinkingUuid) {
+function completeAgent(uuid, success, message, thinkingUuid, undo) {
     try {
         const statusBar = document.getElementById('agent-status-' + uuid);
         if (statusBar) {
@@ -488,7 +508,21 @@ function completeAgent(uuid, success, message, thinkingUuid) {
 
         const actions = document.getElementById('agent-actions-' + uuid);
         if (actions) {
-            actions.innerHTML = `<span class="agent-finished">${success ? '✅ 已完成' : '❌ 已失败'}</span>`;
+            actions.innerHTML = '';
+            const state = document.createElement('span');
+            state.className = 'agent-finished';
+            state.textContent = success ? '✅ 已完成' : '❌ 已失败';
+            actions.appendChild(state);
+
+            if (undo && undo.canUndo && undo.runId) {
+                const undoBtn = document.createElement('button');
+                undoBtn.type = 'button';
+                undoBtn.className = 'agent-btn agent-btn-undo';
+                undoBtn.dataset.runId = undo.runId;
+                undoBtn.textContent = '撤销本轮';
+                undoBtn.addEventListener('click', function () { undoAgentRun(undoBtn); });
+                actions.appendChild(undoBtn);
+            }
         }
 
         // 没有生成 plan card 时，状态仍显示在最初的 thinking 消息中。
@@ -510,6 +544,70 @@ function completeAgent(uuid, success, message, thinkingUuid) {
         console.error('completeAgent error:', err);
     } finally {
         restoreAgentRequestUi();
+    }
+}
+
+/**
+ * 请求撤销某一轮 Agent 写入
+ * @param {HTMLButtonElement} button - 触发撤销的按钮
+ */
+function undoAgentRun(button) {
+    if (!button || button.disabled) return;
+    const runId = button.dataset.runId || '';
+    if (!runId) return;
+
+    const errorEl = button.parentNode ? button.parentNode.querySelector('.agent-undo-error') : null;
+    if (errorEl) errorEl.remove();
+
+    button.disabled = true;
+    button.textContent = '正在撤销...';
+
+    if (typeof sendMessageToServer === 'function') {
+        sendMessageToServer({ type: 'agent:undoRun', runId: runId });
+    } else {
+        button.disabled = false;
+        button.textContent = '撤销本轮';
+        console.error('[AgentUndo] sendMessageToServer 不可用');
+    }
+}
+
+/**
+ * 回写撤销结果；只改动对应 runId 的按钮，不影响其他轮次。
+ * @param {string} runId - 运行标识
+ * @param {boolean} success - 是否撤销成功
+ * @param {string} message - 结果说明
+ * @param {boolean} verified - 是否已核对文档指纹
+ */
+function setAgentUndoResult(runId, success, message, verified) {
+    try {
+        if (!runId) return;
+        const buttons = document.querySelectorAll('.agent-btn-undo');
+        let target = null;
+        for (let i = 0; i < buttons.length; i++) {
+            if (buttons[i].dataset.runId === runId) { target = buttons[i]; break; }
+        }
+        if (!target) return;
+
+        if (success) {
+            const done = document.createElement('span');
+            done.className = 'agent-undo-result';
+            done.textContent = verified ? '↩ 已撤销本轮' : '↩ 已撤销';
+            done.title = message || '';
+            target.parentNode.replaceChild(done, target);
+            return;
+        }
+
+        target.disabled = false;
+        target.textContent = '撤销本轮';
+        target.title = message || '撤销失败';
+        if (message) {
+            const errorEl = document.createElement('span');
+            errorEl.className = 'agent-undo-error';
+            errorEl.textContent = message;
+            target.parentNode.insertBefore(errorEl, target.nextSibling);
+        }
+    } catch (err) {
+        console.error('setAgentUndoResult error:', err);
     }
 }
 
@@ -536,11 +634,14 @@ window.showAgentExecutionExplanation = showAgentExecutionExplanation;
 window.showAgentApproval = showAgentApproval;
 window.confirmAgentExecution = confirmAgentExecution;
 window.agentApprove = agentApprove;
+window.agentApproveSession = agentApproveSession;
 window.agentReject = agentReject;
 window.refineAgentPlan = refineAgentPlan;
 window.abortAgent = abortAgent;
 window.updateAgentStatus = updateAgentStatus;
 window.completeAgent = completeAgent;
+window.undoAgentRun = undoAgentRun;
+window.setAgentUndoResult = setAgentUndoResult;
 window.lockChatInput = lockChatInput;
 window.unlockChatInput = unlockChatInput;
 window.restoreAgentRequestUi = restoreAgentRequestUi;

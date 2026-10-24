@@ -202,6 +202,7 @@
     <Compile Include="Config\MemoryConfig.vb" />
     <Compile Include="Storage\OfficeAiDatabase.vb" />
     <Compile Include="Storage\AgentMemoryRepository.vb" />
+    <Compile Include="Storage\AgentChangeLogRepository.vb" />
     <Compile Include="Storage\MemoryRepository.vb" />
     <Compile Include="Storage\ConversationRepository.vb" />
     <Compile Include="Storage\PromptTemplateRepository.vb" />
@@ -274,6 +275,7 @@
     <Compile Include="Agent\LoopEngine.Planning.vb" />
     <Compile Include="Agent\LoopEngine.vb" />
     <Compile Include="Agent\AgentSession.vb" />
+    <Compile Include="Agent\ApprovalModels.vb" />
     <Compile Include="Agent\AgentMemory.vb" />
     <Compile Include="Agent\SkillRegistry.vb" />
     <Compile Include="Agent\ToolExecutionContext.vb" />
@@ -295,6 +297,7 @@
     <Compile Include="Agent\Context\ContextPack.vb" />
     <Compile Include="Agent\Execution\SafetyGate.vb" />
     <Compile Include="Agent\Execution\SafetyChecker.vb" />
+    <Compile Include="Agent\Execution\AgentChangeLog.vb" />
     <Compile Include="Config\WebView2Loader.vb" />
     <Compile Include="Config\WebView2EnvironmentCache.vb" />
     <Compile Include="Config\SqliteAssemblyResolver.vb" />
@@ -378,6 +381,7 @@
     </Compile>
     <Compile Include="Controls\Models\SelectionInfo.vb" />
     <Compile Include="Controls\Models\HistoryMessage.vb" />
+    <Compile Include="Controls\Models\SessionDocument.vb" />
     <Compile Include="Controls\Services\WebViewBridge.vb" />
     <Compile Include="Controls\Services\HttpStreamService.vb" />
     <Compile Include="Controls\Services\CodeExecutionService.vb" />
@@ -391,6 +395,9 @@
     <Compile Include="Controls\Services\ChatRequestOrchestrator.vb" />
     <Compile Include="Controls\Services\ChatRoutingOrchestrator.vb" />
     <Compile Include="Controls\Services\ChatSendValidator.vb" />
+    <Compile Include="Controls\Services\ModelConfigGate.vb" />
+    <Compile Include="Controls\Services\ModelConnectivityTester.vb" />
+    <Compile Include="Controls\Services\OnboardingService.vb" />
     <Compile Include="Controls\Services\MemoryTurnRecorder.vb" />
     <Compile Include="Controls\Services\ReformatService.vb" />
     <Compile Include="Controls\Services\HistorySessionService.vb" />
@@ -528,6 +535,7 @@
     <None Include="Resources\js\reformat-chat.js" />
     <None Include="Resources\js\reformat-template.js" />
     <None Include="Resources\js\proofread-ui.js" />
+    <None Include="Resources\js\onboarding.js" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Resources\chat-template-refactored.html" />

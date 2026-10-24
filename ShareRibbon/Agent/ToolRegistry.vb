@@ -744,7 +744,8 @@ Namespace Agent
             If safetyDecision IsNot Nothing AndAlso
                safetyDecision.Action = Execution.SafetyAction.RequireApproval AndAlso
                executionContext IsNot Nothing AndAlso
-               executionContext.ConsumeToolApproval(tool.Id, params) Then
+               (executionContext.IsToolApprovedForSession(tool.Id) OrElse
+                executionContext.ConsumeToolApproval(tool.Id, params)) Then
                 safetyDecision = Execution.SafetyDecision.Allow(safetyDecision.RiskLevel)
             End If
             If safetyDecision IsNot Nothing AndAlso safetyDecision.Action <> Execution.SafetyAction.Allow Then
@@ -968,8 +969,9 @@ Namespace Agent
                 If decision IsNot Nothing AndAlso decision.Action <> Execution.SafetyAction.Allow Then
                     If decision.Action = Execution.SafetyAction.RequireApproval AndAlso
                        executionContext IsNot Nothing AndAlso
-                       executionContext.ConsumeToolApproval(innerTool.Id, innerParams) Then
-                        ' 该内层命令已针对精确参数获得一次性审批，放行继续执行。
+                       (executionContext.IsToolApprovedForSession(innerTool.Id) OrElse
+                        executionContext.ConsumeToolApproval(innerTool.Id, innerParams)) Then
+                        ' 该内层命令已获得本会话放行或精确参数的一次性审批，放行继续执行。
                     Else
                         Return BuildSafetyFailure(innerTool, decision)
                     End If

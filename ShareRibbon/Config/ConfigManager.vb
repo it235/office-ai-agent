@@ -1,4 +1,5 @@
 ﻿Imports System.IO
+Imports ShareRibbon.Security
 
 
 Public Class ConfigManager
@@ -36,25 +37,40 @@ Public Class ConfigManager
         ' 从加密存储加载 API Key
         SecureConfigIntegration.LoadSecureApiKeys(ConfigData)
 
-        ' 初始化配置，将数据初始化到 ConfigSettings，方便全局调用
-        For Each item In ConfigData
-            If item.selected Then
-                ConfigSettings.ApiUrl = item.url
-                ConfigSettings.ApiKey = item.key
-                ConfigSettings.platform = item.platform
-                For Each item_m In item.model
-                    If item_m.selected Then
-                        If item_m.modelType = ModelType.Chat Then
-                            ConfigSettings.ModelName = item_m.modelName
-                            ConfigSettings.mcpable = item_m.mcpable
-                            ConfigSettings.fimSupported = item_m.fimSupported
-                            ConfigSettings.fimUrl = If(String.IsNullOrEmpty(item_m.fimUrl), item.url, item_m.fimUrl)
-                            ConfigSettings.ReasoningMode = item_m.reasoningMode
-                        End If
-                    End If
-                Next
-            End If
-        Next
+        ApplyConfigSnapshot()
+    End Sub
+
+    ''' <summary>
+    ''' 把"当前选中的服务商 + 选中的聊天模型"投射到全局快照 ConfigSettings。
+    ''' 必须无条件赋值：没有选中项、或选中项的 URL/Key 被用户清空时，也要把旧值抹掉。
+    ''' 否则保存配置后面板仍按上一次的 URL 和 Key 发请求，未配置闸门也会被旧 Key 放行。
+    ''' EmbeddingModel 与提示词字段不由本方法管理，它们有各自的写入方，重置会打断补全和向量检索。
+    ''' </summary>
+    Public Shared Sub ApplyConfigSnapshot()
+        Dim chosen = If(ConfigData Is Nothing,
+                        Nothing,
+                        ConfigData.FirstOrDefault(Function(item) item.selected))
+
+        ConfigSettings.platform = If(chosen?.platform, "")
+        ConfigSettings.ApiUrl = If(chosen?.url, "")
+        ConfigSettings.ApiKey = If(chosen?.key, "")
+        ConfigSettings.ModelName = ""
+        ConfigSettings.mcpable = False
+        ConfigSettings.ReasoningMode = "default"
+        ConfigSettings.fimSupported = False
+        ConfigSettings.fimUrl = ""
+
+        If chosen Is Nothing Then Return
+
+        Dim chatModel = chosen.model?.FirstOrDefault(
+            Function(m) m.selected AndAlso m.modelType = ModelType.Chat)
+        If chatModel Is Nothing Then Return
+
+        ConfigSettings.ModelName = chatModel.modelName
+        ConfigSettings.mcpable = chatModel.mcpable
+        ConfigSettings.ReasoningMode = chatModel.reasoningMode
+        ConfigSettings.fimSupported = chatModel.fimSupported
+        ConfigSettings.fimUrl = If(String.IsNullOrEmpty(chatModel.fimUrl), chosen.url, chatModel.fimUrl)
     End Sub
 
     ''' <summary>
@@ -136,21 +152,48 @@ Public Class ConfigManager
 
     ' 保存到文件中，默认存在用户的文档目录下
     Public Shared Sub SaveConfig()
-        ' 保存 API Key 到加密存储
-        SecureConfigIntegration.SaveSecureApiKeys(ConfigData)
-
-        Dim json As String = Newtonsoft.Json.JsonConvert.SerializeObject(ConfigData, Newtonsoft.Json.Formatting.Indented)
-        ' 如果configFilePath的目录不存在就创建
-        Dim dir = Path.GetDirectoryName(configFilePath)
-        If Not Directory.Exists(dir) Then
-            Directory.CreateDirectory(dir)
+        ' API Key 只进 DPAPI（secure.config），配置文件里只写占位符：
+        ' 明文密钥落在"我的文档"等于向任何能读该目录的进程公开。
+        ' 只有确认加密写入成功的项才剥掉明文，写盘失败的保持原值，不能让用户的 Key 凭空消失。
+        Dim originals As New List(Of String)()
+        Dim hidden As New List(Of Boolean)()
+        If ConfigData IsNot Nothing Then
+            For Each item In ConfigData
+                originals.Add(If(item.key, ""))
+                Dim canHide As Boolean = False
+                If Not String.IsNullOrEmpty(item.key) AndAlso item.key <> "[encrypted]" Then
+                    canHide = SecureConfigManager.SaveApiKey(item.key, item.platform)
+                End If
+                hidden.Add(canHide)
+                If canHide Then item.key = "[encrypted]"
+            Next
         End If
-        '如果文件不存在就创建
-        If Not File.Exists(configFilePath) Then
-            File.Create(configFilePath).Dispose()
-        End If
-        File.WriteAllText(configFilePath, json)
 
+        Try
+            Dim json As String = Newtonsoft.Json.JsonConvert.SerializeObject(ConfigData, Newtonsoft.Json.Formatting.Indented)
+            ' 如果configFilePath的目录不存在就创建
+            Dim dir = Path.GetDirectoryName(configFilePath)
+            If Not Directory.Exists(dir) Then
+                Directory.CreateDirectory(dir)
+            End If
+            '如果文件不存在就创建
+            If Not File.Exists(configFilePath) Then
+                File.Create(configFilePath).Dispose()
+            End If
+            File.WriteAllText(configFilePath, json)
+        Finally
+            ' 内存里的 ConfigData 必须继续拿着真实 Key：MCP、意图识别、翻译都直接读 cfg.key，
+            ' 它们只在启动时经过 LoadConfig，保存后立刻清空会让这些路径拿到占位符。
+            If ConfigData IsNot Nothing Then
+                For i As Integer = 0 To ConfigData.Count - 1
+                    If hidden(i) Then ConfigData(i).key = originals(i)
+                Next
+            End If
+        End Try
+
+        ' 快照必须跟着磁盘上的选择走，否则配置窗口清空 URL/Key 后，
+        ' 面板仍会用保存前的旧值发请求，E3-03 的未配置闸门也会被旧 Key 放行。
+        ApplyConfigSnapshot()
     End Sub
 
 

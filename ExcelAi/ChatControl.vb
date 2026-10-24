@@ -384,6 +384,25 @@ Public Class ChatControl
     Protected Overrides Function GetApplication() As ApplicationInfo
         Return New ApplicationInfo("Excel", OfficeApplicationType.Excel)
     End Function
+
+    Protected Overrides Function GetOfficeAppType() As String
+        Return "Excel"
+    End Function
+
+    ''' <summary>
+    ''' 会话绑定的文档：只在 UI 线程读取活动工作簿完整路径，未保存工作簿按通用会话处理。
+    ''' </summary>
+    Protected Overrides Function GetSessionDocument() As SessionDocument
+        Try
+            Dim wb = Globals.ThisAddIn.Application.ActiveWorkbook
+            If wb Is Nothing Then Return Nothing
+            Return SessionDocument.FromFullPath(wb.FullName)
+        Catch ex As Exception
+            AppLogger.Debug("ExcelAi", "读取活动工作簿标识失败", ex)
+            Return Nothing
+        End Try
+    End Function
+
     Protected Overrides Sub SendChatMessage(message As String)
         ' 这里可以实现word的特殊逻辑
         Debug.Print(message)

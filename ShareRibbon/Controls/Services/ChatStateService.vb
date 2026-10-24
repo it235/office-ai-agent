@@ -38,6 +38,22 @@ Public Class ChatStateService
         ' 当前会话 ID（用于持久化到 conversation 表）
         Private _currentSessionId As String = Nothing
 
+        ''' <summary>
+        ''' 当前宿主类型提供器（Excel/Word/PowerPoint）。由 BaseChatControl 在 WebView 初始化时注入，
+        ''' 会话消息据此带上 app_type，历史侧边栏才能按宿主隔离。
+        ''' </summary>
+        Public Property AppTypeProvider As Func(Of String) = Nothing
+
+        ''' <summary>
+        ''' 当前会话绑定的文档。由宿主 UI 线程在发消息/打开历史时刷新后缓存进来：
+        ''' 落库发生在后台线程，那时不能再回头读 COM。
+        ''' </summary>
+        Public Property CurrentDocument As SessionDocument
+
+        Public Sub SetCurrentDocument(document As SessionDocument)
+            CurrentDocument = document
+        End Sub
+
 #Region "属性"
 
         ''' <summary>
@@ -127,9 +143,16 @@ Public Class ChatStateService
                     Dim sid = CurrentSessionId
                     Dim r = role
                     Dim c = content
+                    Dim app = ResolveAppType()
+                    Dim docId = ""
+                    Dim docName = ""
+                    If CurrentDocument IsNot Nothing Then
+                        docId = If(CurrentDocument.Id, "")
+                        docName = If(CurrentDocument.Name, "")
+                    End If
                     Task.Run(Sub()
                                  Try
-                                     ConversationRepository.InsertMessage(sid, r, c, False)
+                                     ConversationRepository.InsertMessage(sid, r, c, False, app, docId, docName)
                                  Catch ex As Exception
                                      Debug.WriteLine("ConversationRepository.InsertMessage 后台写入失败: " & ex.Message)
                                  End Try
@@ -139,6 +162,15 @@ Public Class ChatStateService
                 End Try
             End If
         End Sub
+
+        Private Function ResolveAppType() As String
+            If AppTypeProvider Is Nothing Then Return ""
+            Try
+                Return If(AppTypeProvider(), "")
+            Catch
+                Return ""
+            End Try
+        End Function
 
         ''' <summary>
         ''' 添加或更新系统消息

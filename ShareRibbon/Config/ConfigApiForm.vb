@@ -1398,7 +1398,7 @@ Public Class ConfigApiForm
             Dim selectedChatModel = currentCloudConfig.model.FirstOrDefault(Function(m) m.modelName = selectedChatModelName)
             Dim selectedReasoningMode = If(selectedChatModel Is Nothing, ReasoningRequestHelper.ReasoningDefault, selectedChatModel.reasoningMode)
             Dim validationResult = Await ValidateApiAsync(apiUrl, apiKey, selectedChatModelName, selectedReasoningMode, platformName)
-            If validationResult Then
+            If validationResult.Success Then
                 currentCloudConfig.platform = platformName
                 currentCloudConfig.url = apiUrl
                 currentCloudConfig.key = apiKey
@@ -1418,25 +1418,14 @@ Public Class ConfigApiForm
                     End If
                 Next
 
-                ConfigSettings.ApiUrl = currentCloudConfig.url
-                ConfigSettings.ApiKey = apiKey
-                ConfigSettings.platform = currentCloudConfig.platform
-                ConfigSettings.ModelName = selectedChatModelName
-
-                If selectedChatModel IsNot Nothing Then
-                    ConfigSettings.mcpable = selectedChatModel.mcpable
-                    ConfigSettings.fimSupported = selectedChatModel.fimSupported
-                    ConfigSettings.fimUrl = If(String.IsNullOrEmpty(selectedChatModel.fimUrl), currentCloudConfig.url, selectedChatModel.fimUrl)
-                    ConfigSettings.ReasoningMode = selectedChatModel.reasoningMode
-                End If
-
+                ' 全局快照由 SaveConfig -> ApplyConfigSnapshot 统一投射，这里再手写一遍就是第二套真相
                 SaveConfig()
 
                 MessageBox.Show("配置已保存", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information)
                 Me.DialogResult = DialogResult.OK
                 Me.Close()
             Else
-                MessageBox.Show("API验证失败，请检查API Key和模型名称是否正确", "验证失败", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                MessageBox.Show(ValidationFailureText(validationResult), "验证失败", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             End If
         Catch ex As Exception
             MessageBox.Show($"验证失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
@@ -1702,7 +1691,7 @@ Public Class ConfigApiForm
             Dim selectedChatModel = currentLocalConfig.model.FirstOrDefault(Function(m) m.modelName = selectedChatModelName)
             Dim selectedReasoningMode = If(selectedChatModel Is Nothing, ReasoningRequestHelper.ReasoningDefault, selectedChatModel.reasoningMode)
             Dim validationResult = Await ValidateApiAsync(apiUrl, apiKey, selectedChatModelName, selectedReasoningMode, platformName)
-            If validationResult Then
+            If validationResult.Success Then
                 currentLocalConfig.validated = True
                 currentLocalConfig.translateSelected = localTranslateCheckBox.Checked
 
@@ -1719,25 +1708,14 @@ Public Class ConfigApiForm
                     End If
                 Next
 
-                ConfigSettings.ApiUrl = currentLocalConfig.url
-                ConfigSettings.ApiKey = apiKey
-                ConfigSettings.platform = currentLocalConfig.platform
-                ConfigSettings.ModelName = selectedChatModelName
-
-                If selectedChatModel IsNot Nothing Then
-                    ConfigSettings.mcpable = selectedChatModel.mcpable
-                    ConfigSettings.fimSupported = selectedChatModel.fimSupported
-                    ConfigSettings.fimUrl = If(String.IsNullOrEmpty(selectedChatModel.fimUrl), currentLocalConfig.url, selectedChatModel.fimUrl)
-                    ConfigSettings.ReasoningMode = selectedChatModel.reasoningMode
-                End If
-
+                ' 全局快照由 SaveConfig -> ApplyConfigSnapshot 统一投射，这里再手写一遍就是第二套真相
                 SaveConfig()
 
                 MessageBox.Show("配置已保存", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information)
                 Me.DialogResult = DialogResult.OK
                 Me.Close()
             Else
-                MessageBox.Show("API验证失败，请检查API Key和模型名称是否正确", "验证失败", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                MessageBox.Show(ValidationFailureText(validationResult), "验证失败", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             End If
         Catch ex As Exception
             MessageBox.Show($"验证失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
@@ -1888,37 +1866,20 @@ Public Class ConfigApiForm
         End Try
     End Sub
 
-    Private Async Function ValidateApiAsync(apiUrl As String, apiKey As String, modelName As String, Optional reasoningMode As String = Nothing, Optional platformName As String = Nothing) As Task(Of Boolean)
-        Try
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
-            Dim client = HttpClientPool.GetClient(apiUrl)
-            Using request As New HttpRequestMessage(HttpMethod.Post, apiUrl)
-                request.Headers.Authorization = New AuthenticationHeaderValue("Bearer", apiKey)
+    ''' <summary>
+    ''' 探测结果原样返回：配置窗口要能告诉用户"为什么没过"（401 / 超时 / 模型不存在），
+    ''' 只留一个布尔值的话，用户只能在"请检查 API Key"这种废话里猜。
+    ''' </summary>
+    Private Async Function ValidateApiAsync(apiUrl As String, apiKey As String, modelName As String, Optional reasoningMode As String = Nothing, Optional platformName As String = Nothing) As Task(Of ModelConnectivityResult)
+        ' 实现已上移到共享的 ModelConnectivityTester：首次引导和这里的连接测试必须给出同一个结论
+        Return Await New ModelConnectivityTester().TestAsync(apiUrl, apiKey, modelName, reasoningMode, platformName)
+    End Function
 
-                ' 构造一个简单的聊天请求来验证API
-                Dim requestBody = New JObject() From {
-                    {"model", modelName},
-                    {"messages", New JArray() From {
-                        New JObject() From {
-                            {"role", "user"},
-                            {"content", "Hi"}
-                        }
-                    }},
-                    {"max_tokens", 5}
-                }
-                ReasoningRequestHelper.ApplyReasoningOptions(requestBody, reasoningMode, modelName, platformName, apiUrl)
-
-                request.Content = New StringContent(requestBody.ToString(), Encoding.UTF8, "application/json")
-
-                Using timeoutCts As New System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(30))
-                    Using response = Await client.SendAsync(request, timeoutCts.Token)
-                        Return response.IsSuccessStatusCode
-                    End Using
-                End Using
-            End Using
-        Catch
-            Return False
-        End Try
+    Private Function ValidationFailureText(result As ModelConnectivityResult) As String
+        If result Is Nothing Then Return "API验证失败，请检查API Key和模型名称是否正确"
+        Dim reason = If(String.IsNullOrWhiteSpace(result.Detail), result.Reason, result.Detail)
+        If String.IsNullOrWhiteSpace(reason) Then reason = "请检查 API Key 和模型名称是否正确"
+        Return $"API验证失败：{reason}"
     End Function
 
     Private Sub SaveConfig()

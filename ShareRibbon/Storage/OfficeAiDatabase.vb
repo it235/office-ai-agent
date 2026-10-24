@@ -508,7 +508,53 @@ CREATE INDEX IF NOT EXISTS idx_prompt_template_scenario ON prompt_template(scena
              "    AND (k.created_at < j.created_at OR (k.created_at = j.created_at AND k.job_id < j.job_id))));" &
              "CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_job_active_unique ON memory_job(job_type, target_id) " &
              "WHERE status IN ('pending', 'processing');" &
-             "UPDATE schema_version SET version = 13;"}
+             "UPDATE schema_version SET version = 13;"},
+            {14, "UPDATE conversation_event SET app_type = IFNULL((" &
+             "  SELECT r.app_type FROM agent_run r" &
+             "  WHERE r.session_id = conversation_event.session_id" &
+             "    AND IFNULL(r.app_type, '') <> ''" &
+             "  ORDER BY r.started_at DESC LIMIT 1" &
+             "), '') " &
+             "WHERE IFNULL(app_type, '') = '' AND IFNULL(session_id, '') <> '';" &
+             "UPDATE schema_version SET version = 14;"},
+            {15, "CREATE TABLE IF NOT EXISTS agent_run_change (" &
+             "change_id TEXT PRIMARY KEY," &
+             "run_id TEXT NOT NULL," &
+             "session_id TEXT," &
+             "app_type TEXT," &
+             "seq INTEGER NOT NULL," &
+             "tool_id TEXT," &
+             "step_index INTEGER," &
+             "step_description TEXT," &
+             "summary TEXT," &
+             "target_refs_json TEXT," &
+             "changed INTEGER NOT NULL DEFAULT 0," &
+             "success INTEGER NOT NULL DEFAULT 0," &
+             "partial_apply INTEGER NOT NULL DEFAULT 0," &
+             "undo_available INTEGER NOT NULL DEFAULT 0," &
+             "undo_point_id TEXT," &
+             "rollback_error TEXT," &
+             "observed_at TEXT" &
+             ");" &
+             "CREATE INDEX IF NOT EXISTS idx_agent_run_change_run ON agent_run_change(run_id, seq);" &
+             "CREATE INDEX IF NOT EXISTS idx_agent_run_change_session ON agent_run_change(session_id, observed_at);" &
+             "UPDATE schema_version SET version = 15;"},
+            {16, "ALTER TABLE agent_run_change ADD COLUMN rolled_back INTEGER NOT NULL DEFAULT 0;" &
+             "ALTER TABLE agent_run_change ADD COLUMN undo_units INTEGER NOT NULL DEFAULT 0;" &
+             "ALTER TABLE agent_run_change ADD COLUMN doc_hash_before TEXT;" &
+             "ALTER TABLE agent_run_change ADD COLUMN doc_hash_after TEXT;" &
+             "UPDATE schema_version SET version = 16;"},
+            {17, "DELETE FROM session_summary WHERE IFNULL(session_id, '') = '';" &
+             "DELETE FROM session_summary WHERE id NOT IN (" &
+             "  SELECT MAX(s.id) FROM session_summary s WHERE s.session_id = session_summary.session_id);" &
+             "ALTER TABLE session_summary ADD COLUMN app_type TEXT NOT NULL DEFAULT '';" &
+             "ALTER TABLE session_summary ADD COLUMN document_id TEXT NOT NULL DEFAULT '';" &
+             "ALTER TABLE session_summary ADD COLUMN document_name TEXT NOT NULL DEFAULT '';" &
+             "ALTER TABLE session_summary ADD COLUMN custom_title TEXT;" &
+             "ALTER TABLE session_summary ADD COLUMN updated_at TEXT;" &
+             "CREATE UNIQUE INDEX IF NOT EXISTS idx_session_summary_session_unique ON session_summary(session_id);" &
+             "CREATE INDEX IF NOT EXISTS idx_session_summary_document ON session_summary(app_type, document_id);" &
+             "UPDATE schema_version SET version = 17;"}
         }
 
         For Each kvp In migrations.OrderBy(Function(x) x.Key)
@@ -532,6 +578,19 @@ CREATE INDEX IF NOT EXISTS idx_prompt_template_scenario ON prompt_template(scena
                 Catch rollbackEx As Exception
                     Debug.WriteLine($"迁移回滚失败: {rollbackEx.Message}")
                 End Try
+
+                ' Additive migrations re-run over a schema that already has the column must not
+                ' brick startup: the desired shape is already satisfied, so only advance the version.
+                ' RunSchemaHealthChecks will fill in any sibling columns added by the same migration.
+                If IsDuplicateColumnError(ex) Then
+                    Using cmd As New SQLiteCommand($"UPDATE schema_version SET version = {kvp.Key};", conn)
+                        cmd.ExecuteNonQuery()
+                    End Using
+                    currentVersion = kvp.Key
+                    Debug.WriteLine($"OfficeAiDatabase 迁移版本 {kvp.Key} 已存在目标列，仅补记版本号")
+                    Continue For
+                End If
+
                 Debug.WriteLine($"迁移版本 {kvp.Key} 失败: {ex.Message}")
                 Throw
             End Try
@@ -545,6 +604,7 @@ CREATE INDEX IF NOT EXISTS idx_prompt_template_scenario ON prompt_template(scena
         ' conversation_event is now the single source of truth for chat history; keep the
         ' collection flag on it too so the UI can star an assistant turn without a parallel table.
         EnsureColumn(conn, "conversation_event", "is_collected", "is_collected INTEGER NOT NULL DEFAULT 0")
+        EnsureSessionProfileSchema(conn)
         EnsureAgentRunTraceSchema(conn)
         EnsureDataMigrationMarkers(conn)
         MigrateLegacySkillUsage(conn)
@@ -587,6 +647,34 @@ CREATE INDEX IF NOT EXISTS idx_prompt_template_scenario ON prompt_template(scena
             ");" &
             "CREATE INDEX IF NOT EXISTS idx_agent_run_step_run ON agent_run_step(run_id, seq);" &
             "CREATE INDEX IF NOT EXISTS idx_agent_run_step_status ON agent_run_step(status, error_code);", conn)
+            cmd.ExecuteNonQuery()
+        End Using
+
+        ' Idempotent schema healing: migration 016 adds these columns, but a replayed or
+        ' partially applied migration must converge to the same shape instead of failing startup.
+        EnsureColumn(conn, "agent_run_change", "rolled_back", "rolled_back INTEGER NOT NULL DEFAULT 0")
+        EnsureColumn(conn, "agent_run_change", "undo_units", "undo_units INTEGER NOT NULL DEFAULT 0")
+        EnsureColumn(conn, "agent_run_change", "doc_hash_before", "doc_hash_before TEXT")
+        EnsureColumn(conn, "agent_run_change", "doc_hash_after", "doc_hash_after TEXT")
+    End Sub
+
+    ''' <summary>
+    ''' session_summary 是"一行一个会话"的会话档案：历史列表据此显示所属文档、支持用户重命名。
+    ''' 迁移 017 负责建形状，这里只让半途失败的库收敛回来，而不是把启动崩掉。
+    ''' </summary>
+    Private Shared Sub EnsureSessionProfileSchema(conn As SQLiteConnection)
+        EnsureColumn(conn, "session_summary", "app_type", "app_type TEXT NOT NULL DEFAULT ''")
+        EnsureColumn(conn, "session_summary", "document_id", "document_id TEXT NOT NULL DEFAULT ''")
+        EnsureColumn(conn, "session_summary", "document_name", "document_name TEXT NOT NULL DEFAULT ''")
+        EnsureColumn(conn, "session_summary", "custom_title", "custom_title TEXT")
+        EnsureColumn(conn, "session_summary", "updated_at", "updated_at TEXT")
+
+        Using cmd As New SQLiteCommand(
+            "DELETE FROM session_summary WHERE IFNULL(session_id, '') = '';" &
+            "DELETE FROM session_summary WHERE id NOT IN (" &
+            "  SELECT MAX(s.id) FROM session_summary s WHERE s.session_id = session_summary.session_id);" &
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_session_summary_session_unique ON session_summary(session_id);" &
+            "CREATE INDEX IF NOT EXISTS idx_session_summary_document ON session_summary(app_type, document_id);", conn)
             cmd.ExecuteNonQuery()
         End Using
     End Sub
@@ -894,6 +982,18 @@ CREATE INDEX IF NOT EXISTS idx_prompt_template_scenario ON prompt_template(scena
                 End While
             End Using
         End Using
+        Return False
+    End Function
+
+    Private Shared Function IsDuplicateColumnError(ex As Exception) As Boolean
+        Dim current = ex
+        While current IsNot Nothing
+            If current.Message IsNot Nothing AndAlso
+               current.Message.IndexOf("duplicate column name", StringComparison.OrdinalIgnoreCase) >= 0 Then
+                Return True
+            End If
+            current = current.InnerException
+        End While
         Return False
     End Function
 

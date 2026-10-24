@@ -36,6 +36,7 @@ try {
         "scripts\audit-p0-guardrails.ps1",
         "scripts\smoke-db-schema-drift.ps1",
         "scripts\smoke-empty-db-initialization.ps1",
+        "scripts\smoke-change-log-and-session-scope.ps1",
         "scripts\smoke-script-safety.ps1",
         "scripts\smoke-harness-approval.ps1",
         "scripts\smoke-run-cancellation.ps1",
@@ -44,6 +45,9 @@ try {
         "scripts\smoke-skills-usage-migration.ps1",
         "scripts\smoke-word-capability-registry.ps1",
         "scripts\smoke-ai-gateway-provider.ps1",
+        "scripts\smoke-model-config-gate.ps1",
+        "scripts\smoke-config-snapshot.ps1",
+        "scripts\smoke-onboarding-wizard.ps1",
         "scripts\run-golden-l0.ps1"
     )
 
@@ -71,6 +75,8 @@ try {
                 "ShareRibbon\Resources\js\agent-card.js",
                 "ShareRibbon\Resources\js\office-ai-bridge.js",
                 "ShareRibbon\Resources\js\chat-manager.js",
+                "ShareRibbon\Resources\js\onboarding.js",
+                "ShareRibbon\Resources\js\history-manager.js",
                 "ShareRibbon\Resources\js\ralph-loop.js"
             )
 

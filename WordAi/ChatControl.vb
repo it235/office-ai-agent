@@ -795,6 +795,52 @@ Public Class ChatControl
         End Try
     End Sub
 
+    ''' <summary>
+    ''' 撤销最近一轮 Agent 写入。只接受“本轮结束后文档未再变化”且每一步都有自定义撤销单元的记录，
+    ''' 收尾时用文档文本指纹核对是否真正回到本轮开始前，而不是只看 Undo 是否抛错。
+    ''' </summary>
+    Protected Overrides Function PerformUndoAgentRun(runId As String) As Agent.AgentRunUndoResult
+        Dim scope = AgentChangeLogRepository.GetUndoScopeByRun(runId)
+        If Not scope.FullyUndoable Then
+            Return Agent.AgentRunUndoResult.Failed(
+                If(String.IsNullOrWhiteSpace(scope.Reason), "本轮没有可安全撤销的写入", scope.Reason))
+        End If
+
+        Dim wordApp = Globals.ThisAddIn.Application
+        If wordApp Is Nothing Then Return Agent.AgentRunUndoResult.Failed("无法获取Word应用对象。")
+        Dim doc = wordApp.ActiveDocument
+        If doc Is Nothing Then Return Agent.AgentRunUndoResult.Failed("没有活动文档。")
+
+        Dim currentHash = ComputeTextHash(SafeGetDocumentText(doc))
+        If Not String.Equals(currentHash, scope.ExpectedHash, StringComparison.OrdinalIgnoreCase) Then
+            Return Agent.AgentRunUndoResult.Failed("文档在本轮执行后又有其他改动，已拒绝撤销以免误删你的内容")
+        End If
+
+        Dim screenUpdated As Boolean = False
+        Try
+            wordApp.ScreenUpdating = False
+            screenUpdated = True
+
+            doc.Undo(scope.UndoUnits)
+
+            Dim restoredHash = ComputeTextHash(SafeGetDocumentText(doc))
+            If Not String.Equals(restoredHash, scope.BaselineHash, StringComparison.OrdinalIgnoreCase) Then
+                Return Agent.AgentRunUndoResult.Failed(
+                    $"已尝试撤销 {scope.UndoUnits} 步，但文档与原状不一致，请用 Word 自带撤销核对")
+            End If
+
+            AgentChangeLogRepository.MarkRunRolledBack(runId)
+            Return Agent.AgentRunUndoResult.Succeeded($"已撤销本轮 {scope.WrittenCount} 处写入", verified:=True)
+        Catch ex As Exception
+            Debug.WriteLine($"PerformUndoAgentRun 失败: {ex.Message}")
+            Return Agent.AgentRunUndoResult.Failed($"撤销失败: {ex.Message}")
+        Finally
+            If screenUpdated Then
+                Try : wordApp.ScreenUpdating = True : Catch : End Try
+            End If
+        End Try
+    End Function
+
     ''' <summary>智能排版 v2：微调排版方案</summary>
     Protected Overrides Async Sub HandleRefineSmartReformat(jsonDoc As JObject)
         Try
@@ -1951,6 +1997,20 @@ Public Class ChatControl
     ' 返回Office应用类型
     Protected Overrides Function GetOfficeAppType() As String
         Return "Word"
+    End Function
+
+    ''' <summary>
+    ''' 会话绑定的文档：只在 UI 线程读取活动文档完整路径，未保存文档按通用会话处理。
+    ''' </summary>
+    Protected Overrides Function GetSessionDocument() As SessionDocument
+        Try
+            Dim doc = Globals.ThisAddIn.Application.ActiveDocument
+            If doc Is Nothing Then Return Nothing
+            Return SessionDocument.FromFullPath(doc.FullName)
+        Catch ex As Exception
+            AppLogger.Debug("WordAi", "读取活动文档标识失败", ex)
+            Return Nothing
+        End Try
     End Function
 
     ''' <summary>
@@ -3725,6 +3785,16 @@ Public Class ChatControl
             Dim successCount As Integer = 0
             Dim failCount As Integer = 0
             Dim firstFailure As Agent.ToolResult = Nothing
+            Dim batchDoc As Word.Document = Nothing
+            Dim batchBeforeHash As String = ""
+            Try
+                batchDoc = Globals.ThisAddIn.Application.ActiveDocument
+                If batchDoc IsNot Nothing Then
+                    batchBeforeHash = ComputeTextHash(SafeGetDocumentText(batchDoc))
+                End If
+            Catch ex As Exception
+                Debug.WriteLine($"批量命令起始指纹采集失败: {ex.Message}")
+            End Try
 
             For Each cmd In CType(commandsArray, JArray)
                 If cmd.Type <> JTokenType.Object Then
@@ -3745,11 +3815,24 @@ Public Class ChatControl
                 End If
             Next
 
+            ' 整批结束后的指纹才是“撤销本轮”的核对目标：中途失败回滚会让条目级 after 失真
+            Dim batchAfterHash As String = ""
+            Try
+                If batchDoc IsNot Nothing Then
+                    batchAfterHash = ComputeTextHash(SafeGetDocumentText(batchDoc))
+                End If
+            Catch ex As Exception
+                Debug.WriteLine($"批量命令结束指纹采集失败: {ex.Message}")
+            End Try
+
             Dim aggregateObservation As New JObject From {
-                {"kind", "batch"},
+                {"kind", "write"},
                 {"summary", $"批量执行 Word 命令：{successCount} 成功，{failCount} 失败"},
                 {"changed", successCount > 0},
+                {"undoUnits", observations.OfType(Of JObject)().Sum(Function(item) GetIntegerValue(item, "undoUnits"))},
                 {"targetRefs", New JArray("Word:Document")},
+                {"before", If(batchBeforeHash.Length = 0, New JObject(), New JObject From {{"documentTextHash", batchBeforeHash}})},
+                {"after", If(batchAfterHash.Length = 0, New JObject(), New JObject From {{"documentTextHash", batchAfterHash}})},
                 {"warnings", New JArray()},
                 {"items", observations}
             }
@@ -3862,7 +3945,7 @@ Public Class ChatControl
             End Try
 
             Dim afterSnapshot = CaptureWordWriteSnapshot(normalizedToolId, params, doc, selection)
-            Dim observation = BuildWordWriteObservation(normalizedToolId, params, success, beforeSnapshot, afterSnapshot)
+            Dim observation = BuildWordWriteObservation(normalizedToolId, params, success, beforeSnapshot, afterSnapshot, undoStarted)
             Dim summary = observation("summary")?.ToString()
 
             If success Then
@@ -3889,6 +3972,8 @@ Public Class ChatControl
                 If Not String.IsNullOrWhiteSpace(codeFromHost) Then hostCode = codeFromHost
             End If
             If rolledBack Then
+                ' 回滚已经消耗掉该命令的撤销记录，不能再把它算成本轮可撤销单元
+                observation("undoUnits") = 0
                 failureMessage &= "；本轮已对文档的改动已回滚"
             ElseIf rollbackAttempted Then
                 failureMessage &= "；回滚未完成，文档可能保留部分改动"
@@ -3906,9 +3991,26 @@ Public Class ChatControl
             ' 异常可能停在写入中途：同样只撤销本轮记录，避免把半路的改动留给下一轮
             Dim exceptionRollback = TryRollbackWordWrite(normalizedToolId, params, doc, selection, beforeSnapshot, undoStarted)
             Dim exceptionResult = Agent.ToolResult.FromException(normalizedToolId, ex)
-            If exceptionResult.Observation IsNot Nothing AndAlso TypeOf exceptionResult.Observation Is JObject Then
-                CType(exceptionResult.Observation, JObject)("rollback") = exceptionRollback
-            End If
+            Try
+                Dim exceptionSnapshot = CaptureWordWriteSnapshot(normalizedToolId, params, doc, selection)
+                Dim exceptionDiff = BuildWordSnapshotDiff(beforeSnapshot, exceptionSnapshot)
+                Dim exceptionChanged = SnapshotDiffChanged(exceptionDiff)
+                Dim exceptionRolledBack = exceptionRollback.Value(Of Boolean)("succeeded")
+                exceptionResult.Observation = New JObject From {
+                    {"kind", "write"},
+                    {"summary", $"{normalizedToolId} 执行异常"},
+                    {"changed", exceptionChanged},
+                    {"undoUnits", If(exceptionChanged AndAlso undoStarted AndAlso Not exceptionRolledBack, 1, 0)},
+                    {"targetRefs", New JArray("Word:Document")},
+                    {"before", If(beforeSnapshot, New JObject())},
+                    {"after", If(exceptionSnapshot, New JObject())},
+                    {"diff", exceptionDiff},
+                    {"rollback", exceptionRollback},
+                    {"warnings", New JArray($"执行异常: {ex.Message}")}
+                }
+            Catch observationEx As Exception
+                Debug.WriteLine($"ExecuteWordCommandWithToolResult 异常观察失败: {observationEx.Message}")
+            End Try
             Return exceptionResult
         End Try
     End Function
@@ -3998,7 +4100,8 @@ Public Class ChatControl
                                                params As JToken,
                                                commandSucceeded As Boolean,
                                                beforeSnapshot As JObject,
-                                               afterSnapshot As JObject) As JObject
+                                               afterSnapshot As JObject,
+                                               undoStarted As Boolean) As JObject
         Dim targetRefs As JArray = GetWordWriteTargetRefs(toolId, params)
         Dim warnings As New JArray()
         Dim diff = BuildWordSnapshotDiff(beforeSnapshot, afterSnapshot)
@@ -4010,11 +4113,16 @@ Public Class ChatControl
             warnings.Add("宿主执行器返回成功，但未检测到文档内容或选区格式变化")
         End If
 
+        ' 一条写命令对应一个 Word 自定义撤销记录；没有真正开启记录时不得给出撤销单元，
+        ' 否则“撤销本轮”会去撤用户此前的操作。
+        Dim undoUnits As Integer = If(changed AndAlso undoStarted, 1, 0)
+
         Return New JObject From {
             {"kind", "write"},
             {"summary", BuildWordWriteSummary(toolId, params, commandSucceeded, changed)},
             {"targetRefs", targetRefs},
             {"changed", changed},
+            {"undoUnits", undoUnits},
             {"before", If(beforeSnapshot, New JObject())},
             {"after", If(afterSnapshot, New JObject())},
             {"diff", diff},

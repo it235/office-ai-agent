@@ -9,14 +9,19 @@ Namespace Agent.Harness
 
         #Region "Approval Handshake"
 
-        Private Sub HandleKernelRequestApproval(message As String, callback As Action(Of Boolean))
+        Private Sub HandleKernelRequestApproval(request As ApprovalRequest, callback As Action(Of ApprovalDecision))
             Dim pending = GetPendingRun(_currentRunId)
             If pending Is Nothing Then
-                callback(False)
+                callback(ApprovalDecision.Abort)
                 Return
             End If
+            Dim message = If(request?.Message, "该操作需要用户确认")
+            Dim toolId = If(request?.ToolId, "")
+            Dim riskLevel = If(request?.RiskLevel, "risky")
             SyncLock _runLock
-                pending.ApprovalMessage = If(message, "该操作需要用户确认")
+                pending.ApprovalMessage = message
+                pending.ApprovalToolId = toolId
+                pending.ApprovalRiskLevel = riskLevel
                 pending.ApprovalCallback = callback
                 pending.AwaitingApproval = True
             End SyncLock
@@ -24,9 +29,9 @@ Namespace Agent.Harness
                                    -1,
                                    "approval.request",
                                    "awaiting_approval",
-                                   pending.ApprovalMessage,
+                                   message,
                                    ExceptionClassifier.CodeSafetyNeedsApproval,
-                                   New With {.message = pending.ApprovalMessage},
+                                   New With {.message = message, .toolId = toolId, .riskLevel = riskLevel},
                                    DateTime.Now)
             ' 每个待决审批自带超时哨兵：第二次、第三次请求审批同样不会把会话无限挂住。
             ArmApprovalTimeout(pending)
@@ -34,7 +39,8 @@ Namespace Agent.Harness
         End Sub
 
         ''' <summary>
-        ''' 到点仍无人裁决时按拒绝收敛。拒绝是安全默认：未经确认的写操作绝不因为等待太久而擅自执行。
+        ''' 到点仍无人裁决时按放弃收敛。放弃是安全默认：既不能擅自执行未确认操作，
+        ''' 也不能把挂起的审批当成“只跳过这一步”后继续跑后续步骤。
         ''' </summary>
         Private Sub ArmApprovalTimeout(pending As PendingHarnessRun)
             Dim runId = pending.RunId
@@ -43,12 +49,12 @@ Namespace Agent.Harness
                              Await Task.Delay(ApprovalTimeout)
                              If Not pending.AwaitingApproval OrElse pending.IsCompleted Then Return
                              Dim settled = Await SettleApprovalAsync(pending,
-                                                                     False,
+                                                                     ApprovalDecision.Abort,
                                                                      "timeout",
-                                                                     "审批等待超时，该操作已放弃",
+                                                                     "审批等待超时，本轮执行已停止",
                                                                      ExceptionClassifier.CodeApprovalTimeout)
                              If Not settled.HasValue Then Return
-                             ReleaseAbandonedRun(pending, "审批等待超时，该操作已放弃", ExceptionClassifier.CodeApprovalTimeout)
+                             ReleaseAbandonedRun(pending, "审批等待超时，本轮执行已停止", ExceptionClassifier.CodeApprovalTimeout)
                          Catch ex As Exception
                              AppLogger.Warn("OfficeHarness", $"Approval timeout watcher failed: {AppLogger.Redact(ex.Message)}")
                          End Try
@@ -60,11 +66,11 @@ Namespace Agent.Harness
         ''' Nothing 表示审批已被别的路径接管；True/False 表示本次接管后 Loop 是否在宽限期内收敛。
         ''' </summary>
         Private Async Function SettleApprovalAsync(pending As PendingHarnessRun,
-                                                   approved As Boolean,
-                                                   decision As String,
+                                                   decision As ApprovalDecision,
+                                                   decisionName As String,
                                                    message As String,
                                                    errorCode As String) As Task(Of Boolean?)
-            Dim callback As Action(Of Boolean) = Nothing
+            Dim callback As Action(Of ApprovalDecision) = Nothing
             SyncLock _runLock
                 If pending.ApprovalCallback Is Nothing Then Return Nothing
                 callback = pending.ApprovalCallback
@@ -75,12 +81,14 @@ Namespace Agent.Harness
             SafeAppendApprovalStep(pending.RunId,
                                    -2,
                                    "approval.decision",
-                                   decision,
+                                   decisionName,
                                    message,
                                    errorCode,
-                                   New With {.approved = approved, .decision = decision},
+                                   New With {.decision = decisionName,
+                                             .allowed = decision = ApprovalDecision.Once OrElse decision = ApprovalDecision.Session,
+                                             .toolId = pending.ApprovalToolId},
                                    DateTime.Now)
-            callback(approved)
+            callback(decision)
 
             Dim agentTask = pending.AgentTask
             If agentTask Is Nothing Then Return True

@@ -791,7 +791,10 @@ if ($chatSource -notmatch 'If addHistory AndAlso Not String\.IsNullOrWhiteSpace\
 # "4 succeeded, 1 failed" collapsed into one NOT_FOUND ToolResult while four writes stayed in
 # the document, and recoverable=True invited the loop to replay the whole batch.
 $wordBatchStart = $wordChatSource.IndexOf("Function ExecuteWordCommandsArrayWithToolResult")
-$wordBatchBody = If ($wordBatchStart -lt 0) { "" } Else { $wordChatSource.Substring($wordBatchStart, [Math]::Min(4200, $wordChatSource.Length - $wordBatchStart)) }
+# scan to the next function so the guard does not silently fall out of range when the body grows
+$wordBatchEnd = If ($wordBatchStart -lt 0) { -1 } Else { $wordChatSource.IndexOf("Private Function ExecuteWordCommandWithToolResult", $wordBatchStart + 1) }
+$wordBatchLength = If ($wordBatchEnd -gt $wordBatchStart) { $wordBatchEnd - $wordBatchStart } ElseIf ($wordBatchStart -ge 0) { [Math]::Min(8000, $wordChatSource.Length - $wordBatchStart) } Else { 0 }
+$wordBatchBody = If ($wordBatchStart -lt 0) { "" } Else { $wordChatSource.Substring($wordBatchStart, $wordBatchLength) }
 if ($wordBatchBody -notmatch 'If successCount > 0 Then[\s\S]{0,1400}?ExceptionClassifier\.CodePartialApply') {
     $failures.Add("Word batch no longer names partial apply when some commands landed: WordAi\ChatControl.vb")
 }
@@ -879,6 +882,563 @@ if (-not (Test-Path -LiteralPath $wordSkillMd)) {
         }
     }
 }
+
+# P9 guardrail: Excel and PowerPoint capability sets must agree across the tool registry, the
+# host command whitelist, and the default skill gate. The Word checks above showed how a late
+# gate turns a valid plan into TOOL_NOT_ALLOWED; the same drift stays invisible until a real run.
+$hostCapabilityCases = @(
+    @{ App = 'Excel'; ToolDir = 'ShareRibbon\Tools\excel'; Schema = 'ExcelAi\ExcelJsonCommandSchema.vb'; Skill = 'ShareRibbon\Skills\excel-table-agent\SKILL.md'; MinTools = 20 },
+    @{ App = 'PowerPoint'; ToolDir = 'ShareRibbon\Tools\ppt'; Schema = 'PowerPointAi\PowerPointJsonCommandSchema.vb'; Skill = 'ShareRibbon\Skills\powerpoint-deck-agent\SKILL.md'; MinTools = 15 }
+)
+# Registered and whitelisted, but disabled by SafetyGate by default. The skill gate must not
+# advertise a fallback the runtime refuses.
+$policyDisabledTools = @('ExecuteVBA')
+# Routed by the ToolResult entry before the command whitelist, so they are deliberately absent
+# from SupportedCommands (and still must be allowed by the default skill).
+$hostBypassTools = @('DiscoverOfficeCapability', 'OfficeObjectOperation')
+
+foreach ($case in $hostCapabilityCases) {
+    $toolIds = @()
+    $toolDir = Join-Path $repoRoot $case.ToolDir
+    foreach ($toolFile in @(Get-ChildItem -LiteralPath $toolDir -Filter '*.json' -ErrorAction SilentlyContinue)) {
+        $raw = Get-Content -LiteralPath $toolFile.FullName -Raw -Encoding UTF8
+        $toolId = [regex]::Match($raw, '"id"\s*:\s*"([^"]+)"').Groups[1].Value
+        if ($toolId) { $toolIds += $toolId }
+    }
+    if ($toolIds.Count -lt $case.MinTools) {
+        $failures.Add("$($case.App) tool scan only saw $($toolIds.Count) ids; the registry drift check itself is broken")
+    }
+
+    $schemaSource = Get-CodeSource $case.Schema
+    $whitelistBody = [regex]::Match($schemaSource, '(?s)SupportedCommands As String\(\) = \{(?<body>.*?)\}').Groups['body'].Value
+    if ([string]::IsNullOrWhiteSpace($whitelistBody)) {
+        $failures.Add("$($case.App) host whitelist is missing or changed shape: $($case.Schema)")
+    } else {
+        $hostAccepted = @()
+        foreach ($m in [regex]::Matches($whitelistBody, '"([^"]+)"')) { $hostAccepted += $m.Groups[1].Value }
+        foreach ($toolId in $toolIds) {
+            if ($hostBypassTools -contains $toolId) { continue }
+            if ($hostAccepted -notcontains $toolId) {
+                $failures.Add("Registry advertises $($case.App) tool '$toolId' that the host whitelist rejects as unsupported: $($case.Schema)")
+            }
+        }
+    }
+
+    $skillPath = Join-Path $repoRoot $case.Skill
+    if (-not (Test-Path -LiteralPath $skillPath)) {
+        $failures.Add("Default $($case.App) skill disappeared, so the allowed-tools cross-check has nothing to read: $($case.Skill)")
+        continue
+    }
+    $skillText = [System.IO.File]::ReadAllText($skillPath, [System.Text.Encoding]::UTF8)
+    $allowedMatch = [regex]::Match($skillText, '(?m)^allowed-tools:\s*(.+)$')
+    if (-not $allowedMatch.Success) {
+        $failures.Add("Default $($case.App) skill declares no allowed-tools; an empty list silently turns the tool gate off: $($case.Skill)")
+        continue
+    }
+    $skillAllowed = @($allowedMatch.Groups[1].Value -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    foreach ($toolId in $toolIds) {
+        if ($policyDisabledTools -contains $toolId) { continue }
+        if ($skillAllowed -notcontains $toolId) {
+            $failures.Add("Registry advertises $($case.App) tool '$toolId' but the default skill gate blocks it: $($case.Skill)")
+        }
+    }
+    foreach ($skillId in $skillAllowed) {
+        if ($toolIds -notcontains $skillId) {
+            $failures.Add("Default $($case.App) skill allows '$skillId' which no longer exists in the $($case.App) tool registry: $($case.Skill)")
+        }
+    }
+}
+
+# P10 guardrail: the single-run write change log must stay wired end to end.
+# A change log that silently stops recording is worse than none: the UI would tell the user
+# "nothing was written" after a partial apply. Contract: openspec/changes/write-trust-contract.md.
+$changeLogSource = Get-CodeSource "ShareRibbon\Agent\Execution\AgentChangeLog.vb"
+if ($changeLogSource -notmatch 'String\.Equals\(kind, "write"') {
+    $failures.Add("Change log no longer recognizes host write observations: ShareRibbon\Agent\Execution\AgentChangeLog.vb")
+}
+if ($changeLogSource -notmatch '"code_execution"') {
+    $failures.Add("Change log no longer records script/VBA writes: ShareRibbon\Agent\Execution\AgentChangeLog.vb")
+}
+if (($changeLogSource + (Get-CodeSource "ShareRibbon\Storage\AgentChangeLogRepository.vb")) -match "Base64|DataUrl|VisualEvidence") {
+    $failures.Add("Change log must not persist visual evidence payloads")
+}
+if ($loopSource -notmatch "session\.ChangeLog\.AddFromStep\(") {
+    $failures.Add("LoopEngine no longer records write steps into the run change log")
+}
+$agentKernelSource = Get-CodeSource "ShareRibbon\Agent\AgentKernel.vb"
+if ($agentKernelSource -notmatch "result\.ChangeLog = _session\.ChangeLog") {
+    $failures.Add("AgentResult is not carrying the run change log: ShareRibbon\Agent\AgentKernel.vb")
+}
+$harnessSource = Get-CodeSource "ShareRibbon\Agent\Harness\OfficeHarness.vb"
+if ([regex]::Matches($harnessSource, "SafePersistChangeLog\(").Count -lt 3) {
+    $failures.Add("Both OfficeHarness completion paths must persist the change log (call + definition expected)")
+}
+$changeRepoSource = Get-CodeSource "ShareRibbon\Storage\AgentChangeLogRepository.vb"
+if ($changeRepoSource -notmatch "INSERT OR REPLACE INTO agent_run_change") {
+    $failures.Add("Change log repository no longer writes agent_run_change rows")
+}
+if ($changeRepoSource -notmatch "Function GetByRun\(") {
+    $failures.Add("Change log repository lost its per-run read entry: AgentChangeLogRepository.GetByRun")
+}
+if ($codeExecSource -notmatch '\.kind = "code_execution"') {
+    $failures.Add("Script execution observation lost its kind marker, so script writes cannot enter the change log: CodeExecutionService.vb")
+}
+if ($codeExecSource -notmatch "\.changed = ok") {
+    $failures.Add("Script execution observation no longer declares whether the document changed: CodeExecutionService.vb")
+}
+if (-not (Test-Path -LiteralPath (Join-Path $repoRoot "ShareRibbon\Storage\Migrations\015_agent_run_change_log.sql"))) {
+    $failures.Add("Change log migration is missing: ShareRibbon\Storage\Migrations\015_agent_run_change_log.sql")
+}
+if (-not (Test-Path -LiteralPath (Join-Path $repoRoot "ShareRibbon\Storage\Migrations\016_agent_run_change_undo.sql"))) {
+    $failures.Add("Undo migration is missing: ShareRibbon\Storage\Migrations\016_agent_run_change_undo.sql")
+}
+# E1-03/E1-04 guardrail: the end-of-run message and the one-click undo must both derive from the
+# persisted change log, never from an optimistic in-memory count.
+if ($changeRepoSource -notmatch "Function GetUndoScopeByRun\(") {
+    $failures.Add("Change log repository lost its run undo scope query: AgentChangeLogRepository.GetUndoScopeByRun")
+}
+if ($loopSource -notmatch "Function AppendWriteSummary\(" -or $loopSource -notmatch "WrittenCount") {
+    $failures.Add("LoopEngine no longer reports how much was written on cancel/failure")
+}
+$kernelServiceSource = Get-CodeSource "ShareRibbon\Controls\Services\AgentKernelService.vb"
+if ($kernelServiceSource -notmatch "AgentChangeLogRepository\.SaveRun\(") {
+    $failures.Add("AgentKernelService does not persist the change log before rendering the terminal UI")
+}
+if ($kernelServiceSource -notmatch "Function BuildUndoDescriptor\(" -or $kernelServiceSource -notmatch "completeAgent\([\s\S]{0,300}?undoJson") {
+    $failures.Add("AgentKernelService no longer passes the undo descriptor to completeAgent")
+}
+if ($baseChatSource -notmatch 'Register\("agent:undoRun"') {
+    $failures.Add("BaseChatControl no longer routes agent:undoRun")
+}
+if ($wordChatSource -notmatch "Function PerformUndoAgentRun[\s\S]{0,2400}?GetUndoScopeByRun") {
+    $failures.Add("Word run undo does not read the persisted undo scope: WordAi\ChatControl.vb")
+}
+if ($wordChatSource -notmatch "Function PerformUndoAgentRun[\s\S]{0,3000}?scope\.BaselineHash") {
+    $failures.Add("Word run undo does not verify the restored document fingerprint: WordAi\ChatControl.vb")
+}
+if ($wordChatSource -notmatch "Function PerformUndoAgentRun[\s\S]{0,3000}?MarkRunRolledBack") {
+    $failures.Add("Word run undo does not mark the run as rolled back: WordAi\ChatControl.vb")
+}
+$agentCardSource = Get-CodeSource "ShareRibbon\Resources\js\agent-card.js"
+if ($agentCardSource -notmatch "undo\.canUndo" -or $agentCardSource -notmatch "function setAgentUndoResult") {
+    $failures.Add("Agent card no longer renders or resolves the run undo entry: agent-card.js")
+}
+
+# E1-05 guardrail: approval must offer once / session / reject, and a rejection may only skip the
+# current step instead of silently executing or killing the whole plan.
+$toolContextSource = Get-CodeSource "ShareRibbon\Agent\ToolExecutionContext.vb"
+$toolRegistrySource = Get-CodeSource "ShareRibbon\Agent\ToolRegistry.vb"
+if ($loopSource -notmatch "ApprovalDecision\.Session" -or $loopSource -notmatch "ApproveToolForSession\(") {
+    $failures.Add("LoopEngine no longer honors the session-scoped approval decision")
+}
+if ($loopSource -notmatch "Function IsRejectedApproval\(" -or $loopSource -notmatch "StepStatus\.Skipped") {
+    $failures.Add("LoopEngine no longer limits a rejected approval to the current step")
+}
+if ($harnessSource -notmatch "Function DecideAsync\(" -or $harnessSource -notmatch "ApprovalDecision\.Session") {
+    $failures.Add("OfficeHarness lost the three-state approval decision channel")
+}
+if ($toolContextSource -notmatch "Function IsToolApprovedForSession\(" -or
+    $toolContextSource -notmatch "Sub ApproveToolForSession\(") {
+    $failures.Add("ToolExecutionContext no longer keeps non-consuming session approvals")
+}
+if ($toolRegistrySource -notmatch "IsToolApprovedForSession\(") {
+    $failures.Add("ToolRegistry can no longer bypass repeated prompts for a session-approved tool")
+}
+if ($baseChatSource -notmatch 'Register\("agent:approveToolSession"') {
+    $failures.Add("BaseChatControl no longer routes agent:approveToolSession")
+}
+if ($agentCardSource -notmatch "function agentApproveSession" -or
+    $agentCardSource -notmatch "agent-btn-approve-session") {
+    $failures.Add("Agent card no longer offers the session-scoped approval button: agent-card.js")
+}
+
+# E1-05b guardrail: timeout / cancel / supersede must abort the whole round, and only Once/Session may
+# unlock a write. Treating Abort as allowed would execute an unconfirmed write after the user walked away.
+$harnessApprovalsSource = Get-CodeSource "ShareRibbon\Agent\Harness\OfficeHarness.Approvals.vb"
+if ($loopSource -notmatch "Function IsAbortedApproval\(" -or $loopSource -notmatch '"aborted"') {
+    $failures.Add("LoopEngine can no longer stop the whole round when the approval channel aborts")
+}
+if ($harnessSource -notmatch "Dim allowed = decision = ApprovalDecision\.Once OrElse decision = ApprovalDecision\.Session") {
+    $failures.Add("OfficeHarness.DecideAsync no longer treats only Once/Session as allowed")
+}
+if ($harnessSource -notmatch "SettleApprovalAsync\(superseded,\s*ApprovalDecision\.Abort") {
+    $failures.Add("OfficeHarness no longer aborts the stale approval when a new turn supersedes it")
+}
+if ($harnessSource -notmatch "DecideAsync\(runId, ApprovalDecision\.Abort") {
+    $failures.Add("OfficeHarness.CancelAsync no longer aborts a pending approval")
+}
+if ($harnessApprovalsSource -notmatch "ApprovalDecision\.Abort") {
+    $failures.Add("The approval timeout no longer aborts the round: OfficeHarness.Approvals.vb")
+}
+
+# E1-05c guardrail: the WebView2 panel runs the JS/CSS extracted into %LOCALAPPDATA%\OfficeAI\www, not the
+# bytes inside the DLL. A version-stamp skip there pins the UI to an old build with zero errors, so refresh
+# must be decided by content comparison.
+$extractorSource = Get-CodeSource "ShareRibbon\Resources\ResourceExtractor.vb"
+if ($extractorSource -notmatch "Function ByteArrayEquals\(" -or $extractorSource -notmatch "ByRef refreshed As Integer") {
+    $failures.Add("ResourceExtractor no longer refreshes static files by content comparison")
+}
+if ($extractorSource -match '\.version') {
+    $failures.Add("ResourceExtractor went back to a version-stamp skip: stale frontend fails silently")
+}
+
+# E2-01 guardrail: every chat turn is stamped with the host that wrote it, and history rows
+# created before app_type existed must stay visible instead of vanishing after the upgrade.
+$convSource = Get-CodeSource "ShareRibbon\Storage\ConversationRepository.vb"
+$chatStateSource = Get-CodeSource "ShareRibbon\Controls\Services\ChatStateService.vb"
+$historyServiceSource = Get-CodeSource "ShareRibbon\Controls\Services\HistorySessionService.vb"
+if ($convSource -notmatch "INSERT INTO conversation_event \(event_id, session_id, app_type,") {
+    $failures.Add("ConversationRepository no longer stamps the host app type on a chat message")
+}
+if ($convSource -notmatch "IFNULL\(e\.app_type, ''\) = ''") {
+    $failures.Add("GetRecentSessions lost the legacy-row exemption, pre-migration history disappears from the sidebar")
+}
+if ($chatStateSource -notmatch "ConversationRepository\.InsertMessage\(sid, r, c, False, app,") {
+    $failures.Add("ChatStateService no longer passes the host app type when persisting a turn: ChatStateService.vb")
+}
+if ($baseChatSource -notmatch "_chatStateService\.AppTypeProvider = AddressOf GetOfficeAppType") {
+    $failures.Add("BaseChatControl no longer supplies the host app type that scopes history")
+}
+
+# E2-02 guardrail: a session belongs to the document that created it. The binding is written once
+# (first turn wins, later turns must not move the session) and the document identity is read on the
+# UI thread only, because persistence happens on a background thread where COM is cross-apartment.
+if (-not (Test-Path -LiteralPath (Join-Path $repoRoot "ShareRibbon\Storage\Migrations\017_session_document_binding.sql"))) {
+    $failures.Add("Document binding migration is missing: ShareRibbon\Storage\Migrations\017_session_document_binding.sql")
+}
+$dbSource = Get-CodeSource "ShareRibbon\Storage\OfficeAiDatabase.vb"
+if ($dbSource -notmatch "\{\s*17,") {
+    $failures.Add("OfficeAiDatabase has no versioned migration registered for schema 17")
+}
+if ($dbSource -notmatch "Sub EnsureSessionProfileSchema\(") {
+    $failures.Add("OfficeAiDatabase lost the self-healing pass for a half-migrated session profile table")
+}
+if ($convSource -notmatch "Sub UpsertSessionProfile\(") {
+    $failures.Add("ConversationRepository no longer maintains the one-row-per-session profile")
+}
+if ($convSource -notmatch "CASE WHEN IFNULL\(document_id, ''\) = '' THEN") {
+    $failures.Add("Session document binding is no longer first-write-wins, so a later turn could move the session")
+}
+if ($convSource -notmatch "ORDER BY \(IFNULL\(MAX\(p\.document_id\), ''\) = @doc\) DESC") {
+    $failures.Add("GetRecentSessions no longer ranks the current document first in all scope")
+}
+if ($convSource -notmatch "SessionScopeDocument") {
+    $failures.Add("The document-only history scope disappeared from ConversationRepository")
+}
+if ($convSource -notmatch "DELETE FROM session_summary WHERE session_id = @sid") {
+    $failures.Add("DeleteSessionCascade no longer removes the session profile row")
+}
+$sessionDocSource = Get-CodeSource "ShareRibbon\Controls\Models\SessionDocument.vb"
+if ($sessionDocSource -notmatch "Function FromFullPath\(") {
+    $failures.Add("SessionDocument no longer derives the document identity from the host path")
+}
+if ($sessionDocSource -notmatch "If String\.IsNullOrEmpty\(directory\) Then Return doc") {
+    $failures.Add("SessionDocument lost the unsaved-document guard: two new documents would share one session bucket")
+}
+if ($sessionDocSource -notmatch "ToLowerInvariant\(\)") {
+    $failures.Add("The document id must be case-insensitive or a rename alone splits the history")
+}
+foreach ($hostChat in @(
+        @("WordAi\ChatControl.vb", $wordChatSource),
+        @("ExcelAi\ChatControl.vb", $excelChatSource),
+        @("PowerPointAi\ChatControl.vb", $pptChatSource)
+    )) {
+    if ($hostChat[1] -notmatch "Overrides Function GetSessionDocument\(\)") {
+        $failures.Add("$($hostChat[0]) no longer reports the active document for session binding")
+    }
+}
+if ($baseChatSource -notmatch "AddressOf ResolveSessionDocument") {
+    $failures.Add("HistorySessionService is no longer wired to the host document resolver")
+}
+if ([regex]::Matches($baseChatSource, "RefreshSessionDocumentContext\(\)").Count -lt 4) {
+    $failures.Add("Every UI-thread persistence entry must refresh the session document context before handing work to a background thread")
+}
+if ($historyServiceSource -notmatch "GetRecentSessions\(") {
+    $failures.Add("HandleGetSessionList no longer asks for the host/document scoped session list")
+}
+$historyJsSource = Get-JsSource (Join-Path $jsResourceDir "history-manager.js")
+if ($historyJsSource -notmatch "data-scope") {
+    $failures.Add("The history sidebar no longer exposes the current-document / all scope switch")
+}
+if ($historyJsSource -match "this\.items\.sort\(") {
+    $failures.Add("history-manager.js re-sorts sessions and wipes the current-document-first order from the backend")
+}
+
+# E2-03 guardrail: the sidebar title must stay readable without spending a model call, a user rename
+# must win over the auto title, and delete must be confirmed and cascade through the repository.
+if ($convSource -notmatch "Function AutoTitle\(") {
+    $failures.Add("ConversationRepository no longer derives a readable auto title from the first user turn")
+}
+if ($convSource -notmatch 'Regex\.Replace' -or $convSource -notmatch '\\s\+') {
+    $failures.Add("AutoTitle no longer collapses whitespace, a pasted block becomes a one-line wall")
+}
+if ($convSource -notmatch "If\(String\.IsNullOrEmpty\(customTitle\), derivedTitle, customTitle\)") {
+    $failures.Add("A user rename no longer overrides the auto title")
+}
+if ($convSource -notmatch "Function RenameSession\(") {
+    $failures.Add("ConversationRepository lost RenameSession, the rename box would silently do nothing")
+}
+if ($baseChatSource -notmatch 'Register\("renameSession"') {
+    $failures.Add("BaseChatControl no longer routes renameSession")
+}
+if ($historyServiceSource -notmatch "Sub HandleRenameSession\(" -or $historyServiceSource -notmatch "Sub HandleDeleteSession\(") {
+    $failures.Add("HistorySessionService lost the rename or delete handler")
+}
+if ($historyJsSource -notmatch "type: 'renameSession'") {
+    $failures.Add("history-manager.js no longer submits a rename request")
+}
+if ($historyJsSource -notmatch "list\.dataset\.bound") {
+    $failures.Add("History row actions are bound per item again: every refresh would stack duplicate listeners")
+}
+if ($historyJsSource -notmatch "confirm\(") {
+    $failures.Add("Deleting a session cascades to messages, memory and run traces, so it must stay confirmed")
+}
+
+# Memory pipeline contract guardrail: the queue job is keyed by session id and both the history read
+# path and the extractor read path filter conversation_event on event_type = 'chat_message'. When one
+# side drifts the job completes while extracting nothing, which is silent data loss, not an error.
+$memoryPipelineSource = Get-CodeSource "ShareRibbon\Services\Memory\AgentMemoryPipelineService.vb"
+$memoryRecorderSource = Get-CodeSource "ShareRibbon\Controls\Services\MemoryTurnRecorder.vb"
+$agentMemRepoSource = Get-CodeSource "ShareRibbon\Storage\AgentMemoryRepository.vb"
+if ($memoryRecorderSource -notmatch "\.TargetId = capturedSessionId") {
+    $failures.Add("MemoryTurnRecorder no longer keys the extract_memory job by session id")
+}
+if ($memoryPipelineSource -notmatch "GetUnprocessedConversationEventsBySession\(sessionId\)") {
+    $failures.Add("The extract_memory job no longer resolves events through the session, so it reads an empty event set")
+}
+if ($agentMemRepoSource -notmatch "event_type = 'chat_message' AND processed_at IS NULL") {
+    $failures.Add("Unprocessed event selection no longer matches the single chat history event type")
+}
+
+# E3-03 guardrail: an unconfigured model must be blocked inside the shared send funnel and answered with
+# a clickable in-panel CTA. A status-bar string is not an actionable next step, and the Agent entry must
+# not keep a weaker second check, because half-started agent runs leave an empty thinking bubble behind.
+$gateSource = Get-CodeSource "ShareRibbon\Controls\Services\ModelConfigGate.vb"
+$sendValidatorSource = Get-CodeSource "ShareRibbon\Controls\Services\ChatSendValidator.vb"
+$chatManagerJsSource = Get-JsSource (Join-Path $jsResourceDir "chat-manager.js")
+if ($sendValidatorSource -notmatch "Function ValidateConfig\(") {
+    $failures.Add("ChatSendValidator no longer separates the config check from the question check")
+}
+if ($sendValidatorSource -notmatch "ValidateConfig\(apiUrl, apiKey\)") {
+    $failures.Add("Validate() no longer reuses the config check, so the chat and agent gates can drift")
+}
+if ($gateSource -notmatch '"missing_api_key"' -or $gateSource -notmatch '"missing_api_url"') {
+    $failures.Add("ModelConfigGate lost the reason codes, the panel can no longer tell key from url")
+}
+if ($gateSource -notmatch "JObject|ToJson") {
+    $failures.Add("ModelConfigGate no longer serialises the CTA payload through JSON, hand-escaped JS is unsafe")
+}
+if ($baseChatSource -notmatch "IsBlockedByModelConfig\(ModelConfigGate\.ActionChat, validation\)") {
+    $failures.Add("Send no longer routes a missing model config to the in-panel CTA")
+}
+if ($baseChatSource -notmatch "IsBlockedByModelConfig\(ModelConfigGate\.ActionAgent\)") {
+    $failures.Add("HandleStartAgent can still start the agent chain without an API key")
+}
+if ($baseChatSource -notmatch "BuildHideScript\(\)") {
+    $failures.Add("Saving the config form no longer dismisses the stale configuration CTA")
+}
+if ($chatManagerJsSource -notmatch "window\.showModelConfigRequired") {
+    $failures.Add("chat-manager.js lost the configuration CTA renderer")
+}
+if ($chatManagerJsSource -notmatch "window\.hideModelConfigRequired") {
+    $failures.Add("chat-manager.js can no longer remove the configuration CTA")
+}
+if ($chatManagerJsSource -notmatch "model-config-cta") {
+    $failures.Add("The configuration CTA is rebuilt with an unstable id, so repeated blocked sends stack cards")
+}
+if ($chatManagerJsSource -notmatch "openModelConfig") {
+    $failures.Add("The configuration CTA no longer reuses the existing openApiConfigForm bridge")
+}
+
+# E3-03b guardrail: ConfigSettings is the process-wide url/key snapshot every send reads. It used to be
+# written only inside an "if selected" loop at load time, so clearing a url or key left the previous
+# endpoint live and the gate was satisfied by a stale key. The projection must be unconditional and must
+# run after every write to the store, otherwise the panel and the config file disagree for the whole session.
+$configManagerSource = Get-CodeSource "ShareRibbon\Config\ConfigManager.vb"
+if ($configManagerSource -notmatch "Public Shared Sub ApplyConfigSnapshot") {
+    $failures.Add("ConfigManager lost ApplyConfigSnapshot, so the global config snapshot has no single writer")
+}
+if ($configManagerSource -notmatch 'ConfigSettings\.ApiUrl = If\(chosen\?\.url, ""\)') {
+    $failures.Add("ApplyConfigSnapshot no longer assigns the url unconditionally, a cleared url can stay live")
+}
+if ($configManagerSource -notmatch 'ConfigSettings\.ApiKey = If\(chosen\?\.key, ""\)') {
+    $failures.Add("ApplyConfigSnapshot no longer assigns the key unconditionally, a cleared key can stay live")
+}
+if ($configManagerSource -match "ConfigSettings\.ApiUrl = item\.url") {
+    $failures.Add("LoadConfig reverted to assigning the snapshot inside a selected-only loop")
+}
+$loadConfigBody = [regex]::Match($configManagerSource, "Public Sub LoadConfig[\s\S]*?\r?\n    End Sub").Value
+if ($loadConfigBody -notmatch "ApplyConfigSnapshot\(\)") {
+    $failures.Add("LoadConfig no longer projects the snapshot, startup can keep an old endpoint")
+}
+$saveConfigBody = [regex]::Match($configManagerSource, "Public Shared Sub SaveConfig[\s\S]*?\r?\n    End Sub").Value
+if ($saveConfigBody -notmatch "ApplyConfigSnapshot\(\)") {
+    $failures.Add("SaveConfig writes the store but leaves the live snapshot stale, so a saved config change needs a restart")
+}
+$checksSource = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\run-code-checks.ps1") -Raw -Encoding UTF8
+if ($checksSource -notmatch [regex]::Escape("smoke-config-snapshot.ps1")) {
+    $failures.Add("smoke-config-snapshot.ps1 is not registered in run-code-checks.ps1, the stale-snapshot defect can return")
+}
+
+# E3-01 guardrail: the first-run wizard may only carry what the config window never had - the privacy
+# acknowledgement and the example tasks. Choosing a provider, typing an api key and probing the connection
+# already live in ConfigApiForm; re-implementing them in the panel creates a second truth about the same key.
+$onboardingSource = Get-CodeSource "ShareRibbon\Controls\Services\OnboardingService.vb"
+$configApiSource = Get-CodeSource "ShareRibbon\Config\ConfigApiForm.vb"
+$configManagerSource = Get-CodeSource "ShareRibbon\Config\ConfigManager.vb"
+$onboardingJsSource = Get-JsSource (Join-Path $jsResourceDir "onboarding.js")
+
+if ($baseChatSource -notmatch "New OnboardingService\(") {
+    $failures.Add("BaseChatControl no longer wires the onboarding service, so the wizard has no host behind it")
+}
+foreach ($onboardingCommand in @("getOnboardingState", "onboardingSetPrivacy", "onboardingFinish")) {
+    if ($baseChatSource -notmatch [regex]::Escape("Register(`"$onboardingCommand`"")) {
+        $failures.Add("The wizard posts '$onboardingCommand' but the host router no longer registers it")
+    }
+}
+
+# Anti-regrowth: the moment the wizard writes config or probes a socket itself, it is a second config layer.
+foreach ($forbidden in @("ConfigManager\.SaveConfig", "ModelConnectivityTester", "SecureConfigIntegration",
+                         'ConfigSettings\.(ApiUrl|ApiKey|platform|ModelName)\s*=', "ConfigManager\.ConfigData")) {
+    if ($onboardingSource -match $forbidden) {
+        $failures.Add("OnboardingService touches configuration itself ($forbidden) again instead of routing the user to ConfigApiForm")
+    }
+}
+if ($onboardingSource -notmatch "ChatSendValidator\(\)\.ValidateConfig\(ConfigSettings\.ApiUrl, ConfigSettings\.ApiKey\)") {
+    $failures.Add("The wizard decides on its own whether a model is configured, so it can disagree with the send gate")
+}
+foreach ($wizardStep in @("privacy", "example")) {
+    if ($onboardingSource -notmatch [regex]::Escape("Return `"$wizardStep`"")) {
+        $failures.Add("InitialStep no longer produces the '$wizardStep' step the panel renders")
+    }
+}
+if ($onboardingSource -match 'Return "(provider|key|test)"') {
+    $failures.Add("InitialStep can still hand out a provider/key/test step, but the wizard deleted the renderers for them")
+}
+
+# The removed message types must stay removed, on both sides of the bridge.
+foreach ($deadPost in @("onboardingSelectProvider", "onboardingSaveKey", "onboardingTestConnection")) {
+    if ($baseChatSource -match [regex]::Escape("Register(`"$deadPost`"")) {
+        $failures.Add("The '$deadPost' handler is registered again: provider/key/test belongs to ConfigApiForm only")
+    }
+    if ($onboardingJsSource -match $deadPost) {
+        $failures.Add("onboarding.js still posts '$deadPost', which recreates the second config implementation")
+    }
+}
+
+if ($onboardingJsSource -notmatch "window\.renderOnboarding = function") {
+    $failures.Add("onboarding.js lost the renderer the host pushes into")
+}
+if ($onboardingJsSource -notmatch "window\.showOnboarding = function") {
+    $failures.Add("onboarding.js lost the entry point the configuration CTA hands over to")
+}
+if ($onboardingJsSource -notmatch "openModelConfig") {
+    $failures.Add("onboarding.js no longer opens the existing config window, so the wizard has no way to configure")
+}
+if ($onboardingJsSource -match "onboardingStepPinned|window\.onboardingStep\s*=") {
+    $failures.Add("onboarding.js keeps a front-end copy of the wizard step again, which can contradict the host state")
+}
+if ($chatManagerJsSource -notmatch "showOnboarding") {
+    $failures.Add("The blocked-send CTA no longer offers the guided setup path (E3-03 -> E3-01 handover)")
+}
+if ($chatManagerJsSource -match "showOnboarding\('[a-z]") {
+    $failures.Add("The CTA passes a wizard step into showOnboarding, but only the host state decides which step shows")
+}
+
+# A stale wizard card after a successful save is the same class of bug as a stale config snapshot.
+$configFormHandler = [regex]::Match($baseChatSource, "Protected Sub HandleOpenApiConfigForm[\s\S]*?\n    End Sub").Value
+if ($configFormHandler -notmatch "ModelConfigGate\.BuildHideScript\(\)") {
+    $failures.Add("Saving the config form no longer dismisses the stale configuration CTA")
+}
+if ($configFormHandler -notmatch "OnboardingSvc\.HandleGetState\(\)") {
+    $failures.Add("Closing the config form no longer refreshes the wizard, so it keeps claiming nothing is configured")
+}
+
+# One connectivity probe, one caller that shows the verdict: the config window must explain the failure.
+if ($configApiSource -notmatch "New ModelConnectivityTester\(\)") {
+    $failures.Add("ConfigApiForm no longer delegates the test button to the shared connectivity tester")
+}
+if ($configApiSource -notmatch "As Task\(Of ModelConnectivityResult\)") {
+    $failures.Add("ConfigApiForm collapses the probe result to a boolean again, so it cannot say why the test failed")
+}
+if ($configApiSource -notmatch "ValidationFailureText\(validationResult\)") {
+    $failures.Add("The save path no longer shows the tester reason/detail to the user")
+}
+if ($configApiSource -match "max_tokens") {
+    $failures.Add("ConfigApiForm builds its own probe request again, so the panel and the form can disagree")
+}
+if ($configApiSource -match 'ConfigSettings\.(ApiUrl|ApiKey|platform|ModelName)\s*=') {
+    $failures.Add("ConfigApiForm hand-writes the global config snapshot again; SaveConfig -> ApplyConfigSnapshot is the only writer")
+}
+
+# The wizard writes through ConfigManager, so at-rest protection has to live in that one place.
+if ($configManagerSource -notmatch "SecureConfigManager\.SaveApiKey\(item\.key, item\.platform\)") {
+    $failures.Add("SaveConfig writes api keys again without routing them into the current-user encrypted store")
+}
+if ($configManagerSource -notmatch '\[encrypted\]') {
+    $failures.Add("SaveConfig no longer keeps the encrypted placeholder in the config file")
+}
+if ($onboardingSource -match "File\.WriteAllText|SqliteConnection|DbContext") {
+    $failures.Add("OnboardingService persists config outside ConfigManager, creating a second source of truth")
+}
+
+# Deleted steps must not leave dead styles behind - the wizard is small, so every onboarding rule has to
+# still be produced by onboarding.js.
+$stylesCssSource = Get-Content -LiteralPath (Join-Path $repoRoot "ShareRibbon\Resources\css\styles.css") -Raw -Encoding UTF8
+foreach ($rule in [regex]::Matches($stylesCssSource, '\.onboarding-([a-z][a-z-]*)')) {
+    if ($onboardingJsSource -notmatch [regex]::Escape($rule.Groups[1].Value)) {
+        $failures.Add("styles.css styles '.onboarding-$($rule.Groups[1].Value)' but onboarding.js no longer renders it")
+    }
+}
+
+# Static resource registration: a new js file that is not registered in all four places never reaches the
+# WebView, and the panel fails with a missing function instead of a build error.
+$resxSource = Get-Content -LiteralPath (Join-Path $repoRoot "ShareRibbon\My Project\Resources.resx") -Raw -Encoding UTF8
+$extractorSource = Get-CodeSource "ShareRibbon\Resources\ResourceExtractor.vb"
+$templateFiles = @(Get-ChildItem -LiteralPath (Join-Path $repoRoot "ShareRibbon\Resources") -Filter *.html -File)
+foreach ($js in $jsFiles) {
+    if ($resxSource -notmatch [regex]::Escape($js.Name)) {
+        $failures.Add("$($js.Name) is not registered in ShareRibbon\My Project\Resources.resx")
+    }
+    if ($extractorSource -notmatch [regex]::Escape($js.Name)) {
+        $failures.Add("$($js.Name) is not in the ResourceExtractor map, so it never reaches %LOCALAPPDATA%\OfficeAI\www")
+    }
+}
+
+# Bridge contract: every message type the panel posts must have a host handler, otherwise the click is a
+# no-op that only shows up during manual testing.
+$handledTypes = New-Object 'System.Collections.Generic.HashSet[string]'
+$codeProjectDirs = @("ShareRibbon", "WordAi", "ExcelAi", "PowerPointAi")
+foreach ($dir in $codeProjectDirs) {
+    foreach ($vbFile in (Get-ChildItem -LiteralPath (Join-Path $repoRoot $dir) -Filter *.vb -Recurse |
+        Where-Object { $_.FullName -notmatch "[\\/](bin|obj)[\\/]" })) {
+        $vbText = Get-Content -LiteralPath $vbFile.FullName -Raw -Encoding UTF8
+        foreach ($m in [regex]::Matches($vbText, 'Register\(\s*"([A-Za-z][A-Za-z0-9_]*)"')) {
+            [void]$handledTypes.Add($m.Groups[1].Value)
+        }
+        foreach ($m in [regex]::Matches($vbText, 'Case\s+"([A-Za-z][A-Za-z0-9_]*)"')) {
+            [void]$handledTypes.Add($m.Groups[1].Value)
+        }
+    }
+}
+
+$postedTypes = New-Object 'System.Collections.Generic.HashSet[string]'
+$bridgeJsFiles = @($jsFiles) + @($templateFiles)
+foreach ($file in $bridgeJsFiles) {
+    $text = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8
+    foreach ($m in [regex]::Matches($text, "type\s*:\s*['""]([A-Za-z][A-Za-z0-9_]*)['""]")) {
+        [void]$postedTypes.Add($m.Groups[1].Value)
+    }
+}
+if ($postedTypes.Count -lt 40) {
+    $failures.Add("Bridge post scan only saw $($postedTypes.Count) message types; the scan is broken, not the bridge")
+}
+foreach ($posted in ($postedTypes | Sort-Object)) {
+    if (-not $handledTypes.Contains($posted)) {
+        $failures.Add("The panel posts message type '$posted' but no host handler registers it")
+    }
+}
+
 
 if ($failures.Count -gt 0) {
     Write-Host "P0 guardrail failures:" -ForegroundColor Red

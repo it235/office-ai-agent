@@ -61,7 +61,7 @@ Namespace Agent.Harness
                 ' 用户没有点批准/拒绝而是直接说了新需求：视为放弃上一轮未确认的操作。
                 ' 未确认的写操作绝不擅自执行，按拒绝收敛后才能腾出 kernel 跑新一轮。
                 Dim settled = Await SettleApprovalAsync(superseded,
-                                                        False,
+                                                        ApprovalDecision.Abort,
                                                         "superseded",
                                                         "用户发起了新一轮对话，上一轮未确认的操作已放弃",
                                                         ExceptionClassifier.CodeCancelled)
@@ -140,6 +140,7 @@ Namespace Agent.Harness
 
                 Dim agentResult = Await pending.AgentTask
                 pending.IsCompleted = True
+                SafePersistChangeLog(runId, turn, agentResult)
 
                 If agentResult IsNot Nothing AndAlso agentResult.IsCancelled Then
                     RaisePhase(runId, "cancelled", "已取消")
@@ -204,25 +205,53 @@ Namespace Agent.Harness
             End Try
         End Function
 
-        Public Async Function ApproveAsync(runId As String,
-                                           approved As Boolean,
-                                           cancellationToken As CancellationToken) As Task(Of HarnessRunResult) Implements IOfficeHarness.ApproveAsync
+        Public Function ApproveAsync(runId As String,
+                                     approved As Boolean,
+                                     cancellationToken As CancellationToken) As Task(Of HarnessRunResult) Implements IOfficeHarness.ApproveAsync
+            Return DecideAsync(runId, If(approved, ApprovalDecision.Once, ApprovalDecision.Deny), cancellationToken)
+        End Function
+
+        Public Async Function DecideAsync(runId As String,
+                                          decision As ApprovalDecision,
+                                          cancellationToken As CancellationToken) As Task(Of HarnessRunResult) Implements IOfficeHarness.DecideAsync
             Dim pending = GetPendingRun(runId)
             If pending Is Nothing OrElse pending.AgentTask Is Nothing Then
                 Return MissingRunResult(runId)
             End If
 
             cancellationToken.ThrowIfCancellationRequested()
+            Dim allowed = decision = ApprovalDecision.Once OrElse decision = ApprovalDecision.Session
+            Dim decisionName As String
+            If allowed Then
+                decisionName = If(decision = ApprovalDecision.Session, "approved_for_session", "approved_once")
+            Else
+                decisionName = If(decision = ApprovalDecision.Abort, "aborted", "rejected")
+            End If
+            Dim decisionMessage As String
+            If decision = ApprovalDecision.Session Then
+                decisionMessage = "用户已允许本会话使用该工具"
+            ElseIf decision = ApprovalDecision.Once Then
+                decisionMessage = "用户已批准本次高风险操作"
+            ElseIf decision = ApprovalDecision.Abort Then
+                decisionMessage = "审批已放弃，正在停止本轮执行"
+            Else
+                decisionMessage = "用户已拒绝当前高风险操作"
+            End If
             Dim settled = Await SettleApprovalAsync(pending,
-                                                    approved,
-                                                    If(approved, "approved", "rejected"),
-                                                    If(approved, "用户已批准高风险操作", "用户已拒绝高风险操作"),
-                                                    If(approved, "", ExceptionClassifier.CodeSafetyBlocked))
+                                                    decision,
+                                                    decisionName,
+                                                    decisionMessage,
+                                                    If(allowed, "", ExceptionClassifier.CodeSafetyBlocked))
             If Not settled.HasValue Then Return MissingRunResult(runId)
-            SafeSetRunStatus(runId, "running", If(approved, "审批通过，继续执行", "审批拒绝，正在收敛执行结果"), "")
+            SafeSetRunStatus(runId, If(decision = ApprovalDecision.Abort, "cancelling", "running"),
+                             If(allowed,
+                                "审批通过，继续执行",
+                                If(decision = ApprovalDecision.Abort, "审批已放弃，正在停止本轮执行", "审批拒绝，正在跳过当前步骤")),
+                             "")
 
             Dim agentResult = Await pending.AgentTask
             pending.IsCompleted = True
+            SafePersistChangeLog(runId, pending.Turn, agentResult)
 
             If agentResult IsNot Nothing AndAlso agentResult.IsCancelled Then
                 SafeCompleteRun(runId, "cancelled", "已取消", ExceptionClassifier.CodeCancelled, DateTime.Now)
@@ -263,7 +292,7 @@ Namespace Agent.Harness
             Dim pending = GetPendingRun(runId)
             If pending Is Nothing Then Return MissingRunResult(runId)
             If pending.ApprovalCallback IsNot Nothing Then
-                Return Await ApproveAsync(runId, False, cancellationToken)
+                Return Await DecideAsync(runId, ApprovalDecision.Abort, cancellationToken)
             End If
 
             Return New HarnessRunResult With {
@@ -278,7 +307,7 @@ Namespace Agent.Harness
 
         Public Function ResumeAsync(runId As String,
                                     cancellationToken As CancellationToken) As Task(Of HarnessRunResult) Implements IOfficeHarness.ResumeAsync
-            Return ApproveAsync(runId, True, cancellationToken)
+            Return DecideAsync(runId, ApprovalDecision.Once, cancellationToken)
         End Function
 
         Private Sub HandleKernelStatusChanged(status As String)
@@ -357,14 +386,29 @@ Namespace Agent.Harness
             Public Property StartedAt As DateTime
             Public Property AgentTask As Task(Of AgentResult)
             Public Property ApprovalSignal As TaskCompletionSource(Of Boolean)
-            Public Property ApprovalCallback As Action(Of Boolean)
+            Public Property ApprovalCallback As Action(Of ApprovalDecision)
             Public Property ApprovalMessage As String = ""
+            Public Property ApprovalToolId As String = ""
+            Public Property ApprovalRiskLevel As String = ""
             Public Property IsCompleted As Boolean
             ''' <summary>
             ''' 仅表示"当前正卡在等用户裁决"，是新一轮对话能否放弃它的选择性依据。
             ''' </summary>
             Public Property AwaitingApproval As Boolean
         End Class
+
+        ''' <summary>
+        ''' 一轮结束后持久化写操作变更日志；失败或取消也要保存已落地的部分。
+        ''' </summary>
+        Private Sub SafePersistChangeLog(runId As String, turn As UserTurn, agentResult As AgentResult)
+            Try
+                If agentResult Is Nothing OrElse agentResult.ChangeLog Is Nothing Then Return
+                Dim sessionId = If(String.IsNullOrWhiteSpace(agentResult.SessionId), If(turn?.SessionId, ""), agentResult.SessionId)
+                AgentChangeLogRepository.SaveRun(runId, sessionId, If(turn?.AppType, ""), agentResult.ChangeLog)
+            Catch ex As Exception
+                AppLogger.Warn("OfficeHarness", $"Persist change log failed: {AppLogger.Redact(ex.Message)}")
+            End Try
+        End Sub
 
         Private Sub SafeStartRun(runId As String, turn As UserTurn, startedAt As DateTime)
             Try

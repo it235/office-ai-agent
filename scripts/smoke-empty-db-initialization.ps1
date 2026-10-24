@@ -83,8 +83,8 @@ try {
         $cmd = $conn.CreateCommand()
         $cmd.CommandText = "SELECT version FROM schema_version LIMIT 1"
         $version = [int]$cmd.ExecuteScalar()
-        if ($version -ne 13) {
-            throw "Expected schema version 13, got $version"
+        if ($version -ne 17) {
+            throw "Expected schema version 17, got $version"
         }
 
         $requiredTables = @(
@@ -99,6 +99,7 @@ try {
             "skills_registry",
             "agent_run",
             "agent_run_step",
+            "agent_run_change",
             "data_migration_marker"
         )
 
@@ -109,6 +110,37 @@ try {
             if ([int]$check.ExecuteScalar() -ne 1) {
                 throw "Expected table not found: $table"
             }
+        }
+
+        $changeColumns = @()
+        $colCmd = $conn.CreateCommand()
+        $colCmd.CommandText = "PRAGMA table_info(agent_run_change)"
+        $colReader = $colCmd.ExecuteReader()
+        while ($colReader.Read()) { $changeColumns += [string]$colReader["name"] }
+        $colReader.Dispose()
+        $colCmd.Dispose()
+        foreach ($column in @("rolled_back", "undo_units", "doc_hash_before", "doc_hash_after")) {
+            if ($changeColumns -notcontains $column) {
+                throw "agent_run_change must have column $column after migration 016"
+            }
+        }
+
+        # ---- migration 017 gives the session profile its document binding columns ----
+        $profileColumns = @()
+        $colCmd = $conn.CreateCommand()
+        $colCmd.CommandText = "PRAGMA table_info(session_summary)"
+        $colReader = $colCmd.ExecuteReader()
+        while ($colReader.Read()) { $profileColumns += [string]$colReader["name"] }
+        $colReader.Dispose()
+        $colCmd.Dispose()
+        foreach ($column in @("app_type", "document_id", "document_name", "custom_title", "updated_at")) {
+            if ($profileColumns -notcontains $column) {
+                throw "session_summary must have column $column after migration 017"
+            }
+        }
+        $profileUnique = [int](Get-ScalarValue "SELECT COUNT(1) FROM sqlite_master WHERE type = 'index' AND name = 'idx_session_summary_session_unique'")
+        if ($profileUnique -ne 1) {
+            throw "session_summary must keep one profile row per session via idx_session_summary_session_unique"
         }
 
         # ---- chat history is single-sourced from conversation_event ----
@@ -125,6 +157,11 @@ try {
         }
         if ($history[0].Role -ne "user" -or $history[1].Role -ne "assistant") {
             throw "chat history role order broken"
+        }
+
+        # two turns in one session must not grow a second profile row
+        if ([int](Get-ScalarValue "SELECT COUNT(1) FROM session_summary WHERE session_id = '$sessionA'") -ne 1) {
+            throw "the session profile must stay one row per session"
         }
 
         $entryA = [ShareRibbon.ConversationRepository]::GetRecentSessions(50) |
@@ -222,8 +259,8 @@ try {
         if ([int](Get-ScalarValue "SELECT COUNT(1) FROM conversation_event WHERE session_id = '$legacySession' AND event_type = 'chat_message'") -ne 2) {
             throw "migration 012 must backfill legacy conversation rows into conversation_event"
         }
-        if ([int](Get-ScalarValue "SELECT version FROM schema_version LIMIT 1") -ne 13) {
-            throw "schema version must be 13 after migrations 012 and 013"
+        if ([int](Get-ScalarValue "SELECT version FROM schema_version LIMIT 1") -ne 17) {
+            throw "schema version must be 17 after migrations 012 through 017"
         }
         $legacyEntry = [ShareRibbon.ConversationRepository]::GetRecentSessions(200) |
             Where-Object { $_.SessionId -eq $legacySession }
@@ -232,6 +269,9 @@ try {
         }
         if ($legacyEntry.CreatedAt -ne "2026-01-01 10:00:00") {
             throw "legacy session timestamp must come from the earliest backfilled message, got '$($legacyEntry.CreatedAt)'"
+        }
+        if ($legacyEntry.DocumentId -ne "") {
+            throw "an upgraded legacy session must start unbound instead of inventing a document"
         }
         [void][ShareRibbon.ConversationRepository]::DeleteSessionCascade($legacySession)
     }
@@ -244,9 +284,10 @@ try {
 
     [pscustomobject]@{
         Database = [ShareRibbon.OfficeAiDatabase]::GetDatabasePath()
-        SchemaVersion = 13
+        SchemaVersion = 17
         RequiredTables = $requiredTables.Count
         HistorySingleSource = $true
+        SessionProfileSchema = $true
         CascadeDeleteScoped = $true
         LegacyBackfill = $true
         EmptyInitialization = $true

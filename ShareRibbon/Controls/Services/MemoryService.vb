@@ -83,9 +83,9 @@ Public Class MemoryService
     ''' <summary>
     ''' 获取近期会话摘要：与历史侧边栏同源，都从 conversation_event 聚合，不再依赖单独写入的 session_summary
     ''' </summary>
-    Public Shared Function GetRecentSessionSummaries(Optional limit As Integer? = Nothing) As List(Of SessionSummaryRecord)
+    Public Shared Function GetRecentSessionSummaries(Optional limit As Integer? = Nothing, Optional appType As String = Nothing) As List(Of SessionSummaryRecord)
         Dim n = If(limit.HasValue, limit.Value, MemoryConfig.SessionSummaryLimit)
-        Return ConversationRepository.GetRecentSessions(n)
+        Return ConversationRepository.GetRecentSessions(n, appType)
     End Function
 
     ''' <summary>

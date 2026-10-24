@@ -25,6 +25,12 @@ Namespace Agent
         ' 执行计划
         Public Property Plan As ExecutionPlan
 
+        ' 本轮写操作变更日志（目标、前后摘要、是否成功）
+        Public Property ChangeLog As New AgentRunChangeLog()
+
+        ' 本轮用户明确选择“本会话允许”的工具；只在这一轮 Agent 会话内生效
+        Public Property SessionApprovedTools As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+
         ' 最终结果
         Public Property Result As AgentResult
 
@@ -111,6 +117,8 @@ Namespace Agent
         Public Property IterationsCompleted As Integer
         ''' <summary>用户协作式停止产生的终态，区别于普通失败。</summary>
         Public Property IsCancelled As Boolean
+        ''' <summary>本轮所有写操作的变更日志；失败或取消时同样保留已落地的记录。</summary>
+        Public Property ChangeLog As New AgentRunChangeLog()
 
         Public Shared Function SuccessResult(sessionId As String,
                                              Optional message As String = "") As AgentResult

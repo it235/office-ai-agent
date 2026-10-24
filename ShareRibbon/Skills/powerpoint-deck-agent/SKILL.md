@@ -4,7 +4,7 @@ description: Use for PowerPoint tasks that need slide generation, deck structure
 application: PowerPoint
 default_for_application: true
 tags: powerpoint, ppt, slide, deck, presentation, layout, theme, chart, notes, review
-allowed-tools: CreateSlides, InsertSlide, FormatSlide, InsertText, InsertTable, ApplyTheme, ApplyTransition, AddSpeakerNotes, BeautifySlides, DiscoverOfficeCapability, OfficeObjectOperation
+allowed-tools: CreateSlides, InsertSlide, DeleteSlide, DuplicateSlide, MoveSlide, SetSlideLayout, InsertShape, InsertText, InsertTable, FormatSlide, ApplyTheme, ApplyTransition, AddAnimation, AddSpeakerNotes, BeautifySlides, DiscoverOfficeCapability, OfficeObjectOperation
 intent_types: slide_generation, formatting, review, translation, presentation
 ---
 
@@ -35,8 +35,12 @@ Use this skill when the user asks PowerPoint to create or improve slides.
 ## Common Tasks
 
 - Generate slides from an outline
+- Insert, delete, duplicate, or reorder slides
+- Apply a named layout from the current deck, or a standard title/content/blank layout
+- Insert shapes and text boxes
 - Beautify the current slide or whole deck
 - Rewrite slide text for business reporting
 - Add speaker notes
 - Insert charts or tables
-- Apply consistent theme, spacing, alignment, and transitions
+- Apply transitions or shape animations
+- Apply a theme file (`.thmx`); built-in theme names cannot be applied through COM, so ask for a theme file instead of claiming success

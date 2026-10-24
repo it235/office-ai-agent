@@ -69,6 +69,11 @@ Public Class SessionSummaryRecord
     Public Property Title As String
     Public Property Snippet As String
     Public Property CreatedAt As String
+    ''' <summary>所属文档标识（路径哈希）；空表示升级前或无法定位文档的通用会话。</summary>
+    Public Property DocumentId As String = ""
+    Public Property DocumentName As String = ""
+    ''' <summary>标题是否由用户重命名而来；重命名优先于"首条用户消息"自动标题。</summary>
+    Public Property IsRenamed As Boolean = False
 End Class
 
 ''' <summary>

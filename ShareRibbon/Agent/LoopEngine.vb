@@ -28,7 +28,7 @@ Namespace Agent
         Public Property OnIterationUpdate As Action(Of ReActIteration)
         Public Property OnStepCompleted As Action(Of Integer, Boolean, String)
         Public Property OnExecutionExplained As Action(Of ExecutionExplanation)
-        Public Property OnRequestApproval As Func(Of String, Task(Of Boolean))
+        Public Property OnRequestApproval As Func(Of ApprovalRequest, Task(Of ApprovalDecision))
         Public Property OnPlanGenerated As Action(Of ExecutionPlan)
         Public Property SendAIRequest As Func(Of String, String, List(Of HistoryMessage), Task(Of String))
         Public Property SendAIRequestWithMessages As Func(Of JArray, Task(Of String))
@@ -181,25 +181,51 @@ Namespace Agent
                         If Not toolResult.Success AndAlso
                            String.Equals(toolResult.ErrorCode, ExceptionClassifier.CodeSafetyNeedsApproval, StringComparison.OrdinalIgnoreCase) AndAlso
                            OnRequestApproval IsNot Nothing Then
+                            Dim approvalRequest As New ApprovalRequest With {
+                                .ToolId = If(toolCall.ToolId, ""),
+                                .Message = If(toolResult.UserMessage, toolResult.Message),
+                                .RiskLevel = If(tool IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(tool.RiskLevel), tool.RiskLevel, "risky")
+                            }
                             OnStatusChanged?.Invoke($"工具 {toolCall.ToolId} 正在等待用户确认...")
-                            Dim approved = Await OnRequestApproval(If(toolResult.UserMessage, toolResult.Message))
-                            If approved Then
+                            Dim decision = Await OnRequestApproval(approvalRequest)
+                            If decision = ApprovalDecision.Session Then
+                                executionContext.ApproveToolForSession(toolCall.ToolId)
+                                OnStatusChanged?.Invoke($"本会话已允许工具 {toolCall.ToolId}，继续执行...")
+                            ElseIf decision = ApprovalDecision.Once Then
                                 executionContext.ApproveTool(toolCall.ToolId, toolCall.Parameters)
                                 OnStatusChanged?.Invoke($"用户已批准工具 {toolCall.ToolId}，继续执行...")
+                            End If
+
+                            If decision = ApprovalDecision.Once OrElse decision = ApprovalDecision.Session Then
                                 toolResult = ValidateObservedOutcome(
                                     Await _toolRegistry.ExecuteToolAsync(executionContext, toolCall.ToolId, toolCall.Parameters))
-                            Else
+                            ElseIf decision = ApprovalDecision.Deny Then
                                 toolResult = ToolResult.Failed(
                                     toolCall.ToolId,
                                     "用户拒绝高风险操作",
                                     errorCode:=ExceptionClassifier.CodeSafetyBlocked,
-                                    userMessage:="已取消该高风险操作",
+                                    userMessage:="已跳过这个需要确认的操作",
                                     recoverable:=False,
                                     observation:=New JObject From {
                                         {"kind", "approval"},
                                         {"summary", "用户拒绝高风险操作"},
                                         {"changed", False},
+                                        {"decision", "rejected"},
                                         {"warnings", New JArray("approval_rejected")}
+                                    })
+                            Else
+                                toolResult = ToolResult.Failed(
+                                    toolCall.ToolId,
+                                    "审批已放弃",
+                                    errorCode:=ExceptionClassifier.CodeSafetyBlocked,
+                                    userMessage:="审批已放弃，本轮停止执行",
+                                    recoverable:=False,
+                                    observation:=New JObject From {
+                                        {"kind", "approval"},
+                                        {"summary", "审批已放弃"},
+                                        {"changed", False},
+                                        {"decision", "aborted"},
+                                        {"warnings", New JArray("approval_aborted")}
                                     })
                             End If
                         End If
@@ -282,6 +308,16 @@ Namespace Agent
                     Dim explanation = BuildExecutionExplanation(stepIndex, planStep, toolCall, toolResult, fixAttempt, undoPoint, observation, stepStartedAt, stepFinishedAt)
                     planStep.LastExplanation = explanation
 
+                    ' 单轮变更日志：只由宿主观察对象驱动，失败/部分应用同样记录，
+                    ' 这样取消或失败后仍能如实告诉用户“已写入哪些地方”。
+                    session.ChangeLog.AddFromStep(
+                        toolCall.ToolId,
+                        stepIndex,
+                        planStep.Description,
+                        toolResult,
+                        If(String.IsNullOrWhiteSpace(toolResult.UndoPointId), explanation.UndoPointName, toolResult.UndoPointId),
+                        explanation.CanUndo)
+
                     ' 记录迭代
                     Dim iteration = New ReActIteration With {
                         .Index = session.CurrentIteration,
@@ -300,6 +336,23 @@ Namespace Agent
                         planStep.Status = StepStatus.Completed
                         noProgressCount = 0
                         OnStepCompleted?.Invoke(stepIndex, True, toolResult.Message)
+                    ElseIf IsRejectedApproval(toolResult) Then
+                        ' 拒绝只作用于当前步骤：后续步骤继续执行，终态会说明跳过了几处
+                        planStep.Status = StepStatus.Skipped
+                        planStep.ErrorMessage = "用户拒绝当前步骤"
+                        noProgressCount = 0
+                        OnStepCompleted?.Invoke(stepIndex, False, If(toolResult.UserMessage, toolResult.Message))
+                        AppLogger.Info("LoopEngine", $"Step skipped by user approval rejection: {toolResult.ToObserveSummary()}")
+                    ElseIf IsAbortedApproval(toolResult) Then
+                        ' 超时、取消或新一轮对话取代：审批通道已经关闭，本轮必须整轮停下
+                        planStep.Status = StepStatus.Failed
+                        planStep.ErrorMessage = "审批已放弃"
+                        OnStepCompleted?.Invoke(stepIndex, False, If(toolResult.UserMessage, toolResult.Message))
+                        session.Status = AgentStatus.Failed
+                        Dim abortMsg = AppendWriteSummary(session, "审批已放弃，本轮执行已停止")
+                        OnStatusChanged?.Invoke(abortMsg)
+                        AppLogger.Warn("LoopEngine", abortMsg)
+                        Return AgentResult.Failed(session.Id, abortMsg)
                     Else
                         planStep.Status = StepStatus.Failed
                         planStep.ErrorMessage = toolResult.ToObserveSummary()
@@ -312,7 +365,7 @@ Namespace Agent
                             session.Status = AgentStatus.Failed
                             OnStatusChanged?.Invoke(terminalFailure)
                             AppLogger.Warn("LoopEngine", terminalFailure)
-                            Return AgentResult.Failed(session.Id, terminalFailure)
+                            Return AgentResult.Failed(session.Id, AppendWriteSummary(session, terminalFailure))
                         End If
 
                         ' 失败且多轮修复失败，提示可以撤销
@@ -326,7 +379,7 @@ Namespace Agent
                             If replanAttempts >= MaxReplanAttempts Then
                                 Dim failMsg = $"步骤多次失败，已达最大重规划次数: {toolResult.ToObserveSummary()}"
                                 AppLogger.Error("LoopEngine", failMsg)
-                                Return AgentResult.Failed(session.Id, failMsg)
+                                Return AgentResult.Failed(session.Id, AppendWriteSummary(session, failMsg))
                             End If
 
                             session.Status = AgentStatus.Reflecting
@@ -358,7 +411,7 @@ Namespace Agent
                                 Case Else
                                     Dim replanFail = $"重新规划未能给出可执行修复: {toolResult.ToObserveSummary()}"
                                     AppLogger.Error("LoopEngine", replanFail)
-                                    Return AgentResult.Failed(session.Id, replanFail)
+                                    Return AgentResult.Failed(session.Id, AppendWriteSummary(session, replanFail))
                             End Select
                         End If
                     End If
@@ -371,7 +424,7 @@ Namespace Agent
                     Dim failMsg = "任务未执行任何工具调用。可能是计划步骤没有生成可解析的 action，或当前宿主工具未加载。"
                     OnStatusChanged?.Invoke(failMsg)
                     AppLogger.Warn("LoopEngine", failMsg)
-                    Return AgentResult.Failed(session.Id, failMsg)
+                    Return AgentResult.Failed(session.Id, AppendWriteSummary(session, failMsg))
                 End If
 
                 Dim incompleteSteps = session.Plan.Steps.
@@ -382,7 +435,7 @@ Namespace Agent
                     Dim failMsg = $"任务未完成，失败/未执行步骤 {incompleteSteps.Count} 个: {String.Join("; ", incompleteSteps.Select(Function(s) s.ErrorMessage).Where(Function(m) Not String.IsNullOrWhiteSpace(m)).Take(3))}"
                     OnStatusChanged?.Invoke(failMsg)
                     AppLogger.Warn("LoopEngine", failMsg)
-                    Return AgentResult.Failed(session.Id, failMsg)
+                    Return AgentResult.Failed(session.Id, AppendWriteSummary(session, failMsg))
                 End If
 
                 Dim outcomeError = ValidateExecutionOutcome(session)
@@ -390,7 +443,7 @@ Namespace Agent
                     session.Status = AgentStatus.Failed
                     OnStatusChanged?.Invoke(outcomeError)
                     AppLogger.Warn("LoopEngine", outcomeError)
-                    Return AgentResult.Failed(session.Id, outcomeError)
+                    Return AgentResult.Failed(session.Id, AppendWriteSummary(session, outcomeError))
                 End If
 
                 ' 完成
@@ -408,7 +461,7 @@ Namespace Agent
                 Dim classified = ExceptionClassifier.Classify(ex)
                 OnStatusChanged?.Invoke($"执行出错: {classified.UserMessage}")
                 AppLogger.Error("LoopEngine", "RunAsync unhandled exception", ex)
-                Return AgentResult.Failed(session.Id, $"执行异常: [{classified.ErrorCode}] {classified.UserMessage}")
+                Return AgentResult.Failed(session.Id, AppendWriteSummary(session, $"执行异常: [{classified.ErrorCode}] {classified.UserMessage}"))
             End Try
         End Function
 
@@ -419,8 +472,10 @@ Namespace Agent
         ''' </summary>
         Private Shared Function BuildCompletionMessage(session As AgentSession) As String
             Dim lines As New List(Of String)()
+            Dim skippedCount = 0
             If session.Plan IsNot Nothing Then
                 For Each planStep In session.Plan.Steps
+                    If planStep.Status = StepStatus.Skipped Then skippedCount += 1
                     If planStep.Status <> StepStatus.Completed Then Continue For
                     Dim explanation = planStep.LastExplanation
                     Dim detail = explanation?.Message
@@ -436,8 +491,11 @@ Namespace Agent
                 Next
             End If
 
-            If lines.Count = 0 Then Return "任务完成，本轮没有修改文档的操作。"
-            Return "已完成 " & lines.Count & " 个操作：" & vbCrLf & String.Join(vbCrLf, lines)
+            Dim skippedText = If(skippedCount > 0, vbCrLf & $"已跳过 {skippedCount} 个你拒绝的操作。", "")
+            If lines.Count = 0 Then
+                Return "任务完成，本轮没有修改文档的操作。" & skippedText
+            End If
+            Return "已完成 " & lines.Count & " 个操作：" & vbCrLf & String.Join(vbCrLf, lines) & skippedText
         End Function
 
         ''' <summary>
@@ -446,12 +504,67 @@ Namespace Agent
         Private Function FinishCancelled(session As AgentSession) As AgentResult
             session.Status = AgentStatus.Aborted
             Dim executed = session.CurrentIteration
-            Dim cancelMsg = If(executed > 0,
-                               $"已按你的请求停止，已完成 {executed} 个操作，未继续后续步骤。",
-                               "已按你的请求停止，尚未执行任何操作。")
+            Dim written = If(session.ChangeLog Is Nothing, 0, session.ChangeLog.WrittenCount)
+            Dim incomplete = CountIncompleteSteps(session)
+            Dim cancelMsg As String
+            If written > 0 Then
+                cancelMsg = $"已按你的请求停止：已写入 {written} 处，未完成 {incomplete} 步。"
+            ElseIf executed > 0 Then
+                cancelMsg = $"已按你的请求停止，尚未修改文档；未完成 {incomplete} 步。"
+            Else
+                cancelMsg = "已按你的请求停止，尚未执行任何操作。"
+            End If
             OnStatusChanged?.Invoke(cancelMsg)
-            AppLogger.Info("LoopEngine", $"Run cancelled at step boundary, iterations={executed}")
+            AppLogger.Info("LoopEngine", $"Run cancelled at step boundary, iterations={executed}, written={written}")
             Return AgentResult.CancelledResult(session.Id, cancelMsg)
+        End Function
+
+        Private Shared Function CountIncompleteSteps(session As AgentSession) As Integer
+            If session Is Nothing OrElse session.Plan Is Nothing Then Return 0
+            Return session.Plan.Steps.
+                Where(Function(s) s.Status <> StepStatus.Completed AndAlso s.Status <> StepStatus.Skipped).
+                Count()
+        End Function
+
+        ''' <summary>
+        ''' 判断失败是否来自用户在审批里点的“拒绝”，用于把终止范围收窄到当前步骤。
+        ''' </summary>
+        Private Shared Function IsRejectedApproval(toolResult As ToolResult) As Boolean
+            Return String.Equals(GetApprovalDecision(toolResult), "rejected", StringComparison.OrdinalIgnoreCase)
+        End Function
+
+        ''' <summary>
+        ''' 判断失败是否来自审批通道被放弃（超时、取消、新一轮取代），此时不能继续执行后续步骤。
+        ''' </summary>
+        Private Shared Function IsAbortedApproval(toolResult As ToolResult) As Boolean
+            Return String.Equals(GetApprovalDecision(toolResult), "aborted", StringComparison.OrdinalIgnoreCase)
+        End Function
+
+        Private Shared Function GetApprovalDecision(toolResult As ToolResult) As String
+            If toolResult Is Nothing OrElse
+               Not String.Equals(toolResult.ErrorCode, ExceptionClassifier.CodeSafetyBlocked, StringComparison.OrdinalIgnoreCase) Then
+                Return ""
+            End If
+            If toolResult.Observation Is Nothing Then Return ""
+            Try
+                Dim observation = JToken.FromObject(toolResult.Observation)
+                If observation.Type <> JTokenType.Object Then Return ""
+                Dim obj = CType(observation, JObject)
+                If Not String.Equals(obj("kind")?.ToString(), "approval", StringComparison.OrdinalIgnoreCase) Then Return ""
+                Return If(obj("decision")?.ToString(), "")
+            Catch
+                Return ""
+            End Try
+        End Function
+
+        ''' <summary>
+        ''' 失败信息只补事实：回滚成功的步骤不进入“已写入”，避免取消/失败提示和文档实际残留对不上。
+        ''' </summary>
+        Private Shared Function AppendWriteSummary(session As AgentSession, message As String) As String
+            If session Is Nothing OrElse session.ChangeLog Is Nothing Then Return message
+            Dim written = session.ChangeLog.WrittenCount
+            If written <= 0 Then Return message
+            Return $"{message}；本轮已写入 {written} 处，未完成 {CountIncompleteSteps(session)} 步。"
         End Function
 
         ''' <summary>

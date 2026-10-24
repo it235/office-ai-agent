@@ -207,7 +207,7 @@ Public Class ChatContextBuilder
                 End If
             End If
 
-            Dim summaries = MemoryService.GetRecentSessionSummaries(Nothing)
+            Dim summaries = MemoryService.GetRecentSessionSummaries(Nothing, appNorm)
             If summaries IsNot Nothing AndAlso summaries.Count > 0 Then
                 summaries = summaries.
                     Where(Function(s) IsRelevantToQuery(currentQuery, If(s.Title, "") & " " & If(s.Snippet, ""))).

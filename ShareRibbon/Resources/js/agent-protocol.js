@@ -19,6 +19,7 @@ const AgentMessage = {
     APPROVE_PLAN: 'agent:approvePlan',
     REJECT_PLAN: 'agent:rejectPlan',
     APPROVE_STEP: 'agent:approveStep',
+    APPROVE_TOOL_SESSION: 'agent:approveToolSession',
     REFINE_PLAN: 'agent:refinePlan',
 };
 
@@ -76,6 +77,18 @@ function requestReject(sessionId) {
 }
 
 /**
+ * 用户允许本会话内该工具的所有调用
+ * @param {string} sessionId - 会话 ID
+ * @param {string} toolId - 工具 ID（用于 UI 回显，后端按当前待决审批裁决）
+ */
+function requestApproveToolSession(sessionId, toolId) {
+    sendAgentMessage(AgentMessage.APPROVE_TOOL_SESSION, {
+        sessionId: sessionId,
+        toolId: toolId || ''
+    });
+}
+
+/**
  * 用户请求修改计划
  * @param {string} sessionId - 会话 ID
  * @param {string} feedback - 修改意见
@@ -93,5 +106,6 @@ window.sendAgentMessage = sendAgentMessage;
 window.requestStartAgent = requestStartAgent;
 window.requestAbortAgent = requestAbortAgent;
 window.requestApprove = requestApprove;
+window.requestApproveToolSession = requestApproveToolSession;
 window.requestReject = requestReject;
 window.requestRefinePlan = requestRefinePlan;

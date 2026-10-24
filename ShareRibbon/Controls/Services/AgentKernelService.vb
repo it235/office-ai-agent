@@ -181,7 +181,10 @@ Public Partial Class AgentKernelService
             AppLogger.Error("AgentKernelService", "StartAgentAsync exception", ex)
             Dim userMessage = ExceptionClassifier.ToUserMessage(ex, "Agent 启动失败，请重试")
             GlobalStatusStrip.ShowWarning(userMessage)
-            FinalizeAgentUi(False, userMessage)
+            ' OnCompleted 可能已经渲染终态（含撤销入口），此处只在尚未收尾时补一次。
+            If Not String.IsNullOrWhiteSpace(CurrentAgentSessionId) Then
+                FinalizeAgentUi(False, userMessage)
+            End If
             Return False
         End Try
     End Function
@@ -264,10 +267,16 @@ Public Partial Class AgentKernelService
     ''' <summary>
     ''' 处理审批请求事件
     ''' </summary>
-    Private Sub OnKernelRequestApproval(message As String, callback As Action(Of Boolean))
+    Private Sub OnKernelRequestApproval(request As Agent.ApprovalRequest, callback As Action(Of Agent.ApprovalDecision))
         Try
-            ' 显示审批 UI
-            _executeScript($"showAgentApproval({UtilsService.ToJsStringLiteral(CurrentAgentSessionId)}, {UtilsService.ToJsStringLiteral(message)})")
+            ' 显示审批 UI：带上工具与风险，用户可以判断是否只放行一次或放到本会话
+            Dim toolId = If(request?.ToolId, "")
+            Dim riskLevel = If(request?.RiskLevel, "")
+            Dim message = If(request?.Message, "该操作需要用户确认")
+            _executeScript($"showAgentApproval({UtilsService.ToJsStringLiteral(CurrentAgentSessionId)}, " &
+                           $"{UtilsService.ToJsStringLiteral(toolId)}, " &
+                           $"{UtilsService.ToJsStringLiteral(message)}, " &
+                           $"{UtilsService.ToJsStringLiteral(riskLevel)})")
         Catch ex As Exception
             Debug.WriteLine($"[AgentKernelService] OnRequestApproval 出错: {ex.Message}")
         End Try
@@ -354,13 +363,50 @@ Public Partial Class AgentKernelService
         Catch ex As Exception
             Debug.WriteLine($"[AgentKernelService] OnCompleted 出错: {ex.Message}")
         Finally
-            FinalizeAgentUi(terminalSuccess, terminalMessage)
+            PersistChangeLog(result)
+            FinalizeAgentUi(terminalSuccess, terminalMessage, BuildUndoDescriptor(result))
         End Try
     End Sub
 
 #End Region
 
 #Region "Private Helpers"
+
+    ''' <summary>
+    ''' 在渲染终态前先落库本轮变更，保证“撤销本轮”按钮出现时数据库已有可撤销依据。
+    ''' Harness 随后仍会按同一 change_id 覆盖写入，内容一致，天然幂等。
+    ''' </summary>
+    Private Sub PersistChangeLog(result As Agent.AgentResult)
+        If result Is Nothing OrElse result.ChangeLog Is Nothing Then Return
+        Dim runId = CurrentHarnessRunId
+        If String.IsNullOrWhiteSpace(runId) Then Return
+        Try
+            AgentChangeLogRepository.SaveRun(runId,
+                                             If(String.IsNullOrWhiteSpace(result.SessionId), CurrentAgentSessionId, result.SessionId),
+                                             _getOfficeAppType(),
+                                             result.ChangeLog)
+        Catch ex As Exception
+            AppLogger.Warn("AgentKernelService", $"Persist change log failed: {AppLogger.Redact(ex.Message)}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 只有 Word 且所有残留改动都能按自定义撤销单元还原时，才向 UI 暴露“撤销本轮”。
+    ''' Excel/PowerPoint 当前没有等价的安全撤销单元，不生成按钮，避免假承诺。
+    ''' </summary>
+    Private Function BuildUndoDescriptor(result As Agent.AgentResult) As JObject
+        If result Is Nothing OrElse result.ChangeLog Is Nothing Then Return Nothing
+        If Not String.Equals(_getOfficeAppType(), "Word", StringComparison.OrdinalIgnoreCase) Then Return Nothing
+        If Not result.ChangeLog.FullyUndoable Then Return Nothing
+        Dim runId = If(CurrentHarnessRunId, "")
+        If String.IsNullOrWhiteSpace(runId) Then Return Nothing
+        Return New JObject From {
+            {"canUndo", True},
+            {"runId", runId},
+            {"units", result.ChangeLog.UndoableUnits},
+            {"writtenCount", result.ChangeLog.WrittenCount}
+        }
+    End Function
 
     ''' <summary>
     ''' Shared non-streaming gateway used only when the Loop has ephemeral multimodal
@@ -385,11 +431,12 @@ Public Partial Class AgentKernelService
         Return response.Content
     End Function
 
-    Private Sub FinalizeAgentUi(success As Boolean, message As String)
+    Private Sub FinalizeAgentUi(success As Boolean, message As String, Optional undo As JObject = Nothing)
         Dim sessionId = If(CurrentAgentSessionId, "")
         Dim thinkingUuid = If(AgentThinkingUuid, "")
+        Dim undoJson = If(undo Is Nothing, "null", UtilsService.SerializeForScript(undo))
         Try
-            _executeScript($"completeAgent({UtilsService.ToJsStringLiteral(sessionId)}, {success.ToString().ToLowerInvariant()}, {UtilsService.ToJsStringLiteral(message)}, {UtilsService.ToJsStringLiteral(thinkingUuid)})")
+            _executeScript($"completeAgent({UtilsService.ToJsStringLiteral(sessionId)}, {success.ToString().ToLowerInvariant()}, {UtilsService.ToJsStringLiteral(message)}, {UtilsService.ToJsStringLiteral(thinkingUuid)}, {undoJson})")
         Catch ex As Exception
             AppLogger.Warn("AgentKernelService", $"FinalizeAgentUi failed: {AppLogger.Redact(ex.Message)}")
             ' 即使主终态函数不存在，也直接执行最小按钮/规划卡复位。

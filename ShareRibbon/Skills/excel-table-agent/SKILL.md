@@ -4,7 +4,7 @@ description: Use for Excel tasks that need table understanding, cleanup, calcula
 application: Excel
 default_for_application: true
 tags: excel, spreadsheet, table, formula, chart, pivot, clean, transpose, statistics, data-analysis
-allowed-tools: ApplyFormula, WriteData, FormatRange, CreateChart, CleanData, SortData, FilterData, RemoveDuplicates, ConditionalFormat, MergeCells, AutoFit, FindReplace, CreatePivotTable, TransformData, DataAnalysis, GenerateReport
+allowed-tools: ApplyFormula, WriteData, FormatRange, CreateChart, CleanData, SortData, FilterData, RemoveDuplicates, ConditionalFormat, MergeCells, AutoFit, FindReplace, CreatePivotTable, CreateSheet, DeleteSheet, RenameSheet, CopySheet, InsertRowCol, DeleteRowCol, HideRowCol, ProtectSheet, TransformData, DataAnalysis, GenerateReport
 intent_types: data_analysis, formula, chart, table_format, data_clean, transform
 ---
 
@@ -23,7 +23,7 @@ Use this skill when the user asks Excel to do real spreadsheet work from natural
 ## Operating Rules
 
 1. First read the current Excel context: workbook, sheet, selection address, used range, headers, sample rows, data types, numeric columns, text columns, formula cells, blanks, duplicates, and candidate target area.
-2. Prefer native JSON tools over VBA. Use `ExecuteVBA` only when registered tools cannot express the task.
+2. Prefer native JSON tools. This skill cannot execute VBA: if no registered tool can express the task, report a capability gap instead of planning around VBA.
 3. If the user selected a range, treat it as the primary working range. If there is no selection, infer the current table from `UsedRange`.
 4. Do not ask the user for data that the add-in can observe from Excel.
 5. For write operations, produce a plan with target ranges and expected effects before acting when the task is medium or risky.
@@ -39,6 +39,9 @@ Use this skill when the user asks Excel to do real spreadsheet work from natural
 - Row/column transpose: `TransformData` with `operation=transpose`
 - Cleaning: `CleanData`, `RemoveDuplicates`, `FindReplace`
 - Report output: `GenerateReport`, `WriteData`, `CreateChart`
+- Worksheet structure: `CreateSheet`, `DeleteSheet`, `RenameSheet`, `CopySheet`
+- Row/column structure: `InsertRowCol`, `DeleteRowCol`, `HideRowCol`
+- Sheet protection: `ProtectSheet`
 
 ## Chart Selection Heuristics
 

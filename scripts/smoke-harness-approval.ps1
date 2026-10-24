@@ -1,6 +1,7 @@
 # Approval-lifecycle smoke: an unresolved approval must never lock the session forever.
 # Covers both exits - timeout gives up, and a new turn supersedes the stale request.
-# Either way the pending write is rejected, never silently executed.
+# Either way the pending write is rejected, never silently executed. It also covers the three-state
+# decision: allow once reaches the host, session approval is not consumed, abort stops the round.
 param(
     [string]$Configuration = "Debug"
 )
@@ -114,9 +115,64 @@ if ($superseded.DebugMessage -eq "RUN_ALREADY_ACTIVE") {
     throw "Smoke failed: a new turn could not supersede the stale approval request."
 }
 
+# Case 3: an explicit "allow once" decision resumes the pending write and reaches the host.
+$approveHarness = New-SmokeHarness (New-SmokeKernel)
+$approveHarness.ApprovalTimeout = [TimeSpan]::FromMinutes(10)
+$awaiting = Invoke-SmokeRun $approveHarness (New-SmokeTurn "smoke-approve-once-1")
+if ($awaiting.Status.ToString() -ne "AwaitingApproval") {
+    throw "Smoke failed: expected AwaitingApproval for allow-once, got $($awaiting.Status) / $($awaiting.DebugMessage)"
+}
+$callsBeforeDecision = $script:hostCalls.Count
+$policy = [ShareRibbon.Agent.ApprovalDecision]
+$decided = $approveHarness.DecideAsync($awaiting.RunId, $policy::Once, [System.Threading.CancellationToken]::None).GetAwaiter().GetResult()
+if ($script:hostCalls.Count -le $callsBeforeDecision) {
+    throw "Smoke failed: allow-once did not reach the host executor."
+}
+
+# The session decision must survive repeated checks and must never be consumed like a one-time token.
+$context = New-Object ShareRibbon.Agent.ToolExecutionContext
+$context.ApproveToolForSession("DeleteText")
+for ($i = 0; $i -lt 3; $i++) {
+    if (-not $context.IsToolApprovedForSession("deletetext")) {
+        throw "Smoke failed: session approval must match case-insensitively and stay in effect."
+    }
+}
+if ($context.ConsumeToolApproval("DeleteText")) {
+    throw "Smoke failed: session approval was consumed by the one-time approval path."
+}
+$decideMethod = [ShareRibbon.Agent.Harness.IOfficeHarness].GetMethod("DecideAsync")
+if ($null -eq $decideMethod) {
+    throw "Smoke failed: IOfficeHarness no longer exposes the three-state approval decision."
+}
+
+# Case 4: Abort closes the whole round. Unlike Deny (skip this step), it must never reach the host and
+# must not be reported as success, otherwise a walked-away user still gets writes applied.
+$abortHarness = New-SmokeHarness (New-SmokeKernel)
+$abortHarness.ApprovalTimeout = [TimeSpan]::FromMinutes(10)
+$awaitingAbort = Invoke-SmokeRun $abortHarness (New-SmokeTurn "smoke-abort-1")
+if ($awaitingAbort.Status.ToString() -ne "AwaitingApproval") {
+    throw "Smoke failed: expected AwaitingApproval for abort, got $($awaitingAbort.Status) / $($awaitingAbort.DebugMessage)"
+}
+$callsBeforeAbort = $script:hostCalls.Count
+$aborted = $abortHarness.DecideAsync($awaitingAbort.RunId, $policy::Abort, [System.Threading.CancellationToken]::None).GetAwaiter().GetResult()
+if ($script:hostCalls.Count -ne $callsBeforeAbort) {
+    throw "Smoke failed: an aborted approval still reached the host executor."
+}
+if ($aborted.Status.ToString() -eq "Succeeded") {
+    throw "Smoke failed: an aborted round was reported as success."
+}
+$afterAbort = Invoke-SmokeRun $abortHarness (New-SmokeTurn "smoke-abort-2")
+if ($afterAbort.DebugMessage -eq "RUN_ALREADY_ACTIVE") {
+    throw "Smoke failed: an aborted round never released the session."
+}
+
 $result = [pscustomobject]@{
     TimeoutConverged    = ($afterTimeout.Status.ToString() -eq "AwaitingApproval")
     SupersededConverged = ($superseded.Status.ToString() -eq "AwaitingApproval")
+    AllowOnceReachedHost = ($script:hostCalls.Count -gt $callsBeforeDecision)
+    SessionDecisionKept  = ($context.IsToolApprovedForSession("DeleteText"))
+    AbortSkippedHost     = ($script:hostCalls.Count -eq $callsBeforeAbort)
+    AbortReleasedSession = ($afterAbort.DebugMessage -ne "RUN_ALREADY_ACTIVE")
     HostCalls           = $script:hostCalls.Count
 }
 $result | Format-List
@@ -127,6 +183,9 @@ if ($result.TimeoutConverged -ne $true) {
 if ($result.SupersededConverged -ne $true) {
     throw "Smoke failed: superseding an awaiting approval must start the new turn, not abandon it: $($superseded.Status) / $($superseded.UserMessage)"
 }
-if ($script:hostCalls.Count -gt 0) {
+if ($callsBeforeDecision -gt 0) {
     throw "Smoke failed: an operation still awaiting approval reached the host executor."
+}
+if ($result.AbortSkippedHost -ne $true -or $result.AbortReleasedSession -ne $true) {
+    throw "Smoke failed: an aborted round must neither write nor keep the session locked."
 }
