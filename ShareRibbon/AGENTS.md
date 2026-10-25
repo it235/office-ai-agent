@@ -23,6 +23,7 @@ ShareRibbon/
 | Task | Location | Notes |
 |---|---|---|
 | Agent 主链 | `Agent/AgentKernel.vb`, `Agent/LoopEngine.vb` | 规划、执行、观察、修复和终态 |
+| 失败步骤的单步纠偏 | `Agent/AgentStepInterventions.vb`, `Agent/LoopEngine.vb` | 收件箱按步号寻址、同号覆盖、`Take` 即失效；唯一消费者是 `LoopEngine.ApplyUserInterventions`，宿主与面板一律不得直接改 `PlanStep`；`retry`/`skip` 复用反思分支词表，不复用审批握手；计划被替换时必须 `Clear` |
 | 宿主原生入口话术 | `Agent/QuickActionCatalog.vb` | 选区浮层/右键菜单/快捷键与命令面板、引导示例（含每端一键示例 `SampleTask`）的唯一清单；`CapabilityId` 必须能在宿主注册表查到真实 id |
 | 右键菜单共享登记器 | `Agent/HostContextMenu.vb` | 只用 OCOM 的 `Office.CommandBar`；按 `aiq:` Tag 认领与倒序摘除自己挂的项 |
 | 快捷键轮询与组合键合同 | `Controls/Services/HostHotkeyWatcher.vb` | `HostHotkeyChord.Parse`/`IsSafe` + WinForms Timer 轮询 `GetAsyncKeyState`；只在宿主处于前台时触发 |
@@ -83,6 +84,7 @@ ShareRibbon/
 - 本项目的命名空间绝不能用 `Entry`：VB 标识符大小写不敏感，`Namespace Agent.Entry` 会劫持
   `Agent/Execution/AgentChangeLog.vb` 里的 `For Each entry`（BC30112/BC30456）。同理不得用与互操作类型
   同名的命名空间（`Selection`、`ContextMenu` 等），宿主项目里它会把 `sel As Selection` 压成 BC30182。
+- 用户对单步的纠偏（E10-01）只有一条通道：面板发 `agent:stepAction` → `AgentKernel.QueueStepAction` 入 `AgentSession.Interventions` → 循环在步骤边界 `ApplyUserInterventions` 落成步骤状态。宿主与面板一律不得直接改 `PlanStep`：那会造出第二套执行真相，而且只有循环知道当前步号、能安全回退。词表只有 `retry`/`skip` 两个（与反思分支同源，决定权从模型换回用户）；审批握手（`Once/Session/Deny/Abort` + 超时放弃）不为纠偏复用；计划被整体替换时旧步号上的待办决定必须 `Clear`，新计划里同号不是同号。
 
 ## VISUAL EVIDENCE RULES
 

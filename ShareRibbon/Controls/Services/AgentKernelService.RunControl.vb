@@ -45,6 +45,22 @@ Public Partial Class AgentKernelService
     End Sub
 
     ''' <summary>
+    ''' 面板对单个步骤的纠偏（E10-01）。这一层只回答"收下了没有"，不预测何时生效：
+    ''' 落地由循环在步骤边界做，宿主改步骤状态等于第二套执行真相。返回空串表示已排队。
+    ''' </summary>
+    Public Function RequestStepAction(sessionId As String, stepIndex As Integer, action As String) As String
+        If _agentKernel Is Nothing Then Return "Agent 还没有初始化，请稍后再试"
+        If stepIndex < 0 Then Return "缺少步骤序号，无法定位这一步"
+        If _agentKernel.QueueStepAction(sessionId, stepIndex, action) Then
+            AppLogger.Info("AgentKernelService", $"Step action queued step={stepIndex + 1} action={action}")
+            Return ""
+        End If
+        ' 按了没反应比没有这个按钮更糟：必须把"为什么这次不算"送回界面。
+        AppLogger.Info("AgentKernelService", $"Step action refused step={stepIndex + 1} action={action}")
+        Return "这一步已经不在当前这一轮里了（本轮已结束，或计划已被换成新版本）"
+    End Function
+
+    ''' <summary>
     ''' 用户允许一次当前高风险操作
     ''' </summary>
     Public Sub Approve()

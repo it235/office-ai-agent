@@ -234,6 +234,106 @@ function buildPlanTrustHtml(planData, planVersion) {
     return `<div class="agent-plan-trust">${chips.join('')}</div>`;
 }
 
+const STEP_ACTION_QUEUED_HINT = '已收到，这一步会在当前步骤结束后处理';
+
+/**
+ * 失败步骤上的纠偏按钮（E10-01）。
+ * 只挂在 failed 上：重试和跳过都是对"这一步没成"的回答，给正在跑或已完成的步骤发按钮，
+ * 等于承诺一件循环根本不消费的事。整块用 innerHTML 重绘，同一步骤再次失败不会叠出第二套按钮。
+ */
+function renderStepActions(sessionId, stepIndex) {
+    const stepEl = document.getElementById(`agent-step-${sessionId}-${stepIndex}`);
+    if (!stepEl) return;
+
+    let box = document.getElementById(`step-actions-${sessionId}-${stepIndex}`);
+    if (!box) {
+        box = document.createElement('div');
+        box.className = 'agent-step-actions';
+        box.id = `step-actions-${sessionId}-${stepIndex}`;
+        stepEl.appendChild(box);
+    }
+    box.innerHTML = `
+        <button class="agent-btn agent-btn-execute" id="step-retry-${sessionId}-${stepIndex}"
+                onclick="onStepAction('${sessionId}', ${stepIndex}, 'retry')">↻ 重试这一步</button>
+        <button class="agent-btn agent-btn-abort" id="step-skip-${sessionId}-${stepIndex}"
+                onclick="onStepAction('${sessionId}', ${stepIndex}, 'skip')">⏭ 跳过这一步</button>
+        <span class="step-action-hint" id="step-action-hint-${sessionId}-${stepIndex}"></span>
+    `;
+}
+
+/** 步骤换了状态（重跑、跳过、被新计划取代）后上一套纠偏按钮就不再代表任何事实。 */
+function clearStepActions(sessionId, stepIndex) {
+    const box = document.getElementById(`step-actions-${sessionId}-${stepIndex}`);
+    if (box) box.remove();
+}
+
+/**
+ * 点击即置灰：纠偏是在步骤边界被消费的，中间态再点一次会排进第二个决定，
+ * 用户看到的是同一步骤莫名重跑两遍。真正的生效确认来自状态变化，不来自这里。
+ */
+function onStepAction(sessionId, stepIndex, action) {
+    const retryBtn = document.getElementById(`step-retry-${sessionId}-${stepIndex}`);
+    const skipBtn = document.getElementById(`step-skip-${sessionId}-${stepIndex}`);
+    if ((retryBtn && retryBtn.disabled) || (skipBtn && skipBtn.disabled)) return;
+
+    if (retryBtn) retryBtn.disabled = true;
+    if (skipBtn) skipBtn.disabled = true;
+    setStepActionHint(sessionId, stepIndex, STEP_ACTION_QUEUED_HINT);
+
+    if (typeof requestStepAction === 'function') {
+        requestStepAction(sessionId, stepIndex, action);
+    } else {
+        unlockStepActions(sessionId, stepIndex, '前端协议脚本没加载完，请重新打开面板再试');
+    }
+}
+
+function unlockStepActions(sessionId, stepIndex, hintText) {
+    const retryBtn = document.getElementById(`step-retry-${sessionId}-${stepIndex}`);
+    const skipBtn = document.getElementById(`step-skip-${sessionId}-${stepIndex}`);
+    if (retryBtn) retryBtn.disabled = false;
+    if (skipBtn) skipBtn.disabled = false;
+    setStepActionHint(sessionId, stepIndex, hintText);
+}
+
+/** 回执文案一律 textContent：后端原因里带尖括号也只当纯文本，不给注入留口子。 */
+function setStepActionHint(sessionId, stepIndex, hintText) {
+    const hint = document.getElementById(`step-action-hint-${sessionId}-${stepIndex}`);
+    if (!hint) return;
+    hint.textContent = hintText || '';
+}
+
+/**
+ * 宿主回执。排队成功无需重绘（点击时已置灰并写明等待），被拒绝时必须解锁并交代原因，
+ * 否则用户看到的是一次成功的点击和一个仍然不动的步骤。
+ * @param {string} sessionId - 会话 ID
+ * @param {number} stepIndex - 步骤索引
+ * @param {boolean} ok - 是否已排队
+ * @param {string} reason - 未能排队的原因
+ */
+function setStepActionResult(sessionId, stepIndex, ok, reason) {
+    try {
+        if (ok) return;
+        unlockStepActions(sessionId, stepIndex, reason || '这一步没能排队，请重试');
+    } catch (err) {
+        console.error('setStepActionResult error:', err);
+    }
+}
+
+/**
+ * 本轮结束后不再接受单步纠偏：收件箱跟着这一轮一起失效，此时再点只会得到一次拒绝。
+ * 与其让用户点出失败，不如当场置灰并说清原因。
+ */
+function lockAllStepActions(sessionId, reason) {
+    const prefix = `step-actions-${sessionId}-`;
+    document.querySelectorAll('.agent-step-actions').forEach(function (box) {
+        // 按会话前缀过滤：同一时间可能有多张已经结束的计划卡，只收掉这一轮自己的按钮
+        if (!box.id || box.id.indexOf(prefix) !== 0) return;
+        box.querySelectorAll('.agent-btn').forEach(function (btn) { btn.disabled = true; });
+        const hint = box.querySelector('.step-action-hint');
+        if (hint) hint.textContent = reason;
+    });
+}
+
 /**
  * 更新 Agent 步骤状态
  * @param {string} sessionId - 会话 ID
@@ -263,6 +363,12 @@ function updateAgentStep(sessionId, stepIndex, status, message) {
             stepEl.classList.add('step-failed');
         } else if (status === 'skipped' || status === 'aborted') {
             stepEl.classList.add('step-skipped');
+        }
+
+        if (status === 'failed') {
+            renderStepActions(sessionId, stepIndex);
+        } else {
+            clearStepActions(sessionId, stepIndex);
         }
 
         if (message) {
@@ -501,6 +607,7 @@ function refineAgentPlan(uuid) {
  */
 function abortAgent(uuid) {
     updateAgentStatus(uuid, 'aborted', '已终止');
+    lockAllStepActions(uuid, '本轮已终止，这一步不能再单独处理');
     const actions = document.getElementById('agent-actions-' + uuid);
     if (actions) {
         actions.innerHTML = '<span class="agent-terminated">已终止</span>';
@@ -555,6 +662,9 @@ function completeAgent(uuid, success, message, thinkingUuid, terminal) {
         }
 
         renderAgentChangeSummary(uuid, terminal);
+
+        // 终态之后收件箱随这一轮一起失效，按钮继续可点只会换来一次拒绝；当场收掉并指一条真能走的路。
+        lockAllStepActions(uuid, '本轮已经结束，需要重跑这一步请重新发起任务');
 
         const actions = document.getElementById('agent-actions-' + uuid);
         if (actions) {
@@ -783,6 +893,9 @@ window.updateAgentStatus = updateAgentStatus;
 window.completeAgent = completeAgent;
 window.undoAgentRun = undoAgentRun;
 window.setAgentUndoResult = setAgentUndoResult;
+window.onStepAction = onStepAction;
+window.setStepActionResult = setStepActionResult;
+window.lockAllStepActions = lockAllStepActions;
 window.lockChatInput = lockChatInput;
 window.unlockChatInput = unlockChatInput;
 window.restoreAgentRequestUi = restoreAgentRequestUi;

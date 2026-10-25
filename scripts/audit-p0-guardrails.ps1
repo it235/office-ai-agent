@@ -1912,6 +1912,150 @@ if ($kernelSource -match "planning-status-card") {
     $failures.Add("planning-status-card is back in AgentKernelService; agent-card.js owns the plan card as 'agent-plan-' + uuid")
 }
 
+# E10-01 guardrail: a failed step must be recoverable without redoing the round, and the loop stays the
+# only owner of "what the plan is doing now". The panel may only drop a decision into a per-session
+# inbox keyed by step index; the loop applies it at the next step boundary, rewinds to that single step,
+# and walks over every already-decided step without replaying it. A plan swap renumbers the steps, so
+# queued decisions must die with the plan, and both mid-body terminals must first let a queued decision
+# reach the boundary instead of answering the click with an error.
+$e10LoopSource = $loopSource
+$e10InterventionsSource = Get-CodeSource "ShareRibbon\Agent\AgentStepInterventions.vb"
+$e10SessionSource = Get-CodeSource "ShareRibbon\Agent\AgentSession.vb"
+$e10KernelSource = Get-CodeSource "ShareRibbon\Agent\AgentKernel.vb"
+$e10RunControlSource = Get-CodeSource "ShareRibbon\Controls\Services\AgentKernelService.RunControl.vb"
+$e10ProtocolSource = Get-JsSource (Join-Path $jsResourceDir "agent-protocol.js")
+
+if (-not (Test-Path -LiteralPath (Join-Path $repoRoot "ShareRibbon\Agent\AgentStepInterventions.vb"))) {
+    $failures.Add("The per-session step decision inbox is missing: ShareRibbon\Agent\AgentStepInterventions.vb")
+}
+if (-not (Test-Path -LiteralPath (Join-Path $repoRoot "scripts\smoke-step-intervention.ps1"))) {
+    $failures.Add("The step recovery failure-injection gate is missing: scripts\smoke-step-intervention.ps1")
+}
+$e10ProjectSource = Get-Content -LiteralPath (Join-Path $repoRoot "ShareRibbon\ShareRibbon.vbproj") -Raw -Encoding UTF8
+if ($e10ProjectSource -notmatch 'Include="Agent\\AgentStepInterventions\.vb"') {
+    $failures.Add("AgentStepInterventions.vb is not registered in ShareRibbon.vbproj, so the inbox never compiles into the add-in")
+}
+$e10GateRunnerSource = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\run-code-checks.ps1") -Raw -Encoding UTF8
+if ($e10GateRunnerSource -match '"smoke-step-intervention\.ps1"') {
+    $failures.Add("smoke-step-intervention.ps1 is opted out of the gate run, so the failure-injection proof never executes")
+}
+$e10CardCheckSource = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\check-agent-card-ui.js") -Raw -Encoding UTF8
+if ($e10CardCheckSource -notmatch "agent-protocol\.js" -or $e10CardCheckSource -notmatch "setStepActionResult") {
+    $failures.Add("check-agent-card-ui.js no longer loads the protocol script or asserts the step recovery surface")
+}
+
+if ($e10InterventionsSource -notmatch "Public Function Take\(stepIndex As Integer\) As StepIntervention" -or
+    $e10InterventionsSource -notmatch "_pending\.Remove\(stepIndex\)") {
+    $failures.Add("A step decision is no longer take-once, so one click could drive the same step twice: AgentStepInterventions.vb")
+}
+if ($e10InterventionsSource -notmatch 'String\.Equals\(value, "retry", StringComparison\.OrdinalIgnoreCase\)' -or
+    $e10InterventionsSource -notmatch 'String\.Equals\(value, "skip", StringComparison\.OrdinalIgnoreCase\)' -or
+    $e10InterventionsSource -notmatch "Return StepIntervention\.None") {
+    $failures.Add("The step action vocabulary is no longer closed to retry/skip; an unknown verb must not be guessed: AgentStepInterventions.vb")
+}
+if ($e10InterventionsSource -notmatch "keys\.Sort\(\)") {
+    $failures.Add("The inbox no longer hands back step indices in ascending order, so a rewind can land on the later step: AgentStepInterventions.vb")
+}
+if ($e10SessionSource -notmatch "Public Property Interventions As New AgentStepInterventions\(\)") {
+    $failures.Add("AgentSession no longer owns the step decision inbox: AgentSession.vb")
+}
+
+if ([regex]::Matches($e10LoopSource, "session\.Interventions\.Take\(").Count -ne 1 -or
+    $e10LoopSource -notmatch "Private Sub ApplyUserInterventions\(session As AgentSession,") {
+    $failures.Add("LoopEngine is no longer the single consumer of user step decisions: LoopEngine.vb")
+}
+if ($e10KernelSource -match "Interventions\.Take\(" -or $e10KernelSource -match "\.Status = StepStatus") {
+    $failures.Add("AgentKernel consumes the inbox or writes step state instead of only queueing it: AgentKernel.vb")
+}
+if ($e10KernelSource -notmatch "Public Function QueueStepAction\(sessionId As String, stepIndex As Integer, action As String\) As Boolean" -or
+    $e10KernelSource -notmatch "If Not String\.Equals\(_session\.Id, sessionId, StringComparison\.Ordinal\) Then Return False") {
+    $failures.Add("A step decision is accepted for a session that is not the one running now: AgentKernel.vb")
+}
+if ($e10KernelSource -notmatch "AgentStatus\.Failed OrElse\s*_session\.Status = AgentStatus\.Aborted Then Return False") {
+    $failures.Add("A finished round still accepts step decisions, so the click lands on a plan nobody will walk again: AgentKernel.vb")
+}
+
+# The decision only becomes step state at the boundary, before the step is executed, and one retry must
+# reset exactly the target step. Order is checked positionally because three separate edits could keep
+# all three strings while putting them back in the wrong order.
+$e10ApplyAt = $e10LoopSource.IndexOf("ApplyUserInterventions(session, stepIndex, noProgressCount)")
+$e10SettleGuardAt = $e10LoopSource.IndexOf("session.Plan.Steps(stepIndex).Status <> StepStatus.Pending")
+$e10ExecuteAt = $e10LoopSource.IndexOf("Dim planStep = session.Plan.Steps(stepIndex)")
+if ($e10ApplyAt -lt 0 -or $e10SettleGuardAt -lt $e10ApplyAt -or $e10ExecuteAt -lt $e10SettleGuardAt) {
+    $failures.Add("User step decisions are no longer applied at the step boundary before the step executes: LoopEngine.vb")
+}
+if ($e10LoopSource -notmatch "If stepIndex < session\.Plan\.Steps\.Count AndAlso\s*session\.Plan\.Steps\(stepIndex\)\.Status <> StepStatus\.Pending Then\s*stepIndex \+= 1\s*Continue While") {
+    $failures.Add("The loop replays every already-decided step instead of walking over them: LoopEngine.vb")
+}
+if ($e10LoopSource -notmatch "Else\s*target\.Status = StepStatus\.Pending[\s\S]{0,300}?stepIndex = Math\.Min\(stepIndex, idx\)") {
+    $failures.Add("A retry no longer rewinds to the step the user asked for: LoopEngine.vb")
+}
+if ($e10LoopSource -notmatch "target\.Status = StepStatus\.Skipped") {
+    $failures.Add("A user skip no longer settles the step as skipped: LoopEngine.vb")
+}
+if ($e10LoopSource -notmatch "While \(stepIndex < session\.Plan\.Steps\.Count OrElse Not runEndGated OrElse\s*session\.Interventions\.PendingCount > 0\) AndAlso\s*session\.CurrentIteration < MaxIterations") {
+    $failures.Add("The loop never re-enters for a decision taken after the last step, so a trailing click is silently dropped: LoopEngine.vb")
+}
+
+if ($e10LoopSource -notmatch "If Not toolResult\.Recoverable Then[\s\S]{0,900}?If session\.Interventions\.PendingCount > 0 Then[\s\S]{0,400}?Continue While") {
+    $failures.Add("A non-recoverable failure still answers the click with a terminal instead of applying it: LoopEngine.vb")
+}
+if ($e10LoopSource -notmatch "If replanAttempts >= MaxReplanAttempts Then[\s\S]{0,900}?If session\.Interventions\.PendingCount > 0 Then[\s\S]{0,400}?Continue While") {
+    $failures.Add("An exhausted replan budget still answers the click with a terminal instead of applying it: LoopEngine.vb")
+}
+
+if ([regex]::Matches($e10LoopSource, "session\.Interventions\.Clear\(\)").Count -ne 2) {
+    $failures.Add("Queued step decisions are cleared somewhere other than the two plan replacements: LoopEngine.vb")
+}
+if ([regex]::Matches($e10LoopSource, "session\.Writes\.BeginNextPlan\(\)[\s\S]{0,300}?session\.Interventions\.Clear\(\)").Count -ne 2) {
+    $failures.Add("A replaced plan inherits the old plan's step decisions, so a click lands on an unrelated step: LoopEngine.vb")
+}
+
+if ($baseChatSource -notmatch 'router\.Register\("agent:stepAction", Sub\(jsonDoc\) HandleAgentStepAction\(jsonDoc\)\)') {
+    $failures.Add("The panel has no channel for a per-step decision: BaseChatControl.vb")
+}
+$e10HandlerWindow = [regex]::Match($baseChatSource, "Protected Sub HandleAgentStepAction\(jsonDoc As JObject\)[\s\S]{0,2500}?End Sub").Value
+if ($e10HandlerWindow.Length -eq 0) {
+    $failures.Add("HandleAgentStepAction is gone, so the registered channel points at nothing: BaseChatControl.vb")
+}
+elseif ($e10HandlerWindow -match "ApproveToolForSession|ApprovalDecision|HandleAgentApproveStep|RequestApprove") {
+    $failures.Add("Step recovery is routed through the safety approval handshake, which drags its timeout and abandon semantics along: BaseChatControl.vb")
+}
+if ($e10HandlerWindow -notmatch "ReportStepActionRefused\(sessionId, stepIndex, refusal\)") {
+    $failures.Add("A refused step decision is dropped without telling the card, so the button stays disabled with no reason: BaseChatControl.vb")
+}
+if ($baseChatSource -notmatch "AgentKernelSvc\.RequestStepAction\(sessionId, stepIndex, action\)") {
+    $failures.Add("The panel no longer asks the kernel service whether the decision was accepted: BaseChatControl.vb")
+}
+if ($e10RunControlSource -notmatch "Public Function RequestStepAction\(sessionId As String, stepIndex As Integer, action As String\) As String") {
+    $failures.Add("RequestStepAction stopped returning a refusal reason, so a refused click cannot be explained: AgentKernelService.RunControl.vb")
+}
+
+if ($e10ProtocolSource -notmatch "STEP_ACTION: 'agent:stepAction'" -or
+    $e10ProtocolSource -notmatch "window\.requestStepAction = requestStepAction") {
+    $failures.Add("agent-protocol.js no longer exports the step decision message")
+}
+foreach ($e10CardName in @(
+        "function renderStepActions\(",
+        "function clearStepActions\(",
+        "function onStepAction\(",
+        "function setStepActionResult\(",
+        "function lockAllStepActions\("
+    )) {
+    if ($agentCardSource -notmatch $e10CardName) {
+        $failures.Add("agent-card.js lost '$e10CardName', so one end of the step recovery surface is missing")
+    }
+}
+if ($agentCardSource -notmatch "if \(status === 'failed'\) \{\s*renderStepActions\(sessionId, stepIndex\);") {
+    $failures.Add("Step actions are offered for steps that did not fail; only a failed step can be retried or skipped: agent-card.js")
+}
+if ($agentCardSource -notmatch "requestStepAction\(sessionId, stepIndex, action\)") {
+    $failures.Add("The retry/skip buttons no longer post through the step decision protocol: agent-card.js")
+}
+if ($agentCardSource -notmatch "lockAllStepActions\(uuid,") {
+    $failures.Add("A finished round leaves live step buttons on the card: agent-card.js")
+}
+
 
 if ($failures.Count -gt 0) {
     Write-Host "P0 guardrail failures:" -ForegroundColor Red

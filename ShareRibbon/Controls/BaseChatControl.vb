@@ -861,6 +861,9 @@ Public MustInherit Class BaseChatControl
         router.Register("agent:approveStep", Sub(jsonDoc) HandleAgentApproveStep(jsonDoc))
         router.Register("agent:approveToolSession", Sub(jsonDoc) HandleAgentApproveToolSession(jsonDoc))
         router.Register("agent:refinePlan", Sub(jsonDoc) HandleAgentRefinePlan(jsonDoc))
+        ' E10-01 单步纠偏：面板只排队，落地由循环在步骤边界做；被拒绝时原因必须回到界面，
+        ' 所以它不能复用 agent:approveStep——那条通道挂着超时与放弃语义，是安全审批专用的。
+        router.Register("agent:stepAction", Sub(jsonDoc) HandleAgentStepAction(jsonDoc))
         router.Register("agent:undoRun", Sub(jsonDoc) HandleAgentUndoRun(jsonDoc))
         router.Register("openFileDialog", Sub(jsonDoc) HandleOpenFileDialog())
         router.Register("openApiConfigForm", Sub(jsonDoc) HandleOpenApiConfigForm())
@@ -2157,6 +2160,48 @@ Public MustInherit Class BaseChatControl
         Catch ex As Exception
             Debug.WriteLine($"HandleAgentRefinePlan 出错: {ex.Message}")
         End Try
+    End Sub
+
+    ''' <summary>
+    ''' 处理用户对单个步骤的纠偏（E10-01）。这一层只负责收下并回执，不预测何时生效——
+    ''' 生效由循环在步骤边界落地；被拒绝时必须把原因送回同一张卡片，"按了没反应"比没有按钮更糟。
+    ''' </summary>
+    Protected Sub HandleAgentStepAction(jsonDoc As JObject)
+        Try
+            Dim payload = If(jsonDoc("payload"), jsonDoc)
+            Dim sessionId = payload("sessionId")?.ToString()
+            Dim stepIndexValue = payload("stepIndex")
+            Dim action = payload("action")?.ToString()
+
+            Dim stepIndex As Integer
+            If stepIndexValue Is Nothing OrElse Not Integer.TryParse(stepIndexValue.ToString(), stepIndex) Then
+                ReportStepActionRefused(sessionId, stepIndexValue, "这一步的序号没能传上来，无法定位")
+                Return
+            End If
+
+            Dim refusal = AgentKernelSvc.RequestStepAction(sessionId, stepIndex, action)
+            If refusal.Length = 0 Then
+                GlobalStatusStrip.ShowInfo("已收到，当前步骤结束后处理这一步")
+                Return
+            End If
+            ReportStepActionRefused(sessionId, stepIndex, refusal)
+        Catch ex As Exception
+            Debug.WriteLine($"HandleAgentStepAction 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 纠偏没能排队时的回执。卡片上的按钮已经把自己置灰了，所以必须由宿主把它解锁并写出原因，
+    ''' 否则用户看到的是一次成功的点击和一个仍然不动的步骤。
+    ''' </summary>
+    Private Sub ReportStepActionRefused(sessionId As String, stepIndexValue As Object, reason As String)
+        Dim stepIndex As Integer
+        If Integer.TryParse(If(stepIndexValue?.ToString(), "-1"), stepIndex) AndAlso
+           Not String.IsNullOrWhiteSpace(sessionId) Then
+            ExecuteJavaScriptAsyncJS($"setStepActionResult({UtilsService.ToJsStringLiteral(sessionId)}, {stepIndex}, false, " &
+                                     $"{UtilsService.ToJsStringLiteral(reason)})")
+        End If
+        GlobalStatusStrip.ShowWarning(reason)
     End Sub
 
     ''' <summary>

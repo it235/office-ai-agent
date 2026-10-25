@@ -37,6 +37,10 @@ Namespace Agent
         ' 本轮真实落盘写入的台账，供 replan 判定哪些步骤已经做完（E1-06）
         Public Property Writes As New AgentWriteLedger()
 
+        ' 本轮用户对失败步骤的纠偏决定（E10-01）。放这里而不是放控件或静态表：
+        ' 它的生命周期就是这一轮，且只有循环自己在失败分支读它。
+        Public Property Interventions As New AgentStepInterventions()
+
         ' 本轮用户明确选择“本会话允许”的工具；只在这一轮 Agent 会话内生效
         Public Property SessionApprovedTools As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
 

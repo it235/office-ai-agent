@@ -24,6 +24,7 @@ Controls/
 |---|---|---|
 | Chat UI / WebView2 | `BaseChatControl.vb` | 收集输入、上下文、展示状态，不堆业务路由 |
 | Agent 启动与事件 | `Services/AgentKernelService.vb` | 绑定 AgentKernel、Harness、AI 请求和 UI 终态 |
+| 失败步骤的单步纠偏 | `BaseChatControl.HandleAgentStepAction` + `Resources/js/agent-card.js` | 面板只收下并回执，落地在循环的步骤边界；被拒必须经 `setStepActionResult` 把原因送回卡片；终态统一 `lockAllStepActions`；不复用 `agent:approveStep`（超时/放弃语义） |
 | 普通 Chat 请求 | `Services/ChatRequestOrchestrator.vb` | 构建文本请求和历史 |
 | 路由 | `Services/ChatRoutingOrchestrator.vb` | 选择既有执行路径，不复制 Agent 逻辑 |
 | 宿主执行边界 | `Services/CodeExecutionService.vb` | 统一调度到宿主执行回调/UI 线程 |

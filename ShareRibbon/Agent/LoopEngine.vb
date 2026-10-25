@@ -99,12 +99,30 @@ Namespace Agent
                 ' Phase 3: ReAct Loop
                 Dim stepIndex As Integer = 0
                 ' 计划跑完时让循环再进一圈，那一圈只走 run 末合同闸门；每接受一次修复重规划就重新武装它。
+                ' 第三个条件同样是为了"再进一圈"：用户对某一步按了重试或跳过，而我们已经跑到它后面了。
                 Dim runEndGated As Boolean = False
-                While (stepIndex < session.Plan.Steps.Count OrElse Not runEndGated) AndAlso
+                While (stepIndex < session.Plan.Steps.Count OrElse Not runEndGated OrElse
+                       session.Interventions.PendingCount > 0) AndAlso
                       session.CurrentIteration < MaxIterations
                     ' 协作式停止：在步骤边界检查，不打断进行中的宿主操作，但不启动下一步。
                     If cancellationToken.IsCancellationRequested Then
                         Return FinishCancelled(session)
+                    End If
+
+                    ' --- USER STEP RECOVERY (E10-01) ---
+                    ' 用户对失败步骤的纠偏只在这里落成步骤状态：面板或宿主自己去改 PlanStep 会造出
+                    ' 第二套执行真相，而只有循环知道当前步号、能安全回退到更早的那一步。
+                    If session.Interventions.PendingCount > 0 Then
+                        ApplyUserInterventions(session, stepIndex, noProgressCount)
+                    End If
+
+                    ' 已经被判定过、又没人要求重跑的步骤直接前进，这里一条状态都不发：每个状态都在被写下的
+                    ' 那一刻发过一次，再发一次只是让卡片重复出现同一句。纠偏回退到一个已完成的位置、或用户
+                    ' 跳过的是更靠后的步骤时，循环必须只落在那一步——否则成功过的写入会被再执行一遍。
+                    If stepIndex < session.Plan.Steps.Count AndAlso
+                       session.Plan.Steps(stepIndex).Status <> StepStatus.Pending Then
+                        stepIndex += 1
+                        Continue While
                     End If
 
                     If stepIndex >= session.Plan.Steps.Count Then
@@ -126,6 +144,8 @@ Namespace Agent
                         replanAttempts += 1
                         session.Plan = repairPlan
                         session.Writes.BeginNextPlan()
+                        ' 新计划里同号不是同号：旧步号上的用户纠偏必须作废，否则会落到一个语义无关的步骤上。
+                        session.Interventions.Clear()
                         stepIndex = 0
                         runEndGated = False
                         RaisePlanGenerated(session)
@@ -415,6 +435,13 @@ Namespace Agent
                         AppLogger.Warn("LoopEngine", $"Step failed: {toolResult.ToObserveSummary()}")
 
                         If Not toolResult.Recoverable Then
+                            ' 不可恢复是执行器的判断，不是"用户也只能看着"。已经排在收件箱里的纠偏必须先被
+                            ' 走到步骤边界落地，否则用户在卡片上按了重试却当场收到一句终态错误。
+                            If session.Interventions.PendingCount > 0 Then
+                                AppLogger.Info("LoopEngine",
+                                    "Non-recoverable failure deferred to user step recovery at the next step boundary")
+                                Continue While
+                            End If
                             Dim terminalFailure = $"任务因不可恢复错误停止: {toolResult.ToObserveSummary()}"
                             session.Status = AgentStatus.Failed
                             OnStatusChanged?.Invoke(terminalFailure)
@@ -431,6 +458,13 @@ Namespace Agent
                         ' --- REFLECT (连续失败) ---
                         If noProgressCount >= MaxNoProgress Then
                             If replanAttempts >= MaxReplanAttempts Then
+                                ' 重规划预算耗尽是"AI 想不出修法"，不是"用户也无话可说"：排在收件箱里的
+                                ' 纠偏先走到步骤边界落地，拿不到任何纠偏才按失败收敛。
+                                If session.Interventions.PendingCount > 0 Then
+                                    AppLogger.Info("LoopEngine",
+                                        "Replan budget exhausted but user step recovery is queued; applying at the next boundary")
+                                    Continue While
+                                End If
                                 Dim failMsg = $"步骤多次失败，已达最大重规划次数: {toolResult.ToObserveSummary()}"
                                 AppLogger.Error("LoopEngine", failMsg)
                                 Return AgentResult.Failed(session.Id, AppendWriteSummary(session, failMsg))
@@ -470,6 +504,7 @@ Namespace Agent
                                     ' 只有全新计划才从第 0 步重跑；台账会挡住已被上一版写成的步骤
                                     session.Plan = reflection.Plan
                                     session.Writes.BeginNextPlan()
+                                    session.Interventions.Clear()
                                     stepIndex = 0
                                     noProgressCount = 0
                                     RaisePlanGenerated(session)
@@ -530,6 +565,36 @@ Namespace Agent
             End Try
         End Function
 
+
+        ''' <summary>
+        ''' 用户纠偏的唯一落地点（E10-01）：把收件箱里的决定写成步骤状态，需要时把步号退回去。
+        ''' 「只重跑受影响步骤」不是注释里的承诺：回退只把目标那一步复位 Pending，其余已判定的步骤
+        ''' 由循环顶部的"已判定步骤直接前进"落掉，跨计划版本的重复写入另有 E1-06 台账兜着。
+        ''' </summary>
+        Private Sub ApplyUserInterventions(session As AgentSession,
+                                           ByRef stepIndex As Integer,
+                                           ByRef noProgressCount As Integer)
+            Dim steps = session.Plan.Steps
+            For Each idx In session.Interventions.PendingIndices()
+                Dim action = session.Interventions.Take(idx)
+                If action = StepIntervention.None OrElse idx < 0 OrElse idx >= steps.Count Then Continue For
+
+                Dim target = steps(idx)
+                If action = StepIntervention.Skip Then
+                    target.Status = StepStatus.Skipped
+                    target.ErrorMessage = "按你的要求跳过这一步"
+                    OnStepStatusChanged?.Invoke(idx, StepStatusSkipped, "按你的要求跳过这一步")
+                    AppLogger.Info("LoopEngine", $"Step {idx + 1} skipped by user intervention")
+                Else
+                    target.Status = StepStatus.Pending
+                    target.ErrorMessage = Nothing
+                    OnStepStatusChanged?.Invoke(idx, StepStatusPending, "按你的要求重试这一步")
+                    AppLogger.Info("LoopEngine", $"Step {idx + 1} queued for retry by user intervention")
+                    stepIndex = Math.Min(stepIndex, idx)
+                End If
+                noProgressCount = 0
+            Next
+        End Sub
 
         ''' <summary>
         ''' 终稿正文由已落地步骤的观察拼出来。迭代计数是内部记账，直接当回复会让用户

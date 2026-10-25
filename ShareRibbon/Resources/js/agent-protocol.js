@@ -21,6 +21,7 @@ const AgentMessage = {
     APPROVE_STEP: 'agent:approveStep',
     APPROVE_TOOL_SESSION: 'agent:approveToolSession',
     REFINE_PLAN: 'agent:refinePlan',
+    STEP_ACTION: 'agent:stepAction',
 };
 
 /**
@@ -100,6 +101,22 @@ function requestRefinePlan(sessionId, feedback) {
     });
 }
 
+/**
+ * 用户对单个步骤下达纠偏动作。
+ * 走独立通道而不是 agent:approveStep：后者承载的是安全审批的超时/放弃语义，
+ * 纠偏没有"待决"状态，也不允许被审批超时判成中止。
+ * @param {string} sessionId - 会话 ID
+ * @param {number} stepIndex - 步骤序号（0 基，与卡片渲染顺序一致）
+ * @param {string} action - retry / skip，其余取值由宿主判为无法识别
+ */
+function requestStepAction(sessionId, stepIndex, action) {
+    sendAgentMessage(AgentMessage.STEP_ACTION, {
+        sessionId: sessionId,
+        stepIndex: stepIndex,
+        action: action
+    });
+}
+
 // 导出到全局（兼容现有代码风格）
 window.AgentMessage = AgentMessage;
 window.sendAgentMessage = sendAgentMessage;
@@ -109,3 +126,4 @@ window.requestApprove = requestApprove;
 window.requestApproveToolSession = requestApproveToolSession;
 window.requestReject = requestReject;
 window.requestRefinePlan = requestRefinePlan;
+window.requestStepAction = requestStepAction;

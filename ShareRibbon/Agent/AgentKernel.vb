@@ -192,6 +192,25 @@ Namespace Agent
         End Function
 
         ''' <summary>
+        ''' 用户对某一步的纠偏（E10-01）。只认当前这一轮的会话标识：按在上一轮或已结束的一轮上，
+        ''' 决定会落到一个语义无关的步号，所以这里必须回 False 让界面说清"这一步已不在当前这一轮里"，
+        ''' 而不是悄悄收下单击。真正落地仍由循环在步骤边界做（见 LoopEngine.ApplyUserInterventions）。
+        ''' </summary>
+        Public Function QueueStepAction(sessionId As String, stepIndex As Integer, action As String) As Boolean
+            If _session Is Nothing OrElse String.IsNullOrWhiteSpace(sessionId) Then Return False
+            If Not String.Equals(_session.Id, sessionId, StringComparison.Ordinal) Then Return False
+            If _session.Status = AgentStatus.Completed OrElse
+               _session.Status = AgentStatus.Failed OrElse
+               _session.Status = AgentStatus.Aborted Then Return False
+
+            Dim parsed = AgentStepInterventions.Parse(action)
+            If parsed = StepIntervention.None Then Return False
+
+            _session.Interventions.Queue(stepIndex, parsed)
+            Return True
+        End Function
+
+        ''' <summary>
         ''' 执行 Agent 任务 - 统一入口（增强版 - 支持上下文自动注入）
         ''' </summary>
         ''' <param name="userRequest">用户请求</param>

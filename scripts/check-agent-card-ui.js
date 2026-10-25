@@ -74,9 +74,8 @@ class StubElement {
         while ((match = idPattern.exec(this._html)) !== null) {
             const child = new StubElement('div', this._doc);
             child.id = match[1];
-            const classMatch = this._html
-                .slice(Math.max(0, match.index - 200), match.index)
-                .match(/class="([^"]*)"$/);
+            // class 总在 id 之前、且中间还隔着别的属性，所以只能往前找最近的那一个
+            const classMatch = this._html.slice(0, match.index).match(/class="([^"]*)"[^>]*$/);
             if (classMatch) child.className = classMatch[1];
             child.parentNode = this;
             this.children.push(child);
@@ -120,7 +119,19 @@ class StubElement {
         }
     }
 
-    querySelector() { return null; }
+    // 只支持 ".class" 选择器：agent-card.js 用它定位撤销按钮和单步纠偏按钮
+    _byClass(name) {
+        const found = [];
+        const walk = (el) => {
+            if (el._classes.has(name)) found.push(el);
+            el.children.forEach(walk);
+        };
+        this.children.forEach(walk);
+        return found;
+    }
+
+    querySelectorAll(selector) { return this._byClass(String(selector).replace(/^\./, '')); }
+    querySelector(selector) { return this._byClass(String(selector).replace(/^\./, ''))[0] || null; }
     closest() { return null; }
     scrollIntoView() { }
     addEventListener(name, handler) {
@@ -191,7 +202,11 @@ const sandbox = {
 };
 
 const source = fs.readFileSync(cardPath, 'utf8');
+// 协议脚本一起加载：单步纠偏的消息类型与载荷形状必须由真实实现证明，不能在测试里再抄一份常量
+const protocolPath = path.join(repoRoot, 'ShareRibbon', 'Resources', 'js', 'agent-protocol.js');
+const protocolSource = fs.readFileSync(protocolPath, 'utf8');
 vm.createContext(sandbox);
+vm.runInContext(protocolSource, sandbox, { filename: protocolPath });
 vm.runInContext(source, sandbox, { filename: cardPath });
 
 const card = sandbox.window;
@@ -341,5 +356,81 @@ assert(/已撤销本轮/.test(secondActions.text()), 'undo result did not replac
 
 // 没有计划卡/没有终态数据时终态仍要收敛，不能抛异常
 card.completeAgent('run-none', false, '已终止', '', null);
+
+// ---- 5. 失败步骤的单步纠偏（E10-01）----
+assert(sandbox.window.AgentMessage.STEP_ACTION === 'agent:stepAction',
+    'the step recovery message type drifted from the one the host registers');
+assert(sandbox.window.AgentMessage.STEP_ACTION !== sandbox.window.AgentMessage.APPROVE_STEP,
+    'step recovery reused the safety approval channel, whose timeout/abandon semantics it must not inherit');
+assert(typeof card.setStepActionResult === 'function',
+    'setStepActionResult is the host refusal receipt and the card no longer exports it');
+
+const recovery = 'run-3';
+card.showAgentPlanCard({
+    sessionId: recovery, understanding: 'u', planVersion: 1, scope: '', stepCount: 3,
+    toolCount: 3, riskLevel: 'safe', riskyTools: [], summary: 's',
+    steps: [
+        { description: 'a', code: '{}', language: 'json' },
+        { description: 'b', code: '{}', language: 'json' },
+        { description: 'c', code: '{}', language: 'json' }
+    ],
+    replaceThinkingUuid: ''
+});
+
+// 只有失败的那一步给按钮：给正在跑或已成功的步骤发按钮，等于承诺一件循环并不消费的事
+card.updateAgentStep(recovery, 0, 'completed', '');
+card.updateAgentStep(recovery, 1, 'running', '');
+assert(!document.getElementById(`step-retry-${recovery}-0`), 'a completed step was offered a retry button');
+assert(!document.getElementById(`step-retry-${recovery}-1`), 'a running step was offered a retry button');
+
+card.updateAgentStep(recovery, 1, 'failed', '宿主超时');
+const retryBtn = document.getElementById(`step-retry-${recovery}-1`);
+const skipBtn = document.getElementById(`step-skip-${recovery}-1`);
+assert(retryBtn && skipBtn, 'a failed step was not offered retry and skip');
+
+// 点击即置灰并排队：同一次失败不能被点出第二个决定
+card.onStepAction(recovery, 1, 'retry');
+let stepPosts = (sandbox.__posted || []).filter(m => m.type === 'agent:stepAction');
+assert(stepPosts.length === 1, `the click posted ${stepPosts.length} decisions instead of one`);
+assert(stepPosts[0].payload.sessionId === recovery && stepPosts[0].payload.stepIndex === 1 &&
+    stepPosts[0].payload.action === 'retry',
+    'the posted payload does not identify the session, step and verb');
+assert(retryBtn.disabled && skipBtn.disabled,
+    'the clicked step stayed clickable, a second click could queue a second decision');
+card.onStepAction(recovery, 1, 'skip');
+stepPosts = (sandbox.__posted || []).filter(m => m.type === 'agent:stepAction');
+assert(stepPosts.length === 1, 'a click on an already locked step still posted another decision');
+
+// 宿主拒绝时必须解锁并写明原因：按钮是自己置灰的，不写原因就等于"点了没反应"
+const refusal = '这一步已经不在当前这一轮里了';
+card.setStepActionResult(recovery, 1, false, refusal);
+assert(!retryBtn.disabled && !skipBtn.disabled, 'a refused decision left the buttons dead');
+const refusedHint = document.getElementById(`step-action-hint-${recovery}-1`);
+assert(refusedHint && refusedHint.textContent === refusal,
+    'a refused decision did not explain itself on the card');
+
+// 排队成功不再解锁：生效与否只由状态变化宣布，点击回执不能把它变回可点
+card.onStepAction(recovery, 1, 'skip');
+card.setStepActionResult(recovery, 1, true, '');
+assert(retryBtn.disabled && skipBtn.disabled, 'a queued decision was re-enabled before the loop acted on it');
+
+// 状态一变，上一套按钮就不再代表任何事实
+card.updateAgentStep(recovery, 1, 'pending', '按你的要求重试这一步');
+assert(!document.getElementById(`step-retry-${recovery}-1`), 'the buttons survived the step leaving the failed state');
+
+// 再次失败要给一套全新可点的按钮，而不是沿用上一轮已经点过的死按钮
+card.updateAgentStep(recovery, 1, 'failed', '仍旧失败');
+const freshRetry = document.getElementById(`step-retry-${recovery}-1`);
+assert(freshRetry, 'a second failure did not offer a fresh recovery');
+assert(!freshRetry.disabled, 'the fresh recovery button started out dead');
+
+// 终态收掉所有单步按钮，并说清为什么现在不能再点
+card.completeAgent(recovery, false, '任务失败', '', {
+    writtenCount: 0, changes: [], canUndo: false, undoReason: '本轮没有可撤销的写入'
+});
+assert(document.getElementById(`step-retry-${recovery}-1`).disabled === true,
+    'a terminal card still offered a live step action');
+assert(/本轮已经结束/.test(document.getElementById(`step-action-hint-${recovery}-1`).textContent),
+    'the terminal card disabled the step action without saying why');
 
 console.log('agent-card UI contract checks passed');

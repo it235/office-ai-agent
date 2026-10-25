@@ -277,6 +277,7 @@
     <Compile Include="Agent\LoopEngine.Planning.vb" />
     <Compile Include="Agent\LoopEngine.vb" />
     <Compile Include="Agent\AgentSession.vb" />
+    <Compile Include="Agent\AgentStepInterventions.vb" />
     <Compile Include="Agent\ApprovalModels.vb" />
     <Compile Include="Agent\AgentMemory.vb" />
     <Compile Include="Agent\SkillRegistry.vb" />

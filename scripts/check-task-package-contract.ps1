@@ -1002,8 +1002,7 @@ $identityProbes = @(
     # E6-05b: the run-end repair route. Each probe breaks exactly one guarantee of that route.
     [pscustomobject]@{ Name = 'run-end-gate-unreachable'; Expect = 'can never ask for a repair round';
         Apply = { param($s) $s['ShareRibbon\Agent\LoopEngine.vb'] = $s['ShareRibbon\Agent\LoopEngine.vb'].Replace(
-            'While (stepIndex < session.Plan.Steps.Count OrElse Not runEndGated) AndAlso',
-            'While (stepIndex < session.Plan.Steps.Count) AndAlso') } },
+            'OrElse Not runEndGated', '') } },
     [pscustomobject]@{ Name = 'repair-fires-with-failing-steps'; Expect = 'while a plan step is still failing';
         Apply = { param($s) $s['ShareRibbon\Agent\LoopEngine.vb'] = $s['ShareRibbon\Agent\LoopEngine.vb'].Replace(
             'IncompletePlanSteps(session).Count = 0 AndAlso', '') } },
