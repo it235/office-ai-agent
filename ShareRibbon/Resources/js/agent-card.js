@@ -118,10 +118,10 @@ function showAgentPlanCard(planData) {
                 <div class="agent-step-header">
                     <span class="agent-step-icon" id="step-icon-${uuid}-${idx}">⏳</span>
                     <span class="agent-step-num">${idx + 1}</span>
-                    <span class="agent-step-desc">${escapeHtml(step.description)}</span>
+                    <span class="agent-step-desc" id="step-desc-${uuid}-${idx}">${escapeHtml(step.description)}</span>
                 </div>
                 <div class="agent-step-detail" id="step-detail-${uuid}-${idx}" style="display:none;">
-                    <div class="step-detail-text">${escapeHtml(step.detail || step.code || '')}</div>
+                    <div class="step-detail-text" id="step-detail-text-${uuid}-${idx}">${escapeHtml(step.detail || step.code || '')}</div>
                 </div>
                 <div class="agent-iteration-area" id="iteration-area-${uuid}-${idx}"></div>
             </div>
@@ -181,6 +181,11 @@ function showAgentPlanCard(planData) {
                 `;
             }
             updateAgentStatus(uuid, 'paused', '等待确认执行');
+        }
+
+        // 计划刚出来时每一步都还没执行，逐格给改写入口；状态一变由 updateAgentStep 收掉
+        if (planData.steps) {
+            planData.steps.forEach(function (_, idx) { renderStepEditButton(uuid, idx, 'pending'); });
         }
 
         const isAlreadyInContainer = chatContainer.parentElement && chatContainer.parentElement.id === 'chat-container';
@@ -332,6 +337,219 @@ function lockAllStepActions(sessionId, reason) {
         const hint = box.querySelector('.step-action-hint');
         if (hint) hint.textContent = reason;
     });
+
+    // 改写入口跟着这一轮一起失效：收件箱已经没了，此时保存只会换来一次拒绝
+    const editorPrefix = `step-edit-${sessionId}-`;
+    document.querySelectorAll('.agent-step-editor').forEach(function (box) {
+        if (!box.id || box.id.indexOf(editorPrefix) !== 0) return;
+        box.querySelectorAll('.agent-btn').forEach(function (btn) { btn.disabled = true; });
+        const hint = box.querySelector('.step-edit-hint');
+        if (hint) hint.textContent = reason;
+    });
+
+    const openPrefix = `step-edit-open-${sessionId}-`;
+    document.querySelectorAll('.agent-step-edit-open').forEach(function (btn) {
+        if (!btn.id || btn.id.indexOf(openPrefix) !== 0) return;
+        btn.disabled = true;
+        btn.title = reason;
+    });
+}
+
+// ---- 单步正文与参数改写（E10-02）----
+
+const STEP_EDIT_LOCKED_HINT = '这一步已经开始或已经完成，改动不会再被采用';
+
+/**
+ * 可改写的状态与宿主 IsEditableStepStatus 一致：还没跑的、失败的和被跳过的。
+ * 正在执行的那一步改了也来不及生效；改写定义不能替代"重试"来修一个已经成功的步骤。
+ */
+function isEditableStepStatus(status) {
+    return status === 'pending' || status === 'failed' || status === 'skipped';
+}
+
+/** 只取当前这一版计划里的步骤：旧卡片的步骤已经被新计划取代，拿它当编辑底稿会改到不存在的东西。 */
+function currentPlanStep(sessionId, stepIndex) {
+    const current = window.agentCardState.session;
+    if (!current || current.sessionId !== sessionId) return null;
+    if (!Array.isArray(current.steps)) return null;
+    return current.steps[stepIndex] || null;
+}
+
+/** 每一步自己的改写入口，跟随状态出现或消失。 */
+function renderStepEditButton(sessionId, stepIndex, status) {
+    const stepEl = document.getElementById(`agent-step-${sessionId}-${stepIndex}`);
+    if (!stepEl) return;
+
+    const openBtn = document.getElementById(`step-edit-open-${sessionId}-${stepIndex}`);
+    if (!isEditableStepStatus(status)) {
+        if (openBtn) openBtn.remove();
+        // 编辑框可能正开着（用户还没保存这一步就开始执行了）：保留已输入的文字，但明确告知不会再被采用
+        if (document.getElementById(`step-edit-${sessionId}-${stepIndex}`)) {
+            const saveBtn = document.getElementById(`step-edit-save-${sessionId}-${stepIndex}`);
+            if (saveBtn) saveBtn.disabled = true;
+            setStepEditHint(sessionId, stepIndex, STEP_EDIT_LOCKED_HINT);
+        }
+        return;
+    }
+    if (openBtn) return;
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'agent-btn agent-step-edit-open';
+    btn.id = `step-edit-open-${sessionId}-${stepIndex}`;
+    btn.textContent = '✎ 修改这一步';
+    btn.title = '改写这一步的说明与参数，保存后只重跑这一步';
+    btn.addEventListener('click', function () { openStepEditor(sessionId, stepIndex); });
+    stepEl.appendChild(btn);
+}
+
+/** 打开编辑框。说明与参数都从计划本身取，不在前端另存一份。 */
+function openStepEditor(sessionId, stepIndex) {
+    try {
+        const stepEl = document.getElementById(`agent-step-${sessionId}-${stepIndex}`);
+        if (!stepEl) return;
+        if (document.getElementById(`step-edit-${sessionId}-${stepIndex}`)) return;
+
+        const planned = currentPlanStep(sessionId, stepIndex);
+        if (!planned) return;
+
+        const openBtn = document.getElementById(`step-edit-open-${sessionId}-${stepIndex}`);
+        if (openBtn) openBtn.disabled = true;
+
+        const box = document.createElement('div');
+        box.className = 'agent-step-editor';
+        box.id = `step-edit-${sessionId}-${stepIndex}`;
+        box.innerHTML = `
+            <div class="step-edit-title">改写这一步</div>
+            <label class="step-edit-label" for="step-edit-desc-${sessionId}-${stepIndex}">说明</label>
+            <input class="step-edit-input" id="step-edit-desc-${sessionId}-${stepIndex}" type="text" />
+            <label class="step-edit-label" for="step-edit-code-${sessionId}-${stepIndex}">参数（JSON）</label>
+            <textarea class="step-edit-code" id="step-edit-code-${sessionId}-${stepIndex}" rows="4"></textarea>
+            <div class="step-edit-actions">
+                <button type="button" class="agent-btn agent-btn-execute" id="step-edit-save-${sessionId}-${stepIndex}">保存并重跑</button>
+                <button type="button" class="agent-btn agent-btn-abort" id="step-edit-cancel-${sessionId}-${stepIndex}">取消</button>
+                <span class="step-edit-hint" id="step-edit-hint-${sessionId}-${stepIndex}"></span>
+            </div>
+        `;
+        stepEl.appendChild(box);
+
+        const descInput = document.getElementById(`step-edit-desc-${sessionId}-${stepIndex}`);
+        if (descInput) {
+            descInput.value = planned.description || '';
+            descInput.placeholder = '这一步要做什么';
+        }
+        const codeInput = document.getElementById(`step-edit-code-${sessionId}-${stepIndex}`);
+        if (codeInput) {
+            // 计划里本来就没有可解析的 code 时留空：预填一个空 command 只会让用户在保存后才被拒绝
+            codeInput.value = planned.code || '';
+            codeInput.placeholder = '{"command":"工具ID","params":{}}';
+        }
+
+        const saveBtn = document.getElementById(`step-edit-save-${sessionId}-${stepIndex}`);
+        if (saveBtn) saveBtn.addEventListener('click', function () { saveStepEdit(sessionId, stepIndex); });
+        const cancelBtn = document.getElementById(`step-edit-cancel-${sessionId}-${stepIndex}`);
+        if (cancelBtn) cancelBtn.addEventListener('click', function () { closeStepEditor(sessionId, stepIndex); });
+
+        setStepEditHint(sessionId, stepIndex, '参数保持 {"command":"工具ID","params":{...}} 的形状；只重跑这一步');
+    } catch (err) {
+        console.error('openStepEditor error:', err);
+    }
+}
+
+/**
+ * 提交改写。成功与否只由宿主回执宣布：前端在这里猜"应该能存"，
+ * 就会出现卡片已经换成新说明、循环却还在按旧参数跑的情况。
+ */
+function saveStepEdit(sessionId, stepIndex) {
+    try {
+        const descInput = document.getElementById(`step-edit-desc-${sessionId}-${stepIndex}`);
+        const codeInput = document.getElementById(`step-edit-code-${sessionId}-${stepIndex}`);
+        const saveBtn = document.getElementById(`step-edit-save-${sessionId}-${stepIndex}`);
+        if (!descInput || !codeInput) return;
+        if (saveBtn && saveBtn.disabled) return;
+
+        const description = String(descInput.value || '').trim();
+        const code = String(codeInput.value || '').trim();
+        if (!description) {
+            setStepEditHint(sessionId, stepIndex, '说明不能为空，否则这一步等于没有目标');
+            return;
+        }
+
+        descInput.disabled = true;
+        codeInput.disabled = true;
+        if (saveBtn) saveBtn.disabled = true;
+        setStepEditHint(sessionId, stepIndex, '正在保存…');
+
+        if (typeof requestStepEdit !== 'function') {
+            setStepEditResult(sessionId, stepIndex, false, '前端协议脚本没加载完，请重新打开面板再试');
+            return;
+        }
+        requestStepEdit(sessionId, stepIndex, description, code);
+    } catch (err) {
+        console.error('saveStepEdit error:', err);
+    }
+}
+
+/**
+ * 宿主回执。收下了才把卡片上的说明换成改后的文本；没收到就把输入框解冻并写出原因，
+ * 否则用户会以为改动已经生效，而循环手里的还是旧参数。
+ */
+function setStepEditResult(sessionId, stepIndex, ok, reason) {
+    try {
+        const descInput = document.getElementById(`step-edit-desc-${sessionId}-${stepIndex}`);
+        const codeInput = document.getElementById(`step-edit-code-${sessionId}-${stepIndex}`);
+        const saveBtn = document.getElementById(`step-edit-save-${sessionId}-${stepIndex}`);
+
+        if (!ok) {
+            if (descInput) descInput.disabled = false;
+            if (codeInput) codeInput.disabled = false;
+            if (saveBtn) saveBtn.disabled = false;
+            setStepEditHint(sessionId, stepIndex, reason || '改动没有保存，请重试');
+            return;
+        }
+
+        const description = descInput ? String(descInput.value || '').trim() : '';
+        const code = codeInput ? String(codeInput.value || '').trim() : '';
+        const planned = currentPlanStep(sessionId, stepIndex);
+        if (planned) {
+            if (description) planned.description = description;
+            if (code) planned.code = code;
+        }
+
+        const descEl = document.getElementById(`step-desc-${sessionId}-${stepIndex}`);
+        if (descEl && description) descEl.textContent = description;
+        const detailTextEl = document.getElementById(`step-detail-text-${sessionId}-${stepIndex}`);
+        if (detailTextEl && code) detailTextEl.textContent = code;
+
+        closeStepEditor(sessionId, stepIndex);
+        appendStepMessage(sessionId, stepIndex, 'step-msg-pending', '已保存，循环会在这一步执行前按改后的内容重跑');
+    } catch (err) {
+        console.error('setStepEditResult error:', err);
+    }
+}
+
+function closeStepEditor(sessionId, stepIndex) {
+    const box = document.getElementById(`step-edit-${sessionId}-${stepIndex}`);
+    if (box) box.remove();
+    const openBtn = document.getElementById(`step-edit-open-${sessionId}-${stepIndex}`);
+    if (openBtn) openBtn.disabled = false;
+}
+
+function setStepEditHint(sessionId, stepIndex, text) {
+    const hint = document.getElementById(`step-edit-hint-${sessionId}-${stepIndex}`);
+    if (!hint) return;
+    hint.textContent = text || '';
+}
+
+/** 步骤详情里的说明行，和状态变化共用同一套渲染。 */
+function appendStepMessage(sessionId, stepIndex, cssClass, text) {
+    const detailEl = document.getElementById(`step-detail-${sessionId}-${stepIndex}`);
+    if (!detailEl) return;
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `step-message ${cssClass}`;
+    msgDiv.textContent = text;
+    detailEl.appendChild(msgDiv);
+    detailEl.style.display = 'block';
 }
 
 /**
@@ -371,15 +589,10 @@ function updateAgentStep(sessionId, stepIndex, status, message) {
             clearStepActions(sessionId, stepIndex);
         }
 
+        renderStepEditButton(sessionId, stepIndex, status);
+
         if (message) {
-            const detailEl = document.getElementById(`step-detail-${sessionId}-${stepIndex}`);
-            if (detailEl) {
-                const msgDiv = document.createElement('div');
-                msgDiv.className = `step-message step-msg-${status}`;
-                msgDiv.textContent = message;
-                detailEl.appendChild(msgDiv);
-                detailEl.style.display = 'block';
-            }
+            appendStepMessage(sessionId, stepIndex, `step-msg-${status}`, message);
         }
     } catch (err) {
         console.error('updateAgentStep error:', err);
@@ -896,6 +1109,10 @@ window.setAgentUndoResult = setAgentUndoResult;
 window.onStepAction = onStepAction;
 window.setStepActionResult = setStepActionResult;
 window.lockAllStepActions = lockAllStepActions;
+window.openStepEditor = openStepEditor;
+window.saveStepEdit = saveStepEdit;
+window.closeStepEditor = closeStepEditor;
+window.setStepEditResult = setStepEditResult;
 window.lockChatInput = lockChatInput;
 window.unlockChatInput = unlockChatInput;
 window.restoreAgentRequestUi = restoreAgentRequestUi;

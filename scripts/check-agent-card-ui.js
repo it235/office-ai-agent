@@ -433,4 +433,96 @@ assert(document.getElementById(`step-retry-${recovery}-1`).disabled === true,
 assert(/本轮已经结束/.test(document.getElementById(`step-action-hint-${recovery}-1`).textContent),
     'the terminal card disabled the step action without saying why');
 
+// ---- 6. 单步正文与参数改写（E10-02）----
+assert(sandbox.window.AgentMessage.EDIT_STEP === 'agent:editStep',
+    'the rewrite message type drifted from the one the host registers');
+assert(sandbox.window.AgentMessage.EDIT_STEP !== sandbox.window.AgentMessage.STEP_ACTION &&
+    sandbox.window.AgentMessage.EDIT_STEP !== sandbox.window.AgentMessage.APPROVE_STEP,
+    'a rewrite is neither a verb-only decision nor a safety approval, and must not reuse their channels');
+assert(typeof card.openStepEditor === 'function' && typeof card.saveStepEdit === 'function' &&
+    typeof card.setStepEditResult === 'function' && typeof card.closeStepEditor === 'function',
+    'the rewrite surface is missing one of its entry points');
+
+const rewrite = 'run-4';
+const originalCode = '{"command":"InsertText","params":{"content":"a","position":"end"}}';
+card.showAgentPlanCard({
+    sessionId: rewrite, understanding: 'u', planVersion: 1, scope: '', stepCount: 3,
+    toolCount: 1, riskLevel: 'safe', riskyTools: [], summary: 's',
+    steps: [
+        { description: 'a', code: originalCode, language: 'json' },
+        { description: 'b', code: originalCode, language: 'json' },
+        { description: 'c', code: originalCode, language: 'json' }
+    ],
+    replaceThinkingUuid: ''
+});
+
+// 计划刚出来每一步都可能被改；正在执行/已完成的步骤不给入口——改了也来不及生效
+assert(document.getElementById(`step-edit-open-${rewrite}-0`), 'a pending step was not offered a rewrite entry');
+card.updateAgentStep(rewrite, 1, 'running', '');
+assert(!document.getElementById(`step-edit-open-${rewrite}-1`), 'a running step was offered a rewrite entry');
+card.updateAgentStep(rewrite, 1, 'completed', '');
+assert(!document.getElementById(`step-edit-open-${rewrite}-1`), 'a completed step was offered a rewrite entry');
+card.updateAgentStep(rewrite, 1, 'skipped', '按你的要求跳过这一步');
+assert(document.getElementById(`step-edit-open-${rewrite}-1`), 'a skipped step can still be rewritten and was denied the entry');
+card.updateAgentStep(rewrite, 0, 'failed', '宿主超时');
+assert(document.getElementById(`step-edit-open-${rewrite}-0`), 'a failed step lost its rewrite entry');
+
+// 打开编辑框：说明与参数来自计划本身，不在前端另编一份
+document.getElementById(`step-edit-open-${rewrite}-0`).dispatch('click');
+const editBox = document.getElementById(`step-edit-${rewrite}-0`);
+const editDesc = document.getElementById(`step-edit-desc-${rewrite}-0`);
+const editCode = document.getElementById(`step-edit-code-${rewrite}-0`);
+const editSave = document.getElementById(`step-edit-save-${rewrite}-0`);
+assert(editBox && editDesc && editCode && editSave, 'the rewrite editor did not open');
+assert(editDesc.value === 'a' && editCode.value === originalCode,
+    'the editor did not start from the plan it is rewriting');
+assert(document.getElementById(`step-edit-open-${rewrite}-0`).disabled,
+    'the entry stayed clickable while its editor was open');
+
+// 保存即置为提交中；成功与否只由宿主回执宣布
+const editedDescription = '插入改过的正文';
+const editedCode = '{"command":"InsertText","params":{"content":"EDITED","position":"end"}}';
+editDesc.value = editedDescription;
+editCode.value = editedCode;
+editSave.dispatch('click');
+let editPosts = (sandbox.__posted || []).filter(m => m.type === 'agent:editStep');
+assert(editPosts.length === 1, `the save posted ${editPosts.length} rewrites instead of one`);
+assert(editPosts[0].payload.sessionId === rewrite && editPosts[0].payload.stepIndex === 0 &&
+    editPosts[0].payload.description === editedDescription && editPosts[0].payload.code === editedCode,
+    'the posted rewrite does not carry the session, step, description and parameters together');
+assert(editSave.disabled && editDesc.disabled,
+    'the editor stayed editable while the host had not acknowledged the save');
+
+// 宿主拒绝：解冻并写明原因，绝不自行把卡片改成"已保存"
+const editRefusal = '可以改参数，但不能把这一步换成别的工具';
+card.setStepEditResult(rewrite, 0, false, editRefusal);
+assert(!editSave.disabled && !editDesc.disabled, 'a refused rewrite left the editor frozen');
+assert(document.getElementById(`step-edit-hint-${rewrite}-0`).textContent === editRefusal,
+    'a refused rewrite did not explain itself');
+assert(document.getElementById(`step-desc-${rewrite}-0`).textContent !== editedDescription,
+    'a refused rewrite still changed the step description on the card');
+
+// 宿主收下：换上新的说明与参数，关掉编辑框并说明"会重跑"
+card.saveStepEdit(rewrite, 0);
+card.setStepEditResult(rewrite, 0, true, '');
+assert(!document.getElementById(`step-edit-${rewrite}-0`), 'the editor survived a successful save');
+assert(document.getElementById(`step-desc-${rewrite}-0`).textContent === editedDescription,
+    'the card still shows the old description after the host accepted the rewrite');
+assert(document.getElementById(`step-detail-text-${rewrite}-0`).textContent === editedCode,
+    'the card still shows the old parameters after the host accepted the rewrite');
+assert(card.agentCardState.session.steps[0].description === editedDescription &&
+    card.agentCardState.session.steps[0].code === editedCode,
+    'the plan state kept the old step definition, the next edit would start from stale text');
+assert(/已保存/.test(document.getElementById(`step-detail-${rewrite}-0`).text()),
+    'the card never told the user the rewrite was accepted');
+assert(!document.getElementById(`step-edit-open-${rewrite}-0`).disabled,
+    'the rewrite entry stayed disabled after its editor closed');
+
+// 本轮结束后改写入口和单步纠偏一起失效
+card.completeAgent(rewrite, false, '任务失败', '', {
+    writtenCount: 0, changes: [], canUndo: false, undoReason: '本轮没有可撤销的写入'
+});
+assert(document.getElementById(`step-edit-open-${rewrite}-0`).disabled === true,
+    'a terminal card still offered a rewrite entry');
+
 console.log('agent-card UI contract checks passed');

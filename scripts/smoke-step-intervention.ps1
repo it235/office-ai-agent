@@ -1,7 +1,8 @@
-# Step intervention smoke (E10-01).
-# The plan card now lets the user retry or skip a step that failed. Three things must stay true while
-# it does: only the clicked step re-runs, no second terminal or plan owner appears, and a click that
-# arrives while the loop is mid-step is still honoured at the next boundary.
+# Step intervention smoke (E10-01 / E10-02).
+# The plan card lets the user retry or skip a failed step, and rewrite a step's description and
+# parameters. What must stay true: only the clicked step re-runs, no second terminal or plan owner
+# appears, a click that arrives while the loop is mid-step is still honoured at the next boundary,
+# and a rewritten step runs from its saved text without asking the model to rethink it.
 # This drives the real LoopEngine with a scripted model and a scripted host executor, so the judgement
 # is the same code path a Word/Excel/PPT host would take - no test-only loop was added.
 param(
@@ -43,8 +44,24 @@ Assert-That ($inbox.PendingCount() -eq 1) "clicking the same step twice is one d
 $inbox.Queue(0, [ShareRibbon.Agent.StepIntervention]::Skip)
 Assert-That ($inbox.PendingIndices()[0] -eq 0) "pending steps come back in step order, the loop must rewind to the earliest one"
 $inbox.Queue(2, [ShareRibbon.Agent.StepIntervention]::Skip)
-Assert-That ($inbox.Take(2) -eq [ShareRibbon.Agent.StepIntervention]::Skip) "the later decision on a step must replace the earlier one"
-Assert-That ($inbox.Take(2) -eq [ShareRibbon.Agent.StepIntervention]::None) "one decision may act on one failure only"
+$taken = $inbox.Take(2)
+Assert-That ($null -ne $taken -and $taken.Action -eq [ShareRibbon.Agent.StepIntervention]::Skip) `
+    "the later decision on a step must replace the earlier one, got $(if ($null -eq $taken) { 'nothing' } else { $taken.Action })"
+Assert-That ($null -eq $inbox.Take(2)) "one decision may act on one failure only"
+
+# A rewrite must carry its own text: taking the verb without the payload would apply a definition
+# nobody wrote. Both fields travel with the one decision and are taken once.
+$editedInboxCode = '{"command":"InsertText","params":{"content":"EDITED"}}'
+$inbox.QueueEdit(1, "edited description", $editedInboxCode)
+$editRequest = $inbox.Take(1)
+Assert-That ($null -ne $editRequest -and $editRequest.Action -eq [ShareRibbon.Agent.StepIntervention]::Edit) `
+    "a queued rewrite must come back as an edit decision"
+Assert-That ($editRequest.Description -eq "edited description" -and $editRequest.Code -eq $editedInboxCode) `
+    "the rewrite lost its text on the way out of the inbox"
+Assert-That ($null -eq $inbox.Take(1)) "a rewrite may act on one step once"
+# The verb-only door must not swallow an "edit" click that carries no new text.
+$inbox.Queue(4, [ShareRibbon.Agent.StepIntervention]::Edit)
+Assert-That ($null -eq $inbox.Take(4)) "an edit without text must never enter the verb-only door"
 
 $inbox.Clear()
 Assert-That ($inbox.PendingCount() -eq 0) "a replaced plan must not keep any decision addressed to the old step numbers"
@@ -93,10 +110,57 @@ foreach ($terminal in @([ShareRibbon.Agent.AgentStatus]::Completed,
     Assert-That (-not $kernel.QueueStepAction($live.Id, 1, "skip")) `
         "a terminal session ($terminal) must refuse a step decision instead of queueing it into a dead run"
 }
+# The rewrite door (E10-02) has more to judge than a verb: it must refuse a step it cannot place,
+# a plan it cannot keep, and a rewrite that would swap the tool. The loop then executes whatever
+# came through here without judging it a second time.
+$live.Status = [ShareRibbon.Agent.AgentStatus]::Executing
+$live.Interventions.Clear()
+$plannedCode = '{"command":"InsertText","params":{"content":"SMOKE_A","position":"end"}}'
+$plan = New-Object ShareRibbon.Agent.ExecutionPlan
+$stepA = New-Object ShareRibbon.Agent.PlanStep
+$stepA.StepNumber = 1
+$stepA.Description = "smoke step A"
+$stepA.Code = $plannedCode
+$plan.Steps.Add($stepA)
+$stepB = New-Object ShareRibbon.Agent.PlanStep
+$stepB.StepNumber = 2
+$stepB.Description = "smoke step B"
+$stepB.Code = '{"command":"InsertText","params":{"content":"SMOKE_B","position":"end"}}'
+$plan.Steps.Add($stepB)
+$live.Plan = $plan
+
+$rewriteCode = '{"command":"InsertText","params":{"content":"SMOKE_A_EDITED","position":"end"}}'
+Assert-That ($kernel.QueueStepEdit("other-run", 0, "edited", $rewriteCode) -eq [ShareRibbon.Agent.StepEditResult]::NoLiveRun) `
+    "a rewrite aimed at another run must be refused"
+Assert-That ($kernel.QueueStepEdit($live.Id, 5, "edited", $rewriteCode) -eq [ShareRibbon.Agent.StepEditResult]::StepOutOfRange) `
+    "a rewrite aimed at a step the plan does not have must be refused"
+Assert-That ($kernel.QueueStepEdit($live.Id, 0, "   ", $rewriteCode) -eq [ShareRibbon.Agent.StepEditResult]::EmptyEdit) `
+    "a rewrite without a description must be refused, the step would have no goal"
+Assert-That ($kernel.QueueStepEdit($live.Id, 0, "edited", "not a tool call") -eq [ShareRibbon.Agent.StepEditResult]::CodeInvalid) `
+    "a rewrite that is not a {command, params} object must be refused"
+Assert-That ($kernel.QueueStepEdit($live.Id, 0, "edited", '{"command":"CreateChart","params":{}}') -eq [ShareRibbon.Agent.StepEditResult]::ToolChanged) `
+    "a rewrite must not swap the tool behind the user's back"
+$plan.Steps[0].Status = [ShareRibbon.Agent.StepStatus]::Running
+Assert-That ($kernel.QueueStepEdit($live.Id, 0, "edited", $rewriteCode) -eq [ShareRibbon.Agent.StepEditResult]::StepNotEditable) `
+    "a running step must not accept a rewrite that can no longer take effect"
+$plan.Steps[0].Status = [ShareRibbon.Agent.StepStatus]::Pending
+Assert-That ($live.Interventions.PendingCount() -eq 0) "a refused rewrite must leave nothing queued"
+Assert-That (-not $kernel.QueueStepAction($live.Id, 0, "edit")) `
+    "the verb-only door must refuse an edit that carries no text"
+Assert-That ($kernel.QueueStepEdit($live.Id, 0, "  edited  ", $rewriteCode) -eq [ShareRibbon.Agent.StepEditResult]::Queued) `
+    "a same-tool rewrite of a pending step must be queued"
+$queuedEdit = $live.Interventions.Take(0)
+Assert-That ($null -ne $queuedEdit) "the queued rewrite disappeared before the loop could take it"
+Assert-That ($queuedEdit.Action -eq [ShareRibbon.Agent.StepIntervention]::Edit -and
+             $queuedEdit.Code -eq $rewriteCode -and $queuedEdit.Description -eq "edited") `
+    "the door must queue the trimmed description and the rewritten code together"
+
 $sessionField.SetValue($kernel, $null)
 Assert-That (-not $kernel.QueueStepAction($live.Id, 1, "retry")) "with no run in flight the door must stay shut"
+Assert-That ($kernel.QueueStepEdit($live.Id, 0, "edited", $rewriteCode) -eq [ShareRibbon.Agent.StepEditResult]::NoLiveRun) `
+    "with no run in flight the rewrite door must stay shut too"
 $script:caseCount += 1
-Write-Host "    ok AgentKernel is the only door, and it refuses id / verb / terminal mismatches"
+Write-Host "    ok AgentKernel is the only door, and it refuses id / verb / terminal / rewrite mismatches"
 
 # ---- C. the loop consumes decisions at the step boundary ----
 $Marks = @("SMOKE_A", "SMOKE_B", "SMOKE_C")
@@ -144,6 +208,9 @@ function Invoke-InterventionRun {
     foreach ($click in $Clicks) { $script:clickPlan[[string]$click.OnStep] = $click }
     $script:hostCalls = @{}
     foreach ($mark in $Marks) { $script:hostCalls[$mark] = 0 }
+    $script:lastHostCode = @{}
+    $script:reactCalls = @{}
+    foreach ($mark in $Marks) { $script:reactCalls[$mark] = 0 }
     $script:statusEvents = @()
     $script:reflections = 0
     $script:clicksQueued = 0
@@ -176,8 +243,10 @@ function Invoke-InterventionRun {
         }
 
         # The react answer follows the step the loop is thinking about, so a retry re-issues the same call.
+        # The counter is how the rewrite case proves the loop never asked the model about that step.
         foreach ($mark in $script:planMarks) {
             if ($combined -match $mark) {
+                $script:reactCalls[$mark] += 1
                 return [System.Threading.Tasks.Task]::FromResult((New-ActionJson $mark))
             }
         }
@@ -197,6 +266,7 @@ function Invoke-InterventionRun {
         }
         if ($null -eq $mark) { throw "Smoke failed: host saw a call for no known step: $code" }
         $script:hostCalls[$mark] += 1
+        $script:lastHostCode[$mark] = $code
 
         $failUntil = $script:failFirst[$mark]
         if ($failUntil -lt 0 -or $script:hostCalls[$mark] -le $failUntil) {
@@ -224,8 +294,13 @@ function Invoke-InterventionRun {
         $click = $script:clickPlan[[string]$idx]
         if ($null -eq $click -or $click.Remaining -eq 0) { return }
         if ($click.Remaining -gt 0) { $click.Remaining -= 1 }
-        $script:session.Interventions.Queue($click.Target,
-            [ShareRibbon.Agent.AgentStepInterventions]::Parse($click.Action))
+        # The panel has two doors, exactly like the real one: a verb, or a rewrite with its text.
+        if ($click.Action -eq "edit") {
+            $script:session.Interventions.QueueEdit($click.Target, $click.Description, $click.Code)
+        } else {
+            $script:session.Interventions.Queue($click.Target,
+                [ShareRibbon.Agent.AgentStepInterventions]::Parse($click.Action))
+        }
         $script:clicksQueued += 1
     }
 
@@ -236,6 +311,8 @@ function Invoke-InterventionRun {
         Result       = $result
         Session      = $script:session
         Calls        = [hashtable]$script:hostCalls.Clone()
+        LastCodes    = [hashtable]$script:lastHostCode.Clone()
+        ReactCalls   = [hashtable]$script:reactCalls.Clone()
         Events       = @($script:statusEvents)
         Reflections  = $script:reflections
         ClicksQueued = $script:clicksQueued
@@ -243,9 +320,21 @@ function Invoke-InterventionRun {
 }
 
 function Get-Click {
-    param([int]$OnStep, [int]$Target = -1, [string]$Action = "retry", [int]$Remaining = 1)
+    param([int]$OnStep,
+          [int]$Target = -1,
+          [string]$Action = "retry",
+          [int]$Remaining = 1,
+          [string]$Description = "",
+          [string]$Code = "")
     if ($Target -lt 0) { $Target = $OnStep }
-    return @{ OnStep = $OnStep; Target = $Target; Action = $Action; Remaining = $Remaining }
+    return @{
+        OnStep      = $OnStep
+        Target      = $Target
+        Action      = $Action
+        Remaining   = $Remaining
+        Description = $Description
+        Code        = $Code
+    }
 }
 
 function Get-CallCount {
@@ -349,4 +438,35 @@ Assert-That ($case.Session.Writes.PlanGeneration -eq 1) "user retries must not s
 $script:caseCount += 1
 Write-Host "    ok endless retries stay bounded by MaxIterations and never invent a plan version"
 
-Write-Host "PASS step intervention: $script:caseCount cases (2 inbox/door contracts + 7 injected-failure runs over the real LoopEngine)"
+# --- 8. rewriting a failed step: the saved parameters are what runs, and only that step --------
+# The acceptance is not "the text was stored" but "the host saw the rewritten parameters without
+# the model being asked to rethink the step": a prompt-only edit would let the model keep its own
+# plan and the card would be describing an execution that never happened.
+$editedB = '{ "command": "InsertText", "params": { "content": "SMOKE_B_EDITED", "position": "end" } }'
+$case = Invoke-InterventionRun -FailFirst @{ SMOKE_A = 0; SMOKE_B = 1; SMOKE_C = 0 } `
+    -Clicks @(Get-Click -OnStep 1 -Action "edit" -Description "smoke edited B" -Code $editedB)
+Assert-That ($case.ClicksQueued -eq 1) "the rewrite never reached the inbox, so this case proved nothing"
+Assert-That ($case.Result.Success) "a rewritten step that then works must finish the job: $($case.Result.Message)"
+Assert-That ((Get-CallCount $case.Calls "SMOKE_B") -eq 2) "the rewritten step must run again, got $(Get-CallCount $case.Calls "SMOKE_B")"
+Assert-That ((Get-CallCount $case.Calls "SMOKE_A") -eq 1 -and (Get-CallCount $case.Calls "SMOKE_C") -eq 1) `
+    "a rewrite must not replay the steps around it, got $($case.Calls)"
+$sent = $case.LastCodes["SMOKE_B"] | ConvertFrom-Json
+Assert-That ($sent.command -eq "InsertText" -and $sent.params.content -eq "SMOKE_B_EDITED" -and
+             $sent.params.position -eq "end") `
+    "the host must receive the saved parameters, got: $($case.LastCodes['SMOKE_B'])"
+Assert-That ($case.ReactCalls["SMOKE_B"] -eq 1) `
+    "the rewritten step was planned again by the model ($($case.ReactCalls['SMOKE_B']) rounds), so the saved parameters were only a suggestion"
+Assert-That ($case.Session.Plan.Steps[1].PinnedByUser) `
+    "the loop must mark the step as user-defined, otherwise the next run drops the saved text"
+Assert-That ($case.Session.Plan.Steps[1].Description -eq "smoke edited B") `
+    "the plan and the card disagree about this step's description"
+Assert-That ($case.Session.Writes.PlanGeneration -eq 1) `
+    "a rewrite is not a replan: the card must stay at plan version 1, got $($case.Session.Writes.PlanGeneration)"
+Assert-That ($case.Session.Interventions.PendingCount() -eq 0) "the boundary must drain the rewritten decision"
+$editPath = @($case.Events | Where-Object { $_ -like "1|*" })
+Assert-That (($editPath -join ",") -match "1\|failed,1\|pending") `
+    "the card must be told the rewritten step is queued again, got: $($editPath -join ',')"
+$script:caseCount += 1
+Write-Host "    ok a rewritten step runs from its saved parameters with no model round and no plan version bump"
+
+Write-Host "PASS step intervention: $script:caseCount cases (2 inbox/door contracts + 7 injected-failure runs + 1 rewrite run over the real LoopEngine)"

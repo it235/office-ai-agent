@@ -159,14 +159,24 @@ Namespace Agent
                     OnStepStatusChanged?.Invoke(stepIndex, StepStatusRunning, Nothing)
 
                     ' --- THINK ---
+                    ' 用户改写过这一步的说明/参数时，工具与参数只认卡片上保存的 Code：再问一次模型，
+                    ' 等于让模型按自己的理解决定要不要采纳用户的修改，那次编辑就只是一条建议（E10-02）。
                     session.Status = AgentStatus.Thinking
                     OnStatusChanged?.Invoke($"步骤 {stepIndex + 1}/{session.Plan.Steps.Count}: {planStep.Description}")
-                    Dim thought = Await ThinkAsync(session, planStep, systemPrompt)
-                    ' 模型刚返回的这一步不得再变成宿主写操作：停止必须拦在 ACT 之前。
+                    Dim thought As String = Nothing
+                    Dim toolCall As ToolCall = Nothing
+                    If planStep.PinnedByUser Then
+                        thought = "用户已改写这一步的说明与参数，按改后的内容执行"
+                        PlanStepCode.TryParse(planStep.Code, toolCall)
+                        AppLogger.Info("LoopEngine", $"Step {stepIndex + 1} runs from user-edited definition without a model round")
+                    Else
+                        thought = Await ThinkAsync(session, planStep, systemPrompt)
+                        toolCall = ParseToolCall(thought)
+                    End If
+                    ' 停止必须拦在 ACT 之前：即便这一步的参数已由用户定稿，也不能越过取消。
                     If cancellationToken.IsCancellationRequested Then Return FinishCancelled(session)
 
                     ' --- PARSE ACTION ---
-                    Dim toolCall = ParseToolCall(thought)
                     If toolCall Is Nothing Then
                         noProgressCount += 1
                         planStep.Status = StepStatus.Failed
@@ -576,22 +586,36 @@ Namespace Agent
                                            ByRef noProgressCount As Integer)
             Dim steps = session.Plan.Steps
             For Each idx In session.Interventions.PendingIndices()
-                Dim action = session.Interventions.Take(idx)
-                If action = StepIntervention.None OrElse idx < 0 OrElse idx >= steps.Count Then Continue For
+                Dim request = session.Interventions.Take(idx)
+                If request Is Nothing OrElse request.Action = StepIntervention.None OrElse
+                   idx < 0 OrElse idx >= steps.Count Then Continue For
 
                 Dim target = steps(idx)
-                If action = StepIntervention.Skip Then
+                If request.Action = StepIntervention.Skip Then
                     target.Status = StepStatus.Skipped
                     target.ErrorMessage = "按你的要求跳过这一步"
                     OnStepStatusChanged?.Invoke(idx, StepStatusSkipped, "按你的要求跳过这一步")
                     AppLogger.Info("LoopEngine", $"Step {idx + 1} skipped by user intervention")
-                Else
-                    target.Status = StepStatus.Pending
-                    target.ErrorMessage = Nothing
-                    OnStepStatusChanged?.Invoke(idx, StepStatusPending, "按你的要求重试这一步")
-                    AppLogger.Info("LoopEngine", $"Step {idx + 1} queued for retry by user intervention")
-                    stepIndex = Math.Min(stepIndex, idx)
+                    noProgressCount = 0
+                    Continue For
                 End If
+
+                Dim retryMessage As String = "按你的要求重试这一步"
+                If request.Action = StepIntervention.Edit Then
+                    ' 说明与参数换成用户的版本，这一步的工具与参数从此归用户（见循环里的 PinnedByUser 分支）。
+                    ' 还没跑过的步骤别说"重跑"：那是这一轮第一次执行它。
+                    Dim neverRan = target.Status = StepStatus.Pending
+                    target.Description = request.Description
+                    target.Code = request.Code
+                    target.PinnedByUser = True
+                    retryMessage = If(neverRan, "按你改过的内容执行这一步", "按你改过的内容重跑这一步")
+                End If
+
+                target.Status = StepStatus.Pending
+                target.ErrorMessage = Nothing
+                OnStepStatusChanged?.Invoke(idx, StepStatusPending, retryMessage)
+                AppLogger.Info("LoopEngine", $"Step {idx + 1} queued for {request.Action} by user intervention")
+                stepIndex = Math.Min(stepIndex, idx)
                 noProgressCount = 0
             Next
         End Sub

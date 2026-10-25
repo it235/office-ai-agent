@@ -1935,18 +1935,34 @@ $e10ProjectSource = Get-Content -LiteralPath (Join-Path $repoRoot "ShareRibbon\S
 if ($e10ProjectSource -notmatch 'Include="Agent\\AgentStepInterventions\.vb"') {
     $failures.Add("AgentStepInterventions.vb is not registered in ShareRibbon.vbproj, so the inbox never compiles into the add-in")
 }
+if ($e10ProjectSource -notmatch 'Include="Agent\\PlanStepCode\.vb"') {
+    $failures.Add("PlanStepCode.vb is not registered in ShareRibbon.vbproj, so the host and the loop cannot share one reading of a step's code")
+}
+$e10PlanStepCodeSource = Get-CodeSource "ShareRibbon\Agent\PlanStepCode.vb"
 $e10GateRunnerSource = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\run-code-checks.ps1") -Raw -Encoding UTF8
 if ($e10GateRunnerSource -match '"smoke-step-intervention\.ps1"') {
     $failures.Add("smoke-step-intervention.ps1 is opted out of the gate run, so the failure-injection proof never executes")
 }
 $e10CardCheckSource = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\check-agent-card-ui.js") -Raw -Encoding UTF8
-if ($e10CardCheckSource -notmatch "agent-protocol\.js" -or $e10CardCheckSource -notmatch "setStepActionResult") {
-    $failures.Add("check-agent-card-ui.js no longer loads the protocol script or asserts the step recovery surface")
+if ($e10CardCheckSource -notmatch "agent-protocol\.js" -or
+    $e10CardCheckSource -notmatch "setStepActionResult" -or
+    $e10CardCheckSource -notmatch "setStepEditResult") {
+    $failures.Add("check-agent-card-ui.js no longer loads the protocol script or asserts the step recovery/rewrite surface")
 }
 
-if ($e10InterventionsSource -notmatch "Public Function Take\(stepIndex As Integer\) As StepIntervention" -or
+if ($e10InterventionsSource -notmatch "Public Function Take\(stepIndex As Integer\) As StepInterventionRequest" -or
     $e10InterventionsSource -notmatch "_pending\.Remove\(stepIndex\)") {
     $failures.Add("A step decision is no longer take-once, so one click could drive the same step twice: AgentStepInterventions.vb")
+}
+# A rewrite must travel with its text. Taking the verb without the payload would apply a definition
+# nobody wrote, and the verb-only door must refuse it rather than queue an empty edit.
+if ($e10InterventionsSource -notmatch 'String\.Equals\(value, "edit", StringComparison\.OrdinalIgnoreCase\)' -or
+    $e10InterventionsSource -notmatch "Public Sub QueueEdit\(stepIndex As Integer, description As String, code As String\)" -or
+    $e10InterventionsSource -notmatch "action = StepIntervention\.Edit Then Return") {
+    $failures.Add("A rewrite is no longer one decision carrying its description and code, so the loop could apply a definition nobody wrote: AgentStepInterventions.vb")
+}
+if ([regex]::Matches($e10InterventionsSource, "New StepInterventionRequest With \{").Count -lt 2) {
+    $failures.Add("The inbox no longer stores a request object per step, so a decision and its text cannot be taken together: AgentStepInterventions.vb")
 }
 if ($e10InterventionsSource -notmatch 'String\.Equals\(value, "retry", StringComparison\.OrdinalIgnoreCase\)' -or
     $e10InterventionsSource -notmatch 'String\.Equals\(value, "skip", StringComparison\.OrdinalIgnoreCase\)' -or
@@ -1987,8 +2003,13 @@ if ($e10ApplyAt -lt 0 -or $e10SettleGuardAt -lt $e10ApplyAt -or $e10ExecuteAt -l
 if ($e10LoopSource -notmatch "If stepIndex < session\.Plan\.Steps\.Count AndAlso\s*session\.Plan\.Steps\(stepIndex\)\.Status <> StepStatus\.Pending Then\s*stepIndex \+= 1\s*Continue While") {
     $failures.Add("The loop replays every already-decided step instead of walking over them: LoopEngine.vb")
 }
-if ($e10LoopSource -notmatch "Else\s*target\.Status = StepStatus\.Pending[\s\S]{0,300}?stepIndex = Math\.Min\(stepIndex, idx\)") {
+if ($e10LoopSource -notmatch "target\.Status = StepStatus\.Pending[\s\S]{0,300}?stepIndex = Math\.Min\(stepIndex, idx\)") {
     $failures.Add("A retry no longer rewinds to the step the user asked for: LoopEngine.vb")
+}
+# A rewrite changes the step definition and then takes the same re-run path as a retry. Keeping both
+# writes adjacent is the contract: a rewrite that only changes the description would be a prompt edit.
+if ($e10LoopSource -notmatch "target\.Description = request\.Description[\s\S]{0,300}?target\.Code = request\.Code[\s\S]{0,300}?target\.PinnedByUser = True") {
+    $failures.Add("A rewrite no longer lands on this step's description, parameters and pin before it is queued: LoopEngine.vb")
 }
 if ($e10LoopSource -notmatch "target\.Status = StepStatus\.Skipped") {
     $failures.Add("A user skip no longer settles the step as skipped: LoopEngine.vb")
@@ -2054,6 +2075,117 @@ if ($agentCardSource -notmatch "requestStepAction\(sessionId, stepIndex, action\
 }
 if ($agentCardSource -notmatch "lockAllStepActions\(uuid,") {
     $failures.Add("A finished round leaves live step buttons on the card: agent-card.js")
+}
+
+# ---- E10-02 rewrite of one step's description and parameters ----
+if ($e10SessionSource -notmatch "Public Property PinnedByUser As Boolean") {
+    $failures.Add("A rewritten step has nowhere to record that the user owns its definition: AgentSession.vb")
+}
+if ($e10PlanStepCodeSource -notmatch "Public Shared Function TryParse\(code As String, ByRef toolCall As ToolCall\) As Boolean" -or
+    $e10PlanStepCodeSource -notmatch 'obj\("command"\)' -or
+    $e10PlanStepCodeSource -notmatch 'obj\("params"\)') {
+    $failures.Add("PlanStepCode no longer reads exactly the shape the planning prompt writes, so the host validates one thing and the loop executes another: PlanStepCode.vb")
+}
+
+$e10KernelRewrite = [regex]::Match($e10KernelSource,
+    "Public Function QueueStepEdit\([\s\S]{0,3000}?End Function").Value
+if ($e10KernelRewrite.Length -eq 0) {
+    $failures.Add("AgentKernel has no rewrite door with a typed outcome: AgentKernel.vb")
+}
+foreach ($e10Refusal in @(
+        "StepEditResult\.NoLiveRun",
+        "StepEditResult\.StepOutOfRange",
+        "StepEditResult\.StepNotEditable",
+        "StepEditResult\.EmptyEdit",
+        "StepEditResult\.CodeInvalid",
+        "StepEditResult\.ToolChanged",
+        "StepEditResult\.Queued"
+    )) {
+    if ($e10KernelRewrite -notmatch $e10Refusal) {
+        $failures.Add("The rewrite door no longer reports $($e10Refusal.Replace('\.', '.')), so the card cannot explain the refusal: AgentKernel.vb")
+    }
+}
+if ($e10KernelRewrite -notmatch "PlanStepCode\.TryParse\(code, edited\)") {
+    $failures.Add("The rewrite door no longer shares PlanStepCode with execution, so a saved parameter could fail only once it runs: AgentKernel.vb")
+}
+if ($e10KernelSource -notmatch "parsed = StepIntervention\.Edit Then Return False") {
+    $failures.Add("The verb-only door still swallows an edit click that carries no text, leaving the card waiting on a decision nobody queued: AgentKernel.vb")
+}
+$e10EditableWindow = [regex]::Match($e10KernelSource,
+    "Private Shared Function IsEditableStepStatus\(status As StepStatus\) As Boolean[\s\S]{0,300}?End Function").Value
+if ($e10EditableWindow.Length -eq 0 -or
+    $e10EditableWindow -match "StepStatus\.Completed" -or
+    $e10EditableWindow -notmatch "StepStatus\.Pending" -or
+    $e10EditableWindow -notmatch "StepStatus\.Failed" -or
+    $e10EditableWindow -notmatch "StepStatus\.Skipped") {
+    $failures.Add("The rewrite door no longer uses the pending/failed/skipped whitelist, so a future state would silently accept a rewrite: AgentKernel.vb")
+}
+
+# Pinned execution: the model must not get a vote on a saved parameter. The window between the pin
+# branch and its Else is checked, because one extra ThinkAsync there turns the edit back into advice.
+$e10PinnedWindow = [regex]::Match($e10LoopSource, "If planStep\.PinnedByUser Then([\s\S]{0,400}?)Else").Groups[1].Value
+if ($e10PinnedWindow.Length -eq 0 -or
+    $e10PinnedWindow -notmatch "PlanStepCode\.TryParse\(planStep\.Code, toolCall\)" -or
+    $e10PinnedWindow -match "ThinkAsync") {
+    $failures.Add("A rewritten step is planned by the model again, so the parameters saved on the card are only a suggestion: LoopEngine.vb")
+}
+if ($e10LoopSource -notmatch "thought = Await ThinkAsync\(session, planStep, systemPrompt\)") {
+    $failures.Add("Steps the user did not rewrite no longer go through the model, so the loop stopped reasoning: LoopEngine.vb")
+}
+
+$e10RunControlRewrite = [regex]::Match($e10RunControlSource,
+    "Public Function RequestStepEdit\([\s\S]{0,4000}?End Function").Value
+if ($e10RunControlRewrite.Length -eq 0 -or $e10RunControlRewrite -notmatch "Agent\.StepEditResult\.ToolChanged") {
+    $failures.Add("RequestStepEdit stopped mapping the typed outcome to a reason, so a refused rewrite reaches the card mute: AgentKernelService.RunControl.vb")
+}
+if ($baseChatSource -notmatch 'router\.Register\("agent:editStep", Sub\(jsonDoc\) HandleAgentEditStep\(jsonDoc\)\)') {
+    $failures.Add("The panel has no channel for a step rewrite: BaseChatControl.vb")
+}
+$e10EditHandlerWindow = [regex]::Match($baseChatSource,
+    "Protected Sub HandleAgentEditStep\(jsonDoc As JObject\)[\s\S]{0,2500}?End Sub").Value
+if ($e10EditHandlerWindow.Length -eq 0) {
+    $failures.Add("HandleAgentEditStep is gone, so the registered rewrite channel points at nothing: BaseChatControl.vb")
+}
+elseif ($e10EditHandlerWindow -match "ApproveToolForSession|ApprovalDecision|HandleAgentApproveStep|RequestApprove") {
+    $failures.Add("A step rewrite is routed through the safety approval handshake, which drags its timeout and abandon semantics along: BaseChatControl.vb")
+}
+if ($e10EditHandlerWindow -notmatch "AgentKernelSvc\.RequestStepEdit\(sessionId, stepIndex, description, code\)" -or
+    $e10EditHandlerWindow -notmatch "ReportStepEdit\(sessionId, stepIndex, refusal\.Length = 0, refusal\)") {
+    $failures.Add("A step rewrite is no longer sent to the kernel service or its outcome is dropped before the card hears it: BaseChatControl.vb")
+}
+if ($baseChatSource -notmatch 'ExecuteJavaScriptAsyncJS\(\$"setStepEditResult\(') {
+    $failures.Add("The rewrite receipt no longer reaches the card, so a refused save leaves the editor frozen: BaseChatControl.vb")
+}
+if ($e10ProtocolSource -notmatch "EDIT_STEP: 'agent:editStep'" -or
+    $e10ProtocolSource -notmatch "window\.requestStepEdit = requestStepEdit") {
+    $failures.Add("agent-protocol.js no longer exports the rewrite message")
+}
+foreach ($e10EditCardName in @(
+        "function isEditableStepStatus\(",
+        "function renderStepEditButton\(",
+        "function openStepEditor\(",
+        "function saveStepEdit\(",
+        "function setStepEditResult\(",
+        "function closeStepEditor\("
+    )) {
+    if ($agentCardSource -notmatch $e10EditCardName) {
+        $failures.Add("agent-card.js lost '$e10EditCardName', so one end of the rewrite surface is missing")
+    }
+}
+if ($agentCardSource -notmatch "return status === 'pending' \|\| status === 'failed' \|\| status === 'skipped';") {
+    $failures.Add("The card's editable statuses drifted from the host whitelist, so it offers a rewrite the host will refuse: agent-card.js")
+}
+if ($agentCardSource -notmatch "requestStepEdit\(sessionId, stepIndex, description, code\)") {
+    $failures.Add("The rewrite editor no longer posts through the rewrite protocol: agent-card.js")
+}
+if ($agentCardSource -notmatch "document\.querySelectorAll\('\.agent-step-editor'\)") {
+    $failures.Add("A finished round leaves live rewrite editors on the card: agent-card.js")
+}
+$e10SmokeSource = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\smoke-step-intervention.ps1") -Raw -Encoding UTF8
+if ($e10SmokeSource -notmatch "QueueEdit" -or
+    $e10SmokeSource -notmatch "PinnedByUser" -or
+    $e10SmokeSource -notmatch '\$case\.ReactCalls\["SMOKE_B"\]') {
+    $failures.Add("The step intervention gate no longer proves that a rewritten step runs from its saved parameters without a model round")
 }
 
 

@@ -61,6 +61,39 @@ Public Partial Class AgentKernelService
     End Function
 
     ''' <summary>
+    ''' 面板对单个步骤正文与参数的改写（E10-02）。返回空串表示已排队；否则是可以直接显示的原因。
+    ''' 这里只说"收下了没有"，改写是否真的落在这一步上由循环在步骤边界判定。
+    ''' </summary>
+    Public Function RequestStepEdit(sessionId As String, stepIndex As Integer,
+                                    description As String, code As String) As String
+        If _agentKernel Is Nothing Then Return "Agent 还没有初始化，请稍后再试"
+        If stepIndex < 0 Then Return "缺少步骤序号，无法定位这一步"
+        Dim outcome = _agentKernel.QueueStepEdit(sessionId, stepIndex, description, code)
+        If outcome = Agent.StepEditResult.Queued Then
+            AppLogger.Info("AgentKernelService", $"Step edit queued step={stepIndex + 1}")
+            Return ""
+        End If
+
+        AppLogger.Info("AgentKernelService", $"Step edit refused step={stepIndex + 1} reason={outcome}")
+        Select Case outcome
+            Case Agent.StepEditResult.NoLiveRun
+                Return "这一轮 Agent 已经不在了（已结束或被新任务替换），改动没有保存"
+            Case Agent.StepEditResult.StepOutOfRange
+                Return "计划里已经没有这一步了，可能刚被换成新版本"
+            Case Agent.StepEditResult.StepNotEditable
+                Return "这一步正在执行或已经完成，不能改写"
+            Case Agent.StepEditResult.EmptyEdit
+                Return "说明不能为空，否则这一步等于没有目标"
+            Case Agent.StepEditResult.CodeInvalid
+                Return "参数要保持 {""command"":""工具ID"",""params"":{...}} 的形状"
+            Case Agent.StepEditResult.ToolChanged
+                Return "可以改参数，但不能把这一步换成别的工具"
+            Case Else
+                Return "改动没有保存，这一步已经不可编辑"
+        End Select
+    End Function
+
+    ''' <summary>
     ''' 用户允许一次当前高风险操作
     ''' </summary>
     Public Sub Approve()

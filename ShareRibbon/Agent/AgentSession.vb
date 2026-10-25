@@ -103,6 +103,12 @@ Namespace Agent
         Public Property Status As StepStatus = StepStatus.Pending
         Public Property ErrorMessage As String
         Public Property LastExplanation As ExecutionExplanation
+
+        ''' <summary>
+        ''' 用户改写过这一步的说明与参数（E10-02）。为真时工具与参数以 Code 为准，循环不再让模型
+        ''' 重写一遍——否则卡片上刚保存的参数会被模型按自己的理解决定要不要改，编辑就只是一条建议。
+        ''' </summary>
+        Public Property PinnedByUser As Boolean
     End Class
 
     Public Class ExecutionExplanation

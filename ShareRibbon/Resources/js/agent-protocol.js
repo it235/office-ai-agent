@@ -22,6 +22,7 @@ const AgentMessage = {
     APPROVE_TOOL_SESSION: 'agent:approveToolSession',
     REFINE_PLAN: 'agent:refinePlan',
     STEP_ACTION: 'agent:stepAction',
+    EDIT_STEP: 'agent:editStep',
 };
 
 /**
@@ -117,6 +118,23 @@ function requestStepAction(sessionId, stepIndex, action) {
     });
 }
 
+/**
+ * 用户改写单个步骤的说明与参数（E10-02）。
+ * 与纠偏分开一条通道：载荷不同，回执也必须是"保存成功/失败 + 原因"，而不是按钮的启用状态。
+ * @param {string} sessionId - 会话 ID
+ * @param {number} stepIndex - 步骤序号（0 基）
+ * @param {string} description - 改写后的步骤说明
+ * @param {string} code - 改写后的 {"command":"工具ID","params":{...}} JSON 文本
+ */
+function requestStepEdit(sessionId, stepIndex, description, code) {
+    sendAgentMessage(AgentMessage.EDIT_STEP, {
+        sessionId: sessionId,
+        stepIndex: stepIndex,
+        description: description,
+        code: code
+    });
+}
+
 // 导出到全局（兼容现有代码风格）
 window.AgentMessage = AgentMessage;
 window.sendAgentMessage = sendAgentMessage;
@@ -127,3 +145,4 @@ window.requestApproveToolSession = requestApproveToolSession;
 window.requestReject = requestReject;
 window.requestRefinePlan = requestRefinePlan;
 window.requestStepAction = requestStepAction;
+window.requestStepEdit = requestStepEdit;

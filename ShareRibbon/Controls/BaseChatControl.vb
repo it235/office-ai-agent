@@ -864,6 +864,9 @@ Public MustInherit Class BaseChatControl
         ' E10-01 单步纠偏：面板只排队，落地由循环在步骤边界做；被拒绝时原因必须回到界面，
         ' 所以它不能复用 agent:approveStep——那条通道挂着超时与放弃语义，是安全审批专用的。
         router.Register("agent:stepAction", Sub(jsonDoc) HandleAgentStepAction(jsonDoc))
+        ' E10-02 单步正文与参数改写：与纠偏同一条收执原则——先排队，收下与否必须回执给卡片，
+        ' 因为卡片只有拿到回执才敢把编辑框关掉并显示新的说明。
+        router.Register("agent:editStep", Sub(jsonDoc) HandleAgentEditStep(jsonDoc))
         router.Register("agent:undoRun", Sub(jsonDoc) HandleAgentUndoRun(jsonDoc))
         router.Register("openFileDialog", Sub(jsonDoc) HandleOpenFileDialog())
         router.Register("openApiConfigForm", Sub(jsonDoc) HandleOpenApiConfigForm())
@@ -2202,6 +2205,48 @@ Public MustInherit Class BaseChatControl
                                      $"{UtilsService.ToJsStringLiteral(reason)})")
         End If
         GlobalStatusStrip.ShowWarning(reason)
+    End Sub
+
+    ''' <summary>
+    ''' 处理用户对单个步骤正文与参数的改写（E10-02）。工具身份不允许跟着改：换工具等于换一件事，
+    ''' 应当回到计划改写那条路，重新过能力边界与安全判定；这里只改说明和这一步的参数。
+    ''' </summary>
+    Protected Sub HandleAgentEditStep(jsonDoc As JObject)
+        Try
+            Dim payload = If(jsonDoc("payload"), jsonDoc)
+            Dim sessionId = payload("sessionId")?.ToString()
+            Dim stepIndexValue = payload("stepIndex")
+            Dim description = payload("description")?.ToString()
+            Dim code = payload("code")?.ToString()
+
+            Dim stepIndex As Integer
+            If stepIndexValue Is Nothing OrElse Not Integer.TryParse(stepIndexValue.ToString(), stepIndex) Then
+                ReportStepEdit(sessionId, stepIndexValue, False, "这一步的序号没能传上来，无法定位")
+                Return
+            End If
+
+            Dim refusal = AgentKernelSvc.RequestStepEdit(sessionId, stepIndex, description, code)
+            ReportStepEdit(sessionId, stepIndex, refusal.Length = 0, refusal)
+            If refusal.Length = 0 Then
+                GlobalStatusStrip.ShowInfo("已保存，这一步会按你改的内容重跑")
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"HandleAgentEditStep 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 改写回执。卡片把编辑框置为提交中后才等这一条：收下了就换成新的说明并关掉编辑框，
+    ''' 没收到就把原文还回去并写出原因，绝不让一次点击停在"看起来保存了"的状态。
+    ''' </summary>
+    Private Sub ReportStepEdit(sessionId As String, stepIndexValue As Object, accepted As Boolean, reason As String)
+        Dim stepIndex As Integer
+        If Integer.TryParse(If(stepIndexValue?.ToString(), "-1"), stepIndex) AndAlso
+           Not String.IsNullOrWhiteSpace(sessionId) Then
+            ExecuteJavaScriptAsyncJS($"setStepEditResult({UtilsService.ToJsStringLiteral(sessionId)}, {stepIndex}, " &
+                                     $"{If(accepted, "true", "false")}, {UtilsService.ToJsStringLiteral(reason)})")
+        End If
+        If Not accepted Then GlobalStatusStrip.ShowWarning(reason)
     End Sub
 
     ''' <summary>

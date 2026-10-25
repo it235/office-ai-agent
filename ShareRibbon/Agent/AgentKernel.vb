@@ -197,16 +197,64 @@ Namespace Agent
         ''' 而不是悄悄收下单击。真正落地仍由循环在步骤边界做（见 LoopEngine.ApplyUserInterventions）。
         ''' </summary>
         Public Function QueueStepAction(sessionId As String, stepIndex As Integer, action As String) As Boolean
+            If Not IsLiveRun(sessionId) Then Return False
+
+            Dim parsed = AgentStepInterventions.Parse(action)
+            ' "edit" 走的是带正文与参数的那条通道：这里没有可以写进计划的内容，
+            ' 收下它只会让界面显示"已排队"而循环什么也不会做。
+            If parsed = StepIntervention.None OrElse parsed = StepIntervention.Edit Then Return False
+
+            _session.Interventions.Queue(stepIndex, parsed)
+            Return True
+        End Function
+
+        ''' <summary>
+        ''' 用户改写某一步的说明与参数（E10-02）。与 retry/skip 共用同一轮的判定（同一会话、未终结），
+        ''' 但必须先在这里把"这一步到底能不能被改"说清楚：循环在边界拿到的永远是已经校验过的载荷，
+        ''' 所以它的落地分支不需要再判一次合法性。
+        ''' 面板只能改参数、不能换工具：换工具等于换一处能力边界与风险面，那是「修改计划」的事。
+        ''' 计划自己没写出可解析的 code 时不做工具比对——那种步骤正是用户来修的对象，比不出来不等于不许改。
+        ''' </summary>
+        Public Function QueueStepEdit(sessionId As String,
+                                      stepIndex As Integer,
+                                      description As String,
+                                      code As String) As StepEditResult
+            If Not IsLiveRun(sessionId) Then Return StepEditResult.NoLiveRun
+            If _session.Plan Is Nothing OrElse stepIndex < 0 OrElse
+               stepIndex >= _session.Plan.Steps.Count Then Return StepEditResult.StepOutOfRange
+
+            Dim target = _session.Plan.Steps(stepIndex)
+            ' 只放行还能被重跑的步骤。已完成的那一步改了就必须重跑，而重跑会把已经落盘的写入再写一遍；
+            ' 正在执行的那一步轮到它自己时早就跑过旧参数了。白名单而不是黑名单：以后新增的状态默认不可改。
+            If Not IsEditableStepStatus(target.Status) Then Return StepEditResult.StepNotEditable
+
+            If String.IsNullOrWhiteSpace(description) Then Return StepEditResult.EmptyEdit
+
+            Dim edited As ToolCall = Nothing
+            If Not PlanStepCode.TryParse(code, edited) Then Return StepEditResult.CodeInvalid
+
+            Dim plannedToolId As String = ""
+            If PlanStepCode.TryGetToolId(target.Code, plannedToolId) AndAlso
+               Not String.Equals(plannedToolId, edited.ToolId, StringComparison.OrdinalIgnoreCase) Then
+                Return StepEditResult.ToolChanged
+            End If
+
+            _session.Interventions.QueueEdit(stepIndex, description.Trim(), code.Trim())
+            Return StepEditResult.Queued
+        End Function
+
+        ''' <summary>只有还没被判定过的步骤能被改写：重跑它们不会让已经落盘的写入再写一遍。</summary>
+        Private Shared Function IsEditableStepStatus(status As StepStatus) As Boolean
+            Return status = StepStatus.Pending OrElse status = StepStatus.Failed OrElse status = StepStatus.Skipped
+        End Function
+
+        ''' <summary>一轮是否还在跑：会话标识必须是当前这一轮的，且尚未落到终态。</summary>
+        Private Function IsLiveRun(sessionId As String) As Boolean
             If _session Is Nothing OrElse String.IsNullOrWhiteSpace(sessionId) Then Return False
             If Not String.Equals(_session.Id, sessionId, StringComparison.Ordinal) Then Return False
             If _session.Status = AgentStatus.Completed OrElse
                _session.Status = AgentStatus.Failed OrElse
                _session.Status = AgentStatus.Aborted Then Return False
-
-            Dim parsed = AgentStepInterventions.Parse(action)
-            If parsed = StepIntervention.None Then Return False
-
-            _session.Interventions.Queue(stepIndex, parsed)
             Return True
         End Function
 
