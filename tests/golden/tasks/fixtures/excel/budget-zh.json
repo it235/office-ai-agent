@@ -1,0 +1,28 @@
+{
+  "id": "excel/budget-zh",
+  "kind": "excel",
+  "appType": "Excel",
+  "owner": "agent-platform",
+  "dataPolicy": "fictional",
+  "description": "部门预算表：差异列公式与一处除零公式，供公式修复使用。",
+  "expectContains": [
+    "部门预算",
+    "市场推广",
+    "研发投入",
+    "=B2-C2",
+    "=B5/C5"
+  ],
+  "sheets": [
+    {
+      "name": "部门预算",
+      "rows": [
+        ["项目", "预算", "实际", "差异"],
+        ["市场推广", 100, 120, "=B2-C2"],
+        ["研发投入", 200, 180, "=B3-C3"],
+        ["客户支持", 80, 80, "=B4-C4"],
+        ["差旅", 60, 0, "=B5/C5"],
+        ["合计", "=SUM(B2:B5)", "=SUM(C2:C5)", "=B6-C6"]
+      ]
+    }
+  ]
+}

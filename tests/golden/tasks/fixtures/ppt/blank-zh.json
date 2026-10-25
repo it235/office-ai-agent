@@ -1,0 +1,11 @@
+{
+  "id": "ppt/blank-zh",
+  "kind": "ppt",
+  "appType": "PowerPoint",
+  "owner": "agent-platform",
+  "dataPolicy": "fictional",
+  "description": "空演示文稿：只有母版与空白版式，验证从零成稿不走假成功。",
+  "expectSlideCount": 0,
+  "expectContains": [],
+  "slides": []
+}

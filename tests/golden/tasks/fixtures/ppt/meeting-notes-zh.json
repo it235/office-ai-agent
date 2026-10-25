@@ -1,0 +1,30 @@
+{
+  "id": "ppt/meeting-notes-zh",
+  "kind": "ppt",
+  "appType": "PowerPoint",
+  "owner": "agent-platform",
+  "dataPolicy": "fictional",
+  "description": "三页周会纪要：标题加要点，含一处错别字，供摘要、校对和改写使用。",
+  "expectSlideCount": 3,
+  "expectContains": [
+    "产品周会纪要",
+    "本周进展",
+    "修复 3 个高优先极缺陷",
+    "下周计划",
+    "上线数据看板"
+  ],
+  "slides": [
+    {
+      "title": "产品周会纪要",
+      "bullets": ["时间：2026 年 10 月 20 日", "参会：产品、研发、设计"]
+    },
+    {
+      "title": "本周进展",
+      "bullets": ["登录页改版完成", "修复 3 个高优先极缺陷", "数据看板进入联调"]
+    },
+    {
+      "title": "下周计划",
+      "bullets": ["上线数据看板", "补齐导出功能", "整理验收清单"]
+    }
+  ]
+}

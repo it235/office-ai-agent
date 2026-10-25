@@ -45,6 +45,7 @@ try {
         "build-installer-prep.ps1"       = "installer build entry, not a check; its audits live in build\"
         "ensure-vsto-temp-keys.ps1"      = "developer-certificate setup, not a check"
         "audit-installer-duplicates.ps1" = "informational duplicate-SourcePath report, it never fails; the installer gates live in build\"
+        "New-GoldenFixtures.ps1"         = "fixture generator, not a check; check-golden-corpus.ps1 regenerates fixtures twice and validates them"
     }
     $gateNames = @(
         Get-ChildItem -LiteralPath (Join-Path $repoRoot "scripts") -Filter *.ps1 -File |

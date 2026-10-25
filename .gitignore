@@ -91,6 +91,12 @@ docs/*
 # 门禁/冒烟跑出来的临时渲染产物，可重跑再生，不入库
 artifacts/
 
+# 黄金评测夹具由 JSON 规格生成，二进制不入库
+tests/golden/.generated/
+
+# L1 真机运行记录是本地证据，依赖机器与 Key，不入库
+tests/golden/runs/
+
 # 不提交 IDE/CI 配置目录
 .github/
 .vscode/

@@ -1,0 +1,32 @@
+{
+  "id": "word/contract-zh",
+  "kind": "word",
+  "appType": "Word",
+  "owner": "agent-platform",
+  "dataPolicy": "fictional",
+  "description": "示例服务协议：条款段落与一张两列表格，含繁简混用错字。",
+  "expectContains": [
+    "服务协议（示例）",
+    "第一条 服务范围",
+    "甲方应于每月 5 日前支付服务费用",
+    "付款约定",
+    "3 个工作日內"
+  ],
+  "blocks": [
+    { "type": "paragraph", "style": "Title", "text": "服务协议（示例）" },
+    { "type": "paragraph", "style": "Heading1", "text": "第一条 服务范围" },
+    { "type": "paragraph", "text": "乙方根据本协议向甲方提供数据整理、报表生成和月度复盘服务。" },
+    { "type": "paragraph", "style": "Heading1", "text": "第二条 付款约定" },
+    { "type": "paragraph", "text": "甲方应于每月 5 日前支付服务费用，逾期付款需提前书面说明。" },
+    {
+      "type": "table",
+      "rows": [
+        ["条款", "内容"],
+        ["服务周期", "2026 年 10 月至 2027 年 9 月"],
+        ["响应时限", "收到通知后 3 个工作日內回复"]
+      ]
+    },
+    { "type": "paragraph", "style": "Heading1", "text": "第三条 保密" },
+    { "type": "paragraph", "text": "双方对履行本协议过程中知悉的商业信息负有保密义务。" }
+  ]
+}

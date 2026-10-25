@@ -1,0 +1,33 @@
+{
+  "id": "word/report-zh",
+  "kind": "word",
+  "appType": "Word",
+  "owner": "agent-platform",
+  "dataPolicy": "fictional",
+  "description": "季度经营报告：含标题层级、错别字、重复标点和一张指标表。",
+  "expectContains": [
+    "2026 年第三季度经营报告",
+    "本季度销售额同比成长了12%",
+    "毛利率保持稳定。团队人数从 48 人增加到 55 人。。",
+    "指标",
+    "1280"
+  ],
+  "blocks": [
+    { "type": "paragraph", "style": "Title", "text": "2026 年第三季度经营报告" },
+    { "type": "paragraph", "style": "Heading1", "text": "一、整体经营情况" },
+    { "type": "paragraph", "text": "本季度销售额同比成长了12%，主要来自华东与华南两个区域的新增客户。" },
+    { "type": "paragraph", "text": "毛利率保持稳定。团队人数从 48 人增加到 55 人。。" },
+    { "type": "paragraph", "style": "Heading1", "text": "二、重点问题" },
+    { "type": "paragraph", "text": "交付周期偏长，部分项目存在重复返工，需要在下季度建立统一的验收清单。" },
+    { "type": "paragraph", "style": "Heading2", "text": "（一）客户反馈" },
+    { "type": "paragraph", "text": "客户普遍认可响应速度，但对报表口径的一致性提出了疑问。" },
+    {
+      "type": "table",
+      "rows": [
+        ["指标", "本季度", "上季度"],
+        ["销售额（万元）", "1280", "1140"],
+        ["客户数", "96", "81"]
+      ]
+    }
+  ]
+}

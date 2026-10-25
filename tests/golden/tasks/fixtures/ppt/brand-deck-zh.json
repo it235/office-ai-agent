@@ -1,0 +1,34 @@
+{
+  "id": "ppt/brand-deck-zh",
+  "kind": "ppt",
+  "appType": "PowerPoint",
+  "owner": "agent-platform",
+  "dataPolicy": "fictional",
+  "description": "四页虚构品牌发布会草稿：标题加要点，供美化与结构性删除的负样例使用。",
+  "expectSlideCount": 4,
+  "expectContains": [
+    "北辰科技 2026 产品发布会",
+    "市场机会",
+    "解决方案",
+    "下一步",
+    "统一数据入口"
+  ],
+  "slides": [
+    {
+      "title": "北辰科技 2026 产品发布会",
+      "bullets": ["让数据回到业务现场"]
+    },
+    {
+      "title": "市场机会",
+      "bullets": ["中小企业数字化预算持续增长", "现有工具割裂，数据难以复用"]
+    },
+    {
+      "title": "解决方案",
+      "bullets": ["统一数据入口", "场景化分析模板", "可审计的自动化执行"]
+    },
+    {
+      "title": "下一步",
+      "bullets": ["10 月完成试点", "11 月开放首批客户"]
+    }
+  ]
+}

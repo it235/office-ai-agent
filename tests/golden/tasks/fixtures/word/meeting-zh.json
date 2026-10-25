@@ -1,0 +1,25 @@
+{
+  "id": "word/meeting-zh",
+  "kind": "word",
+  "appType": "Word",
+  "owner": "agent-platform",
+  "dataPolicy": "fictional",
+  "description": "产品周会纪要：短段落与编号列表，适合做改写与摘要。",
+  "expectContains": [
+    "产品周会纪要",
+    "本周进展",
+    "登录页改版完成",
+    "下周计划",
+    "上线数据看板"
+  ],
+  "blocks": [
+    { "type": "paragraph", "style": "Title", "text": "产品周会纪要" },
+    { "type": "paragraph", "style": "Heading1", "text": "本周进展" },
+    { "type": "paragraph", "text": "登录页改版完成，已通过设计走查。" },
+    { "type": "paragraph", "text": "修复了 3 个高优先级缺限，剩余问题转入下周。" },
+    { "type": "paragraph", "style": "Heading1", "text": "下周计划" },
+    { "type": "paragraph", "text": "1. 上线数据看板" },
+    { "type": "paragraph", "text": "2. 补齐导出功能" },
+    { "type": "paragraph", "text": "3. 整理验收清单" }
+  ]
+}
