@@ -238,6 +238,36 @@ E10 的坑是**为了「用户能纠偏」再造一套循环、一套终态或�
 | E10-03 | 终态后的边界说明 | 本轮已结束时单步动作全部禁用并说明原因（此时「重试」等于重开一轮，就是「重来」），可用出口是撤销本轮或带意见重新发起 | 卡片真机 + UI 断言 | E1-07/E10-01 | S |
 | E10-04 | 门禁与口径落地 | 失败注入门禁自动登记进 `run-code-checks.ps1`；P0 守卫钉住「三处失败分支都消费收件箱」「计划替换点必须清空」「不得新增第二套终态/裁决通道」；AGENTS 与落地记录写清边界与代价 | 门禁输出 + 变异探针 | E10-01 | S |
 
+#### E11 详细拆解（落地顺序即编号顺序）
+
+E11 的坑是**把评测做成第六份平行清单**：再抄一份任务名、工具名与成功标准，三周后与 `QuickActionCatalog` / `TaskPackages` / Skill 各说各话。开工前逐项实测（`git show HEAD:` + 实读）：
+
+1. 现有黄金集只有 `tests/golden/l0/catalog.json` 19 个用例，全部是合同、门禁与包断言（`kind = tool_execution | contract | task_package_outcome`），**没有一份夹具、没有一句用户话术、没有 L1 执行器**。它证明「机制没坏」，不证明「用户的任务能做成」。
+2. `scripts/run-golden-l0.ps1` 直接 `Add-Type` 真实 `ShareRibbon.dll`，在无 Office、无网络下跑。这层必须原样保留，E11 不得把 Office/API 依赖塞进 PR 流水线（D13）。
+3. 任务包只有 3 份（`word.review-polish`、`excel.clean-and-fix`、`excel.insight`），E6-07 的「六包」尚未补齐。所以语料不能只按包组织，否则 20 个任务里会有一半是临时编出来的包。
+4. 仓库里没有任何 `.pptx`，Office 夹具只有 `.qoder/realtest` 两份 Word；`DocumentFormat.OpenXml 3.1.0` 在 `packages/` 且 ShareRibbon/WordAi 已引用，但没有任何夹具生成代码。
+5. 设计稿 `docs/design/eval-golden-set.md` 仍是权威口径（L0/L1/L2/L3、case.json、断言目录、U1–U10、D13、Q1–Q4 冻结）。E11 v1 只补它缺的「语料 + 生成器 + 回归记录」，不重写分层，也不新增第二套断言词表。
+
+**硬约束（不可谈判）**：
+
+1. **一份语料，不抄任何清单**：每个用例只能引用既有 `packageId` / `entryActionId` / `skill` / `capabilityId`；引用不到就是 `readiness = gap`，必须写清缺的持有者与计划行。禁止为凑数量新造任务 id 或工具 id——那正是本计划反复否决的那种清单。
+2. **夹具是生成物不是提交物**：spec（JSON）进仓库，`.docx/.xlsx/.pptx` 由 `scripts/New-GoldenFixtures.ps1` 确定性生成到 `tests/golden/.generated/`（gitignore），manifest 记 SHA256；门禁重跑生成并核对哈希。Q1 冻结：docx 走 OpenXml SDK；xlsx/pptx 同样优先 SDK，若某格式 SDK 构造成本压倒收益，允许 raw OOXML，但必须由 OpenXml 打开校验并在 README 写明理由。
+3. **「无返工完成率」只认用户可见返工**：`completed && userRework = 0`，其中 `userRework = 额外用户轮次 + 单步重试/跳过/改写 + 撤销本轮`。模型内部 replan/repair 不计入返工，但单独记 `repairs` 作为诊断；两个数字一起报，禁止用一个掩盖另一个。E6-08 的真实文档完成率沿用这一份定义，不另立口径。
+4. **P0 硬通过**：失败样例的「通过」是系统按预期拒绝、提问或阻断，不是分数打折。
+5. **运行记录不可伪造**：记录必须带 fixture 哈希与构建 commit；哈希不一致的两次记录不可比较；没有真机就写 `not-run`，不生成样本成绩。
+6. L1 真机执行（Office + API Key）按当前指示**延后**：E11-04 交手册与清单，E11-05 首跑基线在环境具备后补。这不阻塞 E11-01/02/03 进 PR 门禁。
+
+| WI | 工作项 | 验收标准（用户可观察） | 证据 | 依赖 | 规模 |
+|---|---|---|---|---|---|
+| E11-00 | 口径与 schema | 语料与单例 schema 冻结（id/appType/layer/readiness/title/userText/setup/fixture/expect/tags/owner）；「无返工」三要素写明从哪几个既有事件读（run 数、`AgentStepInterventions`、撤销记录），读不到判 `not-run` 而不是 0；负样例与 gap 各有判定字段 | `tests/golden/tasks/README.md` + 本计划 | 无 | S |
+| E11-01 | 语料 v1 + 夹具生成 | ≥20 个真实文档任务，Word/Excel/PPT 各 ≥4；≥5 个安全负样例（越权、VBA、高危删除、超大范围、含糊指令）；≥15 个 `ready`，gap 用例 ≥1 且每个指名缺的持有者；每个任务有中文用户话术、夹具与选区、可机器判定断言、步数/修复预算 | `tests/golden/tasks/catalog.json`、`fixtures/*.json`、`scripts/New-GoldenFixtures.ps1` | E11-00 | L |
+| E11-02 | 语料静态门禁 | 数量、三端覆盖、负样例数、id 唯一、断言词表闭合、入口/包/Skill 可解析、夹具可生成且能被 OpenXml 读回并核对文本、无客户数据、无整份文档快照、layer 与 D13 一致；任一项断裂即红，并含变异探针 | `scripts/check-golden-corpus.ps1` + 门禁输出 | E11-01 | M |
+| E11-03 | 运行记录与版本对比 | 记录 schema 含 case、构建 commit、fixture 哈希、status、步数、userRework、repairs、断言明细、runId、耗时；对比输出通过率/无返工率变化、新失败、消失用例与 flaky；哈希不一致拒绝比较；没有真机只能产生 `not-run` | `scripts/Compare-GoldenRuns.ps1` + 合成记录自检 | E11-02 | M |
+| E11-04 | L1 执行手册 | 真机前置（Office + API Key）、每次临时副本隔离、单例 120s 超时、失败导出 run、清理；PR/Nightly/Release 三档严格按 D13；手册能让人独立跑起来 | `tests/golden/README.md` + 真机清单 | E11-01 | S |
+| E11-05 | L1 首跑基线 | 在真实 Office 上跑完整语料，P0 硬通过，记录首个基线并标注 flaky；只有环境具备后才能开始 | 运行记录 + 对比报告 | E11-03/04 | L（按指示延后） |
+
+**明确不做**：不做 LLM 裁判作为主分（L3 仍可选）、不提交整份输出文档快照（Q2）、不做多语言分集（Q3 先中文）、失败不自动建 issue（Q4）。E11 v1 的职责是让「能不能一次做成」第一次变成可重复的数字，而不是让数字好看。
+
 ### Phase 3（第 9–12 周）：智能与生态
 
 | Epic | 目标 | 关键验收 | 退出条件 |
