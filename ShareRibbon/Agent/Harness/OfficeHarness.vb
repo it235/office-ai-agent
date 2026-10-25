@@ -32,7 +32,7 @@ Namespace Agent.Harness
             _kernel = kernel
             _runTraceStore = If(runTraceStore, New NoopRunTraceStore())
             AddHandler _kernel.OnStatusChanged, AddressOf HandleKernelStatusChanged
-            AddHandler _kernel.OnStepCompleted, AddressOf HandleKernelStepCompleted
+            AddHandler _kernel.OnStepStatusChanged, AddressOf HandleKernelStepStatusChanged
             AddHandler _kernel.OnPlanGenerated, AddressOf HandleKernelPlanGenerated
             AddHandler _kernel.OnExecutionExplained, AddressOf HandleKernelExecutionExplained
             AddHandler _kernel.OnRequestApproval, AddressOf HandleKernelRequestApproval
@@ -124,6 +124,7 @@ Namespace Agent.Harness
                                                          contextPack,
                                                          turn.TaskSpec,
                                                          turn.SelectedSkills,
+                                                         turn.EntryActionId,
                                                          cancellationToken)
                 Dim first = Await Task.WhenAny(pending.AgentTask, pending.ApprovalSignal.Task)
                 If first Is pending.ApprovalSignal.Task AndAlso Not pending.AgentTask.IsCompleted Then
@@ -315,12 +316,12 @@ Namespace Agent.Harness
             RaisePhase(_currentRunId, "status", If(status, ""))
         End Sub
 
-        Private Sub HandleKernelStepCompleted(stepIndex As Integer, success As Boolean, message As String)
+        Private Sub HandleKernelStepStatusChanged(stepIndex As Integer, status As String, message As String)
             If String.IsNullOrWhiteSpace(_currentRunId) Then Return
             RaiseEvent StepChanged(Me, New HarnessStepChangedEventArgs With {
                 .RunId = _currentRunId,
                 .StepIndex = stepIndex,
-                .Status = If(success, "completed", "failed"),
+                .Status = If(String.IsNullOrWhiteSpace(status), "failed", status),
                 .Message = If(message, "")
             })
         End Sub

@@ -22,6 +22,8 @@ Namespace Agent.Harness
         Public Property ContextPack As Agent.Context.ContextPack
         Public Property TaskSpec As Agent.AgentTaskSpec
         Public Property SelectedSkills As New List(Of SkillFileDefinition)()
+        ''' <summary>入口动作 id；空表示自由文本，任务包断言据此决定要不要核对（E6-05）。</summary>
+        Public Property EntryActionId As String = ""
     End Class
 
     Public Class HarnessRunResult

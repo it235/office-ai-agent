@@ -233,6 +233,59 @@ CREATE INDEX IF NOT EXISTS idx_prompt_template_scenario ON prompt_template(scena
         End Try
 
         ' 各版本迁移 SQL（仅 ALTER / CREATE INDEX / UPDATE version，不重复执行）
+        ' E2-04：app_type 的合法值只有 Word / Excel / PowerPoint / 空串，白名单外的历史写法
+        ' （早期 Excel 落库的 "Unknown" 就是这种）一律先归一再回填，否则那条会话三端都查不到。
+        ' 归一覆盖带这一列的六张表：历史链四张 + 记忆链两张（atomic_memory / memory_item），
+        ' 后两者的读侧豁免规则完全一样，所以同一批 "Unknown" 也让老记忆在三端同时召不回来。
+        ' 写侧统一走 AppTypeContract.Normalize，跑完这一次不会再长回第三种值。
+        ' 与 Storage\Migrations\019_*.sql 同义；这里是不带迁移文件安装时的兜底。
+        Dim appTypeNormalizeCase As String =
+            "CASE LOWER(TRIM(IFNULL(app_type, ''))) " &
+            "WHEN 'word' THEN 'Word' WHEN 'excel' THEN 'Excel' WHEN 'powerpoint' THEN 'PowerPoint' ELSE '' END"
+        Dim appTypeNeedsNormalize As String =
+            "WHERE IFNULL(app_type, '') <> '' AND IFNULL(app_type, '') NOT IN ('Word', 'Excel', 'PowerPoint');"
+        Dim sessionOwnedByLatestRun As String =
+            "SET app_type = IFNULL((SELECT r.app_type FROM agent_run r " &
+            "WHERE r.session_id = conversation_event.session_id AND IFNULL(r.app_type, '') <> '' " &
+            "ORDER BY r.started_at DESC LIMIT 1), '') " &
+            "WHERE IFNULL(app_type, '') = '' AND IFNULL(session_id, '') <> '';"
+        Dim migration019 As String =
+            "UPDATE conversation_event SET app_type = " & appTypeNormalizeCase & " " & appTypeNeedsNormalize &
+            "UPDATE agent_run SET app_type = " & appTypeNormalizeCase & " " & appTypeNeedsNormalize &
+            "UPDATE agent_run_change SET app_type = " & appTypeNormalizeCase & " " & appTypeNeedsNormalize &
+            "UPDATE session_summary SET app_type = " & appTypeNormalizeCase & " " & appTypeNeedsNormalize &
+            "UPDATE atomic_memory SET app_type = " & appTypeNormalizeCase & " " & appTypeNeedsNormalize &
+            "UPDATE memory_item SET app_type = " & appTypeNormalizeCase & " " & appTypeNeedsNormalize &
+            "UPDATE conversation_event " & sessionOwnedByLatestRun &
+            "UPDATE conversation_event SET app_type = IFNULL((SELECT c.app_type FROM agent_run_change c " &
+            "WHERE c.session_id = conversation_event.session_id AND IFNULL(c.app_type, '') <> '' " &
+            "ORDER BY c.observed_at DESC LIMIT 1), '') " &
+            "WHERE IFNULL(app_type, '') = '' AND IFNULL(session_id, '') <> '';" &
+            "UPDATE session_summary SET app_type = 'Word' WHERE IFNULL(app_type, '') = '' " &
+            "AND TRIM(IFNULL(document_name, '')) <> '' AND (TRIM(IFNULL(document_name, '')) LIKE '%.doc' " &
+            "OR TRIM(IFNULL(document_name, '')) LIKE '%.docx' OR TRIM(IFNULL(document_name, '')) LIKE '%.docm' " &
+            "OR TRIM(IFNULL(document_name, '')) LIKE '%.dot' OR TRIM(IFNULL(document_name, '')) LIKE '%.dotx' " &
+            "OR TRIM(IFNULL(document_name, '')) LIKE '%.rtf' OR TRIM(IFNULL(document_name, '')) LIKE '%.wps');" &
+            "UPDATE session_summary SET app_type = 'Excel' WHERE IFNULL(app_type, '') = '' " &
+            "AND TRIM(IFNULL(document_name, '')) <> '' AND (TRIM(IFNULL(document_name, '')) LIKE '%.xls' " &
+            "OR TRIM(IFNULL(document_name, '')) LIKE '%.xlsx' OR TRIM(IFNULL(document_name, '')) LIKE '%.xlsm' " &
+            "OR TRIM(IFNULL(document_name, '')) LIKE '%.xlt' OR TRIM(IFNULL(document_name, '')) LIKE '%.et');" &
+            "UPDATE session_summary SET app_type = 'PowerPoint' WHERE IFNULL(app_type, '') = '' " &
+            "AND TRIM(IFNULL(document_name, '')) <> '' AND (TRIM(IFNULL(document_name, '')) LIKE '%.ppt' " &
+            "OR TRIM(IFNULL(document_name, '')) LIKE '%.pptx' OR TRIM(IFNULL(document_name, '')) LIKE '%.pptm' " &
+            "OR TRIM(IFNULL(document_name, '')) LIKE '%.pps' OR TRIM(IFNULL(document_name, '')) LIKE '%.ppsx' " &
+            "OR TRIM(IFNULL(document_name, '')) LIKE '%.dps');" &
+            "UPDATE conversation_event SET app_type = (SELECT p.app_type FROM session_summary p " &
+            "WHERE p.session_id = conversation_event.session_id AND IFNULL(p.app_type, '') <> '' LIMIT 1) " &
+            "WHERE IFNULL(conversation_event.app_type, '') = '' AND IFNULL(conversation_event.session_id, '') <> '' " &
+            "AND EXISTS (SELECT 1 FROM session_summary p WHERE p.session_id = conversation_event.session_id " &
+            "AND IFNULL(p.app_type, '') <> ''); " &
+            "UPDATE session_summary SET app_type = (SELECT e.app_type FROM conversation_event e " &
+            "WHERE e.session_id = session_summary.session_id AND IFNULL(e.app_type, '') <> '' " &
+            "ORDER BY e.created_at DESC LIMIT 1) WHERE IFNULL(session_summary.app_type, '') = '' " &
+            "AND IFNULL(session_summary.session_id, '') <> '' AND EXISTS (SELECT 1 FROM conversation_event e " &
+            "WHERE e.session_id = session_summary.session_id AND IFNULL(e.app_type, '') <> ''); " &
+            "UPDATE schema_version SET version = 19;"
         Dim migrations As New Dictionary(Of Integer, String) From {
             {2, "ALTER TABLE atomic_memory ADD COLUMN app_type TEXT DEFAULT '';" &
              "CREATE INDEX IF NOT EXISTS idx_atomic_memory_app_type ON atomic_memory(app_type);" &
@@ -554,7 +607,10 @@ CREATE INDEX IF NOT EXISTS idx_prompt_template_scenario ON prompt_template(scena
              "ALTER TABLE session_summary ADD COLUMN updated_at TEXT;" &
              "CREATE UNIQUE INDEX IF NOT EXISTS idx_session_summary_session_unique ON session_summary(session_id);" &
              "CREATE INDEX IF NOT EXISTS idx_session_summary_document ON session_summary(app_type, document_id);" &
-             "UPDATE schema_version SET version = 17;"}
+             "UPDATE schema_version SET version = 17;"},
+            {18, "ALTER TABLE agent_run_change ADD COLUMN restore_json TEXT;" &
+             "UPDATE schema_version SET version = 18;"},
+            {19, migration019}
         }
 
         For Each kvp In migrations.OrderBy(Function(x) x.Key)
@@ -656,6 +712,7 @@ CREATE INDEX IF NOT EXISTS idx_prompt_template_scenario ON prompt_template(scena
         EnsureColumn(conn, "agent_run_change", "undo_units", "undo_units INTEGER NOT NULL DEFAULT 0")
         EnsureColumn(conn, "agent_run_change", "doc_hash_before", "doc_hash_before TEXT")
         EnsureColumn(conn, "agent_run_change", "doc_hash_after", "doc_hash_after TEXT")
+        EnsureColumn(conn, "agent_run_change", "restore_json", "restore_json TEXT")
     End Sub
 
     ''' <summary>

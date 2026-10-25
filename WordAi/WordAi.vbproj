@@ -340,6 +340,10 @@
     <Compile Include="WordCompletionManager.vb" />
     <Compile Include="WordJsonCommandSchema.vb" />
     <Compile Include="Services\WordGhostTextManager.vb" />
+    <Compile Include="Selection\WordSelectionToolbarGeometry.vb" />
+    <Compile Include="Selection\WordSelectionToolbar.vb" />
+    <Compile Include="Selection\WordSelectionToolbarController.vb" />
+    <Compile Include="HostEntry\WordContextMenu.vb" />
     <EmbeddedResource Include="ChatControl.resx">
       <DependentUpon>ChatControl.vb</DependentUpon>
     </EmbeddedResource>

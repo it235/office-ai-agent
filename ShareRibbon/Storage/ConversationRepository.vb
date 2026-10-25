@@ -24,9 +24,11 @@ Public Class ConversationRepository
     ''' 追加一条聊天消息到权威历史表 conversation_event，并把该会话登记进 session_summary 档案。
     ''' app_type 决定该会话归属于哪个宿主，document_id 决定它归属于哪一篇文档，
     ''' 历史侧边栏据此隔离 Word/Excel/PowerPoint 并优先显示当前文档的会话。
+    ''' 归属值必须先过 AppTypeContract.Normalize：口径见那个类，不要在调用方各自约定。
     ''' </summary>
     Public Shared Sub InsertMessage(sessionId As String, role As String, content As String, Optional isCollected As Boolean = False, Optional appType As String = "", Optional documentId As String = "", Optional documentName As String = "")
         OfficeAiDatabase.EnsureInitialized()
+        Dim appTypeNorm = AppTypeContract.Normalize(appType)
         Using conn As New SQLiteConnection(OfficeAiDatabase.GetConnectionString())
             conn.Open()
             Using cmd As New SQLiteCommand(
@@ -34,14 +36,14 @@ Public Class ConversationRepository
                 "VALUES (@event_id, @sid, @app, @doc, 'chat_message', @role, @content, @collected, datetime('now', 'localtime'))", conn)
                 cmd.Parameters.AddWithValue("@event_id", Guid.NewGuid().ToString())
                 cmd.Parameters.AddWithValue("@sid", sessionId)
-                cmd.Parameters.AddWithValue("@app", If(appType, ""))
+                cmd.Parameters.AddWithValue("@app", appTypeNorm)
                 cmd.Parameters.AddWithValue("@doc", If(documentId, ""))
                 cmd.Parameters.AddWithValue("@role", role)
                 cmd.Parameters.AddWithValue("@content", If(content, ""))
                 cmd.Parameters.AddWithValue("@collected", If(isCollected, 1, 0))
                 cmd.ExecuteNonQuery()
             End Using
-            UpsertSessionProfile(conn, sessionId, If(appType, ""), If(documentId, ""), If(documentName, ""))
+            UpsertSessionProfile(conn, sessionId, appTypeNorm, If(documentId, ""), If(documentName, ""))
         End Using
     End Sub
 
@@ -160,6 +162,8 @@ Public Class ConversationRepository
     ''' 现在无论走哪条链路，只要有消息就能出现在列表中。
     ''' appType 非空时只返回当前宿主创建的会话；升级前的历史行 app_type 为空，仍保留可见。
     ''' scope="document" 只返回当前文档的会话；"all" 返回全部但把当前文档排在最前。
+    ''' 排序键是「最近活跃」（MAX(created_at)），所以首次时间与最近时间都要回传：
+    ''' 前端按时间分组只能用真正决定顺序的那一列，否则分桶会和列表顺序自相矛盾。
     ''' </summary>
     Public Shared Function GetRecentSessions(limit As Integer,
                                             Optional appType As String = Nothing,
@@ -180,7 +184,8 @@ Public Class ConversationRepository
                 "   AND f.event_type = 'chat_message' AND f.role = 'user' ORDER BY f.created_at, f.rowid LIMIT 1), " &
                 "  (SELECT g.content FROM conversation_event g WHERE g.session_id = e.session_id " &
                 "   AND g.event_type = 'chat_message' ORDER BY g.created_at DESC, g.rowid DESC LIMIT 1), " &
-                "  IFNULL(p.custom_title, ''), IFNULL(p.document_id, ''), IFNULL(p.document_name, '') " &
+                "  IFNULL(p.custom_title, ''), IFNULL(p.document_id, ''), IFNULL(p.document_name, ''), " &
+                "  MAX(e.created_at) " &
                 "FROM conversation_event e " &
                 "LEFT JOIN session_summary p ON p.session_id = e.session_id " &
                 "WHERE e.event_type = 'chat_message' AND IFNULL(e.session_id, '') <> '' " &
@@ -202,6 +207,7 @@ Public Class ConversationRepository
                             .Title = If(String.IsNullOrEmpty(customTitle), derivedTitle, customTitle),
                             .Snippet = Truncate(ReadText(rdr, 3), 200),
                             .CreatedAt = ReadText(rdr, 1),
+                            .LastActiveAt = ReadText(rdr, 7),
                             .DocumentId = ReadText(rdr, 5),
                             .DocumentName = ReadText(rdr, 6),
                             .IsRenamed = Not String.IsNullOrEmpty(customTitle)

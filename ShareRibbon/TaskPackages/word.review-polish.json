@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "id": "word.review-polish",
+  "title": "审阅润色",
+  "application": "Word",
+  "entryActions": ["word.selection.proofread", "word.selection.rewrite"],
+  "capabilityIds": ["word.proofread"],
+  "skill": "word-document-agent",
+  "previewPolicy": {
+    "mode": "summary",
+    "requireBeforeWrite": true,
+    "note": "计划卡给出将要处理的段落数和最典型的几处前后对照；选区级改写不做整文高亮。"
+  },
+  "verifier": {
+    "assertions": [
+      { "fact": "writtenCount", "op": "gte", "value": 1, "why": "报成功却一轮没有任何写回，就是假成功" },
+      { "fact": "nativeUndoable", "op": "isTrue", "why": "Word 的每一步都应有原生撤销单元和首尾文档指纹，否则不能承诺一键撤销本轮" }
+    ],
+    "onFail": "repair"
+  },
+  "successCriteria": [
+    "选区内的错别字、标点和语法问题被真的写回文档，段落总数不变",
+    "结束摘要显示改动处数，并提供「撤销本轮」按钮",
+    "撤销后文档指纹回到任务前取值，残留 0 处"
+  ],
+  "deliverable": "文档内结果：原地替换当前选区文本，不新建文档、不插入批注框",
+  "explanation": {
+    "whatChanged": "本轮在选区内改回 {writtenCount} 处，段落结构未变。",
+    "whyHint": "按 word-document-agent 的校对判据逐处替换错别字、标点和明显语法问题，只动当前选区。",
+    "undoHint": "「撤销本轮」按宿主原生撤销整栈回退；撤销后仍显示同一份变更日志，便于核对。"
+  },
+  "recovery": {
+    "strategy": "rollback",
+    "notes": "宿主返回成功但观察不到实际变化时，按 CodeVerifyFailed 进既有 repair loop 重新规划；连续修复失败则回滚本轮并如实报告未改动。"
+  },
+  "goldenCases": ["L0-word-review-polish-pass", "L0-word-review-polish-fail-no-undo", "L0-word-review-polish-fail-no-write"],
+  "existingImplementation": {
+    "reuse": [
+      "ShareRibbon/Agent/QuickActionCatalog.vb",
+      "WordAi/Services/WordCapabilityRegistry.vb",
+      "ShareRibbon/Skills/word-document-agent/SKILL.md",
+      "ShareRibbon/Agent/Execution/AgentChangeLog.vb",
+      "ShareRibbon/Agent/LoopEngine.Planning.vb"
+    ],
+    "gap": "入口话术、capability、Skill 工具边界、变更事实都已有持有者；此前只有预览策略、验证断言、解释模板和交付物口径散在提示词与注释里，没有任何一份可校验的合同。本包只补这层合同，执行链一律复用 OfficeHarness -> AgentKernel -> LoopEngine 主链。"
+  }
+}

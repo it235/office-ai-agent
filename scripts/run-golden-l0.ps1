@@ -16,10 +16,85 @@ if (-not (Test-Path -LiteralPath $catalogPath)) {
 }
 
 Add-Type -Path $assemblyPath
-$catalog = Get-Content -LiteralPath $catalogPath -Raw | ConvertFrom-Json
+$catalog = Get-Content -LiteralPath $catalogPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $results = @()
 
+# E6-06: build a real change log out of the case's step observations, exactly the way the host does it
+# during a run. The fixture stays data (catalog.json) so a package's contract can be re-read without
+# touching this script, and a step the log must NOT record is itself an assertion.
+function New-TaskPackageChangeLog {
+    param($Case)
+    $log = New-Object ShareRibbon.Agent.AgentRunChangeLog
+    if ($null -eq $Case.canUndo) {
+        throw "Golden case $($Case.id) must state canUndo - the host undo-stack flag decides nativeUndoable"
+    }
+    $canUndo = [bool]$Case.canUndo
+    $index = 0
+    foreach ($step in @($Case.steps)) {
+        $index += 1
+        # ConvertFrom-Json hands back a PSCustomObject; JObject.FromObject on that yields a single
+        # "CliXml" property, so the observation has to round-trip through its own JSON text.
+        $observation = [Newtonsoft.Json.Linq.JObject]::Parse(($step.observation | ConvertTo-Json -Depth 8))
+        $toolId = [string]$step.toolId
+        $result = [ShareRibbon.Agent.ToolResult]::Succeed($toolId, "golden step $index", $null, $observation)
+        $record = $log.AddFromStep($toolId, $index, "golden step $index", $result, "golden-undo-$index", $canUndo)
+        $expectedRecorded = ($null -eq $step.recorded) -or [bool]$step.recorded
+        if ($expectedRecorded -and $null -eq $record) {
+            throw "Golden case $($Case.id) step ${index}: the change log rejected the fixture - the write-observation contract drifted"
+        }
+        if ((-not $expectedRecorded) -and $null -ne $record) {
+            throw "Golden case $($Case.id) step ${index}: a non-write observation entered the change log, so a read-only run would claim it modified the document"
+        }
+    }
+    return $log
+}
+
 foreach ($case in $catalog.cases) {
+    if ($case.kind -eq "task_package_outcome") {
+        $entryActionId = [string]$case.entryActionId
+        $packageId = [string]$case.packageId
+        $package = [ShareRibbon.Agent.TaskPackageCatalog]::FindByAction($entryActionId)
+        if ($null -eq $package) {
+            throw "Golden case $($case.id): entry action $entryActionId no longer resolves to a package, so E6-05 would never verify this task"
+        }
+        if ($package.Id -ne $packageId) {
+            throw "Golden case $($case.id): $entryActionId now belongs to package $($package.Id), not $packageId"
+        }
+
+        $changeLog = New-TaskPackageChangeLog $case
+        $reasons = @([ShareRibbon.Agent.TaskPackageOutcomeVerifier]::UnmetReasons($package, $changeLog))
+        $joined = $reasons -join " | "
+        if ($reasons.Count -ne [int]$case.expectedUnmetCount) {
+            throw "Golden case $($case.id) expected $($case.expectedUnmetCount) unmet assertion(s), got $($reasons.Count): $joined"
+        }
+        if ($case.expectedOutcome -eq "satisfied") {
+            if ($reasons.Count -gt 0) {
+                throw "Golden case $($case.id) ($packageId) should meet its declared success criteria, got: $joined"
+            }
+        }
+        elseif ($case.expectedOutcome -eq "unmet") {
+            if ($reasons.Count -eq 0) {
+                throw "Golden case $($case.id) ($packageId) must be able to fail - the verifier answered satisfied for a run the package does not accept"
+            }
+            foreach ($fact in @($case.expectedUnmetFacts)) {
+                if (-not $joined.Contains([string]$fact)) {
+                    throw "Golden case $($case.id) must name '$fact' in the failure text, got: $joined"
+                }
+            }
+        }
+        else {
+            throw "Golden case $($case.id) has expectedOutcome '$($case.expectedOutcome)'; only satisfied/unmet are meaningful"
+        }
+
+        $results += [pscustomobject]@{
+            Id = $case.id
+            Status = "PASS"
+            ErrorCode = "$packageId/$($case.expectedOutcome)"
+            HostCalls = $changeLog.Entries.Count
+        }
+        continue
+    }
+
     if ($case.kind -eq "contract") {
         if ($case.contractType -eq "context_pack") {
             $officeContext = New-Object ShareRibbon.Agent.Context.OfficeContext
@@ -67,7 +142,7 @@ foreach ($case in $catalog.cases) {
                 "PowerPointAi\ChatControl.vb"
             )
             foreach ($sourceFile in $sourceFiles) {
-                $source = Get-Content -LiteralPath (Join-Path $repoRoot $sourceFile) -Raw
+                $source = Get-Content -LiteralPath (Join-Path $repoRoot $sourceFile) -Raw -Encoding UTF8
                 if ($source -match 'Protected\s+(Overridable|Overrides)\s+Function\s+ExecuteJsonCommand\s*\(') {
                     throw "Golden case $($case.id): Boolean JSON override found in $sourceFile"
                 }
@@ -88,7 +163,7 @@ foreach ($case in $catalog.cases) {
                 throw "Golden case $($case.id): malformed LLM JSON returned a default intent and would overwrite the fallback"
             }
 
-            $routeSource = Get-Content -LiteralPath (Join-Path $repoRoot "ShareRibbon\Controls\Services\ChatRoutingOrchestrator.vb") -Raw
+            $routeSource = Get-Content -LiteralPath (Join-Path $repoRoot "ShareRibbon\Controls\Services\ChatRoutingOrchestrator.vb") -Raw -Encoding UTF8
             if ($routeSource -notmatch 'taskSpecRequiresExecution' -or
                 $routeSource -notmatch 'Not\s+taskSpecRequiresExecution') {
                 throw "Golden case $($case.id): TaskSpec execution fallback is missing"
@@ -101,18 +176,18 @@ foreach ($case in $catalog.cases) {
                 throw "Golden case $($case.id): E_NOINTERFACE must be terminal"
             }
 
-            $rendererSource = Get-Content -LiteralPath (Join-Path $repoRoot "PowerPointAi\Design\PowerPointSceneRenderer.vb") -Raw
+            $rendererSource = Get-Content -LiteralPath (Join-Path $repoRoot "PowerPointAi\Design\PowerPointSceneRenderer.vb") -Raw -Encoding UTF8
             if ($rendererSource -match 'As\s+(FillFormat|LineFormat|ShadowFormat|ColorFormat|Adjustments|PictureFormat|TextFrame2|TextRange2|Font2|ParagraphFormat2)') {
                 throw "Golden case $($case.id): renderer reintroduced a strongly typed Office style interface"
             }
 
-            $pptChatSource = Get-Content -LiteralPath (Join-Path $repoRoot "PowerPointAi\ChatControl.vb") -Raw
+            $pptChatSource = Get-Content -LiteralPath (Join-Path $repoRoot "PowerPointAi\ChatControl.vb") -Raw -Encoding UTF8
             if ($pptChatSource -notmatch 'ProfessionalDeckExecutor\.ExecuteAsToolResult\(\s*GetPowerPointEnvelopeParams\(envelope\),\s*preview\)') {
                 throw "Golden case $($case.id): CreateSlides preview flag is not propagated"
             }
         }
         elseif ($case.contractType -eq "excel_observer_compat") {
-            $excelChatSource = Get-Content -LiteralPath (Join-Path $repoRoot "ExcelAi\ChatControl.vb") -Raw
+            $excelChatSource = Get-Content -LiteralPath (Join-Path $repoRoot "ExcelAi\ChatControl.vb") -Raw -Encoding UTF8
             if ($excelChatSource -match 'BuildExcelRangePreview\(target\s+As\s+Microsoft\.Office\.Interop\.Excel\.Range' -or
                 $excelChatSource -match 'CountExcelFormulaErrors\(target\s+As\s+Microsoft\.Office\.Interop\.Excel\.Range' -or
                 $excelChatSource -match 'TryCast\(app\.Selection,\s*Microsoft\.Office\.Interop\.Excel\.Range\)') {
@@ -194,6 +269,29 @@ foreach ($case in $catalog.cases) {
         Status = "PASS"
         ErrorCode = $result.ErrorCode
         HostCalls = $hostCalls.Count
+    }
+}
+
+# Coverage is a golden assertion of its own: a catalog whose cases stopped covering the packages on disk
+# would still print "passed", and a package rejected at load time disappears from coverage silently.
+$loadedCount = [ShareRibbon.Agent.TaskPackageCatalog]::LoadFromRuntimeDirectories()
+$loadErrors = @([ShareRibbon.Agent.TaskPackageCatalog]::ValidationErrors)
+if ($loadErrors.Count -gt 0) {
+    throw "task package(s) rejected while loading: $($loadErrors -join ' | ') - a rejected package cannot be covered by a golden case"
+}
+$loadedPackages = @([ShareRibbon.Agent.TaskPackageCatalog]::Packages)
+if ($loadedCount -lt 1 -or $loadedPackages.Count -lt 1) {
+    throw "no task package loaded - the task_package_outcome cases below would prove nothing"
+}
+foreach ($package in $loadedPackages) {
+    $ownCases = @($catalog.cases | Where-Object { $_.kind -eq "task_package_outcome" -and $_.packageId -eq $package.Id })
+    $passCases = @($ownCases | Where-Object { $_.expectedOutcome -eq "satisfied" })
+    $failCases = @($ownCases | Where-Object { $_.expectedOutcome -eq "unmet" })
+    if ($passCases.Count -lt 1 -or $failCases.Count -lt 1) {
+        throw "task package $($package.Id) needs >=1 pass and >=1 fail golden case, got pass=$($passCases.Count) fail=$($failCases.Count)"
+    }
+    if (@($package.GoldenCases).Count -ne $ownCases.Count) {
+        throw "task package $($package.Id) declares $(@($package.GoldenCases).Count) golden case(s) but the catalog holds $($ownCases.Count) for it"
     }
 }
 

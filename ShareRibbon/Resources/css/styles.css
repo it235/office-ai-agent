@@ -930,6 +930,58 @@ pre.collapsible.collapsed {
     cursor: pointer;
 }
 
+/* ====== 历史分组（E2-05）====== */
+/* 组头只说明「哪篇文档 / 哪一段时间」，条目顺序仍由后端决定，前端不做重排 */
+.history-group + .history-group {
+    border-top: 1px solid #e6e9ee;
+}
+
+.history-group-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 20px 4px;
+    background: #f6f7f9;
+    font-size: 11px;
+    color: #8a94a3;
+}
+
+.history-group-label {
+    flex: 1 1 auto;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.history-group-count {
+    flex: 0 0 auto;
+    color: #aab3bf;
+}
+
+.history-group-current .history-group-label {
+    color: #4a6fa5;
+}
+
+.empty-state-hint {
+    margin-top: 8px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #888;
+}
+
+.empty-state-actions {
+    margin-top: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+}
+
+.empty-state-actions .history-empty-action {
+    margin-top: 0;
+}
+
 #sidebar-overlay {
     position: fixed;
     top: 0;
@@ -1922,6 +1974,23 @@ input:checked + .mcp-toggle-slider:before {
     background: #dc3545;
 }
 
+/* 用户拒绝与审批放弃：不能和"执行失败"画成同一个红叉 */
+.agent-step[data-status="skipped"],
+.agent-step[data-status="aborted"] {
+    border-color: #d1d5db;
+    background: #f9fafb;
+}
+
+.agent-step[data-status="skipped"] .agent-step-num,
+.agent-step[data-status="aborted"] .agent-step-num {
+    background: #9ca3af;
+}
+
+.agent-step[data-status="skipped"] .agent-step-desc,
+.agent-step[data-status="aborted"] .agent-step-desc {
+    color: #6b7280;
+}
+
 /* 步骤详情 */
 .agent-step-detail {
     padding: 10px 12px;
@@ -1942,6 +2011,53 @@ input:checked + .mcp-toggle-slider:before {
     border-top: 1px solid #e0e0e0;
     font-size: 13px;
     color: #495057;
+}
+
+/* Agent 计划卡信任信息：范围/数量/风险 */
+.agent-plan-trust {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 15px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #eee;
+}
+
+.agent-trust-chip {
+    font-size: 11px;
+    line-height: 1.5;
+    padding: 2px 9px;
+    border-radius: 10px;
+    background: #eef2f7;
+    color: #374151;
+    border: 1px solid #dbe3ec;
+}
+
+.agent-trust-chip.agent-trust-scope {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.agent-trust-chip.agent-trust-risk-medium {
+    background: #fffbeb;
+    border-color: #fcd34d;
+    color: #92400e;
+}
+
+.agent-trust-chip.agent-trust-risk-risky {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: #b91c1c;
+}
+
+.agent-plan-version {
+    font-size: 11px;
+    font-weight: normal;
+    padding: 1px 7px;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.25);
 }
 
 /* Agent 操作按钮 */
@@ -3741,6 +3857,70 @@ input:checked + .mcp-toggle-slider:before {
     border-left: 3px solid #ef4444;
 }
 
+.step-msg-skipped,
+.step-msg-aborted,
+.step-msg-pending {
+    background: #f3f4f6;
+    color: #4b5563;
+    border-left: 3px solid #9ca3af;
+}
+
+.step-msg-running {
+    background: #fffbeb;
+    color: #92400e;
+    border-left: 3px solid #f59e0b;
+}
+
+/* Agent 终态变更摘要 */
+.agent-change-summary {
+    margin: 0 15px 4px;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 12px;
+    color: #334155;
+}
+
+.agent-change-title {
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.agent-change-list {
+    margin: 0;
+    padding-left: 18px;
+    list-style: decimal;
+}
+
+.agent-change-list li {
+    margin-bottom: 4px;
+    line-height: 1.5;
+    word-break: break-word;
+}
+
+.agent-change-tool {
+    margin-right: 6px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: #e2e8f0;
+    color: #1e293b;
+    font-size: 11px;
+}
+
+.agent-change-partial {
+    margin-left: 6px;
+    color: #b45309;
+    font-size: 11px;
+}
+
+.agent-change-more,
+.agent-change-rollback {
+    margin-top: 4px;
+    color: #64748b;
+    font-size: 11px;
+}
+
 .agent-terminated {
     color: #6b7280;
     font-size: 13px;
@@ -3781,6 +3961,14 @@ input:checked + .mcp-toggle-slider:before {
     color: #b91c1c;
     font-size: 12px;
     margin-left: 8px;
+}
+
+/* 不提供一键撤销时必须说明原因，不能只留一个沉默的卡片 */
+.agent-undo-reason {
+    color: #6b7280;
+    font-size: 12px;
+    margin-left: 10px;
+    align-self: center;
 }
 
 /* Agent 模式指示器动画 */
@@ -3929,6 +4117,17 @@ input:checked + .mcp-toggle-slider:before {
     background: #eff6ff;
 }
 
+.onboarding-demo {
+    background: #2563eb;
+    color: #fff;
+    border: 1px solid #2563eb;
+    font-weight: 500;
+}
+
+.onboarding-demo:hover {
+    background: #1d4ed8;
+}
+
 .onboarding-actions {
     display: flex;
     align-items: center;
@@ -3944,4 +4143,89 @@ input:checked + .mcp-toggle-slider:before {
     font-size: 12px;
     text-decoration: underline;
     cursor: pointer;
+}
+
+/* E4-03 command palette */
+.command-palette-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(15, 23, 42, 0.35);
+    z-index: 1200;
+}
+
+.command-palette {
+    display: none;
+    position: fixed;
+    top: 12%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 88%;
+    max-width: 380px;
+    padding: 10px;
+    border: 1px solid #d9e2ef;
+    border-radius: 10px;
+    background: #ffffff;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+    z-index: 1201;
+}
+
+.command-palette-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 13px;
+    outline: none;
+}
+
+.command-palette-input:focus {
+    border-color: #4a6fa5;
+}
+
+.command-palette-list {
+    margin-top: 8px;
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.command-palette-item {
+    padding: 7px 9px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #1f2937;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.command-palette-item:hover,
+.command-palette-item.active {
+    background: #eef4ff;
+    color: #1d4ed8;
+}
+
+.command-palette-empty {
+    padding: 8px 9px;
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.command-palette-group {
+    padding: 6px 9px 2px;
+    font-size: 11px;
+    letter-spacing: .02em;
+    color: #6b7280;
+}
+
+.command-palette-hint {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #94a3b8;
+    text-align: right;
 }

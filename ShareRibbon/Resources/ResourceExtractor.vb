@@ -88,7 +88,8 @@ Public Class ResourceExtractor
                 {"reformat_template", "reformat-template.js"},
                 {"reformat_chat", "reformat-chat.js"},
                 {"proofread_ui", "proofread-ui.js"},
-                {"onboarding", "onboarding.js"}
+                {"onboarding", "onboarding.js"},
+                {"command_palette", "command-palette.js"}
             }
 
             ' 释放JS资源

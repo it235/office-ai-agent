@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "id": "excel.clean-and-fix",
+  "title": "清洗与公式修复",
+  "application": "Excel",
+  "entryActions": ["excel.selection.formula", "excel.selection.format"],
+  "capabilityIds": [],
+  "skill": "excel-table-agent",
+  "previewPolicy": {
+    "mode": "summary",
+    "requireBeforeWrite": true,
+    "note": "写前给出目标区域地址、行列数和最典型的几处 old/new；区域超过还原快照上限时先说明「这一步无法整块还原」，不允许静默写入。"
+  },
+  "verifier": {
+    "assertions": [
+      { "fact": "writtenCount", "op": "gte", "value": 1, "why": "声称清洗或补公式完成但零写回，就是假成功" },
+      { "fact": "changedCount", "op": "gte", "value": 1, "why": "写入必须被观察到状态变化，写回原值不算完成" }
+    ],
+    "onFail": "repair"
+  },
+  "successCriteria": [
+    "新增列的公式落在选区右侧相邻空白列，不覆盖已有数据",
+    "格式改动只作用于声明过的区域，其他 Sheet 与命名区域不变",
+    "结束摘要给出改动处数；区域级改动能一键还原，结构性改动明确说明不可整轮撤销"
+  ],
+  "deliverable": "文档内结果：当前工作表上的公式列与表格样式；报告类输出仍留在面板，不自动新建 Sheet",
+  "explanation": {
+    "whatChanged": "本轮写回 {writtenCount} 处、观察到 {changedCount} 处变化，带还原快照 {restoreCount} 条。",
+    "whyHint": "按 excel-table-agent 的公式与格式判据先确定字段和计算口径，再只在目标区域内写入。",
+    "undoHint": "区域级改动按还原快照整块写回执行前状态；插行插列、新建图表这类结构性改动不声明可还原，摘要里会单独列出。"
+  },
+  "recovery": {
+    "strategy": "rollback",
+    "notes": "部分步骤失败按 CodePartialApply 进既有 repair loop，还原快照跟随降级结果一起保留；连续修复失败则整轮还原并列出未成功步骤，不留半成品。"
+  },
+  "goldenCases": ["L0-excel-clean-and-fix-pass", "L0-excel-clean-and-fix-fail-rolled-back"],
+  "existingImplementation": {
+    "reuse": [
+      "ShareRibbon/Agent/QuickActionCatalog.vb",
+      "ShareRibbon/Skills/excel-table-agent/SKILL.md",
+      "ExcelAi/Undo/ExcelRunRestore.vb",
+      "ShareRibbon/Agent/Execution/AgentChangeLog.vb"
+    ],
+    "gap": "Excel 还原快照、区域采集和工具边界都已有持有者，本包不重做；缺的是把「写前必须预览、区域级才可撤销、结构性改动不承诺撤销」这套口径从各段注释收成一份合同，供验证器和结束摘要共用。"
+  }
+}

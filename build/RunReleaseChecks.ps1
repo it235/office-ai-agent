@@ -15,7 +15,14 @@ function Invoke-Step {
 
     Write-Host ""
     Write-Host "==> $Name"
+    $global:LASTEXITCODE = 0
     & $Action
+    # E5-05: a child script that ends with `exit 1` does not stop the caller and does not throw, so
+    # every step below that audits with an exit code used to print PASS even when it failed. Measured
+    # before the fix: a child `exit 1` produced "PASS" plus LASTEXITCODE=1 and the run kept going.
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Name failed with exit code $LASTEXITCODE"
+    }
     Write-Host "PASS: $Name"
 }
 
@@ -91,18 +98,13 @@ Invoke-Step 'Installer input audit' {
 }
 
 if (-not $SkipSmoke) {
-    $smokeScripts = @(
-        'scripts\smoke-ai-gateway-provider.ps1',
-        'scripts\smoke-word-capability-registry.ps1',
-        'scripts\smoke-memory-pipeline.ps1',
-        'scripts\smoke-skills-registry.ps1',
-        'scripts\smoke-db-schema-drift.ps1'
-    )
-
-    foreach ($script in $smokeScripts) {
-        Invoke-Step "Smoke $script" {
-            & (Join-Path $repoRoot $script)
-        }
+    # E5-05: this was a second, private copy of the gate list and it had drifted to 5 of 22 entries,
+    # so the capability-consistency guards (P7/P8) and every panel-contract gate were never part of a
+    # release check even though the plan row says a drifting list must fail the build. The list now
+    # has one owner (scripts\run-code-checks.ps1). It is called without -SkipBuild on purpose: the
+    # reflection-based gates read bin\Debug, not the Release output built above.
+    Invoke-Step 'Code gates (scripts\run-code-checks.ps1)' {
+        & (Join-Path $repoRoot 'scripts\run-code-checks.ps1')
     }
 }
 

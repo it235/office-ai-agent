@@ -43,7 +43,7 @@ Namespace Agent.Harness
                     cmd.Parameters.AddWithValue("@run_id", runId)
                     cmd.Parameters.AddWithValue("@turn_id", If(turn?.TurnId, ""))
                     cmd.Parameters.AddWithValue("@session_id", If(turn?.SessionId, ""))
-                    cmd.Parameters.AddWithValue("@app_type", If(turn?.AppType, ""))
+                    cmd.Parameters.AddWithValue("@app_type", AppTypeContract.Normalize(turn?.AppType))
                     cmd.Parameters.AddWithValue("@status", "running")
                     cmd.Parameters.AddWithValue("@user_text", DbText(turn?.Text))
                     cmd.Parameters.AddWithValue("@started_at", ToDbTime(startedAt))

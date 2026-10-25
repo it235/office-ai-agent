@@ -19,6 +19,9 @@ Public Class ThisAddIn
     Private chatTaskPane As Microsoft.Office.Tools.CustomTaskPane
     Public Shared chatControl As ChatControl
 
+    ' E4-02 右键菜单入口：面板打开过才挂，关闭加载项时按 Tag 摘干净
+    Private contextMenu As ExcelAi.HostEntry.ExcelContextMenu
+
     ' XLL 路径缓存：首次找到后不再重复搜索
     Private Shared _cachedXllPath As String = Nothing
 
@@ -131,6 +134,16 @@ Public Class ThisAddIn
     End Sub
 
     Private Sub ThisAddIn_Shutdown() Handles Me.Shutdown
+        ' 右键菜单：按 Tag 摘掉本加载项挂上去的菜单项并解绑事件，否则宿主菜单里会留下死项
+        If contextMenu IsNot Nothing Then
+            Try
+                contextMenu.Detach()
+            Catch ex As Exception
+                Debug.WriteLine($"Excel 右键菜单入口释放失败: {ex.Message}")
+            End Try
+            contextMenu = Nothing
+        End If
+
         ' 清理定时器资源
         If widthTimer IsNot Nothing Then
             widthTimer.Stop()
@@ -310,6 +323,34 @@ Public Class ThisAddIn
     End Function
 
     ' 解决WPS中无法显示正常宽度的问题
+    ''' <summary>
+    ''' E4-02：把 Excel 的 AI 动作挂到单元格右键菜单。只在面板打开过之后挂，且默认由
+    ''' enableContextMenu 控制——改宿主既有菜单不能是 opt-out。
+    ''' </summary>
+    Private Sub EnsureContextMenu()
+        If Not ChatSettings.EnableContextMenu Then Return
+
+        Try
+            If contextMenu Is Nothing Then
+                contextMenu = New ExcelAi.HostEntry.ExcelContextMenu(Me.Application)
+            End If
+            contextMenu.Attach(AddressOf OnContextMenuAction)
+        Catch ex As Exception
+            Debug.WriteLine($"Excel 右键菜单入口初始化失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>菜单项只把入口动作（话术＋id）交回面板的统一入口，执行仍走唯一那条 Agent 主链。</summary>
+    Private Sub OnContextMenuAction(action As ShareRibbon.Agent.QuickAction)
+        Try
+            If chatControl Is Nothing Then Return
+            If chatTaskPane IsNot Nothing Then chatTaskPane.Visible = True
+            chatControl.StartAgentFromHostEntry(action)
+        Catch ex As Exception
+            Debug.WriteLine($"Excel 右键菜单动作执行失败: {ex.Message}")
+        End Try
+    End Sub
+
     Private Sub ChatTaskPane_VisibleChanged(sender As Object, e As EventArgs)
         Dim taskPane As Microsoft.Office.Tools.CustomTaskPane = CType(sender, Microsoft.Office.Tools.CustomTaskPane)
         If taskPane.Visible Then
@@ -317,6 +358,10 @@ Public Class ThisAddIn
                 EnsureWidthTimers()
                 widthTimer.Start()
             End If
+            ' E4-05：入口开关来自配置文件，读之前必须先保证它被加载过一次，否则进程内第一次打开面板
+            ' 读到的是代码默认值，用户开过的右键菜单这一次就是「没反应」。
+            ChatSettings.EnsureLoaded(New ApplicationInfo("Excel", OfficeApplicationType.Excel))
+            EnsureContextMenu()
         End If
     End Sub
 
@@ -346,17 +391,11 @@ Public Class ThisAddIn
         End If
     End Sub
 
-    Dim loadChatHtml As Boolean = True
-
-    Public Async Sub ShowChatTaskPane()
+    Public Sub ShowChatTaskPane()
         EnsureCoreServicesLoaded()
         CreateChatTaskPane()
         If chatTaskPane Is Nothing Then Return
         chatTaskPane.Visible = True
-        If loadChatHtml Then
-            loadChatHtml = False
-            Await chatControl.LoadLocalHtmlFile()
-        End If
     End Sub
 
     Public Sub ShowDeepseekTaskPane()

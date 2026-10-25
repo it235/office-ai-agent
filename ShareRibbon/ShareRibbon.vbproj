@@ -201,6 +201,7 @@
     <Compile Include="Config\ConfigManager.vb" />
     <Compile Include="Config\MemoryConfig.vb" />
     <Compile Include="Storage\OfficeAiDatabase.vb" />
+    <Compile Include="Storage\AppTypeContract.vb" />
     <Compile Include="Storage\AgentMemoryRepository.vb" />
     <Compile Include="Storage\AgentChangeLogRepository.vb" />
     <Compile Include="Storage\MemoryRepository.vb" />
@@ -272,6 +273,7 @@
     <Compile Include="Agent\AgentKernel.vb" />
     <Compile Include="Agent\AiNativeRuntime.vb" />
     <Compile Include="Agent\ExecutionPathPolicy.vb" />
+    <Compile Include="Agent\LoopEngine.Coverage.vb" />
     <Compile Include="Agent\LoopEngine.Planning.vb" />
     <Compile Include="Agent\LoopEngine.vb" />
     <Compile Include="Agent\AgentSession.vb" />
@@ -298,6 +300,13 @@
     <Compile Include="Agent\Execution\SafetyGate.vb" />
     <Compile Include="Agent\Execution\SafetyChecker.vb" />
     <Compile Include="Agent\Execution\AgentChangeLog.vb" />
+    <Compile Include="Agent\Execution\AgentWriteLedger.vb" />
+    <Compile Include="Agent\QuickActionCatalog.vb" />
+    <Compile Include="Agent\TaskPackageModels.vb" />
+    <Compile Include="Agent\TaskPackageCatalog.vb" />
+    <Compile Include="Agent\TaskPackageCatalog.Parsing.vb" />
+    <Compile Include="Agent\TaskPackageOutcomeVerifier.vb" />
+    <Compile Include="Agent\HostContextMenu.vb" />
     <Compile Include="Config\WebView2Loader.vb" />
     <Compile Include="Config\WebView2EnvironmentCache.vb" />
     <Compile Include="Config\SqliteAssemblyResolver.vb" />
@@ -396,8 +405,11 @@
     <Compile Include="Controls\Services\ChatRoutingOrchestrator.vb" />
     <Compile Include="Controls\Services\ChatSendValidator.vb" />
     <Compile Include="Controls\Services\ModelConfigGate.vb" />
+    <Compile Include="Controls\Services\PrivacyConsentGate.vb" />
     <Compile Include="Controls\Services\ModelConnectivityTester.vb" />
     <Compile Include="Controls\Services\OnboardingService.vb" />
+    <Compile Include="Controls\Services\HostHotkeyWatcher.vb" />
+    <Compile Include="Controls\Services\CommandPaletteService.vb" />
     <Compile Include="Controls\Services\MemoryTurnRecorder.vb" />
     <Compile Include="Controls\Services\ReformatService.vb" />
     <Compile Include="Controls\Services\HistorySessionService.vb" />
@@ -578,6 +590,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Tools\**\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="TaskPackages\**\*.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

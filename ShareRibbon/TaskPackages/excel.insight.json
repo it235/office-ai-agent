@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "id": "excel.insight",
+  "title": "表格问答与洞察",
+  "application": "Excel",
+  "entryActions": ["excel.selection.explain"],
+  "capabilityIds": [],
+  "skill": "excel-table-agent",
+  "previewPolicy": {
+    "mode": "none",
+    "requireBeforeWrite": false,
+    "note": "只读任务：结果输出在面板里，不碰工作表；因此没有写前预览，验证器反过来要求本轮零写入。"
+  },
+  "verifier": {
+    "assertions": [
+      { "fact": "writtenCount", "op": "eq", "value": 0, "why": "洞察包声明只读，任何写回都是越权" },
+      { "fact": "hasChanges", "op": "isFalse", "why": "文档/工作表状态必须与任务前一致" }
+    ],
+    "onFail": "report"
+  },
+  "successCriteria": [
+    "结论引用了选区内真实的列名、行数和取值，而不是泛泛而谈",
+    "工作表内容和数字格式与任务前完全一致，任务后面板里能看到只读标记",
+    "异常点至少给出定位（单元格地址或行号），用户能点过去核对"
+  ],
+  "deliverable": "面板内结果：解读文本 + 异常点清单，不新增 Sheet、不改工作表",
+  "explanation": {
+    "whatChanged": "本轮读取数据并输出结论，写回 {writtenCount} 处；工作表未被改动。",
+    "whyHint": "按 excel-table-agent 的数据理解判据读取区域，先判断字段含义和分布，再给结论与异常定位。",
+    "undoHint": "只读任务无需撤销；若你需要把结论落成表格，请改用「清洗与公式修复」。"
+  },
+  "recovery": {
+    "strategy": "degrade",
+    "notes": "区域过大读不动时降级为采样说明并明确告知采样范围；一旦检测到写回，按只读合同立刻停止并把差异报给用户，而不是继续解释。"
+  },
+  "goldenCases": ["L0-excel-insight-pass", "L0-excel-insight-fail-wrote"],
+  "existingImplementation": {
+    "reuse": [
+      "ShareRibbon/Agent/QuickActionCatalog.vb",
+      "ShareRibbon/Skills/excel-table-agent/SKILL.md",
+      "ShareRibbon/Agent/Execution/AgentChangeLog.vb"
+    ],
+    "gap": "Excel 侧还没有宿主 capability 注册表（开放待办 #36），所以本包不声明 capabilityIds；缺的是「只读任务也要有可校验合同」这件事——此前只读的承诺只写在入口话术里，没有任何断言能在 run 结束时核对是否真的没写。"
+  }
+}

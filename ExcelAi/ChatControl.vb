@@ -101,7 +101,8 @@ Public Class ChatControl
         ' 初始化 WebView2
         Await InitializeWebView2()
         InitializeWebView2Script()
-        InitializeSettings()
+        ' E4-05：这里原来还手动调用过一次 InitializeSettings()，与基类在导航完成时那次重复；
+        ' 设置注入由基类的「一次装载一次初始化」负责，三端口径一致。
     End Sub
 
 
@@ -388,6 +389,13 @@ Public Class ChatControl
     Protected Overrides Function GetOfficeAppType() As String
         Return "Excel"
     End Function
+
+    ''' <summary>
+    ''' E4-03：快捷键很可能在任务窗格收起时被按下，先让宿主把窗格展开，命令面板才有落点。
+    ''' </summary>
+    Protected Overrides Sub EnsureHostTaskPaneVisible()
+        Globals.ThisAddIn.ShowChatTaskPane()
+    End Sub
 
     ''' <summary>
     ''' 会话绑定的文档：只在 UI 线程读取活动工作簿完整路径，未保存工作簿按通用会话处理。
@@ -1169,6 +1177,55 @@ Public Class ChatControl
     End Function
 
     ''' <summary>
+    ''' Excel 没有整栈撤销：撤销本轮 = 按写入顺序的逆序，把每一步的目标区域写回执行前。
+    ''' 任何一步拒绝（区域被用户又改过、形状变了、活动工作簿不对）都如实停下来说明已还原几处，
+    ''' 不假装整轮干净回退，也不把本轮标记成已回滚——用户处理完冲突后还能再点一次。
+    ''' </summary>
+    Protected Overrides Function PerformUndoAgentRun(runId As String) As Agent.AgentRunUndoResult
+        Dim scope = AgentChangeLogRepository.GetUndoScopeByRun(runId)
+        If Not scope.FullyUndoable Then
+            Return Agent.AgentRunUndoResult.Failed(If(String.IsNullOrWhiteSpace(scope.Reason),
+                                                      "本轮没有可安全还原的写入", scope.Reason))
+        End If
+
+        Dim snapshots = AgentChangeLogRepository.GetRestoreSnapshotsByRun(runId)
+        If snapshots.Count <> scope.WrittenCount Then
+            Return Agent.AgentRunUndoResult.Failed("本轮有改动缺少还原快照，一键回退可能只撤掉一半，已拒绝执行。")
+        End If
+
+        Dim app = Globals.ThisAddIn.Application
+        If app Is Nothing Then Return Agent.AgentRunUndoResult.Failed("无法获取 Excel 应用对象。")
+
+        Dim screenUpdated As Boolean = False
+        Try
+            app.ScreenUpdating = False
+            screenUpdated = True
+            Dim restored As Integer = 0
+            For index = snapshots.Count - 1 To 0 Step -1
+                Dim kind = If(snapshots(index)("kind")?.ToString(), "")
+                If Not String.Equals(kind, ExcelUndo.ExcelRunRestore.RestoreKind, StringComparison.Ordinal) Then
+                    Return Agent.AgentRunUndoResult.Failed($"还原快照类型「{kind}」不是 Excel 能重放的格式，已停止还原。")
+                End If
+                Dim reason = ExcelUndo.ExcelRunRestore.Replay(app, TryCast(snapshots(index)("state"), JObject))
+                If reason.Length > 0 Then
+                    Return Agent.AgentRunUndoResult.Failed(
+                        $"已还原 {restored} 处区域，剩余 {snapshots.Count - restored} 处未能还原：{reason}")
+                End If
+                restored += 1
+            Next
+            AgentChangeLogRepository.MarkRunRolledBack(runId)
+            Return Agent.AgentRunUndoResult.Succeeded($"已按快照还原本轮 {restored} 处区域", verified:=True)
+        Catch ex As Exception
+            Debug.WriteLine($"PerformUndoAgentRun(Excel) 失败: {ex.Message}")
+            Return Agent.AgentRunUndoResult.Failed($"还原失败: {AppLogger.Redact(ex.Message)}")
+        Finally
+            If screenUpdated Then
+                Try : app.ScreenUpdating = True : Catch : End Try
+            End If
+        End Try
+    End Function
+
+    ''' <summary>
     ''' Agent 原生工具必须返回可观察的 ToolResult。Excel 先以宿主快照覆盖全部 JSON 命令，
     ''' 高频写工具会额外记录目标 Range、公式错误数、UsedRange 与图表数量变化。
     ''' </summary>
@@ -1176,11 +1233,19 @@ Public Class ChatControl
         Dim commandEnvelope As JObject = Nothing
         Dim toolId As String = "ExcelCommands"
         Dim beforeSnapshot As JObject = Nothing
+        Dim restoreNode As JObject = Nothing
+        Dim restoreBefore As JObject = Nothing
 
         Try
             commandEnvelope = ParseExcelCommandEnvelope(jsonCode)
             toolId = GetEnvelopeToolId(commandEnvelope, "ExcelCommands")
             beforeSnapshot = CaptureExcelCommandSnapshot(commandEnvelope)
+            ' 还原快照要在写之前抓：Excel 没有"一条命令一个撤销记录"的边界，
+            ' 只能把目标区域整块写回执行前。预览不落地，无需采集。
+            Dim targetAddress = If(beforeSnapshot?("targetAddress")?.ToString(), "")
+            If Not preview Then
+                restoreBefore = ExcelUndo.ExcelRunRestore.Capture(Globals.ThisAddIn.Application, targetAddress)
+            End If
             Dim success = ExecuteJsonCommandCore(jsonCode, preview)
             ' 预览被用户拒绝时核心返回 True（UI 语义：取消不是错误），但 ToolResult 不能据此报成功。
             If ConsumePreviewCancelled() Then
@@ -1188,6 +1253,11 @@ Public Class ChatControl
             End If
             Dim afterSnapshot = CaptureExcelCommandSnapshot(commandEnvelope)
             Dim observation = BuildExcelCommandObservation(toolId, commandEnvelope, success, beforeSnapshot, afterSnapshot)
+            If restoreBefore IsNot Nothing Then
+                Dim restoreAfter = ExcelUndo.ExcelRunRestore.Capture(Globals.ThisAddIn.Application, targetAddress)
+                restoreNode = ExcelUndo.ExcelRunRestore.BuildNode(restoreBefore, restoreAfter,
+                                                                  IsExcelStructureStable(beforeSnapshot, afterSnapshot))
+            End If
             Dim summary = If(observation?("summary")?.ToString(), $"{toolId} 执行完成")
             Dim observationError = If(afterSnapshot?("captureError")?.ToString(),
                                       beforeSnapshot?("captureError")?.ToString())
@@ -1195,41 +1265,46 @@ Public Class ChatControl
             ' A write may already have succeeded even when observation fails. Never
             ' repeat it automatically, because a second execution could duplicate data.
             If success AndAlso Not String.IsNullOrWhiteSpace(observationError) Then
-                observation("rollback") = BuildExcelRollbackNote(True)
-                Return Agent.ToolResult.Failed(
+                observation("rollback") = BuildExcelRollbackNote(True, restoreNode IsNot Nothing)
+                Return WithRestore(Agent.ToolResult.Failed(
                     toolId,
                     $"Excel 命令可能已执行，但结果观察失败: {observationError}",
                     errorCode:=ExceptionClassifier.CodeObservationFailed,
                     userMessage:="Excel 操作可能已经完成，但插件无法安全验证结果；已停止自动重试",
                     recoverable:=False,
-                    observation:=observation)
+                    observation:=observation), restoreNode)
             End If
 
             If success Then
-                Return Agent.ToolResult.Succeed(toolId,
-                                                summary,
-                                                data:=New With {.targetRefs = observation("targetRefs")},
-                                                observation:=observation)
+                Return WithRestore(Agent.ToolResult.Succeed(toolId,
+                                                            summary,
+                                                            data:=New With {.targetRefs = observation("targetRefs")},
+                                                            observation:=observation), restoreNode)
             End If
 
-            ' 失败但工作表确实被改过：Excel 无法安全自动撤销，只能把半应用状态如实报给 Agent，
-            ' 并用 recoverable=False 掐断自动重放——重放会在已改过的表上再改一次。
+            ' 失败但工作表确实被改过：Excel 不能整栈撤销，只能用还原快照回退目标区域；
+            ' 没有快照时如实上报半应用，并用 recoverable=False 掐断自动重放——重放会在已改过的表上再改一次。
             Dim partialApply = observation.Value(Of Boolean)("changed")
-            observation("rollback") = BuildExcelRollbackNote(partialApply)
+            Dim hasRestore = restoreNode IsNot Nothing
+            observation("rollback") = BuildExcelRollbackNote(partialApply, hasRestore)
             Dim failureMessage = If(partialApply, $"{summary}；工作表已被部分修改且未回滚", summary)
-            Return Agent.ToolResult.Failed(toolId,
-                                           failureMessage,
-                                           errorCode:=If(partialApply,
-                                                         ExceptionClassifier.CodePartialApply,
-                                                         ExceptionClassifier.CodeUnknown),
-                                           userMessage:=If(partialApply,
-                                                           "Excel 操作部分完成，插件无法自动撤销，请检查工作表后再继续",
-                                                           failureMessage),
-                                           recoverable:=Not partialApply,
-                                           observation:=observation)
+            Return WithRestore(Agent.ToolResult.Failed(toolId,
+                                                       failureMessage,
+                                                       errorCode:=If(partialApply,
+                                                                     ExceptionClassifier.CodePartialApply,
+                                                                     ExceptionClassifier.CodeUnknown),
+                                                       userMessage:=If(partialApply,
+                                                                       If(hasRestore,
+                                                                          "Excel 操作部分完成；本轮改动可以按「撤销本轮」还原，请核对后再继续",
+                                                                          "Excel 操作部分完成，插件无法自动撤销，请检查工作表后再继续"),
+                                                                       failureMessage),
+                                                       recoverable:=Not partialApply,
+                                                       observation:=observation), restoreNode)
         Catch ex As Exception
             Dim crashResult = Agent.ToolResult.FromException(toolId, ex)
-            Dim crashObservation = BuildExcelCrashObservation(commandEnvelope, beforeSnapshot)
+            Dim crashRestore = BuildExcelCrashRestore(commandEnvelope, restoreBefore, beforeSnapshot)
+            crashResult.RestoreSnapshot = crashRestore
+            Dim crashObservation = BuildExcelCrashObservation(commandEnvelope, beforeSnapshot, crashRestore IsNot Nothing)
             If crashObservation IsNot Nothing Then
                 crashResult.Observation = crashObservation
                 crashResult.Recoverable = Not crashObservation.Value(Of Boolean)("changed")
@@ -1240,19 +1315,64 @@ Public Class ChatControl
 
     ''' <summary>
     ''' Excel 没有“一条命令 = 一个撤销记录”的事务边界：Application.Undo 会连带撤掉用户此前的操作，
-    ''' 所以宿主只做诚实上报——attempted=False 表示根本没尝试回滚，不让 Agent 误以为文档已还原。
+    ''' 所以执行这一步不做即时回滚——attempted=False 表示根本没尝试，不让 Agent 误以为文档已还原。
+    ''' 有还原快照时，本轮结束时由“撤销本轮”按快照写回目标区域；没有快照就只能人工核对。
     ''' </summary>
-    Private Shared Function BuildExcelRollbackNote(partialApply As Boolean) As JObject
+    Private Shared Function BuildExcelRollbackNote(partialApply As Boolean, hasRestore As Boolean) As JObject
+        Dim unresolved = If(hasRestore,
+                            "工作表已部分修改且未即时回滚；本轮可用「撤销本轮」按快照还原目标区域",
+                            "Excel 不支持整栈自动撤销本轮改动，请按变更清单人工检查或手动撤销")
         Return New JObject From {
             {"succeeded", False},
             {"attempted", False},
             {"verified", False},
             {"partialApply", partialApply},
-            {"error", If(partialApply, "Excel 不支持安全地自动撤销本轮改动，请人工检查或手动撤销", "本轮未检测到工作表变化，无需回滚")}
+            {"error", If(partialApply, unresolved, "本轮未检测到工作表变化，无需回滚")}
         }
     End Function
 
-    Private Function BuildExcelCrashObservation(envelope As JObject, beforeSnapshot As JObject) As JObject
+    ''' <summary>还原快照走 ToolResult 旁路字段，不进 Observation——观察结果要给模型看，单元格内容不能进提示词。</summary>
+    Private Shared Function WithRestore(result As Agent.ToolResult, restore As JObject) As Agent.ToolResult
+        If result IsNot Nothing AndAlso restore IsNot Nothing Then result.RestoreSnapshot = restore
+        Return result
+    End Function
+
+    ''' <summary>
+    ''' 行列数、图表数、工作簿/工作表名和目标地址一致才算结构没动：插行插列、新建图表意味着区域位移
+    ''' 或多了对象，只把值写回去会留下一半对不上的东西，这种情况不给还原快照。
+    ''' </summary>
+    Private Shared Function IsExcelStructureStable(before As JObject, after As JObject) As Boolean
+        If before Is Nothing OrElse after Is Nothing Then Return False
+        If before("captureError") IsNot Nothing OrElse after("captureError") IsNot Nothing Then Return False
+        For Each key In {"workbook", "worksheet", "targetAddress"}
+            If Not String.Equals(If(before(key)?.ToString(), ""), If(after(key)?.ToString(), ""), StringComparison.Ordinal) Then
+                Return False
+            End If
+        Next
+        Return GetSnapshotInteger(before, "usedRows") = GetSnapshotInteger(after, "usedRows") AndAlso
+               GetSnapshotInteger(before, "usedColumns") = GetSnapshotInteger(after, "usedColumns") AndAlso
+               GetSnapshotInteger(before, "chartCount") = GetSnapshotInteger(after, "chartCount")
+    End Function
+
+    ''' <summary>
+    ''' 异常路径的还原快照：命令写了一半就抛，这时“撤销本轮”比正常路径更有用。
+    ''' 采集不到或结构对不上就返回 Nothing，宁可不给按钮也不拿对不上号的快照去写区域。
+    ''' </summary>
+    Private Function BuildExcelCrashRestore(envelope As JObject, restoreBefore As JObject, structureBefore As JObject) As JObject
+        Try
+            If envelope Is Nothing OrElse restoreBefore Is Nothing OrElse structureBefore Is Nothing Then Return Nothing
+            Dim targetAddress = If(structureBefore("targetAddress")?.ToString(), "")
+            Dim structureAfter = CaptureExcelCommandSnapshot(envelope)
+            Dim restoreAfter = ExcelUndo.ExcelRunRestore.Capture(Globals.ThisAddIn.Application, targetAddress)
+            Return ExcelUndo.ExcelRunRestore.BuildNode(restoreBefore, restoreAfter,
+                                                       IsExcelStructureStable(structureBefore, structureAfter))
+        Catch ex As Exception
+            Debug.WriteLine($"[Excel] 异常路径还原快照采集失败: {ex.Message}")
+            Return Nothing
+        End Try
+    End Function
+
+    Private Function BuildExcelCrashObservation(envelope As JObject, beforeSnapshot As JObject, hasRestore As Boolean) As JObject
         Try
             If envelope Is Nothing OrElse beforeSnapshot Is Nothing Then Return Nothing
             Dim afterSnapshot = CaptureExcelCommandSnapshot(envelope)
@@ -1266,8 +1386,12 @@ Public Class ChatControl
                 {"after", afterSnapshot},
                 {"warnings", New JArray()}
             }
-            If changed Then CType(observation("warnings"), JArray).Add("异常发生在工作表已发生变化之后，本轮改动未回滚")
-            observation("rollback") = BuildExcelRollbackNote(changed)
+            If changed Then
+                CType(observation("warnings"), JArray).Add(If(hasRestore,
+                                                              "异常发生在工作表已发生变化之后，本轮改动未即时回滚，可用「撤销本轮」还原",
+                                                              "异常发生在工作表已发生变化之后，本轮改动未回滚"))
+            End If
+            observation("rollback") = BuildExcelRollbackNote(changed, hasRestore)
             Return observation
         Catch ex As Exception
             Debug.WriteLine($"[Excel] 异常路径观察采集失败: {ex.Message}")

@@ -1,8 +1,9 @@
 /**
- * onboarding.js - 首次使用引导（E3-01）
+ * onboarding.js - 首次使用引导（E3-01 / E3-02）
  *
  * 只剩两步：隐私确认 -> 示例任务。选服务商、填 Key、测连接都用既有配置窗口（openApiConfigForm ->
  * ConfigApiForm），这里不再实现第二套配置逻辑，也不在前端保存步骤状态：向导走到哪一步只由 VB 推来的状态决定。
+ * 示例任务的话术全部来自 QuickActionCatalog：带 request 的那条是一键示例，点了就交给 startAgent 主链。
  */
 
 const ONBOARDING_STEPS = ['privacy', 'example'];
@@ -37,6 +38,8 @@ function onboardingClose() {
 window.renderOnboarding = function (state) {
     if (state) window.onboardingState = state;
     state = window.onboardingState || {};
+    // 设置面板里那一行和向导用的是同一份状态：同意状态、边界文案都只从宿主这一份 payload 来。
+    syncPrivacyConsentRow(state);
 
     const existing = onboardingCard(false);
     const isAuto = existing && existing.dataset.pinned !== 'true';
@@ -50,7 +53,7 @@ window.renderOnboarding = function (state) {
     if (!view) return;
     view.innerHTML = '';
     view.appendChild(onboardingHeader(state));
-    view.appendChild(onboardingStep(state) === 'privacy' ? onboardingPrivacy() : onboardingExample(state));
+    view.appendChild(onboardingStep(state) === 'privacy' ? onboardingPrivacy(state) : onboardingExample(state));
 };
 
 function onboardingHeader(state) {
@@ -133,23 +136,54 @@ function onboardingHint(text) {
     return hint;
 }
 
-function onboardingPrivacy() {
+function onboardingPrivacy(state) {
+    const list = onboardingPrivacyList(state, 'onboarding-privacy');
+    return onboardingStepNode('1. 隐私确认', [list], onboardingActions([
+        onboardingButton('同意并继续', 'agent-btn-execute', function () {
+            setPrivacyConsent(true);
+        })
+    ]));
+}
+
+/**
+ * 数据边界三条说明：文案由宿主（PrivacyConsentGate）下发，前端只渲染。
+ * 在这里抄一份是最坏的那种副本——用户看到的承诺会和实际发送的内容各自漂移。
+ */
+function onboardingPrivacyList(state, className) {
     const list = document.createElement('ul');
-    list.className = 'onboarding-privacy';
-    [
-        '文档内容、选区和会话会发送给你所选的模型接口，用于生成结果。',
-        '会话历史、变更日志和记忆只保存在本机 SQLite，不上传统计服务。',
-        'API Key 只写入当前用户的加密存储，配置文件里只保留占位符。'
-    ].forEach(function (text) {
+    list.className = className;
+    ((state && state.privacyBoundary) || []).forEach(function (text) {
         const li = document.createElement('li');
         li.textContent = text;
         list.appendChild(li);
     });
-    return onboardingStepNode('1. 隐私确认', [list], onboardingActions([
-        onboardingButton('同意并继续', 'agent-btn-execute', function () {
-            sendMessageToServer({ type: 'onboardingSetPrivacy', accepted: 'true' });
-        })
-    ]));
+    return list;
+}
+
+function setPrivacyConsent(accepted) {
+    sendMessageToServer({ type: 'onboardingSetPrivacy', accepted: accepted ? 'true' : 'false' });
+}
+
+/**
+ * 设置面板中的「数据边界同意」行（E3-05）：勾选状态与边界文案都只由宿主推来的状态决定，
+ * 点一下就把选择送回去，宿主写完立刻回推真实状态——用户看到的永远是盘上的那一份。
+ * 宿主还没给过状态时保持 disabled，不显示成一个能点的默认值。
+ */
+function syncPrivacyConsentRow(state) {
+    const box = document.getElementById('settings-privacy-consent');
+    if (!box) return;
+    const known = !!(state && typeof state.privacyAccepted === 'boolean');
+    box.disabled = !known;
+    box.checked = !!(state && state.privacyAccepted === true);
+
+    const list = document.getElementById('settings-privacy-boundary');
+    if (!list) return;
+    while (list.firstChild) list.removeChild(list.firstChild);
+    ((state && state.privacyBoundary) || []).forEach(function (text) {
+        const li = document.createElement('li');
+        li.textContent = text;
+        list.appendChild(li);
+    });
 }
 
 function onboardingExample(state) {
@@ -158,13 +192,18 @@ function onboardingExample(state) {
         rows.push(onboardingHint('还没有可用的模型配置，先配好模型服务，示例才能真的跑起来。'));
         rows.push(onboardingConfigButton());
     } else {
-        rows.push(onboardingHint('点一个例子填进输入框，或直接写你自己的需求。'));
+        rows.push(onboardingHint('一键示例直接把任务交给 Agent 跑一次；其余例子填进输入框，也可以自己写需求。'));
     }
-    (state.examples || []).forEach(function (text) {
-        const item = onboardingButton(text, 'onboarding-example', function () {
-            onboardingFillInput(text);
-            sendMessageToServer({ type: 'onboardingFinish' });
-        });
+    (state.examples || []).forEach(function (sample) {
+        const text = (sample && sample.text) || '';
+        if (!text) return;
+        const request = (sample && sample.request) || '';
+        const item = request
+            ? onboardingButton(text, 'onboarding-demo', function () { onboardingRunSample(request); })
+            : onboardingButton(text, 'onboarding-example', function () {
+                onboardingFillInput(text);
+                sendMessageToServer({ type: 'onboardingFinish' });
+            });
         item.classList.add('onboarding-example-row');
         rows.push(item);
     });
@@ -174,6 +213,17 @@ function onboardingExample(state) {
             onboardingClose();
         })
     ]));
+}
+
+/**
+ * 一键示例（E3-02）：把目录里带来的请求原话交给 startAgent，与面板输入同一个闸门、
+ * 同一条主链。这里不判断模型是否配好——发送闸门是唯一权威，没配好就回落到配置 CTA，
+ * 免得向导里再养一份配置判断。
+ */
+function onboardingRunSample(request) {
+    sendMessageToServer({ type: 'startAgent', request: request });
+    sendMessageToServer({ type: 'onboardingFinish' });
+    onboardingClose();
 }
 
 function onboardingFillInput(text) {
@@ -203,4 +253,13 @@ window.showOnboarding = function () {
             sendMessageToServer({ type: 'getOnboardingState' });
         }
     }, 800);
+
+    // E3-05：设置面板那一行的勾选直接写回宿主。绑定只在页面装载时做一次，
+    // 值本身永远由宿主回推的 renderOnboarding 决定，所以这里不保存任何本地状态。
+    const consentBox = document.getElementById('settings-privacy-consent');
+    if (consentBox) {
+        consentBox.addEventListener('change', function () {
+            setPrivacyConsent(consentBox.checked === true);
+        });
+    }
 })();

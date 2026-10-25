@@ -8,7 +8,7 @@
 > - `openspec/changes/ai-native-productization-roadmap.md`（已落地阶段跟踪）
 > - `openspec/changes/global-architecture-hardening-plan.md`（工程硬化）
 > - `docs/project-issues-and-optimization-audit.md`（问题与优化审计）
-> - `docs/build-and-installer.md` / `docs/signing-and-certificates.md`
+> - 构建与安装包链路：`README.md`「从源码构建」+ `docs/VS2026-InstallerProjects.md`；签名：`README.md`「VSTO 开发证书与发布签名」+ `build/SignArtifacts.ps1`
 > - 根目录 `AGENTS.md` / `CLAUDE.md`（AI Native 硬规则）
 
 ---

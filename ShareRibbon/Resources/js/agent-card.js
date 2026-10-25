@@ -76,7 +76,7 @@ function isAgentLocked() {
 
 /**
  * 显示 Agent 规划卡片（嵌入聊天流）
- * @param {Object} planData - { sessionId, understanding, steps, summary, replaceThinkingUuid }
+ * @param {Object} planData - { sessionId, understanding, steps, summary, planVersion, scope, stepCount, toolCount, riskLevel, riskyTools, replaceThinkingUuid }
  */
 function showAgentPlanCard(planData) {
     try {
@@ -87,6 +87,11 @@ function showAgentPlanCard(planData) {
 
         const uuid = planData.sessionId || generateUUID();
         const timestamp = formatDateTime(new Date());
+        const planVersion = Number(planData.planVersion) || 1;
+
+        // 重新规划会对同一会话再发一次计划：原位重绘，否则时间线一直停留在已经作废的旧计划上。
+        const existingContainer = document.getElementById('agent-plan-' + uuid);
+        const isReplan = planVersion > 1 && !!existingContainer;
 
         let chatContainer;
         if (planData.replaceThinkingUuid) {
@@ -101,9 +106,11 @@ function showAgentPlanCard(planData) {
         }
 
         if (!chatContainer) {
-            chatContainer = document.createElement('div');
-            chatContainer.className = 'chat-container agent-card-container';
-            chatContainer.id = 'agent-plan-' + uuid;
+            chatContainer = isReplan ? existingContainer : document.createElement('div');
+            if (!isReplan) {
+                chatContainer.className = 'chat-container agent-card-container';
+                chatContainer.id = 'agent-plan-' + uuid;
+            }
         }
 
         const stepsHtml = planData.steps ? planData.steps.map((step, idx) => `
@@ -132,9 +139,10 @@ function showAgentPlanCard(planData) {
                 <div class="agent-understanding">
                     <strong>📋 理解：</strong>${escapeHtml(planData.understanding || '')}
                 </div>
+                ${buildPlanTrustHtml(planData, planVersion)}
                 <div class="agent-steps-container">
                     <div class="agent-steps-header">
-                        <span>📝 执行计划</span>
+                        <span>📝 执行计划${planVersion > 1 ? ` <span class="agent-plan-version">第 ${planVersion} 版</span>` : ''}</span>
                         <span class="agent-step-count">${planData.steps ? planData.steps.length : 0} 个步骤</span>
                     </div>
                     <div class="agent-steps-list" id="agent-steps-${uuid}">
@@ -144,7 +152,25 @@ function showAgentPlanCard(planData) {
                 <div class="agent-summary">
                     <strong>🎯 预期结果：</strong>${escapeHtml(planData.summary || '')}
                 </div>
-                <div class="agent-actions" id="agent-actions-${uuid}">
+                <div class="agent-actions" id="agent-actions-${uuid}"></div>
+            </div>
+            <div class="agent-status-bar" id="agent-status-${uuid}"></div>
+        `;
+
+        const actionsEl = document.getElementById('agent-actions-' + uuid);
+        if (isReplan) {
+            // 新一轮计划已经在执行中，不能把卡片退回“等待确认执行”状态
+            if (actionsEl) {
+                actionsEl.innerHTML = `
+                    <button class="agent-btn agent-btn-abort" onclick="abortAgent('${uuid}')">
+                        ⏹ 终止执行
+                    </button>
+                `;
+            }
+            updateAgentStatus(uuid, 'running', '按新计划继续执行...');
+        } else {
+            if (actionsEl) {
+                actionsEl.innerHTML = `
                     <button class="agent-btn agent-btn-execute" onclick="confirmAgentExecution('${uuid}')">
                         ▶ 开始执行
                     </button>
@@ -152,13 +178,10 @@ function showAgentPlanCard(planData) {
                     <button class="agent-btn agent-btn-abort" onclick="abortAgent('${uuid}')">
                         ✖ 取消
                     </button>
-                </div>
-            </div>
-            <div class="agent-status-bar" id="agent-status-${uuid}">
-                <span class="status-icon">⏸</span>
-                <span class="status-text">等待确认执行</span>
-            </div>
-        `;
+                `;
+            }
+            updateAgentStatus(uuid, 'paused', '等待确认执行');
+        }
 
         const isAlreadyInContainer = chatContainer.parentElement && chatContainer.parentElement.id === 'chat-container';
         if (!isAlreadyInContainer) {
@@ -183,10 +206,39 @@ function showAgentPlanCard(planData) {
 }
 
 /**
+ * 计划卡的信任信息：范围/数量/风险。三者都由后端按上下文与工具注册表算出，
+ * 不让模型自述“我要改哪一段”，避免卡片上的范围和实际写入对不上。
+ */
+function buildPlanTrustHtml(planData, planVersion) {
+    const scope = planData.scope || '';
+    const stepCount = Number(planData.stepCount) || (planData.steps ? planData.steps.length : 0);
+    const toolCount = Number(planData.toolCount) || 0;
+    const riskLevel = planData.riskLevel || 'safe';
+    const riskyTools = Array.isArray(planData.riskyTools) ? planData.riskyTools.filter(Boolean) : [];
+
+    let riskText;
+    if (riskLevel === 'safe') {
+        riskText = '风险：安全操作';
+    } else if (riskyTools.length > 0) {
+        const shown = riskyTools.slice(0, 3).join('、');
+        riskText = `风险：需确认 ${riskyTools.length} 项（${shown}${riskyTools.length > 3 ? ' 等' : ''}）`;
+    } else {
+        riskText = `风险：${riskLevel}`;
+    }
+
+    const chips = [];
+    if (scope) chips.push(`<span class="agent-trust-chip agent-trust-scope">范围 ${escapeHtml(scope)}</span>`);
+    chips.push(`<span class="agent-trust-chip">数量 ${stepCount} 步 · ${toolCount} 个工具</span>`);
+    chips.push(`<span class="agent-trust-chip agent-trust-risk-${escapeHtml(riskLevel)}">${escapeHtml(riskText)}</span>`);
+    if (planVersion > 1) chips.push(`<span class="agent-trust-chip">第 ${planVersion} 版计划</span>`);
+    return `<div class="agent-plan-trust">${chips.join('')}</div>`;
+}
+
+/**
  * 更新 Agent 步骤状态
  * @param {string} sessionId - 会话 ID
  * @param {number} stepIndex - 步骤索引
- * @param {string} status - 状态：pending / running / completed / failed / skipped
+ * @param {string} status - 状态：pending / running / completed / failed / skipped / aborted
  * @param {string} message - 可选消息
  */
 function updateAgentStep(sessionId, stepIndex, status, message) {
@@ -197,27 +249,20 @@ function updateAgentStep(sessionId, stepIndex, status, message) {
         stepEl.setAttribute('data-status', status);
 
         const iconEl = document.getElementById(`step-icon-${sessionId}-${stepIndex}`);
-        if (iconEl) {
-            const icons = {
-                pending: '⏳',
-                running: '🔄',
-                completed: '✅',
-                failed: '❌',
-                skipped: '⏭'
-            };
-            iconEl.textContent = icons[status] || '⏳';
-        }
+        if (iconEl) iconEl.textContent = getAgentStepIcon(status);
 
+        // 重规划、重试都会让同一步骤换状态；先清掉旧类，否则失败样式会一直挂在已完成的步骤上
+        stepEl.classList.remove('step-running', 'step-completed', 'step-failed', 'step-skipped');
         if (status === 'running') {
             stepEl.classList.add('step-running');
             const detailEl = document.getElementById(`step-detail-${sessionId}-${stepIndex}`);
             if (detailEl) detailEl.style.display = 'block';
         } else if (status === 'completed') {
-            stepEl.classList.remove('step-running');
             stepEl.classList.add('step-completed');
         } else if (status === 'failed') {
-            stepEl.classList.remove('step-running');
             stepEl.classList.add('step-failed');
+        } else if (status === 'skipped' || status === 'aborted') {
+            stepEl.classList.add('step-skipped');
         }
 
         if (message) {
@@ -227,6 +272,7 @@ function updateAgentStep(sessionId, stepIndex, status, message) {
                 msgDiv.className = `step-message step-msg-${status}`;
                 msgDiv.textContent = message;
                 detailEl.appendChild(msgDiv);
+                detailEl.style.display = 'block';
             }
         }
     } catch (err) {
@@ -237,23 +283,25 @@ function updateAgentStep(sessionId, stepIndex, status, message) {
 /**
  * 更新 ReAct 迭代（Think → Action → Observation）
  * @param {string} sessionId - 会话 ID
- * @param {Object} iteration - { index, thought, action, observation }
+ * @param {Object} iteration - { index, stepIndex, thought, action, observation }
  */
 function updateAgentIteration(sessionId, iteration) {
     try {
         if (!iteration) return;
 
-        const areaEl = document.getElementById(`iteration-area-${sessionId}-${iteration.index}`);
+        // 迭代详情属于某个步骤：优先用后端给的步骤索引。全局迭代号和步骤号在重规划后必然错开，
+        // 只按 index 找会把详情写进别的步骤，甚至找不到位置。
+        const stepIndex = Number.isInteger(iteration.stepIndex) && iteration.stepIndex >= 0
+            ? iteration.stepIndex
+            : iteration.index;
+
+        const areaEl = document.getElementById(`iteration-area-${sessionId}-${stepIndex}`);
         if (!areaEl) {
-            // 如果没有精确匹配的步骤区域，放到当前运行的步骤下
+            // 兜底：仍找不到位置时写到当前正在执行的步骤下，而不是丢弃这次观察
             const runningStep = document.querySelector(`#agent-steps-${sessionId} .step-running`);
-            if (runningStep) {
-                const idx = runningStep.querySelector('.agent-step-num')?.textContent;
-                if (idx) {
-                    const fallbackArea = document.getElementById(`iteration-area-${sessionId}-${parseInt(idx) - 1}`);
-                    if (fallbackArea) fallbackArea.innerHTML = buildIterationHtml(iteration);
-                }
-            }
+            const stepNum = runningStep ? runningStep.querySelector('.agent-step-num')?.textContent : '';
+            const fallbackArea = document.getElementById(`iteration-area-${sessionId}-${parseInt(stepNum, 10) - 1}`);
+            if (fallbackArea) fallbackArea.innerHTML = buildIterationHtml(iteration);
             return;
         }
 
@@ -492,9 +540,9 @@ function updateAgentStatus(uuid, status, text) {
  * @param {boolean} success - 是否成功
  * @param {string} message - 完成消息
  * @param {string} thinkingUuid - 思考消息 UUID
- * @param {Object} undo - 可撤销描述 { canUndo, runId, units, writtenCount }
+ * @param {Object} terminal - { writtenCount, rolledBackCount, changeTruncated, changes[], canUndo, runId, units, undoReason }
  */
-function completeAgent(uuid, success, message, thinkingUuid, undo) {
+function completeAgent(uuid, success, message, thinkingUuid, terminal) {
     try {
         const statusBar = document.getElementById('agent-status-' + uuid);
         if (statusBar) {
@@ -506,6 +554,8 @@ function completeAgent(uuid, success, message, thinkingUuid, undo) {
             `;
         }
 
+        renderAgentChangeSummary(uuid, terminal);
+
         const actions = document.getElementById('agent-actions-' + uuid);
         if (actions) {
             actions.innerHTML = '';
@@ -514,14 +564,29 @@ function completeAgent(uuid, success, message, thinkingUuid, undo) {
             state.textContent = success ? '✅ 已完成' : '❌ 已失败';
             actions.appendChild(state);
 
-            if (undo && undo.canUndo && undo.runId) {
+            if (terminal && terminal.canUndo && terminal.runId) {
                 const undoBtn = document.createElement('button');
                 undoBtn.type = 'button';
                 undoBtn.className = 'agent-btn agent-btn-undo';
-                undoBtn.dataset.runId = undo.runId;
-                undoBtn.textContent = '撤销本轮';
+                undoBtn.dataset.runId = terminal.runId;
+                const units = Number(terminal.units) || 0;
+                const restores = Number(terminal.restoreCount) || 0;
+                if (units > 0) {
+                    undoBtn.textContent = `撤销本轮（${units} 个撤销单元）`;
+                } else if (restores > 0) {
+                    // Excel/PPT 没有整栈撤销：按钮按写入前的目标区域快照逐步还原，说清楚还原几处
+                    undoBtn.textContent = `撤销本轮（按快照还原 ${restores} 处）`;
+                } else {
+                    undoBtn.textContent = '撤销本轮';
+                }
                 undoBtn.addEventListener('click', function () { undoAgentRun(undoBtn); });
                 actions.appendChild(undoBtn);
+            } else if (terminal && terminal.undoReason) {
+                // 不给按钮就必须说清原因，否则用户会以为这些改动随时能一键回退
+                const reason = document.createElement('span');
+                reason.className = 'agent-undo-reason';
+                reason.textContent = terminal.undoReason;
+                actions.appendChild(reason);
             }
         }
 
@@ -544,6 +609,71 @@ function completeAgent(uuid, success, message, thinkingUuid, undo) {
         console.error('completeAgent error:', err);
     } finally {
         restoreAgentRequestUi();
+    }
+}
+
+/**
+ * 终态变更摘要：把这一轮真正留在文档里的改动列成清单，作为“撤销本轮”的事实依据。
+ * 全部用 textContent 写入，后端摘要里若带 HTML 也只当纯文本。
+ */
+function renderAgentChangeSummary(uuid, terminal) {
+    if (!terminal) return;
+    const actions = document.getElementById('agent-actions-' + uuid);
+    let box = document.getElementById('agent-change-summary-' + uuid);
+    if (!box && actions && actions.parentNode) {
+        box = document.createElement('div');
+        box.id = 'agent-change-summary-' + uuid;
+        box.className = 'agent-change-summary';
+        actions.parentNode.insertBefore(box, actions);
+    }
+    if (!box) return;
+
+    box.innerHTML = '';
+    const written = Number(terminal.writtenCount) || 0;
+    const title = document.createElement('div');
+    title.className = 'agent-change-title';
+    title.textContent = written > 0 ? `🧾 本轮已写入 ${written} 处` : '🧾 本轮没有留在文档里的改动';
+    box.appendChild(title);
+
+    const changes = Array.isArray(terminal.changes) ? terminal.changes : [];
+    if (changes.length > 0) {
+        const list = document.createElement('ol');
+        list.className = 'agent-change-list';
+        changes.forEach(function (item) {
+            const li = document.createElement('li');
+            if (item && item.toolId) {
+                const tool = document.createElement('code');
+                tool.className = 'agent-change-tool';
+                tool.textContent = item.toolId;
+                li.appendChild(tool);
+            }
+            const text = document.createElement('span');
+            text.textContent = (item && item.summary) ? item.summary : '（宿主未返回变更说明）';
+            li.appendChild(text);
+            if (item && item.partialApply) {
+                const tag = document.createElement('em');
+                tag.className = 'agent-change-partial';
+                tag.textContent = '部分生效';
+                li.appendChild(tag);
+            }
+            list.appendChild(li);
+        });
+        box.appendChild(list);
+    }
+
+    if (terminal.changeTruncated) {
+        const more = document.createElement('div');
+        more.className = 'agent-change-more';
+        more.textContent = `另有 ${Math.max(0, written - changes.length)} 处改动未列出，展开步骤可查看执行记录。`;
+        box.appendChild(more);
+    }
+
+    const rolledBack = Number(terminal.rolledBackCount) || 0;
+    if (rolledBack > 0) {
+        const note = document.createElement('div');
+        note.className = 'agent-change-rollback';
+        note.textContent = `已自动回滚 ${rolledBack} 处未完成的改动。`;
+        box.appendChild(note);
     }
 }
 
@@ -614,13 +744,14 @@ function setAgentUndoResult(runId, success, message, verified) {
 /**
  * 获取步骤状态图标
  */
-function getStepIcon(status) {
+function getAgentStepIcon(status) {
     const icons = {
         pending: '⏳',
         running: '🔄',
         completed: '✅',
         failed: '❌',
-        skipped: '⏭'
+        skipped: '⏭',
+        aborted: '⏹'
     };
     return icons[status] || '⏳';
 }

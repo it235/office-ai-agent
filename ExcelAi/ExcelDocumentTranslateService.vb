@@ -335,6 +335,11 @@ Public Class ExcelDocumentTranslateService
     ''' 发送HTTP请求
     ''' </summary>
     Private Async Function SendHttpRequestAsync(apiUrl As String, apiKey As String, requestBody As String) As Task(Of String)
+        ' E3-05：Excel 这一份是共享翻译服务的复制品，同意口径必须和基类一致，否则三端里有一端能绕过。
+        ' 拒绝按异常说：调用方Catch 后保留单元格原文，返回空串只会被 JObject.Parse 当成坏响应。
+        If Not ShareRibbon.PrivacyConsentGate.IsAccepted() Then
+            Throw New InvalidOperationException("还没确认数据边界，翻译请求没有发送。请先在 AI 面板同意，再重试。")
+        End If
         ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
         Dim client = HttpClientPool.GetClient(apiUrl)
         Using request As New HttpRequestMessage(HttpMethod.Post, apiUrl)

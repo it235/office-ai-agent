@@ -48,12 +48,19 @@ AiHelper/
 | 前端 HTML/JS/CSS 资源 | `ShareRibbon/Resources/` 及相关项目资源项 | Office Virtual Server 加载入口，改动后检查 `.vbproj` 注册和 HTML 引用 |
 | 配置、API Key、Prompt | `ShareRibbon/Config/` | 配置管理和持久化逻辑 |
 | MCP 协议集成 | `ShareRibbon/Mcp/` | StreamJsonRpc / MCP client 相关实现 |
+| 本地库与迁移 | `ShareRibbon/Storage/` | 建表、版本化迁移与取值口径；口径规则见 `Storage/README_DATABASE.md` |
 | Excel 功能 | `ExcelAi/` | 单元格、Range、Sheet、图表、ExcelDna、批量数据生成 |
 | Word 功能 | `WordAi/` | 文档、段落、续写、翻译、OpenXml 处理 |
 | PowerPoint 功能 | `PowerPointAi/` | 演示文稿、幻灯片、形状、续写、翻译 |
 | PowerPoint Professional Design Agent | `PowerPointAi/Design/` | Scene 语义、设计系统、专业构图、COM 渲染、视觉验证与安全回滚 |
 | 安装包定义 | `OfficeAgent/` | `.vdproj` 安装项目，慎改，保持最小 diff |
 | 调试/迁移文档 | `docs/` | Visual Studio/VSTO 调试、迁移指南等 |
+| 入口可达性门禁 | `scripts/check-entry-reachability.js` | 面板消息 type、内联事件、DOM id、`vsto` 桥方法、三端 Ribbon 可见按钮，以及 VB 注入载荷里的字面量 id 与调用名、导航文档引用的路径（规则 A–J）的闭合合同；已登记进 `scripts/run-code-checks.ps1`，规则细节见 `ShareRibbon/Controls/AGENTS.md` |
+| 门禁清单唯一持有者 | `scripts/run-code-checks.ps1` | `scripts\*.ps1` 默认全部作为门禁被发现，不跑必须在 `$notGates` 具名写理由；`build\RunReleaseChecks.ps1` 委托给它，不再自备名单 |
+| 任务包合同 | `ShareRibbon/TaskPackages/*.json` + `ShareRibbon/Agent/TaskPackageCatalog.vb` | 一个工作目标一份合同，只承载目前没有持有者的字段（预览策略、验证器、成功标准、交付物、解释模板、失败恢复、黄金样例引用、已有实现）；入口话术仍归 `ShareRibbon/Agent/QuickActionCatalog.vb`、工具边界归 Skill 的 `allowed-tools`、capability 归宿主注册表、变更事实归 `ShareRibbon/Agent/Execution/AgentChangeLog.vb`，**不要把它们的清单抄回包里**，也不要给没有可解析入口的任务建占位包。加载器按 id 首次加载去重，且会拒绝「源码目录与 `bin` 副本内容不一致」的包——改完 JSON 必须重建，否则门禁红而不是静默用旧合同 |
+| 任务包一致性门禁 | `scripts/check-task-package-contract.ps1` | 包→动作→capability→Skill→黄金样例→已有实现逐级可解析；词表从 `TaskPackageCatalog.vb` 与 `AgentChangeLog.vb` 反查，门禁不自带名单；任一级断裂即失败。同一脚本还管入口话术：三端 Ribbon 的 Agent 请求必须引用 `QuickActionCatalog` 里声明的 ribbon 话术（helper 形参带类型，传字面量不再能编译），且这些话术不得混进命令面板的行集；E6-05 起还管入口身份闭包（面板→payload→`UserTurn`→`AgentKernel`→`AgentSession`→run 收尾，13 个文件、29 条变异探针），E6-05b 起还管 run 末修复路由的形状（闸门在既有 `While` 内、预算与步内修复共用、终态出口计数必须为 1、`LoopEngine.Coverage.vb` 不得自开模型调用） |
+| 任务包断言的执行者与修复路由 | `ShareRibbon/Agent/TaskPackageOutcomeVerifier.vb` + `ShareRibbon/Agent/LoopEngine.Coverage.vb` + `ShareRibbon/Agent/LoopEngine.vb` | 包声明的成功标准在 run 收尾时对着本轮 `AgentRunChangeLog` 真核一遍，判定 fail-closed、接在既有 `ValidateExecutionOutcome` 末尾（不新建终态）；变更事实只能由 `AgentRunChangeLog.TryFactValue` 报，验证器不得自己数记录；未达成时按包里声明的 `verifier.onFail` 分流——`repair` 走循环内的 run 末闸门复用既有 `ReflectAndReplanAsync`（共享 replan 预算、只接受 `replan`、换计划必过 `ValidateReplannedCoverage` 并推进计划版本，已落盘写入不重跑），`report` 只报告，`rollback` 目前没有还原路由、只如实写 Warn；运行时回归见 `scripts/smoke-task-package-verifier.ps1` 与 `scripts/smoke-run-end-repair.ps1` |
+| 包语义的黄金样例 | `tests/golden/l0/catalog.json` + `scripts/run-golden-l0.ps1` | 每个已存在的包至少一份 `satisfied` 和一份 `unmet` 的 `task_package_outcome` 用例，`observation` 用宿主 `ToolResult` 的原始形状，由真实 `AddFromStep`+`TaskPackageOutcomeVerifier` 判定；「发生过写」与「留在文档里的写」是两条不同口径，回滚过的 run 只能报 `writtenCount` 未达成。样例的静态合法性与覆盖由 E6-03 那份门禁管，不在别处维护第二份样例名单 |
 | 需求/变更规格 | `openspec/` | 变更说明、规格草案、归档记录 |
 | AI Native Harness 总设计 | `docs/ai-native-harness-design.md` | 对标 Copilot/Claude/Cursor 的平台设计与细化清单 |
 | AI Native Harness 落地实施设计 | `docs/ai-native-harness-implementation-design.md` | 基于现有代码的渐进改造任务、文件范围与验收清单 |
@@ -128,7 +135,7 @@ AiHelper/
 - `OfficeAgent/` 的 `.vdproj` 是安装包定义，自动化修改风险高，除非必要不要大范围编辑。
 - 仓库曾有 `OfficeAgentSetupCustomActions/`，它未被解决方案和安装包引用、也不参与任何构建校验，已于 2026-10-18 删除。
 - 若将来需要可代码化的安装动作，新建自定义动作项目并同时接入 `AiHelper.sln` 与 `.vdproj` 的 `CustomAction` 节点，否则等于写了一套永不验证的代码。
-- 打 MSI 前必须先 `build-installer-prep`（Release 代码 + SourcePath 审计），见 `docs/build-and-installer.md`。
+- 打 MSI 前必须先 `build-installer-prep`（Release 代码 + SourcePath 审计），见 `README.md`「从源码构建」与 `docs/VS2026-InstallerProjects.md`。
 
 ## AI Native Architecture Rules
 
@@ -249,11 +256,13 @@ intent_types: data_analysis, formula, chart
 15. 新建平行 Harness/Loop/Safety 来实现动态 API，造成两套状态机、两套终态和不同错误合同。
 16. 把 PowerPoint 截图或 Base64 塞进 Observation、Artifacts、History、Trace 或日志，造成隐私、体积和持久化风险。
 17. 在 PowerPoint Executor/Verifier 内直接调用视觉模型，绕过现有 Loop 的重试、降级和终态管理。
+18. 往用于过滤的枚举列（如 `app_type`）写入调用方传来的原始字符串。读侧是「等于当前取值 OR 空值豁免」，第三种取值会让那条数据在所有查询里静默消失；写前必须经过口径持有者归一，历史数据用只填空、可重跑的迁移收口。
+19. 新增一个把内容发出去的 HttpClient 出口（`HttpRequestMessage(HttpMethod.Post` / `.PostAsync(`）却不登记进 `scripts/smoke-privacy-consent.ps1` 的 `$outboundInventory`，或更糟——在用户还没确认数据边界之前就读配置直接发。清单要求每个出口交代「被哪把门看着」（自己问 / 面板漏斗 / 固定探针 / 用户自加的 MCP 服务器），交代不出来门禁就红；「我们拦住了云调用」必须是可重跑的计数，不是一句承诺。
 
 ## Commands
 
 常用命令索引如下；更完整规则见 `CLAUDE.md`。
-**构建二分（P0-5）**：日常只编代码，不要用整解决方案 Rebuild 判断代码是否可编。详见 `docs/build-and-installer.md`。
+**构建二分（P0-5）**：日常只编代码，不要用整解决方案 Rebuild 判断代码是否可编。详见 `README.md`「从源码构建」与 `docs/VS2026-InstallerProjects.md`。
 
 ```bash
 # 还原 NuGet 包
@@ -288,7 +297,7 @@ powershell -File .\scripts\ensure-vsto-temp-keys.ps1
 powershell -File .\build\SignArtifacts.ps1
 ```
 
-签名策略见 `docs/signing-and-certificates.md`。禁止提交 `*.pfx` / `*.snk` / 正式签名私钥。
+签名策略见 `README.md`「VSTO 开发证书与发布签名」与 `build/SignArtifacts.ps1`。禁止提交 `*.pfx` / `*.snk` / 正式签名私钥。
 
 ## Documentation Maintenance Rules
 

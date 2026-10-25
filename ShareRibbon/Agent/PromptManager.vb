@@ -328,7 +328,11 @@ Namespace Agent
                 Dim startIdx = Math.Max(0, session.Iterations.Count - 3)
                 For i = startIdx To session.Iterations.Count - 1
                     Dim it = session.Iterations(i)
-                    sb.AppendLine($"步骤 {it.Index}: {it.Action.ToolId} - {If(it.Observation, "成功", "失败")}")
+                    ' 观察是字符串，不能当条件用；这里只做长度收敛，让反思阶段看清"做过什么、结果如何"。
+                    Dim observationText = If(it.Observation, "").Replace(vbCr, " ").Replace(vbLf, " ").Trim()
+                    If observationText.Length > 200 Then observationText = observationText.Substring(0, 200) & "…"
+                    If observationText.Length = 0 Then observationText = "无观察"
+                    sb.AppendLine($"步骤 {it.Index}: {If(it.Action?.ToolId, "unknown")} - {observationText}")
                 Next
             End If
 

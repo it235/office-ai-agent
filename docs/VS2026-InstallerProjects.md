@@ -1,6 +1,6 @@
 # Visual Studio 2026 打开 OfficeAgent.vdproj 失败处理
 
-> 构建链路总览（code vs installer）见 [build-and-installer.md](./build-and-installer.md)。
+> 构建链路总览（code vs installer）见 [README.md](../README.md) 的「从源码构建」一节。
 > 打 MSI 前请先跑 `.\build-installer-prep.bat`（Release 代码 + SourcePath 审计）。
 
 ## 现象

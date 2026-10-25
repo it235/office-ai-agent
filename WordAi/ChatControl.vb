@@ -1744,8 +1744,8 @@ Public Class ChatControl
             Await proofreadMode.EnterAsync()
             Await ExecuteJavaScriptAsyncJS($"updateProofreadPlanSummary({UtilsService.ToJsStringLiteral(plan.ToHumanReadableSummary())});")
 
-            ' 显示加载中提示
-            Await ExecuteJavaScriptAsyncJS("showProofreadModeIndicator(); showProofreadLoading();")
+            ' 显示加载中提示：右上角动画由消息渲染路径负责收口，这里只负责把它点起来
+            Await ExecuteJavaScriptAsyncJS("showProofreadModeIndicator(); showLoadingIndicator();")
             GlobalStatusStrip.ShowInfo("正在校对，请稍候... " & plan.ToHumanReadableSummary())
 
             ' 构建校对提示词
@@ -1998,6 +1998,13 @@ Public Class ChatControl
     Protected Overrides Function GetOfficeAppType() As String
         Return "Word"
     End Function
+
+    ''' <summary>
+    ''' E4-03：快捷键很可能在任务窗格收起时被按下，先让宿主把窗格展开，命令面板才有落点。
+    ''' </summary>
+    Protected Overrides Sub EnsureHostTaskPaneVisible()
+        Globals.ThisAddIn.ShowChatTaskPane()
+    End Sub
 
     ''' <summary>
     ''' 会话绑定的文档：只在 UI 线程读取活动文档完整路径，未保存文档按通用会话处理。

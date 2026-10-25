@@ -972,6 +972,13 @@ function hideReformatModeIndicator() {
 }
 
 /**
+ * 退出排版模式：指示器只是视觉标记，排版状态由服务端每次响应自行判定，所以这里只移除横幅。
+ */
+function exitReformatMode() {
+    hideReformatModeIndicator();
+}
+
+/**
  * 隐藏所有模式指示器
  */
 function hideAllModeIndicators() {

@@ -414,6 +414,13 @@ Public MustInherit Class DocumentTranslateService
     ''' 发送HTTP请求
     ''' </summary>
     Protected Async Function SendHttpRequestAsync(apiUrl As String, apiKey As String, requestBody As String) As Task(Of String)
+        ' E3-05：翻译把整段正文交给模型接口，属于云调用，Word/PPT 两个子类都从这一处出去。
+        ' 本函数没有「失败返回空串」的约定——调用方一律按异常处理并保留原文，所以拒绝就用异常说，
+        ' 不返回空串：空串会变成 JObject.Parse 的语法错误，把一条隐私拦截伪装成模型返回坏了。
+        If Not PrivacyConsentGate.IsAccepted() Then
+            AppLogger.Debug("DocumentTranslateService", PrivacyConsentGate.RefusalReason)
+            Throw New InvalidOperationException("还没确认数据边界，翻译请求没有发送。请先在 AI 面板同意，再重试。")
+        End If
         ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
         Dim client = HttpClientPool.GetClient(apiUrl)
         Using request As New HttpRequestMessage(HttpMethod.Post, apiUrl)

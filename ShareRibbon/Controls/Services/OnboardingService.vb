@@ -1,11 +1,10 @@
 ' ShareRibbon\Controls\Services\OnboardingService.vb
-' E3-01 首次使用引导：只做"隐私确认 -> 示例任务"这两件以前没有的事。
+' E3-01 首次使用引导：只做"隐私确认 -> 示例任务"这两件以前没有的事；E3-02 让每端第一条示例可以一键跑。
 ' 服务商、API Key、连接测试沿用 ConfigApiForm 那一套，这里不写第二份配置代码，也不碰 Harness/Loop。
 
 Imports System.Threading.Tasks
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
-Imports ShareRibbon.Security
 
 ''' <summary>
 ''' 面板内引导向导的状态与动作。
@@ -37,7 +36,7 @@ Public Class OnboardingService
         Dim accepted = jsonDoc IsNot Nothing AndAlso jsonDoc("accepted") IsNot Nothing AndAlso
                        CStr(jsonDoc("accepted").ToString()).Equals("true", StringComparison.OrdinalIgnoreCase)
         Try
-            SecureConfigManager.PrivacySettings.PrivacyPolicyAccepted = accepted
+            PrivacyConsentGate.Apply(accepted)
             Send("renderOnboarding", BuildState())
         Catch ex As Exception
             AppLogger.Debug("OnboardingService", "写入隐私确认失败", ex)
@@ -59,7 +58,9 @@ Public Class OnboardingService
         Dim isValid = New ChatSendValidator().ValidateConfig(ConfigSettings.ApiUrl, ConfigSettings.ApiKey).IsValid
         Dim state As New JObject()
         state("needsSetup") = Not isValid
-        state("privacyAccepted") = SecureConfigManager.PrivacySettings.PrivacyPolicyAccepted
+        state("privacyAccepted") = PrivacyConsentGate.IsAccepted()
+        ' 数据边界的三条说明由持有者下发，前端只渲染：文案在 JS 里再抄一份就等于有了第二份承诺。
+        state("privacyBoundary") = JArray.FromObject(PrivacyConsentGate.BoundaryItems)
         state("appType") = If(_getAppType(), "")
         state("step") = InitialStep()
         state("examples") = BuildExamples()
@@ -70,30 +71,21 @@ Public Class OnboardingService
     ''' 向导只剩两步，起点完全由配置状态决定：没确认过隐私就先确认，否则直接给示例。
     ''' </summary>
     Private Function InitialStep() As String
-        If Not SecureConfigManager.PrivacySettings.PrivacyPolicyAccepted Then Return "privacy"
+        If Not PrivacyConsentGate.IsAccepted() Then Return "privacy"
         Return "example"
     End Function
 
+    ''' <summary>
+    ''' 示例任务话术只在 QuickActionCatalog 维护一份：这里曾经也有一份 Select Case，
+    ''' 现在选区工具条（E4-01）、右键菜单（E4-02）、每端示例任务（E3-02）共用同一来源，
+    ''' 避免三端各留一张需要人工同步的表。带 request 的那条是一键示例，点下去直接进主链。
+    ''' </summary>
     Private Function BuildExamples() As JArray
-        Dim appType = If(_getAppType(), "").Trim().ToLowerInvariant()
-        Dim items As New List(Of String)
-        Select Case appType
-            Case "excel"
-                items.Add("读取当前选区，找出异常值并说明原因")
-                items.Add("为当前数据加一列同比增长率公式")
-                items.Add("把选区整理成一张柱状图")
-            Case "powerpoint"
-                items.Add("按当前大纲生成 5 页汇报初稿")
-                items.Add("统一全部标题的字体和字号")
-                items.Add("检查哪一页文字过密并给出拆分建议")
-            Case Else
-                items.Add("把当前选区改写成更正式的书面表达")
-                items.Add("检查全文的编号和标题层级是否连贯")
-                items.Add("为当前文档生成一段摘要")
-        End Select
-
         Dim arr As New JArray()
-        For Each item In items
+        For Each sample In ShareRibbon.Agent.QuickActionCatalog.SampleTasks(_getAppType())
+            Dim item As New JObject()
+            item("text") = sample.Text
+            If sample.Runnable Then item("request") = sample.RunRequestText
             arr.Add(item)
         Next
         Return arr

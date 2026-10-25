@@ -272,156 +272,6 @@ complexity 规则：
             Return plan
         End Function
 
-        Private Function ValidatePlanCoverage(spec As AgentTaskSpec, plan As ExecutionPlan) As String
-            If spec Is Nothing OrElse plan Is Nothing Then Return ""
-
-            Dim toolIds = GetPlannedToolIds(plan)
-            If spec.ExpectedOutputs.Contains("images") AndAlso
-               Not toolIds.Contains("InsertImage") AndAlso
-               Not PlanContainsCreateSlidesImage(plan) Then
-                Return "规划未覆盖用户要求的真实图片插入；没有可访问图片来源时必须明确报告 capability gap。"
-            End If
-            If spec.ExpectedOutputs.Contains("images") Then
-                Dim imagePathError = ValidatePlannedImagePaths(plan)
-                If Not String.IsNullOrWhiteSpace(imagePathError) Then Return imagePathError
-            End If
-            If spec.ExpectedSlideCount > 0 AndAlso
-               Not toolIds.Contains("CreateSlides") AndAlso
-               Not toolIds.Contains("InsertSlide") Then
-                Return $"规划未覆盖创建 {spec.ExpectedSlideCount} 张幻灯片的要求。"
-            End If
-            Return ""
-        End Function
-
-        Private Function ValidatePlannedImagePaths(plan As ExecutionPlan) As String
-            If plan?.Steps Is Nothing Then Return "图片计划为空。"
-
-            For Each stepItem In plan.Steps
-                Try
-                    Dim envelope = JObject.Parse(If(stepItem.Code, ""))
-                    Dim commands As New List(Of JObject)()
-                    If envelope("command") IsNot Nothing Then commands.Add(envelope)
-                    Dim commandArray = TryCast(envelope("commands"), JArray)
-                    If commandArray IsNot Nothing Then commands.AddRange(commandArray.OfType(Of JObject)())
-
-                    For Each commandObj In commands
-                        Dim commandName = commandObj("command")?.ToString()
-                        If String.Equals(commandName, "InsertImage", StringComparison.OrdinalIgnoreCase) Then
-                            Dim params = TryCast(commandObj("params"), JObject)
-                            Dim imagePath = params?("imagePath")?.ToString()
-                            If String.IsNullOrWhiteSpace(imagePath) Then
-                                Return "图片计划缺少 imagePath，不能开始部分修改。"
-                            End If
-                            If Not IO.File.Exists(imagePath) Then
-                                Return $"图片文件不可访问：{imagePath}。为避免只创建文字页，任务尚未执行。"
-                            End If
-                        ElseIf String.Equals(commandName, "CreateSlides", StringComparison.OrdinalIgnoreCase) Then
-                            Dim params = TryCast(commandObj("params"), JObject)
-                            Dim slides = TryCast(params?("slides"), JArray)
-                            If slides Is Nothing Then Continue For
-                            For Each slide In slides.OfType(Of JObject)()
-                                Dim imagePath = slide("imagePath")?.ToString()
-                                If Not String.IsNullOrWhiteSpace(imagePath) AndAlso Not IO.File.Exists(imagePath) Then
-                                    Return $"图片文件不可访问：{imagePath}。为避免只创建文字页，任务尚未执行。"
-                                End If
-                            Next
-                        End If
-                    Next
-                Catch
-                    ' Invalid plan JSON is handled by the normal tool-call parsing path.
-                End Try
-            Next
-            Return ""
-        End Function
-
-        Private Function PlanContainsCreateSlidesImage(plan As ExecutionPlan) As Boolean
-            If plan?.Steps Is Nothing Then Return False
-
-            For Each stepItem In plan.Steps
-                Try
-                    Dim envelope = JObject.Parse(If(stepItem.Code, ""))
-                    Dim commands As New List(Of JObject)()
-                    If envelope("command") IsNot Nothing Then commands.Add(envelope)
-                    Dim commandArray = TryCast(envelope("commands"), JArray)
-                    If commandArray IsNot Nothing Then commands.AddRange(commandArray.OfType(Of JObject)())
-
-                    For Each commandObj In commands
-                        If String.Equals(commandObj("command")?.ToString(), "CreateSlides", StringComparison.OrdinalIgnoreCase) AndAlso
-                           CreateSlidesParametersContainImage(TryCast(commandObj("params"), JObject)) Then
-                            Return True
-                        End If
-                    Next
-                Catch
-                    ' Invalid plan JSON is handled by the normal tool-call parsing path.
-                End Try
-            Next
-            Return False
-        End Function
-
-        Private Shared Function CreateSlidesParametersContainImage(parameters As JObject) As Boolean
-            Dim slides = TryCast(parameters?("slides"), JArray)
-            If slides Is Nothing Then Return False
-            Return slides.OfType(Of JObject)().Any(
-                Function(slide) Not String.IsNullOrWhiteSpace(slide("imagePath")?.ToString()))
-        End Function
-
-        Private Function ValidateExecutionOutcome(session As AgentSession) As String
-            If session Is Nothing OrElse session.Spec Is Nothing Then Return ""
-
-            Dim successfulActions = session.Iterations.
-                Where(Function(item) item IsNot Nothing AndAlso
-                                     item.Explanation IsNot Nothing AndAlso
-                                     item.Explanation.Success AndAlso
-                                     item.Action IsNot Nothing).
-                Select(Function(item) item.Action).
-                ToList()
-            If session.Spec.ExpectedOutputs.Contains("images") AndAlso
-               Not successfulActions.Any(
-                   Function(toolCall) String.Equals(toolCall.ToolId, "InsertImage", StringComparison.OrdinalIgnoreCase) OrElse
-                                      (String.Equals(toolCall.ToolId, "CreateSlides", StringComparison.OrdinalIgnoreCase) AndAlso
-                                       CreateSlidesParametersContainImage(toolCall.Parameters))) Then
-                Return "任务未完成：用户要求插入图片，但执行记录中没有成功产生真实图片的操作。"
-            End If
-
-            If session.Spec.ExpectedSlideCount > 0 Then
-                Dim created As Integer = 0
-                For Each action In successfulActions
-                    If String.Equals(action.ToolId, "CreateSlides", StringComparison.OrdinalIgnoreCase) Then
-                        Dim slides = TryCast(action.Parameters?("slides"), JArray)
-                        If slides IsNot Nothing Then created += slides.Count
-                    ElseIf String.Equals(action.ToolId, "InsertSlide", StringComparison.OrdinalIgnoreCase) Then
-                        created += 1
-                    End If
-                Next
-                If created < session.Spec.ExpectedSlideCount Then
-                    Return $"任务未完成：要求创建 {session.Spec.ExpectedSlideCount} 张幻灯片，执行记录仅确认 {created} 张。"
-                End If
-            End If
-            Return ""
-        End Function
-
-        Private Function GetPlannedToolIds(plan As ExecutionPlan) As HashSet(Of String)
-            Dim result As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
-            If plan?.Steps Is Nothing Then Return result
-
-            For Each stepItem In plan.Steps
-                Try
-                    Dim obj = JObject.Parse(If(stepItem.Code, ""))
-                    Dim command = obj("command")?.ToString()
-                    If Not String.IsNullOrWhiteSpace(command) Then result.Add(command)
-                    Dim commands = TryCast(obj("commands"), JArray)
-                    If commands Is Nothing Then Continue For
-                    For Each item In commands.OfType(Of JObject)()
-                        command = item("command")?.ToString()
-                        If Not String.IsNullOrWhiteSpace(command) Then result.Add(command)
-                    Next
-                Catch
-                    ' Invalid plan JSON is handled by the normal tool-call parsing path.
-                End Try
-            Next
-            Return result
-        End Function
-
         ''' <summary>
         ''' Think：调用LLM生成思考+行动
         ''' </summary>
@@ -449,14 +299,17 @@ complexity 规则：
         End Class
 
         ''' <summary>
-        ''' 反思并给出修复策略
+        ''' 反思并给出修复策略。提示词必须带上本轮已落盘的写入清单，
+        ''' 否则模型会重新规划出已经执行过的步骤，新计划从头执行时造成重复写入（E1-06）。
         ''' </summary>
         Private Async Function ReflectAndReplanAsync(session As AgentSession,
                                                       observation As String,
                                                       systemPrompt As String) As Task(Of ReflectionDecision)
             Try
+                ' 已落盘写入是这一轮的客观事实，作为系统级约束下发，反思和重新规划共用同一份。
+                Dim appliedConstraint = session.Writes.BuildAppliedWritesText()
                 Dim prompt = _promptManager.BuildReflectionPrompt(session, observation)
-                Dim response = Await SendAIRequest(prompt, systemPrompt, Nothing)
+                Dim response = Await SendAIRequest(prompt, systemPrompt & appliedConstraint, Nothing)
 
                 Dim jsonStr = ExtractJson(response)
                 If String.IsNullOrEmpty(jsonStr) Then Return ReflectionDecision.NoAction
@@ -472,8 +325,8 @@ complexity 规则：
                         ' 跳过当前失败步骤：由调用方前进一步，已完成步骤保持不动
                         Return New ReflectionDecision With {.Strategy = "skip", .Plan = session.Plan}
                     Case "replan"
-                        ' 生成全新计划：仅在此情况下由调用方从第 0 步重新执行
-                        Dim newPlan = Await GeneratePlanAsync(session, systemPrompt, session.Skill)
+                        ' 生成全新计划：调用方会推进计划版本，已落盘的写入由台账挡住不再执行
+                        Dim newPlan = Await GeneratePlanAsync(session, systemPrompt & appliedConstraint, session.Skill)
                         If newPlan IsNot Nothing AndAlso newPlan.Steps.Count > 0 Then
                             Return New ReflectionDecision With {.Strategy = "replan", .Plan = newPlan}
                         End If
@@ -482,7 +335,7 @@ complexity 规则：
                         Return ReflectionDecision.NoAction
                 End Select
             Catch ex As Exception
-                Debug.WriteLine($"[LoopEngine] 反思失败: {ex.Message}")
+                AppLogger.Warn("LoopEngine", $"Reflect/replan failed: {AppLogger.Redact(ex.Message)}")
                 Return ReflectionDecision.NoAction
             End Try
         End Function
@@ -661,7 +514,7 @@ complexity 规则：
                     Dim failedCount = operations.OfType(Of JObject)().Count(
                         Function(item) Not String.Equals(item("status")?.ToString(), "succeeded", StringComparison.OrdinalIgnoreCase))
                     If failedCount > 0 Then
-                        Return ToolResult.Failed(
+                        Dim degraded = ToolResult.Failed(
                             result.ToolId,
                             $"操作批次存在 {failedCount} 个未成功步骤",
                             data:=result.Data,
@@ -670,6 +523,9 @@ complexity 规则：
                             recoverable:=True,
                             observation:=result.Observation,
                             artifacts:=result.Artifacts)
+                        ' 降级成失败时还原快照必须跟着走：部分应用的这一步恰恰最需要「撤销本轮」
+                        degraded.RestoreSnapshot = result.RestoreSnapshot
+                        Return degraded
                     End If
                 End If
 

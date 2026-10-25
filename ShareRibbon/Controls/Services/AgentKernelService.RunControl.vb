@@ -33,6 +33,7 @@ Public Partial Class AgentKernelService
             AgentThinkingUuid = Nothing
             AgentOriginalUserRequest = Nothing
             AgentFullUserMessage = Nothing
+            AgentEntryActionId = Nothing
             CurrentAgentSessionId = Nothing
             CurrentHarnessRunId = Nothing
 
@@ -100,6 +101,7 @@ Public Partial Class AgentKernelService
                                         thinkingUuid As String,
                                         originalRequest As String,
                                         fullMessage As String,
+                                        entryActionId As String,
                                         carriedCts As Threading.CancellationTokenSource,
                                         rejectedCts As Threading.CancellationTokenSource,
                                         message As String) As Boolean
@@ -107,6 +109,7 @@ Public Partial Class AgentKernelService
         AgentThinkingUuid = thinkingUuid
         AgentOriginalUserRequest = originalRequest
         AgentFullUserMessage = fullMessage
+        AgentEntryActionId = entryActionId
         _runCts = carriedCts
         rejectedCts.Dispose()
         If String.IsNullOrWhiteSpace(sessionId) Then

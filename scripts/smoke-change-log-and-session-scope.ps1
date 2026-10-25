@@ -12,6 +12,8 @@ if (-not (Test-Path (Join-Path $bin "ShareRibbon.dll"))) {
 
 Push-Location $bin
 try {
+    # E1-07 assertions build Newtonsoft JObject payloads by hand, so load the dependency explicitly
+    Add-Type -Path (Join-Path $bin "Newtonsoft.Json.dll")
     Add-Type -Path (Join-Path $bin "ShareRibbon.dll")
 
     [ShareRibbon.OfficeAiDatabase]::EnsureInitialized()
@@ -154,6 +156,81 @@ try {
         throw "a rolled-back run must no longer offer undo"
     }
 
+    # ---- E1-07 restore snapshots: hosts without a whole-stack undo replay a captured region instead ----
+    # The snapshot travels on ToolResult.RestoreSnapshot, never inside Observation: observation text is
+    # fed to the planner prompt and persisted in the run trace, so document content must not ride along.
+    $restoreRunId = "smoke-restore-" + [Guid]::NewGuid().ToString("N")
+    $restoreLog = New-Object ShareRibbon.Agent.AgentRunChangeLog
+    $regionObservation = @{
+        kind = "write"
+        summary = "wrote a region"
+        changed = $true
+        targetRefs = @("Sheet1!A1:C3")
+    }
+    $restoreNode = [ShareRibbon.Agent.AgentRunChangeLog]::BuildRestoreNode(
+        "excel_range_state",
+        ([Newtonsoft.Json.Linq.JObject]::Parse('{"address":"Sheet1!A1:C3","secretPayload":"cell-content-must-not-leak"}')))
+    if ($null -eq $restoreNode) { throw "a small reversible restore node must be accepted" }
+    if ($restoreNode["reversible"].ToString() -ne "True") { throw "restore nodes must declare themselves reversible" }
+
+    $regionResult = [ShareRibbon.Agent.ToolResult]::Succeed("ApplyFormula", "wrote a region", $null, $regionObservation)
+    $regionResult.RestoreSnapshot = $restoreNode
+    $regionRecord = $restoreLog.AddFromStep("ApplyFormula", 1, "write region", $regionResult, "", $false)
+    if ($null -eq $regionRecord -or -not $regionRecord.HasRestore) {
+        throw "a write carrying a restore snapshot must record it"
+    }
+    if ($regionRecord.NativeUndoUnit) { throw "an Excel-style write has no host undo unit" }
+    if ($restoreLog.NativeUndoable) { throw "restore-only writes must not be reported as native undo" }
+    if ($restoreLog.RestoreCount -ne 1 -or -not $restoreLog.FullyUndoable) {
+        throw "a run whose every residual write has a snapshot must be undoable by replay"
+    }
+    if ($regionRecord.ToJson().ToString().Contains("cell-content-must-not-leak")) {
+        throw "change records must only report that a snapshot exists, never the snapshot body"
+    }
+
+    # all-or-nothing: one replayable step plus one unreplayable step is not a safe one-click undo
+    $mixedRunId = "smoke-restore-mixed-" + [Guid]::NewGuid().ToString("N")
+    $halfNode = [Newtonsoft.Json.Linq.JObject]::Parse('{"kind":"excel_range_state","state":{"address":"A1"}}')
+    $halfResult = [ShareRibbon.Agent.ToolResult]::Succeed("FormatRange", "formatted", $null, @{
+        kind = "write"; summary = "formatted a range"; changed = $true; targetRefs = @("Sheet1!A1") })
+    $halfResult.RestoreSnapshot = $halfNode
+    [void]$restoreLog.AddFromStep("FormatRange", 2, "format without reversibility", $halfResult, "", $false)
+    if ($restoreLog.RestoreCount -ne 1 -or $restoreLog.WrittenCount -ne 2 -or $restoreLog.FullyUndoable) {
+        throw "a run with one unrestorable write must not claim a complete undo"
+    }
+    [ShareRibbon.AgentChangeLogRepository]::SaveRun($mixedRunId, $sessionId, "Excel", $restoreLog)
+    $mixedScope = [ShareRibbon.AgentChangeLogRepository]::GetUndoScopeByRun($mixedRunId)
+    if ($mixedScope.FullyUndoable -or $mixedScope.NativeUndoable) {
+        throw "persisted mixed run must stay undo-refused"
+    }
+    if (-not $mixedScope.Reason) { throw "a refused undo must carry a reason for the user" }
+
+    # persistence: the snapshot body survives only in agent_run_change.restore_json
+    $persistLog = New-Object ShareRibbon.Agent.AgentRunChangeLog
+    [void]$persistLog.AddFromStep("ApplyFormula", 1, "write region", $regionResult, "", $false)
+    [ShareRibbon.AgentChangeLogRepository]::SaveRun($restoreRunId, $sessionId, "Excel", $persistLog)
+    $restored = [ShareRibbon.AgentChangeLogRepository]::GetByRun($restoreRunId)
+    if ($restored.Count -ne 1 -or -not $restored[0].HasRestore) {
+        throw "restore snapshots must survive persistence"
+    }
+    if ($restored[0].RestoreJson -notlike "*cell-content-must-not-leak*") {
+        throw "the persisted snapshot must keep the region payload for replay"
+    }
+    $snapshots = [ShareRibbon.AgentChangeLogRepository]::GetRestoreSnapshotsByRun($restoreRunId)
+    if ($snapshots.Count -ne 1 -or $snapshots[0]["kind"].ToString() -ne "excel_range_state") {
+        throw "undo replay must read back the restore node by kind"
+    }
+    $restoreScope = [ShareRibbon.AgentChangeLogRepository]::GetUndoScopeByRun($restoreRunId)
+    if (-not $restoreScope.FullyUndoable -or $restoreScope.NativeUndoable -or $restoreScope.RestoreCount -ne 1) {
+        throw "a persisted Excel run must expose a restore-only undo scope"
+    }
+
+    # size gate: a snapshot bigger than the contract limit is dropped, not silently truncated
+    $oversize = [Newtonsoft.Json.Linq.JObject]::Parse('{"text":"' + ("x" * 61000) + '"}')
+    if ($null -ne [ShareRibbon.Agent.AgentRunChangeLog]::BuildRestoreNode("excel_range_state", $oversize)) {
+        throw "restore snapshots over the size limit must be refused"
+    }
+
     # ---- session scope: history is filtered by host, legacy rows stay visible ----
     $excelSession = "smoke-excel-" + [Guid]::NewGuid().ToString("N")
     $wordSession = "smoke-word-" + [Guid]::NewGuid().ToString("N")
@@ -178,6 +255,41 @@ try {
     if (-not ($excelSessions | Where-Object { $_.SessionId -eq $legacySession })) {
         throw "legacy rows without app_type must stay visible to every host"
     }
+
+    # ---- E2-04 write boundary: an app_type that is neither a host nor the empty exemption
+    # makes the session invisible in every host, so InsertMessage must normalise it to '' ----
+    $sentinelSession = "smoke-sentinel-" + [Guid]::NewGuid().ToString("N")
+    [ShareRibbon.ConversationRepository]::InsertMessage($sentinelSession, "user", "sentinel question", $false, "Unknown ")
+    $excelAfter = [ShareRibbon.ConversationRepository]::GetRecentSessions(200, "Excel")
+    $wordAfter = [ShareRibbon.ConversationRepository]::GetRecentSessions(200, "Word")
+    $pptAfter = [ShareRibbon.ConversationRepository]::GetRecentSessions(200, "PowerPoint")
+    foreach ($hostSessions in @($excelAfter, $wordAfter, $pptAfter)) {
+        if (-not ($hostSessions | Where-Object { $_.SessionId -eq $sentinelSession })) {
+            throw "a rejected app_type must fall back to the generic exemption and stay visible in every host"
+        }
+    }
+
+    $sentinelProbe = New-Object System.Data.SQLite.SQLiteConnection([ShareRibbon.OfficeAiDatabase]::GetConnectionString())
+    $sentinelProbe.Open()
+    try {
+        $cmd = $sentinelProbe.CreateCommand()
+        $cmd.CommandText = "SELECT IFNULL(app_type,'?') FROM conversation_event WHERE session_id = @sid"
+        [void]$cmd.Parameters.AddWithValue("@sid", $sentinelSession)
+        $storedEventApp = [string]$cmd.ExecuteScalar()
+        $cmd.Dispose()
+
+        $cmd = $sentinelProbe.CreateCommand()
+        $cmd.CommandText = "SELECT IFNULL(app_type,'?') FROM session_summary WHERE session_id = @sid"
+        [void]$cmd.Parameters.AddWithValue("@sid", $sentinelSession)
+        $storedProfileApp = [string]$cmd.ExecuteScalar()
+        $cmd.Dispose()
+    }
+    finally {
+        $sentinelProbe.Dispose()
+        [System.Data.SQLite.SQLiteConnection]::ClearAllPools()
+    }
+    if ($storedEventApp -ne "") { throw "InsertMessage must store the normalised host, got '$storedEventApp'" }
+    if ($storedProfileApp -ne "") { throw "the session profile must carry the same normalised host, got '$storedProfileApp'" }
 
     # ---- E2-02 session/document binding: group by document, first write wins ----
     $docA = "smoke-doc-a-" + [Guid]::NewGuid().ToString("N")
@@ -273,7 +385,36 @@ try {
     if ($legacyRenamed.Title -ne "Old session") { throw "legacy rename must reach the list, got '$($legacyRenamed.Title)'" }
     if ($legacyRenamed.DocumentId -ne "") { throw "backfilling a profile row must not invent a document binding" }
 
-    foreach ($sid in @($excelSession, $wordSession, $legacySession, $sessionOnA, $sessionOnB, $sessionGeneral)) {
+    # ---- E2-05 grouping keys the sidebar buckets by ----
+    # The group header buckets by last activity, so the list must carry both the first and the newest
+    # event time: with CreatedAt only, a session opened long ago and still running today lands in "older".
+    $backdate = New-Object System.Data.SQLite.SQLiteConnection([ShareRibbon.OfficeAiDatabase]::GetConnectionString())
+    $backdate.Open()
+    try {
+        $cmd = $backdate.CreateCommand()
+        $cmd.CommandText = "UPDATE conversation_event SET created_at = '2020-01-01 00:00:00' WHERE session_id = @sid AND role = 'user'"
+        [void]$cmd.Parameters.AddWithValue("@sid", $sessionOnA)
+        [void]$cmd.ExecuteNonQuery()
+        $cmd.Dispose()
+    }
+    finally {
+        $backdate.Dispose()
+        [System.Data.SQLite.SQLiteConnection]::ClearAllPools()
+    }
+
+    $groupKeys = [ShareRibbon.ConversationRepository]::GetRecentSessions(200, "Word", $docA, "all") |
+        Where-Object { $_.SessionId -eq $sessionOnA }
+    if ($groupKeys.CreatedAt -notlike "2020-01-01*") {
+        throw "CreatedAt must stay the first message time, got '$($groupKeys.CreatedAt)'"
+    }
+    if ([string]::IsNullOrWhiteSpace($groupKeys.LastActiveAt) -or $groupKeys.LastActiveAt -eq $groupKeys.CreatedAt) {
+        throw "LastActiveAt must follow the newest event instead of duplicating MIN(created_at)"
+    }
+    if ($groupKeys.DocumentId -ne $docA) {
+        throw "the list must carry the document hash, otherwise two files with the same name merge into one group"
+    }
+
+    foreach ($sid in @($excelSession, $wordSession, $legacySession, $sentinelSession, $sessionOnA, $sessionOnB, $sessionGeneral)) {
         [void][ShareRibbon.ConversationRepository]::DeleteSessionCascade($sid)
     }
 
@@ -319,11 +460,15 @@ try {
         PartialApplyCarried = $true
         UndoPointCarried = $true
         UndoScopeVerified = $true
+        RestoreReplayUndoable = $true
+        MixedRunUndoRefused = $true
         RollbackExcluded = $true
         HostScopeIsolated = $true
         LegacyRowsVisible = $true
+        UnknownAppTypeNormalizedAtWrite = $true
         DocumentScopeIsolated = $true
         CurrentDocumentPreferred = $true
+        GroupingKeysReturned = $true
         FirstDocumentBindingWins = $true
         AutoTitleReadable = $true
         RenameWinsOverAutoTitle = $true

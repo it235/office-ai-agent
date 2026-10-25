@@ -30,6 +30,10 @@ Public MustInherit Class BaseChatControl
     Private _selfCheckLoopController As SelfCheckLoopController = Nothing
     Private _conversationRuntime As IConversationRuntime = Nothing
     Private ReadOnly _webViewInitSemaphore As New SemaphoreSlim(1, 1)
+    ' E4-05：页面装载只做一次。这份文档注入设置、MCP 状态和命令面板状态各一份就够，
+    ' 面板里之后的任何导航都不应该再重跑一遍（重跑会把开关值重复下发、把监听重复注册）。
+    ' 真正的重新初始化（CoreWebView2 重建并重新 NavigateToString）在装载前把它复位。
+    Private _pageBootstrapDone As Boolean
     Private _commandRouter As ChatCommandRouter = Nothing
     Private _webViewBridge As WebViewBridge = Nothing
     Private _systemPromptResolver As ChatSystemPromptResolver = Nothing
@@ -105,7 +109,18 @@ Public MustInherit Class BaseChatControl
                         ConfigGate.Evaluate(validation, blockedAction))
         If prompt Is Nothing Then Return False
 
-        ExecuteJavaScriptAsyncJS(ConfigGate.BuildShowScript(prompt))
+        ExecuteJavaScriptAsyncJS(ModelConfigGate.BuildShowScript(prompt))
+        Return True
+    End Function
+
+    ''' <summary>
+    ''' E3-05：第一次云调用（以及撤回之后的第一次）之前必须先有同意。撤回复用同一张卡片，
+    ''' 所以拦下的位置和给用户看的承诺不可能各说一套。返回 True 表示本轮已经拦下。
+    ''' </summary>
+    Protected Function IsBlockedByPrivacy(blockedAction As String) As Boolean
+        Dim prompt = PrivacyConsentGate.Evaluate(PrivacyConsentGate.IsAccepted(), blockedAction)
+        If prompt Is Nothing Then Return False
+        ExecuteJavaScriptAsyncJS(ModelConfigGate.BuildShowScript(prompt))
         Return True
     End Function
 
@@ -244,6 +259,29 @@ Public MustInherit Class BaseChatControl
         End Get
     End Property
 
+    ' 延迟初始化的命令面板服务（E4-03）：快捷键监听跟着面板一起生灭，
+    ' 面板销毁后还留着轮询就等于快捷键在用户以为已经关掉插件的情况下继续生效。
+    Private _commandPaletteService As CommandPaletteService = Nothing
+    Protected ReadOnly Property CommandPaletteSvc As CommandPaletteService
+        Get
+            If _commandPaletteService Is Nothing Then
+                _commandPaletteService = New CommandPaletteService(
+                    AddressOf ExecuteJavaScriptAsyncJS,
+                    AddressOf GetOfficeAppType,
+                    AddressOf EnsureHostTaskPaneVisible)
+                AddHandler Me.Disposed, Sub(sender As Object, args As EventArgs) _commandPaletteService.Shutdown()
+            End If
+            Return _commandPaletteService
+        End Get
+    End Property
+
+    ''' <summary>
+    ''' 快捷键很可能在任务窗格收起时被按下，这时动作清单没有落点，宿主必须先把窗格展开。
+    ''' 基类拿不到 CustomTaskPane，所以由三端各自的 ChatControl 重写；默认什么都不做表示面板已经可见。
+    ''' </summary>
+    Protected Overridable Sub EnsureHostTaskPaneVisible()
+    End Sub
+
     ' 延迟初始化的代码执行服务
     Private _codeExecutionService As CodeExecutionService = Nothing
     Protected ReadOnly Property CodeExecutionService As CodeExecutionService
@@ -349,7 +387,8 @@ Public MustInherit Class BaseChatControl
     'settings
     Protected topicRandomness As Double
     Protected contextLimit As Integer
-    Protected selectedCellChecked As Boolean = False
+    ' E4-04：选区自动引用默认开启。开关在面板设置里可见可关，缺键时保持这个默认值。
+    Protected selectedCellChecked As Boolean = True
     Protected settingsScrollChecked As Boolean = False
 
     Protected stopReaderStream As Boolean = False
@@ -360,6 +399,9 @@ Public MustInherit Class BaseChatControl
 
     ' 输入框入口登记的"本回合用户可见文本"，由执行漏斗认领后落库并置空，保证每回合只写一条 user 历史
     Private _pendingUserVisibleText As String
+
+    ' E4-04：本轮真的带进提示的选区引用摘要（Nothing = 没带）。只用于在对话里显示，不落历史、不进日志。
+    Private _autoSelectionReference As String
 
     Protected loadingPictureBox As PictureBox
 
@@ -531,10 +573,14 @@ Public MustInherit Class BaseChatControl
                 ChatBrowser.CoreWebView2.AddWebResourceRequestedFilter("http://officeai.local/*", CoreWebView2WebResourceContext.Image)
                 
                 Dim htmlContent As String = My.Resources.chat_template_refactored
+                ' E4-05：这是一次新的文档装载，页面侧的初始化要重做一遍；除此之外不重复注入。
+                _pageBootstrapDone = False
                 ChatBrowser.CoreWebView2.NavigateToString(htmlContent)
-                
-                ' 等待页面加载完成后设置应用名称
-                AddHandler ChatBrowser.CoreWebView2.NavigationCompleted, AddressOf OnWebViewNavigationCompleted
+
+                ' E4-05：这里原来还 AddHandler 了一次 CoreWebView2.NavigationCompleted，
+                ' 而 OnWebViewNavigationCompleted 已经用 Handles ChatBrowser.NavigationCompleted 绑过一次，
+                ' 同一次导航因此跑两遍；下面的 RemoveHandler 只摘得掉这一份，Handles 那份永远留着。
+                ' 现在只保留声明式那一份绑定，配合 _pageBootstrapDone 做到「一次装载一次初始化」。
                 
                 ' 配置 Markdown 解析器
                 Await ConfigureMarked()
@@ -679,25 +725,22 @@ Public MustInherit Class BaseChatControl
     End Property
 
     Private Async Sub OnWebViewNavigationCompleted(sender As Object, e As CoreWebView2NavigationCompletedEventArgs) Handles ChatBrowser.NavigationCompleted
-        If e.IsSuccess Then
-            Try
-                ' Async Sub中Await后VSTO同步上下文可能丢失，
-                ' 统一通过Invoke确保CoreWebView2访问在UI线程
-                Await Task.Delay(100)
-                Await UiDispatcher.InvokeAsync(ChatBrowser,
-                    Sub()
-                        InitializeSettings()
-                        InitializeMcpSettings()
-
-                        If ChatBrowser IsNot Nothing AndAlso ChatBrowser.CoreWebView2 IsNot Nothing Then
-                            RemoveHandler ChatBrowser.CoreWebView2.NavigationCompleted, AddressOf OnWebViewNavigationCompleted
-                        End If
-                    End Sub)
-            Catch ex As Exception
-                Debug.WriteLine($"导航完成事件处理中出错: {ex.Message}")
-                Debug.WriteLine(ex.StackTrace)
-            End Try
-        End If
+        If Not e.IsSuccess Then Return
+        If _pageBootstrapDone Then Return
+        _pageBootstrapDone = True
+        Try
+            ' Async Sub中Await后VSTO同步上下文可能丢失，
+            ' 统一通过Invoke确保CoreWebView2访问在UI线程
+            Await Task.Delay(100)
+            Await UiDispatcher.InvokeAsync(ChatBrowser,
+                Sub()
+                    InitializeSettings()
+                    InitializeMcpSettings()
+                End Sub)
+        Catch ex As Exception
+            Debug.WriteLine($"导航完成事件处理中出错: {ex.Message}")
+            Debug.WriteLine(ex.StackTrace)
+        End Try
     End Sub
 
     Protected Sub InitializeSettings()
@@ -730,6 +773,8 @@ Public MustInherit Class BaseChatControl
 
             ' 设置Office应用类型（用于前端区分Word/PPT/Excel）
             Dim appType = GetOfficeAppType()
+            Dim paletteTitle As String = If(ChatSettings.EnableHotkey,
+                                            "命令面板（" & ChatSettings.HotkeyChord & "）", "命令面板")
 
             ' 将设置发送到前端
             Dim js As String = $"
@@ -755,18 +800,25 @@ Public MustInherit Class BaseChatControl
                 updateAutocompleteSettings({{ enabled: {ChatSettings.EnableAutocomplete.ToString().ToLower()}, delayMs: {ChatSettings.AutocompleteDelayMs}, shortcut: '{ChatSettings.AutocompleteShortcut}' }});
             }}
             
-            // 同步到主界面的checkbox
-            document.getElementById('scrollChecked').checked = {ChatSettings.settingsScrollChecked.ToString().ToLower()};
-            document.getElementById('selectedCell').checked = {ChatSettings.selectedCellChecked.ToString().ToLower()};
+            // E4-01/E4-02/E4-03：三个原生入口开关在设置面板里可见，用户不改代码就能关掉它们
+            setNativeEntrySetting('settings-enable-hotkey', {ChatSettings.EnableHotkey.ToString().ToLower()});
+            setNativeEntrySetting('settings-enable-selection-toolbar', {ChatSettings.EnableSelectionToolbar.ToString().ToLower()});
+            setNativeEntrySetting('settings-enable-context-menu', {ChatSettings.EnableContextMenu.ToString().ToLower()});
+            setNativeEntrySetting('settings-hotkey-chord', {Newtonsoft.Json.JsonConvert.SerializeObject(ChatSettings.HotkeyChord)});
+            setNativeEntrySetting('command-palette-button', null, {Newtonsoft.Json.JsonConvert.SerializeObject(paletteTitle)});
         "
             ExecuteJavaScriptAsyncJS(js)
+
+            ' E4-03：页面这时候才真的有 window.syncCommandPalette，清单和快捷键状态在这里落地一次；
+            ' 设置里改过开关的话，ApplyHotkey 会在下一次保存时再同步，不需要重启宿主。
+            CommandPaletteSvc.PushState()
+            CommandPaletteSvc.ApplyHotkey()
         Catch ex As Exception
             Debug.WriteLine($"初始化设置失败: {ex.Message}")
         End Try
     End Sub
 
     Private Sub RegisterWebViewCommandHandlers(router As ChatCommandRouter)
-        router.Register("checkedChange", Sub(jsonDoc) HandleCheckedChange(jsonDoc))
         router.Register("sendMessage", Sub(jsonDoc) HandleSendMessage(jsonDoc))
         router.Register("stopMessage", Sub(jsonDoc) HandleStopMessage(jsonDoc))
         router.Register("executeCode", Sub(jsonDoc) HandleExecuteCode(jsonDoc))
@@ -793,14 +845,11 @@ Public MustInherit Class BaseChatControl
         router.Register("requestCompletion", Sub(jsonDoc) HandleRequestCompletion(jsonDoc))
         router.Register("acceptCompletion", Sub(jsonDoc) HandleAcceptCompletion(jsonDoc))
         router.Register("startAgent", Sub(jsonDoc) HandleStartAgent(jsonDoc))
-        router.Register("startAgentExecution", Sub(jsonDoc) HandleStartAgentExecution(jsonDoc))
         router.Register("abortAgent", Sub(jsonDoc) HandleAbortAgent())
-        router.Register("refineAgentPlan", Sub(jsonDoc) HandleRefineAgentPlan(jsonDoc))
-        ' Legacy Ralph protocol → AgentKernel compatibility shims (do not add new features here).
-        router.Register("startLoop", Sub(jsonDoc) HandleLegacyStartLoop(jsonDoc))
-        router.Register("continueLoop", Sub(jsonDoc) HandleStartAgentExecution(jsonDoc))
-        router.Register("replanLoop", Sub(jsonDoc) HandleAgentRefinePlan(jsonDoc))
-        router.Register("cancelLoop", Sub(jsonDoc) HandleAbortAgent())
+        ' E5-04 删掉了 7 条没有任何发送者的注册：startLoop/continueLoop/replanLoop/cancelLoop（Ralph 别名，
+        ' /loop 已在 message-sender.js 改写成 startAgent）、startAgentExecution/refineAgentPlan（被 agent: 前缀
+        ' 那套取代）、checkedChange（旧版 BaseChat 面板有自己的 Select Case，不经过这个 router）。
+        ' 保留一条注册等于保留一条走不到、也验证不了的路径；由 scripts/check-entry-reachability.js 钉住。
         router.Register("agent:approvePlan", Sub(jsonDoc) HandleAgentApprovePlan(jsonDoc))
         router.Register("agent:rejectPlan", Sub(jsonDoc) HandleAgentRejectPlan(jsonDoc))
         router.Register("agent:approveStep", Sub(jsonDoc) HandleAgentApproveStep(jsonDoc))
@@ -1257,14 +1306,6 @@ Public MustInherit Class BaseChatControl
         HistorySessionSvc.HandleRenameSession(jsonDoc, scope)
     End Sub
 
-    Protected Overridable Sub HandleCheckedChange(jsonDoc As JObject)
-        Dim prop As String = jsonDoc("property").ToString()
-        Dim isChecked As Boolean = Boolean.Parse(jsonDoc("isChecked").ToString())
-        If prop = "selectedCell" Then
-            selectedCellChecked = isChecked
-        End If
-    End Sub
-
     Protected Overridable Sub HandleSaveSettings(jsonDoc As JObject)
         topicRandomness = jsonDoc("topicRandomness")
         contextLimit = jsonDoc("contextLimit")
@@ -1273,12 +1314,39 @@ Public MustInherit Class BaseChatControl
         Dim executeCodePreview As Boolean = jsonDoc("executeCodePreview")
         Dim enableAutocomplete As Boolean = If(jsonDoc("enableAutocomplete")?.Value(Of Boolean)(), False)
         Dim autocompleteShortcut As String = If(jsonDoc("autocompleteShortcut")?.Value(Of String)(), "Ctrl+.")
-        Dim chatSettings As New ChatSettings(GetApplication())
+        ' 原生入口的三个开关由面板自己带上来。这里以前回写的是静态值，等于面板上的开关存不住；
+        ' 缺键时退回当前值，避免旧版前端一保存就把用户已经存好的设置抹平。
+        Dim enableSelectionToolbar As Boolean = ReadFlagSetting(jsonDoc, "enableSelectionToolbar", ChatSettings.EnableSelectionToolbar)
+        Dim enableContextMenu As Boolean = ReadFlagSetting(jsonDoc, "enableContextMenu", ChatSettings.EnableContextMenu)
+        Dim enableHotkey As Boolean = ReadFlagSetting(jsonDoc, "enableHotkey", ChatSettings.EnableHotkey)
+        Dim hotkeyChord As String = If(jsonDoc("hotkeyChord")?.Value(Of String)(), ChatSettings.HotkeyChord)
+
+        ' 快捷键是独占资源：写法无效还照存，下次启动就是一个按了没反应、又没人知道为什么的开关
+        Dim parsedChord = HostHotkeyChord.Parse(hotkeyChord)
+        If enableHotkey AndAlso (parsedChord Is Nothing OrElse Not parsedChord.IsSafe) Then
+            hotkeyChord = ChatSettings.HotkeyChord
+            enableHotkey = False
+            GlobalStatusStrip.ShowWarning("命令面板快捷键写法无效，已保持关闭：请使用带 Ctrl 或 Alt 的组合键，例如 Ctrl+Alt+K")
+        End If
+
+        Dim chatSettingsStore As New ChatSettings(GetApplication())
         ' 保存设置到配置文件（chatMode 已弃用，统一为智能模式）
-        chatSettings.SaveSettings(topicRandomness, contextLimit, selectedCellChecked,
+        chatSettingsStore.SaveSettings(topicRandomness, contextLimit, selectedCellChecked,
                                   settingsScrollChecked, executeCodePreview,
-                                  enableAutocomplete, 800, autocompleteShortcut)
+                                  enableAutocomplete, 800, autocompleteShortcut,
+                                  enableSelectionToolbar, enableContextMenu,
+                                  enableHotkey, hotkeyChord)
+
+        ' 保存完立刻生效：快捷键不该要求用户重启宿主才能试出它到底注册上了没有
+        CommandPaletteSvc.ApplyHotkey()
     End Sub
+
+    ''' <summary>设置面板传来的开关缺键时退回当前值，不当成「用户想关掉」。</summary>
+    Private Shared Function ReadFlagSetting(jsonDoc As JObject, key As String, fallback As Boolean) As Boolean
+        Dim token = jsonDoc(key)
+        If token Is Nothing OrElse token.Type = JTokenType.Null Then Return fallback
+        Return token.Value(Of Boolean)()
+    End Function
 
     ' SendMessageReferenceContentItem 已移至 Controls/Models/HistoryMessage.vb
 
@@ -1342,7 +1410,7 @@ Public MustInherit Class BaseChatControl
         End If
 
         ' --- 处理选中的内容 ---
-        question = AppendCurrentSelectedContent("--- 我此次的问题：" & question & " ---")
+        question = BuildMessageWithAutoSelection("--- 我此次的问题：" & question & " ---")
 
         ' 检查是否有文件需要解析
         If filePaths IsNot Nothing AndAlso filePaths.Count > 0 Then
@@ -1635,6 +1703,7 @@ Public MustInherit Class BaseChatControl
     ''' <summary>
     ''' Agent模式下直接启动规划流程（不显示意图预览卡片）
     ''' Primary product path: AgentKernel planning/execution.
+    ''' 这条路径给的是空入口身份（E6-05）：输入框里是自由文本，没有入口动作，也就没有任务包合同可核对。
     ''' </summary>
     Private Sub StartAgentPlanningFlow(message As String,
                                        intent As IntentResult,
@@ -1670,7 +1739,8 @@ Public MustInherit Class BaseChatControl
                              historyMessages,
                              officeContext,
                              analysis?.TaskSpec,
-                             analysis?.SelectedSkills)
+                             analysis?.SelectedSkills,
+                             "")
 
                          If Not success Then
                              ' StartAgentAsync 已通过 Agent 完成事件展示结构化失败。执行型请求在
@@ -1701,6 +1771,33 @@ Public MustInherit Class BaseChatControl
 #Region "Ralph Agent 智能助手"
 
     ''' <summary>
+    ''' 宿主原生入口（Word 选区工具条 E4-01、E4-02 右键菜单、E4-03 快捷键、三端 Ribbon）发起一次 Agent 回合。
+    ''' 直接进 HandleStartAgent，与面板输入同一个闸门、同一个上下文采集、同一条主链；
+    ''' 不再让宿主拼 sendMessageToServer 的 JS 字符串，避免依赖 WebView 加载时序和一处以上话术副本。
+    ''' 形参收 QuickAction 而不是 String：E6-05 的断言要靠入口身份绑任务包，
+    ''' 话术和 id 必须来自同一个声明处，少传 id 要在这里编译不过，而不是等运行时猜。
+    ''' </summary>
+    Public Sub StartAgentFromHostEntry(action As Agent.QuickAction)
+        If action Is Nothing OrElse String.IsNullOrWhiteSpace(action.RequestText) Then Return
+        Dim payload As New JObject()
+        payload("request") = action.RequestText
+        payload("entryActionId") = If(action.Id, "")
+        HandleStartAgent(payload)
+    End Sub
+
+    ''' <summary>
+    ''' 本轮 Agent 是否还在跑。宿主原生入口据此不再叠加浮层，免得打断计划卡与风险审批。
+    ''' 只读已实例化的服务，不触发懒加载。
+    ''' </summary>
+    Public ReadOnly Property IsAgentRunActive As Boolean
+        Get
+            If _agentKernelService Is Nothing Then Return False
+            Return Not String.IsNullOrWhiteSpace(_agentKernelService.AgentThinkingUuid) OrElse
+                   Not String.IsNullOrWhiteSpace(_agentKernelService.CurrentAgentSessionId)
+        End Get
+    End Property
+
+    ''' <summary>
     ''' 处理启动Agent请求（AgentKernel 主路径）
     ''' </summary>
     Protected Sub HandleStartAgent(jsonDoc As JObject)
@@ -1711,11 +1808,19 @@ Public MustInherit Class BaseChatControl
                 Return
             End If
 
+            ' 同一条漏斗上的第二把门：还没有同意过数据边界，就还不能把文档发出去（E3-05）
+            If IsBlockedByPrivacy(ModelConfigGate.ActionAgent) Then
+                ExecuteJavaScriptAsyncJS("changeSendButton()")
+                Return
+            End If
+
             ' Agent 回合的用户事件由后台路径落库，文档标识必须此刻在 UI 线程取好
             RefreshSessionDocumentContext()
             Dim request = jsonDoc("request")?.ToString()
             Dim filePathsToken = jsonDoc("filePaths")
             Dim selectedContentToken = jsonDoc("selectedContent")
+            ' 入口身份随载荷走：命令面板/宿主入口带 id，自由输入没有。空 id 表示本轮没有包合同可核对。
+            Dim entryActionId = If(jsonDoc("entryActionId")?.ToString(), "")
 
             If String.IsNullOrEmpty(request) AndAlso (filePathsToken Is Nothing OrElse filePathsToken.Type <> JTokenType.Array) AndAlso (selectedContentToken Is Nothing OrElse selectedContentToken.Type <> JTokenType.Array) Then
                 GlobalStatusStrip.ShowWarning("请输入任务描述或添加文件引用")
@@ -1750,12 +1855,13 @@ Public MustInherit Class BaseChatControl
 
             Dim originalQuestion As String = request
             Dim finalMessageToLLM As String = request
-            finalMessageToLLM = AppendCurrentSelectedContent("--- 我此次的问题：" & finalMessageToLLM & " ---")
+            finalMessageToLLM = BuildMessageWithAutoSelection("--- 我此次的问题：" & finalMessageToLLM & " ---")
+            RenderAutoSelectionReference(AgentKernelSvc.AgentThinkingUuid)
 
             If filePaths IsNot Nothing AndAlso filePaths.Count > 0 Then
-                HandleStartAgentWithFilesAsync(finalMessageToLLM, originalQuestion, filePaths, selectedContents)
+                HandleStartAgentWithFilesAsync(finalMessageToLLM, originalQuestion, filePaths, selectedContents, entryActionId)
             Else
-                HandleStartAgentCore(finalMessageToLLM, originalQuestion, "")
+                HandleStartAgentCore(finalMessageToLLM, originalQuestion, "", entryActionId)
             End If
 
         Catch ex As Exception
@@ -1764,30 +1870,10 @@ Public MustInherit Class BaseChatControl
         End Try
     End Sub
 
-    ''' <summary>
-    ''' Compatibility: Ralph /loop and startLoop messages are rewritten to startAgent (AgentKernel).
-    ''' </summary>
-    Private Sub HandleLegacyStartLoop(jsonDoc As JObject)
-        Try
-            Dim goal = jsonDoc("goal")?.ToString()
-            If String.IsNullOrWhiteSpace(goal) Then
-                goal = jsonDoc("request")?.ToString()
-            End If
-
-            Debug.WriteLine("[ExecutionPathPolicy] legacy startLoop remapped to startAgent/AgentKernel")
-            Dim agentRequest As New JObject()
-            agentRequest("type") = "startAgent"
-            agentRequest("request") = goal
-            HandleStartAgent(agentRequest)
-        Catch ex As Exception
-            Debug.WriteLine($"HandleLegacyStartLoop failed: {ex.Message}")
-            GlobalStatusStrip.ShowWarning($"启动Agent失败: {ex.Message}")
-        End Try
-    End Sub
-
     Private Sub HandleStartAgentWithFilesAsync(question As String, originalQuestion As String,
                                               filePaths As List(Of String),
-                                              selectedContents As List(Of SendMessageReferenceContentItem))
+                                              selectedContents As List(Of SendMessageReferenceContentItem),
+                                              entryActionId As String)
         ' 显示进度提示
         GlobalStatusStrip.ShowInfo($"正在解析 {filePaths.Count} 个文件...")
         ExecuteJavaScriptAsyncJS("showFileParsingProgress(true)")
@@ -1890,7 +1976,7 @@ Public MustInherit Class BaseChatControl
                                        ExecuteJavaScriptAsyncJS("showFileParsingProgress(false)")
 
                                        Dim questionWithFiles = question & " 用户提问结束，后续引用的文件都在同一目录下所以可以放心读取。 ---"
-                                       HandleStartAgentCore(questionWithFiles, originalQuestion, fileContentBuilder.ToString())
+                                       HandleStartAgentCore(questionWithFiles, originalQuestion, fileContentBuilder.ToString(), entryActionId)
                                    End Sub)
 
                      Catch ex As Exception
@@ -1906,8 +1992,11 @@ Public MustInherit Class BaseChatControl
     ''' <summary>
     ''' 处理Agent启动的核心逻辑（文件解析完成后调用）
     ''' AgentKernel 启动核心（始终注入 CaptureOfficeContext）
+    ''' entryActionId 是必填项：每条路径都要说清自己是哪个入口动作（自由文本置为空串），
+    ''' 这样任务包断言要么真的核对，要么明确没有合同，不会靠"忘了传"来跳过验证。
     ''' </summary>
-    Private Sub HandleStartAgentCore(question As String, originalQuestion As String, fileContent As String)
+    Private Sub HandleStartAgentCore(question As String, originalQuestion As String, fileContent As String,
+                                     entryActionId As String)
         ' 构建最终发送给 LLM 的消息
         Dim finalMessageToLLM As String = question
 
@@ -1935,7 +2024,7 @@ Public MustInherit Class BaseChatControl
                          Next
 
                          GlobalStatusStrip.ShowInfo("正在分析您的需求...")
-                         Dim success = Await AgentKernelSvc.StartAgentAsync(finalMessageToLLM, appType, currentContent, historyMessages, officeContext)
+                         Dim success = Await AgentKernelSvc.StartAgentAsync(finalMessageToLLM, appType, currentContent, historyMessages, officeContext, Nothing, Nothing, entryActionId)
 
                          If Not success Then
                              GlobalStatusStrip.ShowWarning("无法分析您的需求，请重试")
@@ -1950,26 +2039,10 @@ Public MustInherit Class BaseChatControl
     End Sub
 
     ''' <summary>
-    ''' 处理修改Agent计划（新架构下暂不支持重新规划，记录日志）
-    ''' </summary>
-    Protected Overridable Sub HandleRefineAgentPlan(jsonDoc As JObject)
-        Debug.WriteLine("[AgentKernel] 收到 refineAgentPlan 请求，当前架构不支持手动重新规划")
-        GlobalStatusStrip.ShowInfo("已收到修改请求，请在下一轮对话中直接描述新需求")
-    End Sub
-
-    ''' <summary>
-    ''' 处理终止Agent（兼容新旧架构）
+    ''' 处理终止Agent
     ''' </summary>
     Protected Sub HandleAbortAgent()
         AgentKernelSvc.AbortAgent()
-    End Sub
-
-    ''' <summary>
-    ''' 处理开始执行Agent（兼容新旧架构）
-    ''' </summary>
-    Protected Sub HandleStartAgentExecution(jsonDoc As JObject)
-        ' 新架构中，用户点击"开始执行"相当于批准计划
-        AgentKernelSvc.Approve()
     End Sub
 
 #Region "AgentKernel 统一消息处理"
@@ -2034,7 +2107,8 @@ Public MustInherit Class BaseChatControl
                     Dim refinedRequest = request & vbCrLf & "[用户修改意见] " & feedback
                     AgentKernelSvc.AgentThinkingUuid = Guid.NewGuid().ToString()
                     AgentKernelSvc.AgentThinkingLabel = "正在根据您的意见重新规划..."
-                    HandleStartAgentCore(refinedRequest, request, "")
+                    ' 改计划仍然是同一件事：入口身份沿用本轮在跑的，包断言才不会因为一次改写而失效
+                    HandleStartAgentCore(refinedRequest, request, "", AgentKernelSvc.AgentEntryActionId)
                 End If
             End If
         Catch ex As Exception
@@ -2174,6 +2248,9 @@ Public MustInherit Class BaseChatControl
     ''' 非流式 AI 请求，直接获取完整响应（供 AgentKernel 使用）
     ''' </summary>
     Private Async Function SendAndGetResponseAsync(prompt As String, systemPrompt As String, historyMessages As List(Of HistoryMessage)) As Task(Of String)
+        ' E3-05：排版、审阅与 AgentKernel 的非流式请求都从这一个发送器出去，它们不经过 Send，
+        ' 所以同意要在这里再问一次；返回值沿用本函数既有的失败约定（空串），不发明第三种终态。
+        If IsBlockedByPrivacy(ModelConfigGate.ActionChat) Then Return ""
         ' Agent 回合的"停止"要能掐断在途请求；不在回合作用域内时为 None，其它调用方行为不变。
         Dim ambientCancellation = Agent.AgentCancellationScope.Current
         Try
@@ -2654,16 +2731,60 @@ Public MustInherit Class BaseChatControl
     Protected MustOverride Function GetCurrentWorkingDirectory() As String
     Protected MustOverride Function AppendCurrentSelectedContent(message As String) As String
 
+    ''' <summary>
+    ''' E4-04：选区自动引用只有一个决策点。关掉开关就必须真的一个字都不附加——
+    ''' 三端的 AppendCurrentSelectedContent 只负责「怎么把选区写成提示」，不负责「要不要写」。
+    ''' </summary>
+    Protected Function BuildMessageWithAutoSelection(message As String) As String
+        _autoSelectionReference = Nothing
+        If Not selectedCellChecked Then Return message
+
+        Dim appended = AppendCurrentSelectedContent(message)
+        If appended Is Nothing OrElse appended.Length <= message.Length Then Return If(appended, message)
+
+        _autoSelectionReference = DescribeAutoSelection(appended.Substring(message.Length))
+        Return appended
+    End Function
+
+    ''' <summary>引用摘要压成一行：正文已经进提示，这里只让用户看清带出去的是哪一段、多大。</summary>
+    Private Shared Function DescribeAutoSelection(referenceText As String) As String
+        Dim flat As New System.Text.StringBuilder()
+        Dim pendingSpace As Boolean = False
+        For Each c In referenceText
+            If Char.IsWhiteSpace(c) Then
+                pendingSpace = True
+            Else
+                If flat.Length > 0 AndAlso pendingSpace Then flat.Append(" "c)
+                pendingSpace = False
+                flat.Append(c)
+                If flat.Length >= 160 Then Exit For
+            End If
+        Next
+
+        Dim preview = flat.ToString()
+        Dim tail = If(referenceText.Length > preview.Length, "…", "")
+        Return $"当前选区 · 约 {referenceText.Length} 字：{preview}{tail}"
+    End Function
+
+    ''' <summary>
+    ''' 把本轮自动引用显示到对话里。Agent 回合不渲染用户气泡，不显示就等于「没打招呼把选区发出去了」。
+    ''' </summary>
+    Private Sub RenderAutoSelectionReference(turnUuid As String)
+        If String.IsNullOrWhiteSpace(_autoSelectionReference) Then Return
+        ExecuteJavaScriptAsyncJS($"appendTurnSelectionReference({UtilsService.ToJsStringLiteral(turnUuid)}, {UtilsService.ToJsStringLiteral(_autoSelectionReference)})")
+    End Sub
+
     ' 文本/CSV 解析已委托给 FileParserService，请使用 _fileParserService.ParseTextFile()
 
     Protected MustOverride Function GetApplication() As ApplicationInfo
 
     ''' <summary>
-    ''' 获取Office应用类型，用于前端区分Word/PowerPoint/Excel
+    ''' 宿主类型，用于前端区分 Word/PowerPoint/Excel，也是 app_type 落库前的归一输入。
+    ''' E5-04 把它从「默认 Unknown 的 Overridable」改成 MustOverride：漏实现不再在运行时
+    ''' 变成一个既不属于任何宿主、也拿不到空串豁免的值（见 AppTypeContract 与迁移 019），
+    ''' 而是在编译期就报错。
     ''' </summary>
-    Protected Overridable Function GetOfficeAppType() As String
-        Return "Unknown"
-    End Function
+    Protected MustOverride Function GetOfficeAppType() As String
 
     ''' <summary>
     ''' 宿主提供当前文档标识（一般取活动文档的完整路径）。共享层不碰 COM，
@@ -2791,6 +2912,12 @@ Public MustInherit Class BaseChatControl
             If Not IsBlockedByModelConfig(ModelConfigGate.ActionChat, validation) Then
                 GlobalStatusStrip.ShowWarning(GetSendValidationWarning(validation.Failure))
             End If
+            ExecuteJavaScriptAsyncJS($"changeSendButton()")
+            Return
+        End If
+
+        ' 配置齐了不代表可以把文档发出去：还没有同意过数据边界时，这条同样拦在发送之前（E3-05）
+        If IsBlockedByPrivacy(ModelConfigGate.ActionChat) Then
             ExecuteJavaScriptAsyncJS($"changeSendButton()")
             Return
         End If
@@ -2980,11 +3107,6 @@ Public MustInherit Class BaseChatControl
     ' 共用的HTTP请求方法 - 委托给 UtilsService
     Protected Async Function SendHttpRequest(apiUrl As String, apiKey As String, requestBody As String) As Task(Of String)
         Return Await UtilsService.SendHttpRequestAsync(apiUrl, apiKey, requestBody)
-    End Function
-
-    ' 加载本地HTML文件
-    Public Async Function LoadLocalHtmlFile() As Task
-        Await WebViewBridge.LoadHtmlFileAsync(ChatHtmlFilePath)
     End Function
 
     Public Async Function SaveFullWebPageAsync() As Task

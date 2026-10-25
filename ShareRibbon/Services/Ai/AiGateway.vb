@@ -56,6 +56,13 @@ Public Class AiGateway
         If String.IsNullOrWhiteSpace(options.ApiKey) Then Return Fail("ApiKey is required.")
         If String.IsNullOrWhiteSpace(options.ModelName) Then Return Fail("ModelName is required.")
 
+        ' E3-05：共享请求层的出口。意图识别、记忆沉淀、AgentKernel 的内部调用都从这里出去，
+        ' 在这里拦一次，比在每个调用方各拦一次可靠。理由文案归 PrivacyConsentGate 持有。
+        If Not PrivacyConsentGate.IsAccepted() Then
+            Debug.WriteLine("[AiGateway] refused: privacy consent not accepted")
+            Return Fail(PrivacyConsentGate.RefusalReason)
+        End If
+
         Dim isAnthropic = IsAnthropicEndpoint(options.ApiUrl)
         Dim requestBody = BuildProviderRequest(options)
         Dim timeoutSeconds = If(options.TimeoutSeconds > 0, options.TimeoutSeconds, 60)

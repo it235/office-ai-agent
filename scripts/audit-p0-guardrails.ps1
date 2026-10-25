@@ -71,6 +71,25 @@ function Test-CodeLineMatch {
 
 $failures = New-Object System.Collections.Generic.List[string]
 
+# A .vb file that is not in the .vbproj Compile list still reads fine and only fails at build time in
+# whichever project consumes it, so the registration check runs here against every code project.
+foreach ($project in $sourceRoots) {
+    $projectFile = Join-Path $repoRoot "$project\$project.vbproj"
+    if (-not (Test-Path -LiteralPath $projectFile)) {
+        $failures.Add("Project file missing: $project\$project.vbproj")
+        continue
+    }
+    $projectText = Get-Content -LiteralPath $projectFile -Raw -Encoding UTF8
+    $projectFiles = @(Get-ChildItem -LiteralPath (Join-Path $repoRoot $project) -Recurse -Filter *.vb -File |
+        Where-Object { $_.FullName -notmatch "\\(bin|obj)\\" })
+    foreach ($vb in $projectFiles) {
+        $relative = $vb.FullName.Substring((Join-Path $repoRoot $project).Length + 1)
+        if ($projectText.IndexOf($relative, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+            $failures.Add("$relative is not compiled by $project\$project.vbproj")
+        }
+    }
+}
+
 # Reads a file for pattern guards, dropping comment-only lines so that an explanatory
 # note can never satisfy (or trip) a guard that is supposed to talk about real code.
 function Get-CodeSource {
@@ -278,7 +297,7 @@ foreach ($file in $excelUndoFiles) {
 # Only the CreateSlides chain can delete its own pages; a plain command envelope that already moved the
 # presentation must stop automatic replay instead of pretending the deck is untouched.
 $pptChatSource = Get-CodeSource "PowerPointAi\ChatControl.vb"
-if ($pptChatSource -notmatch "Function ExecuteJsonCommandWithToolResult[\s\S]{0,4000}?ExceptionClassifier\.CodeObservationFailed") {
+if ($pptChatSource -notmatch "Function ExecuteJsonCommandWithToolResult[\s\S]{0,6000}?ExceptionClassifier\.CodeObservationFailed") {
     $failures.Add("PowerPoint treats an unverified success as final: PowerPointAi\ChatControl.vb")
 }
 $pptRollbackNotes = [regex]::Matches($pptChatSource, "observation\(`"rollback`"\) = BuildPowerPointRollbackNote\(").Count
@@ -379,6 +398,63 @@ if ($loopSource -notmatch "Catch ex As OperationCanceledException When cancellat
 }
 if (([regex]::Matches($loopSource, "If cancellationToken\.IsCancellationRequested Then Return FinishCancelled")).Count -lt 2) {
     $failures.Add("Cancelled turn can still reach the host executor after a model reply: LoopEngine")
+}
+
+# E1-06 guardrail: a replanned plan is generated without knowing the document already changed.
+# The write ledger is the only authority on what really landed, so the gate has to stay in front of
+# the host call; otherwise every replan can write the same content a second time.
+if ($loopSource -notmatch "Dim priorWrite = session\.Writes\.FindAppliedInPriorPlan\(toolCall\)") {
+    $failures.Add("Replan no longer consults the write ledger before executing a write: LoopEngine")
+}
+$loopActWindow = [regex]::Match($loopSource, "Dim priorWrite = session\.Writes\.FindAppliedInPriorPlan\(toolCall\)[\s\S]{0,6000}?ExecuteToolAsync").Value
+if ($loopActWindow -notmatch "If priorWrite IsNot Nothing Then") {
+    $failures.Add("A write already applied in an earlier plan can still reach the host executor: LoopEngine")
+}
+if ($loopActWindow -notmatch "If _undoManager IsNot Nothing AndAlso priorWrite Is Nothing Then") {
+    $failures.Add("A skipped duplicate write still opens an empty undo point: LoopEngine")
+}
+if ($loopSource -notmatch "session\.Writes\.Record\(toolCall, changeRecord, planStep\.Description\)") {
+    $failures.Add("Committed host writes are no longer fed into the ledger, so replan has nothing to skip: LoopEngine")
+}
+$loopReplanWindow = [regex]::Match($loopSource, "Case ""replan""[\s\S]{0,2500}?Continue While").Value
+if ($loopReplanWindow -notmatch "session\.Writes\.BeginNextPlan\(\)") {
+    $failures.Add("Replan replaces the plan without advancing the plan version, so applied writes never become cross-plan: LoopEngine")
+}
+if ($loopReplanWindow -notmatch "ValidateReplannedCoverage\(session, reflection\.Plan\)") {
+    $failures.Add("Replan coverage no longer counts the writes the previous plan already delivered, so completed work is reported as a gap: LoopEngine")
+}
+
+$ledgerSource = Get-CodeSource "ShareRibbon\Agent\Execution\AgentWriteLedger.vb"
+if ($ledgerSource -notmatch "If Not change\.Success OrElse Not change\.Changed OrElse change\.RolledBack Then Return Nothing") {
+    $failures.Add("Ledger records a write the host did not commit, so replan skips work that never landed")
+}
+if ($ledgerSource -notmatch "APPLIED_WRITES") {
+    $failures.Add("The applied-write constraint lost its machine-checkable marker, so the smoke can no longer prove the model was told")
+}
+
+$planSource = Get-CodeSource "ShareRibbon\Agent\LoopEngine.Planning.vb"
+if ($planSource -notmatch "Dim appliedConstraint = session\.Writes\.BuildAppliedWritesText\(\)") {
+    $failures.Add("Reflection no longer receives the objective list of writes already on disk: LoopEngine.Planning")
+}
+$reflectWindow = [regex]::Match($planSource, "Private Async Function ReflectAndReplanAsync[\s\S]{0,3500}?End Try").Value
+if ($reflectWindow -notmatch "SendAIRequest\(prompt, systemPrompt & appliedConstraint") {
+    $failures.Add("Reflection request no longer carries the applied-write constraint: LoopEngine.Planning")
+}
+if ($reflectWindow -notmatch "GeneratePlanAsync\(session, systemPrompt & appliedConstraint") {
+    $failures.Add("Replanned plan request no longer carries the applied-write constraint, so it can re-plan finished work: LoopEngine.Planning")
+}
+if ($reflectWindow -match "appliedText") {
+    $failures.Add("Reflection and replan build the applied-write constraint twice instead of sharing one copy: LoopEngine.Planning")
+}
+
+# The reflection prompt used to crash on a three-argument If over a String observation, which silently
+# killed every replan path. Keep the guard on the shape that actually broke.
+$promptSource = Get-CodeSource "ShareRibbon\Agent\PromptManager.vb"
+if ($promptSource -match 'If\(it\.Observation,\s*"[^"]*",\s*"') {
+    $failures.Add("PromptManager treats a String observation as a Boolean condition again, which throws and kills replan")
+}
+if ($promptSource -notmatch "BuildReflectionPrompt") {
+    $failures.Add("PromptManager lost the reflection prompt builder the loop depends on")
 }
 
 # P3-A guardrail: refusing the preview is a cancellation, not a successful write.
@@ -701,60 +777,14 @@ if ($wordChatSource -notmatch "setSectionPlainText\(") {
     $failures.Add("WordAi user echo no longer uses the plain-text bridge helper: WordAi\ChatControl.vb")
 }
 
-# P4-C guardrail: every JS function the VB bridge calls must exist in a WebView resource.
-# A missing name fails silently inside the pane ("x is not defined" in its console only), so
-# the user just sees a button that does nothing; showIdentifyingStatus and addThinkingMessage
-# survived that way until this scan was added.
-$bridgeCallSkip = @(
-    "document", "window", "console", "localStorage", "JSON", "Object", "Array", "String",
-    "Number", "setTimeout", "setInterval", "alert", "this", "if", "for", "while", "switch",
-    "return", "function", "var", "let", "const", "requestAnimationFrame", "getComputedStyle",
-    "Event", "CustomEvent", "Date", "Math", "Promise"
-)
-
-$jsGlobals = New-Object 'System.Collections.Generic.HashSet[string]'
-$jsScanFiles = @(Get-ChildItem -LiteralPath (Join-Path $repoRoot $jsResourceDir) -Filter *.js -Recurse)
-$jsScanFiles += @(Get-ChildItem -LiteralPath (Join-Path $repoRoot "ShareRibbon\Resources") -Filter *.html)
-$jsGlobalPatterns = @(
-    "function\s+([A-Za-z_$][\w$]*)\s*\(",
-    "(?:window|globalThis)\.([A-Za-z_$][\w$]*)\s*=",
-    "(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:function|\()",
-    "^\s*([A-Za-z_$][\w$]*)\s*:\s*function"
-)
-foreach ($jsFile in $jsScanFiles) {
-    $jsText = Get-Content -LiteralPath $jsFile.FullName -Raw -Encoding UTF8
-    foreach ($pattern in $jsGlobalPatterns) {
-        foreach ($m in [regex]::Matches($jsText, $pattern, "Multiline")) {
-            [void]$jsGlobals.Add($m.Groups[1].Value)
-        }
-    }
-}
-if ($jsGlobals.Count -lt 100) {
-    $failures.Add("Bridge contract scan only saw $($jsGlobals.Count) JS globals; the resource scan is broken, not the bridge")
-}
-
-$bridgeCallSites = @{}
-foreach ($bridgeFile in ($bridgeFiles + @("ShareRibbon\Controls\Services\ChatRequestOrchestrator.vb",
-                                         "ShareRibbon\Controls\Services\CodeExecutionService.vb",
-                                         "ExcelAi\ChatControl.vb"))) {
-    $bridgeSource = Get-CodeSource $bridgeFile
-    foreach ($m in [regex]::Matches($bridgeSource, '(?:_executeScript|ExecuteJavaScriptAsyncJS|ExecuteScript|executeScript)\s*\(\s*\$?"([^"{}]{0,400})')) {
-        $head = [regex]::Match($m.Groups[1].Value, "^\s*([A-Za-z_$][\w$.]*)\s*\(")
-        if (-not $head.Success) { continue }
-        $callName = $head.Groups[1].Value
-        if ($callName.Contains(".") -or $bridgeCallSkip -contains $callName) { continue }
-        if (-not $bridgeCallSites.ContainsKey($callName)) {
-            $bridgeCallSites[$callName] = New-Object System.Collections.Generic.List[string]
-        }
-        $bridgeCallSites[$callName].Add($bridgeFile)
-    }
-}
-foreach ($callName in ($bridgeCallSites.Keys | Sort-Object)) {
-    if (-not $jsGlobals.Contains($callName)) {
-        $callFiles = ($bridgeCallSites[$callName] | Sort-Object -Unique) -join ", "
-        $failures.Add("VB bridge calls JS '$callName' that no WebView resource defines, so the call is a silent no-op: $callFiles")
-    }
-}
+# P4-C (every JS name the VB bridge calls must exist; every literal id an injected block looks up
+# must have a node) moved to scripts\check-entry-reachability.js rules H and I in E5-05. That scan
+# owns the corpus now: it walks all four modules' .vb from disk and reads the payload with VB
+# lexing, while this file kept a hand-picked file list, only looked at the first call of a payload,
+# and skipped every payload containing VB interpolation - which is most of them. Deleting the copy
+# here is the point: two owners of one contract is how the contract drifts.
+# run-code-checks.ps1 runs the node gate and treats a missing node as a failure, and
+# build\RunReleaseChecks.ps1 now delegates to run-code-checks.ps1, so this rule still gates releases.
 
 # P5 guardrail: the JavaScriptStringEncode output is a JS literal, never message content.
 # It used to be accumulated into a second buffer that history/memory read, so every persisted
@@ -1004,8 +1034,8 @@ $kernelServiceSource = Get-CodeSource "ShareRibbon\Controls\Services\AgentKernel
 if ($kernelServiceSource -notmatch "AgentChangeLogRepository\.SaveRun\(") {
     $failures.Add("AgentKernelService does not persist the change log before rendering the terminal UI")
 }
-if ($kernelServiceSource -notmatch "Function BuildUndoDescriptor\(" -or $kernelServiceSource -notmatch "completeAgent\([\s\S]{0,300}?undoJson") {
-    $failures.Add("AgentKernelService no longer passes the undo descriptor to completeAgent")
+if ($kernelServiceSource -notmatch "Function BuildTerminalDescriptor\(" -or $kernelServiceSource -notmatch "completeAgent\([\s\S]{0,300}?terminalJson") {
+    $failures.Add("AgentKernelService no longer passes the terminal change summary to completeAgent")
 }
 if ($baseChatSource -notmatch 'Register\("agent:undoRun"') {
     $failures.Add("BaseChatControl no longer routes agent:undoRun")
@@ -1020,8 +1050,52 @@ if ($wordChatSource -notmatch "Function PerformUndoAgentRun[\s\S]{0,3000}?MarkRu
     $failures.Add("Word run undo does not mark the run as rolled back: WordAi\ChatControl.vb")
 }
 $agentCardSource = Get-CodeSource "ShareRibbon\Resources\js\agent-card.js"
-if ($agentCardSource -notmatch "undo\.canUndo" -or $agentCardSource -notmatch "function setAgentUndoResult") {
+if ($agentCardSource -notmatch "terminal\.canUndo" -or $agentCardSource -notmatch "function setAgentUndoResult") {
     $failures.Add("Agent card no longer renders or resolves the run undo entry: agent-card.js")
+}
+
+# E1-07 guardrail: Excel and PowerPoint have no whole-stack undo, so "undo this run" replays a restore
+# snapshot. That payload must only ever ride on the ephemeral ToolResult side channel and land in
+# agent_run_change.restore_json - anywhere else it reaches the planner prompt, the run trace, the chat
+# history or the logs. Undo is also all-or-nothing: a run is offered only when every residual write is
+# covered, either by host undo units or by its own snapshot.
+if ($toolRegistrySource -notmatch "JsonIgnore>[\s\S]{0,200}?Property RestoreSnapshot") {
+    $failures.Add("The restore snapshot is no longer a JsonIgnore side channel, so document content can be serialized into prompts: ToolRegistry.vb")
+}
+if ($changeLogSource -notmatch "toolResult\.RestoreSnapshot") {
+    $failures.Add("The change log no longer reads restore snapshots from the ToolResult side channel: AgentChangeLog.vb")
+}
+if ($changeLogSource -notmatch "NativeUndoable" -or $changeLogSource -notmatch "RestoreCount") {
+    $failures.Add("The change log lost the two-path undo scope (host undo units or full snapshot coverage): AgentChangeLog.vb")
+}
+if ($changeRepoSource -notmatch "restore_json" -or $changeRepoSource -notmatch "Function GetRestoreSnapshotsByRun\(") {
+    $failures.Add("Restore snapshots are no longer persisted and read back for replay: AgentChangeLogRepository.vb")
+}
+if (-not (Test-Path -LiteralPath (Join-Path $repoRoot "ShareRibbon\Storage\Migrations\018_agent_run_change_restore.sql"))) {
+    $failures.Add("Restore snapshot migration is missing: ShareRibbon\Storage\Migrations\018_agent_run_change_restore.sql")
+}
+if ($kernelServiceSource -notmatch "restoreCount") {
+    $failures.Add("The terminal undo descriptor no longer reports how many writes can be replayed: AgentKernelService.vb")
+}
+if ($kernelServiceSource -match '_getOfficeAppType\(\),\s*"Word"') {
+    $failures.Add("The one-click undo is gated to Word again; Excel/PPT undo must go through restore snapshots: AgentKernelService.vb")
+}
+if ($planSource -notmatch "degraded\.RestoreSnapshot = result\.RestoreSnapshot") {
+    $failures.Add("Downgrading a partially applied batch drops its restore snapshot, so the run can no longer be undone: LoopEngine.Planning.vb")
+}
+if ($excelChatSource -notmatch "Function PerformUndoAgentRun[\s\S]{0,2000}?GetRestoreSnapshotsByRun" -or
+    $pptChatSource -notmatch "Function PerformUndoAgentRun[\s\S]{0,2000}?GetRestoreSnapshotsByRun") {
+    $failures.Add("Excel or PowerPoint lost its restore-snapshot undo entry: ChatControl.vb")
+}
+if ($excelChatSource -notmatch "ExcelUndo\.ExcelRunRestore\.BuildNode" -or
+    $pptChatSource -notmatch "PowerPointUndo\.PowerPointRunRestore\.BuildNode") {
+    $failures.Add("Excel or PowerPoint no longer captures a restore snapshot before writing: ChatControl.vb")
+}
+if ($excelChatSource -match 'observation\("restore"\)' -or $pptChatSource -match 'observation\("restore"\)') {
+    $failures.Add("A host put the restore payload into the observation instead of the ToolResult side channel: ChatControl.vb")
+}
+if ($agentCardSource -notmatch "terminal\.restoreCount") {
+    $failures.Add("Agent card no longer distinguishes host undo units from replayed snapshots: agent-card.js")
 }
 
 # E1-05 guardrail: approval must offer once / session / reject, and a rejection may only skip the
@@ -1080,6 +1154,75 @@ if ($extractorSource -notmatch "Function ByteArrayEquals\(" -or $extractorSource
 }
 if ($extractorSource -match '\.version') {
     $failures.Add("ResourceExtractor went back to a version-stamp skip: stale frontend fails silently")
+}
+
+# E1-08 guardrail: the plan card is the user's only view of what the round is about to change, so it must
+# carry scope / count / risk computed from the tool registry and the live context pack (never model prose),
+# re-render when the plan is replanned, keep per-step status as a token instead of a Boolean, and finish
+# with the committed change list plus either an undo entry or the reason there is none.
+if ($loopSource -notmatch "Property OnStepStatusChanged As Action\(Of Integer, String, String\)" -or
+    $loopSource -notmatch 'Public Const StepStatusAborted As String = "aborted"') {
+    $failures.Add("LoopEngine collapsed step status back into a Boolean, so skipped and aborted steps render as failures")
+}
+if ($loopSource -notmatch "OnStepStatusChanged\?\.Invoke\(stepIndex, StepStatusRunning") {
+    $failures.Add("LoopEngine no longer announces the running step, so the plan card cannot show in-flight work")
+}
+$loopKernelEventSource = Get-CodeSource "ShareRibbon\Agent\AgentKernel.vb"
+if ($loopKernelEventSource -match "OnStepCompleted" -or
+    $loopKernelEventSource -notmatch "Event OnStepStatusChanged\(stepIndex As Integer, status As String, message As String\)") {
+    $failures.Add("AgentKernel still forwards a Boolean step-completion event instead of the status token")
+}
+if ($harnessSource -notmatch "AddressOf HandleKernelStepStatusChanged") {
+    $failures.Add("OfficeHarness is not wired to the step status token")
+}
+if ($loopSource -notmatch "RaisePlanGenerated\(session\)" -or
+    [regex]::Matches($loopSource, "RaisePlanGenerated\(session\)").Count -lt 2) {
+    $failures.Add("LoopEngine raises the plan card only once, so a replanned plan never reaches the timeline")
+}
+$loopCoverageSource = Get-CodeSource "ShareRibbon\Agent\LoopEngine.Coverage.vb"
+if ($loopCoverageSource -notmatch "session\.Plan\.Trust = BuildPlanTrust\(session, session\.Plan\)") {
+    $failures.Add("The plan card is raised without the trust descriptor: LoopEngine.Coverage.vb")
+}
+if ($loopCoverageSource -notmatch "_toolRegistry\.GetTool\(toolId\)") {
+    $failures.Add("Plan risk is no longer read from the tool registry, so the card would trust model prose: LoopEngine.Coverage.vb")
+}
+if ($loopCoverageSource -notmatch 'GetWorking\("lastContextPack"\)') {
+    $failures.Add("Plan scope is no longer read from the captured context pack: LoopEngine.Coverage.vb")
+}
+if ($kernelServiceSource -notmatch '\{"scope", If\(plan\.Trust\?\.ScopeText' -or
+    $kernelServiceSource -notmatch '\{"riskLevel"' -or
+    $kernelServiceSource -notmatch '\{"planVersion"') {
+    $failures.Add("The plan card bridge dropped the scope/count/risk payload: AgentKernelService.vb")
+}
+if ($kernelServiceSource -notmatch '\.stepIndex = If\(iteration\.Explanation\?\.StepIndex' -or
+    $agentCardSource -notmatch "iteration\.stepIndex") {
+    $failures.Add("Iteration details are keyed by the global iteration again, so they land in the wrong step: agent-card.js")
+}
+if ($agentCardSource -notmatch "function buildPlanTrustHtml" -or $agentCardSource -notmatch "agent-trust-risk-") {
+    $failures.Add("The plan card no longer renders scope/count/risk chips: agent-card.js")
+}
+if ($agentCardSource -notmatch "const isReplan = planVersion > 1") {
+    $failures.Add("A replanned plan appends a second card instead of re-rendering in place: agent-card.js")
+}
+if ($agentCardSource -match "function getStepIcon\(") {
+    $failures.Add("agent-card.js re-declares getStepIcon, which silently overrides the code-handler.js icon map")
+}
+if ($kernelServiceSource -notmatch "MaxTerminalChanges As Integer" -or
+    $kernelServiceSource -notmatch "For Each entry In changeLog\.Entries" -or
+    $kernelServiceSource -notmatch "BoundText\(If\(entry\.Summary, entry\.StepDescription\), 120\)") {
+    $failures.Add("The terminal change summary is no longer built from the committed change log with a bound: AgentKernelService.vb")
+}
+if ($kernelServiceSource -notmatch 'descriptor\("undoReason"\)') {
+    $failures.Add("The undo entry can disappear without a reason: AgentKernelService.vb")
+}
+if ($agentCardSource -notmatch "function renderAgentChangeSummary" -or $agentCardSource -notmatch "agent-undo-reason") {
+    $failures.Add("The terminal card lost the change summary or the missing-undo explanation: agent-card.js")
+}
+if (-not (Test-Path -LiteralPath (Join-Path $repoRoot "scripts\check-agent-card-ui.js"))) {
+    $failures.Add("The agent card UI contract check is missing: scripts\check-agent-card-ui.js")
+}
+if ((Get-Content -LiteralPath (Join-Path $repoRoot "scripts\run-code-checks.ps1") -Raw -Encoding UTF8) -notmatch "check-agent-card-ui\.js") {
+    $failures.Add("run-code-checks.ps1 does not execute the agent card UI contract check")
 }
 
 # E2-01 guardrail: every chat turn is stamped with the host that wrote it, and history rows
@@ -1194,6 +1337,85 @@ if ($historyJsSource -notmatch "confirm\(") {
     $failures.Add("Deleting a session cascades to messages, memory and run traces, so it must stay confirmed")
 }
 
+# E2-04 guardrail: app_type is a closed contract, not a free-text column. Both read sides only ever
+# match "this host OR empty", so a third value (the "Unknown" an early build stored) equals no host and
+# loses the empty-string exemption: the row disappears from Word, Excel and PowerPoint at once. That is
+# why normalisation must sit at the write boundary, and why migration 019 has to cover all six columns.
+$appTypeContractSource = Get-CodeSource "ShareRibbon\Storage\AppTypeContract.vb"
+if ($appTypeContractSource -notmatch "Function Normalize\(") {
+    $failures.Add("AppTypeContract no longer owns the app_type contract, so writers fall back to raw strings")
+}
+$appTypeMemRepoSource = Get-CodeSource "ShareRibbon\Storage\AgentMemoryRepository.vb"
+foreach ($writer in @(
+    "ShareRibbon\Storage\ConversationRepository.vb",
+    "ShareRibbon\Storage\AgentMemoryRepository.vb",
+    "ShareRibbon\Storage\MemoryRepository.vb",
+    "ShareRibbon\Storage\AgentChangeLogRepository.vb",
+    "ShareRibbon\Agent\Harness\RunTraceStore.vb")) {
+    if ((Get-CodeSource $writer) -notmatch "AppTypeContract\.Normalize") {
+        $failures.Add("$writer writes an app_type column without AppTypeContract.Normalize")
+    }
+}
+if (([regex]::Matches($appTypeMemRepoSource, 'AddWithValue\("@app_type", AppTypeContract\.Normalize')).Count -lt 2) {
+    $failures.Add("AgentMemoryRepository must normalise both writers (conversation_event and memory_item)")
+}
+if ($convSource -notmatch 'AddWithValue\("@app", appTypeNorm\)') {
+    $failures.Add("ConversationRepository no longer writes the normalised host into conversation_event")
+}
+$migration019Path = Join-Path $repoRoot "ShareRibbon\Storage\Migrations\019_session_ownership_normalization.sql"
+if (-not (Test-Path -LiteralPath $migration019Path)) {
+    $failures.Add("Session ownership migration is missing: ShareRibbon\Storage\Migrations\019_session_ownership_normalization.sql")
+    $migration019Sql = ""
+} else {
+    $migration019Sql = Get-Content -LiteralPath $migration019Path -Raw -Encoding UTF8
+}
+foreach ($tableName in @("conversation_event", "agent_run", "agent_run_change", "session_summary", "atomic_memory", "memory_item")) {
+    if ($migration019Sql -notmatch "(?s)UPDATE $tableName\s+SET app_type = CASE") {
+        $failures.Add("Migration 019 no longer normalises $tableName.app_type")
+    }
+    # the inline fallback is what runs on an install without the Migrations folder, so the two
+    # copies must agree statement by statement instead of only the deployed file being correct
+    $inlineNeedle = "UPDATE $tableName SET app_type = " + [char]34 + " & appTypeNormalizeCase"
+    if ($dbSource -notmatch [regex]::Escape($inlineNeedle)) {
+        $failures.Add("OfficeAiDatabase inline migration 019 does not normalise $tableName")
+    }
+}
+if ($dbSource -notmatch "\{\s*19,") {
+    $failures.Add("OfficeAiDatabase has no versioned migration registered for schema 19")
+}
+
+# E2-05 guardrail: the sidebar buckets sessions by document and by recency, but only the backend knows
+# which column decided the order. lastActiveAt is the MAX(created_at) that ORDER BY already uses - bucket
+# by the first message time instead and a session reopened today lands under "older". documentId is the
+# path hash - bucket by the file name and two files with the same name merge into one group.
+if ($convSource -notmatch "MAX\(e\.created_at\)") {
+    $failures.Add("GetRecentSessions no longer selects the last-activity column the sidebar buckets by")
+}
+if ($convSource -notmatch "\.LastActiveAt = ReadText\(rdr, 7\)") {
+    $failures.Add("GetRecentSessions selects MAX(created_at) but never maps it onto SessionSummaryRecord.LastActiveAt")
+}
+if ($historyServiceSource -notmatch "\.lastActiveAt = ") {
+    $failures.Add("HandleGetSessionList stopped sending lastActiveAt, so time buckets fall back to the first message")
+}
+if ($historyServiceSource -notmatch "\.documentId = ") {
+    $failures.Add("HandleGetSessionList stopped sending documentId, so same-name documents merge into one group")
+}
+foreach ($contract in @(
+        @("buildGroups", "the first-appearance bucketing pass"),
+        @("timeBucket", "the recency bucket labels"),
+        @("runEmptyAction", "the guided empty-state actions"),
+        @("s\.documentId", "the document group key"))) {
+    if ($historyJsSource -notmatch $contract[0]) {
+        $failures.Add("history-manager.js lost $($contract[1]): $($contract[0])")
+    }
+}
+if ($historyJsSource -notmatch 'data-empty="start"') {
+    $failures.Add("The history empty state no longer hands the user back to the composer")
+}
+if ($historyJsSource -match "items\.sort\(|\.sort\(\(a, b\)") {
+    $failures.Add("history-manager.js sorts sessions in the frontend again, wiping the backend document/time order")
+}
+
 # Memory pipeline contract guardrail: the queue job is keyed by session id and both the history read
 # path and the extractor read path filter conversation_event on event_type = 'chat_message'. When one
 # side drifts the job completes while extracting nothing, which is silent data loss, not an error.
@@ -1276,8 +1498,21 @@ if ($saveConfigBody -notmatch "ApplyConfigSnapshot\(\)") {
     $failures.Add("SaveConfig writes the store but leaves the live snapshot stale, so a saved config change needs a restart")
 }
 $checksSource = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\run-code-checks.ps1") -Raw -Encoding UTF8
-if ($checksSource -notmatch [regex]::Escape("smoke-config-snapshot.ps1")) {
-    $failures.Add("smoke-config-snapshot.ps1 is not registered in run-code-checks.ps1, the stale-snapshot defect can return")
+$releaseChecksSource = Get-Content -LiteralPath (Join-Path $repoRoot "build\RunReleaseChecks.ps1") -Raw -Encoding UTF8
+# E5-05: the gate list used to be hand-maintained twice, so per-script "my file name appears in the
+# checklist" pins were both unmaintainable and beside the point. Pin the shape instead: the runner
+# treats every scripts\*.ps1 as a gate unless it opts out by name, and the release path delegates to
+# that runner instead of keeping its own shorter list - which is what made the capability-consistency
+# guards non-release gates. The opt-out table is what makes the discovery testable: a name-prefix rule
+# (smoke-*.ps1) looked general and still missed run-professional-design-smoke.ps1 entirely.
+if ($checksSource -notmatch "Get-ChildItem" -or $checksSource -notmatch '\$notGates') {
+    $failures.Add("run-code-checks.ps1 no longer discovers every scripts\*.ps1 as a gate, so a new gate can land without ever running")
+}
+if ($releaseChecksSource -notmatch 'run-code-checks\.ps1') {
+    $failures.Add("build\RunReleaseChecks.ps1 keeps its own gate list again instead of delegating to scripts\run-code-checks.ps1")
+}
+if ($releaseChecksSource -notmatch '\$LASTEXITCODE') {
+    $failures.Add("build\RunReleaseChecks.ps1 Invoke-Step ignores exit codes, so a step ending in exit 1 still prints PASS")
 }
 
 # E3-01 guardrail: the first-run wizard may only carry what the config window never had - the privacy
@@ -1338,11 +1573,164 @@ if ($onboardingJsSource -notmatch "openModelConfig") {
 if ($onboardingJsSource -match "onboardingStepPinned|window\.onboardingStep\s*=") {
     $failures.Add("onboarding.js keeps a front-end copy of the wizard step again, which can contradict the host state")
 }
+
+# E4-01 single-source rule: the wizard examples and the Word selection quick actions read the same
+# QuickActionCatalog. Any second hardcoded list is the start of three per-host tables that need manual
+# syncing, so the wizard must keep delegating instead of re-owning the wording (no literal here: PS 5.1
+# reads these files by codepage, so Chinese strings cannot be used as guard anchors).
+if ($onboardingSource -notmatch "QuickActionCatalog\.SampleTasks") {
+    $failures.Add("OnboardingService owns its own example list again instead of reading QuickActionCatalog.SampleTasks")
+}
+
+# E3-02 guardrail: the one-click sample is an entry, not an executor. It posts the catalog request to the
+# panel's own startAgent message, so it inherits the model-config gate, the context refresh, the plan card,
+# the risk confirmation and the change summary. A wizard that opens its own run path would be a second main
+# chain with its own end states - and none of that shows up as a compile error.
+$sampleCatalogSource = Get-CodeSource "ShareRibbon\Agent\QuickActionCatalog.vb"
+if ($sampleCatalogSource -notmatch "Class SampleTask" -or $sampleCatalogSource -notmatch "RunRequestText As String") {
+    $failures.Add("SampleTask lost its RunRequestText, so a one-click sample cannot carry a request at all")
+}
+if ($onboardingSource -notmatch 'item\("request"\)\s*=\s*sample\.RunRequestText') {
+    $failures.Add("OnboardingService no longer pushes the runnable request, so every sample degrades back to fill-the-input")
+}
+if ($onboardingJsSource -notmatch "type:\s*'startAgent'") {
+    $failures.Add("onboarding.js no longer posts the one-click sample to startAgent, so it bypasses the panel's single Agent entry")
+}
+$runSampleMatch = [regex]::Match($onboardingJsSource, '(?s)function onboardingRunSample\([\s\S]*?\n\}')
+if (-not $runSampleMatch.Success) {
+    $failures.Add("onboarding.js lost onboardingRunSample, the single place the one-click sample leaves the panel")
+} else {
+    $runSampleBody = $runSampleMatch.Value
+    foreach ($forbiddenRun in @("needsSetup", "ConfigApiForm", "sendChatMessage", "startAgentExecution", "executeCode")) {
+        if ($runSampleBody -match $forbiddenRun) {
+            $failures.Add("onboardingRunSample does its own gating or execution ('$forbiddenRun') instead of speaking one request to startAgent")
+        }
+    }
+}
+# A sample-specific run handler on the host side would be a second entry next to startAgent.
+foreach ($deadSamplePost in @("runSample", "onboardingRunSample", "runOnboardingSample")) {
+    if ($baseChatSource -match [regex]::Escape("Register(`"$deadSamplePost`"")) {
+        $failures.Add("BaseChatControl registered a second sample-run handler ('$deadSamplePost') next to startAgent")
+    }
+}
+
+# E4-01 guardrail: the selection toolbar is a floating strip drawn on top of the document the user is
+# writing in. Three properties are load-bearing and none of them show up as a compile error if they rot:
+# it must not steal focus (otherwise clicking a button destroys the selection it acts on), it must not
+# start a second execution path (the panel's HandleStartAgent is the only gate + context + main chain),
+# and it must not log selection text (AppLogger writes to a file that leaves the machine).
+$quickActionSource = Get-CodeSource "ShareRibbon\Agent\QuickActionCatalog.vb"
+$toolbarDir = Join-Path $repoRoot "WordAi\Selection"
+$toolbarSourceFiles = @()
+if (Test-Path -LiteralPath $toolbarDir) {
+    $toolbarSourceFiles = @(Get-ChildItem -LiteralPath $toolbarDir -Filter *.vb -File)
+} else {
+    $failures.Add("WordAi\Selection is missing, the E4-01 selection toolbar has no implementation")
+}
+$toolbarCode = ($toolbarSourceFiles | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8 }) -join "`n"
+$thisAddInSource = Get-CodeSource "WordAi\ThisAddIn.vb"
+$chatSettingsSource = Get-CodeSource "ShareRibbon\Config\ChatSettings.vb"
+
+if ($quickActionSource -match 'Namespace\s+Agent\.Entry') {
+    $failures.Add("QuickActionCatalog is back under Namespace Agent.Entry; VB is case-insensitive and the namespace hijacks the 'entry' loop variable in ShareRibbon.Agent.Execution")
+}
+if ($toolbarCode -match 'sendMessageToServer|createChatSection|ExecuteJavaScript') {
+    $failures.Add("The Word selection toolbar builds panel JS instead of handing the request to StartAgentFromHostEntry")
+}
+if ($toolbarCode -notmatch 'StartAgentFromHostEntry') {
+    $failures.Add("The selection toolbar no longer routes quick actions through the single Agent entry")
+}
+if ($toolbarSourceFiles.Count -gt 0 -and $toolbarCode -notmatch 'WS_EX_NOACTIVATE') {
+    $failures.Add("The selection toolbar can activate again: clicking a quick action clears the Word selection")
+}
+foreach ($logCall in [regex]::Matches($toolbarCode, 'AppLogger\.\w+\([^\r\n]*')) {
+    if ($logCall.Value -match '\.Text|RequestText') {
+        $failures.Add("The selection toolbar logs document text (AppLogger writes to disk): $($logCall.Value.Trim())")
+    }
+}
+if ($chatSettingsSource -notmatch 'EnableSelectionToolbar As Boolean = False') {
+    $failures.Add("The selection toolbar defaults back to on; a strip drawn over every selection needs a UI switch before it can be opt-out")
+}
+if ($chatSettingsSource -notmatch '"enableSelectionToolbar"') {
+    $failures.Add("enableSelectionToolbar is no longer persisted in chat-settings.json, so the feature is compile-time only")
+}
+$thisAddInStartup = [regex]::Match($thisAddInSource, "Private Sub WordAi_Startup[\s\S]*?\r?\n    End Sub").Value
+if ($thisAddInStartup -match "EnsureSelectionToolbar") {
+    $failures.Add("The selection toolbar is created on the VSTO startup critical path again")
+}
 if ($chatManagerJsSource -notmatch "showOnboarding") {
     $failures.Add("The blocked-send CTA no longer offers the guided setup path (E3-03 -> E3-01 handover)")
 }
 if ($chatManagerJsSource -match "showOnboarding\('[a-z]") {
     $failures.Add("The CTA passes a wizard step into showOnboarding, but only the host state decides which step shows")
+}
+
+# E4-02 guardrail: the right-click entry rewrites a menu the user already owns, in three hosts, from
+# one shared OCOM registrar. What must stay true is the same list as E4-01 plus reversibility: the
+# shared layer may only touch Office.CommandBar (never host COM types), every item it adds must be
+# Tag-owned and removable, availability is judged at click time (the pinned Office 15 PIA exposes no
+# CommandBar events), and the entry only speaks - execution stays on the single Agent chain.
+$contextMenuShared = Get-CodeSource "ShareRibbon\Agent\HostContextMenu.vb"
+$contextMenuAdapters = @(
+    (Get-CodeSource "WordAi\HostEntry\WordContextMenu.vb"),
+    (Get-CodeSource "ExcelAi\HostEntry\ExcelContextMenu.vb"),
+    (Get-CodeSource "PowerPointAi\HostEntry\PowerPointContextMenu.vb")
+)
+if ($contextMenuShared -match 'Microsoft\.Office\.Interop\.(Word|Excel|PowerPoint)') {
+    $failures.Add("ShareRibbon\Agent\HostContextMenu.vb reaches into a host object model; the shared layer is Office.CommandBar only")
+}
+if ($contextMenuShared -notmatch 'TagPrefix As String = "aiq:"') {
+    $failures.Add("The shared context menu layer lost its Tag prefix, so it can no longer tell its own items from the user's")
+}
+if ($contextMenuShared -match 'BeforeRightClick|_CommandBarEvents') {
+    # The pinned Office 15 primary interop exposes no event surface on CommandBar, so a right-click
+    # hook cannot compile; availability has to be judged at click time.
+    $failures.Add("The context menu tries to hook CommandBar events that the referenced Office primary interop does not expose")
+}
+foreach ($adapter in $contextMenuAdapters) {
+    if ($adapter -match '(?m)^\s*Namespace Selection\s*$') {
+        $failures.Add("A host context menu adapter is back under Namespace Selection, which shadows the interop Selection type in that project")
+    }
+    if ($adapter -match 'sendMessageToServer|ExecuteJavaScript') {
+        $failures.Add("A host context menu adapter talks to the panel JS instead of the single Agent entry")
+    }
+    if ($adapter -notmatch 'New HostContextMenu\(\)') {
+        $failures.Add("A host context menu adapter stopped delegating registration to the shared HostContextMenu layer")
+    }
+}
+foreach ($entrySource in @($contextMenuShared) + $contextMenuAdapters) {
+    foreach ($logCall in [regex]::Matches($entrySource, 'AppLogger\.\w+\([^\r\n]*')) {
+        if ($logCall.Value -match '\.Text|RequestText|\.Caption') {
+            $failures.Add("The host entry layer logs document text (AppLogger writes to disk): $($logCall.Value.Trim())")
+        }
+    }
+}
+$contextMenuHosts = @(
+    [pscustomobject]@{ AddIn = "WordAi\ThisAddIn.vb"; Project = "WordAi\WordAi.vbproj"; Item = "HostEntry\WordContextMenu.vb" },
+    [pscustomobject]@{ AddIn = "ExcelAi\ThisAddIn.vb"; Project = "ExcelAi\ExcelAi.vbproj"; Item = "HostEntry\ExcelContextMenu.vb" },
+    [pscustomobject]@{ AddIn = "PowerPointAi\ThisAddIn.vb"; Project = "PowerPointAi\PowerPointAi.vbproj"; Item = "HostEntry\PowerPointContextMenu.vb" }
+)
+foreach ($hostEntry in $contextMenuHosts) {
+    $addInSource = Get-CodeSource $hostEntry.AddIn
+    $projectSource = Get-CodeSource $hostEntry.Project
+    if ($addInSource -notmatch 'ChatSettings\.EnableContextMenu Then Return') {
+        $failures.Add("$($hostEntry.AddIn) attaches the AI context menu without checking ChatSettings.EnableContextMenu")
+    }
+    if ($addInSource -notmatch 'chatControl\.StartAgentFromHostEntry\(action\)') {
+        $failures.Add("$($hostEntry.AddIn) context menu callback no longer runs through StartAgentFromHostEntry")
+    }
+    if ($addInSource -notmatch 'contextMenu\.Detach\(\)') {
+        $failures.Add("$($hostEntry.AddIn) no longer removes its context menu items on shutdown, leaving dead entries in the user's menu")
+    }
+    if ($projectSource -notmatch [regex]::Escape($hostEntry.Item)) {
+        $failures.Add("$($hostEntry.Item) is not registered in $($hostEntry.Project), so the E4-02 adapter never compiles")
+    }
+}
+if ($chatSettingsSource -notmatch 'EnableContextMenu As Boolean = False') {
+    $failures.Add("The AI context menu defaults back to on; rewriting a menu the user already owns needs a settings UI before it can be opt-out")
+}
+if ($chatSettingsSource -notmatch '"enableContextMenu"') {
+    $failures.Add("enableContextMenu is no longer persisted in office_ai_chat_settings.json, so the entry is compile-time only")
 }
 
 # A stale wizard card after a successful save is the same class of bug as a stale config snapshot.
@@ -1388,6 +1776,21 @@ $stylesCssSource = Get-Content -LiteralPath (Join-Path $repoRoot "ShareRibbon\Re
 foreach ($rule in [regex]::Matches($stylesCssSource, '\.onboarding-([a-z][a-z-]*)')) {
     if ($onboardingJsSource -notmatch [regex]::Escape($rule.Groups[1].Value)) {
         $failures.Add("styles.css styles '.onboarding-$($rule.Groups[1].Value)' but onboarding.js no longer renders it")
+    }
+}
+
+# E2-05 markup is grouped headers plus a guided empty state; a class rendered without a rule (or a rule
+# nothing renders any more) is drift nobody sees in a build error.
+foreach ($rule in [regex]::Matches($stylesCssSource, '\.(history-group(?:-[a-z]+)?|empty-state-[a-z]+)')) {
+    $rendered = $rule.Groups[1].Value
+    if ($historyJsSource -notmatch [regex]::Escape($rendered)) {
+        $failures.Add("styles.css styles '.$rendered' but history-manager.js no longer renders it")
+    }
+}
+foreach ($needed in @("history-group", "history-group-header", "history-group-label", "history-group-count",
+                      "history-group-current", "empty-state-hint", "empty-state-actions")) {
+    if ($stylesCssSource -notmatch [regex]::Escape(".$needed")) {
+        $failures.Add("history-manager.js renders '.$needed' but styles.css has no rule for it")
     }
 }
 
@@ -1437,6 +1840,76 @@ foreach ($posted in ($postedTypes | Sort-Object)) {
     if (-not $handledTypes.Contains($posted)) {
         $failures.Add("The panel posts message type '$posted' but no host handler registers it")
     }
+}
+
+# E5-04 guardrail: unreachable entries are invisible at runtime - ChatCommandRouter only Debug.Writes an
+# unknown type, a commented-out button renders nothing and a dead JS function noops. Deletion is therefore
+# part of the contract: the surfaces proven unreachable in E5-04 must not silently come back.
+$webViewBridgeSource = Get-CodeSource "ShareRibbon\Controls\Services\WebViewBridge.vb"
+if ($baseChatSource -match "LoadLocalHtmlFile") {
+    $failures.Add("BaseChatControl.LoadLocalHtmlFile is back; page load is owned by InitializeWebView2 alone")
+}
+if ($webViewBridgeSource -match "LoadHtmlFileAsync") {
+    $failures.Add("WebViewBridge.LoadHtmlFileAsync is back; its only caller was the unreachable local-html loader")
+}
+foreach ($legacyType in @("startLoop", "continueLoop", "replanLoop", "cancelLoop",
+                          "startAgentExecution", "refineAgentPlan", "checkedChange")) {
+    if ($baseChatSource -match ('router\.Register\("' + $legacyType + '"')) {
+        $failures.Add("BaseChatControl re-registers legacy message type '$legacyType' with no sender in the panel")
+    }
+}
+if ($baseChatSource -notmatch "Protected MustOverride Function GetOfficeAppType") {
+    $failures.Add("GetOfficeAppType is overridable again, so a host that forgets it silently writes an unowned app_type")
+}
+foreach ($hostChat in @("WordAi\ChatControl.vb", "ExcelAi\ChatControl.vb", "PowerPointAi\ChatControl.vb")) {
+    if ((Get-CodeSource $hostChat) -notmatch "Overrides Function GetOfficeAppType") {
+        $failures.Add("$hostChat does not override GetOfficeAppType, so its history rows lose host attribution")
+    }
+}
+
+# The template library is the entry E5-04 reconnected: the editor and the list were implemented in all
+# three hosts but only PowerPoint's ribbon button could reach them. The button, the JS and the registered
+# message type are one contract - drop any link and the entry is unreachable again.
+$templateHtmlSource = Get-Content -LiteralPath $chatTemplatePath -Raw -Encoding UTF8
+$reformatTemplateJsSource = Get-JsSource (Join-Path $jsResourceDir "reformat-template.js")
+if ($templateHtmlSource -notmatch 'id="template-library-button"' -or
+    $templateHtmlSource -notmatch "openTemplateLibrary\(\)") {
+    $failures.Add("chat-template-refactored.html no longer renders the reformat template library entry")
+}
+if ($reformatTemplateJsSource -notmatch "window\.openTemplateLibrary\s*=\s*function") {
+    $failures.Add("openTemplateLibrary is gone from reformat-template.js, leaving a dead button in the input bar")
+}
+if ($reformatTemplateJsSource -notmatch "window\.editTemplate\s*=\s*function") {
+    $failures.Add("reformat-template.js no longer defines editTemplate, so manage-mode cards have no working edit link")
+}
+$checkListSource = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\run-code-checks.ps1") -Raw -Encoding UTF8
+if ($checkListSource -notmatch "check-entry-reachability\.js") {
+    $failures.Add("scripts/check-entry-reachability.js is not registered in run-code-checks.ps1, so the E5-04 invariants are unverified")
+}
+
+# E5-05 guardrail: the injected payload contract (rule H = literal ids must have nodes, rule I = called
+# JS functions must exist) and the navigation contract (rule J = paths quoted in AGENTS.md/CLAUDE.md/
+# README must be on disk) live in exactly one place now. Pin every half so a future edit cannot drop one
+# and leave the bridge, or the map, checked only from one side.
+$reachabilitySource = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\check-entry-reachability.js") -Raw -Encoding UTF8
+foreach ($ruleToken in @("injectApiRe", "vbIdLookups", "vbBridgeCalls", "jsGlobals", "collectNavDocs", "navRefs")) {
+    if ($reachabilitySource -notmatch $ruleToken) {
+        $failures.Add("check-entry-reachability.js no longer contains '$ruleToken', so the injected-payload contract lost its owner")
+    }
+}
+# The two names the extended scan found. showProofreadLoading never existed in the panel, so the
+# proofread banner loaded and the spinner stayed hidden; planning-status-card was a leftover id from
+# the pre-agent-card UI, so both _executeScript calls removed nothing while claiming to reset the card.
+$wordChatSource = Get-CodeSource "WordAi\ChatControl.vb"
+if ($wordChatSource -match "showProofreadLoading") {
+    $failures.Add("WordAi calls showProofreadLoading() again; that name is not in the panel corpus, the ReferenceError only shows in the pane console")
+}
+if ($wordChatSource -notmatch "showProofreadModeIndicator\(\); showLoadingIndicator\(\)") {
+    $failures.Add("The proofread entry no longer shows the loading indicator, which is what showProofreadLoading was meant to do")
+}
+$kernelSource = Get-CodeSource "ShareRibbon\Controls\Services\AgentKernelService.vb"
+if ($kernelSource -match "planning-status-card") {
+    $failures.Add("planning-status-card is back in AgentKernelService; agent-card.js owns the plan card as 'agent-plan-' + uuid")
 }
 
 

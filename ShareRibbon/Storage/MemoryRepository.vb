@@ -69,6 +69,8 @@ Public Class SessionSummaryRecord
     Public Property Title As String
     Public Property Snippet As String
     Public Property CreatedAt As String
+    ''' <summary>会话内最后一条消息的时间；列表按它排序，前端按时间分组也必须用它，否则分桶会和顺序自相矛盾。</summary>
+    Public Property LastActiveAt As String = ""
     ''' <summary>所属文档标识（路径哈希）；空表示升级前或无法定位文档的通用会话。</summary>
     Public Property DocumentId As String = ""
     Public Property DocumentName As String = ""
@@ -503,7 +505,7 @@ Public Class MemoryRepository
     Public Shared Function InsertMemory(content As String, Optional embedding As String = Nothing, Optional sessionId As String = Nothing, Optional appType As String = Nothing, Optional memoryType As String = "long_term", Optional importance As Double = 0.5, Optional sourceType As String = "general") As Long
         OfficeAiDatabase.EnsureInitialized()
         Dim ts = CType((DateTime.UtcNow - New DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds, Long)
-        Dim app = If(String.IsNullOrEmpty(appType), "", appType.Trim())
+        Dim app = AppTypeContract.Normalize(appType)
         Dim newId As Long = 0
         Dim embeddingDim = GetEmbeddingDimension(embedding)
         Using conn As New SQLiteConnection(OfficeAiDatabase.GetConnectionString())

@@ -83,8 +83,8 @@ try {
         $cmd = $conn.CreateCommand()
         $cmd.CommandText = "SELECT version FROM schema_version LIMIT 1"
         $version = [int]$cmd.ExecuteScalar()
-        if ($version -ne 17) {
-            throw "Expected schema version 17, got $version"
+        if ($version -ne 19) {
+            throw "Expected schema version 19, got $version"
         }
 
         $requiredTables = @(
@@ -123,6 +123,10 @@ try {
             if ($changeColumns -notcontains $column) {
                 throw "agent_run_change must have column $column after migration 016"
             }
+        }
+        # migration 018 stores the replayable before-state snapshot for hosts without native undo
+        if ($changeColumns -notcontains "restore_json") {
+            throw "agent_run_change must have column restore_json after migration 018"
         }
 
         # ---- migration 017 gives the session profile its document binding columns ----
@@ -246,6 +250,43 @@ try {
         $legacySession = "smoke-legacy-" + [Guid]::NewGuid().ToString("N")
         Invoke-ExecSql "INSERT INTO conversation (session_id, role, content, create_time) VALUES ('$legacySession', 'user', 'legacy question', '2026-01-01 10:00:00')"
         Invoke-ExecSql "INSERT INTO conversation (session_id, role, content, create_time) VALUES ('$legacySession', 'assistant', 'legacy answer', '2026-01-01 10:00:05')"
+
+        # ---- E2-04 fixtures: legacy ownership shapes migration 019 has to resolve ----
+        # (a) the "Unknown" sentinel an early Excel build used to store. It equals no host and is
+        #     not the empty-string exemption, so the session was invisible in all three hosts.
+        #     The session profile knows the document, so the extension is the ownership evidence.
+        $sentinelSession = "smoke-sentinel-" + [Guid]::NewGuid().ToString("N")
+        Invoke-ExecSql "INSERT INTO conversation_event (event_id, session_id, app_type, event_type, role, content, created_at) VALUES ('ev-a1', '$sentinelSession', 'Unknown', 'chat_message', 'user', 'sentinel question', '2026-01-02 09:00:00')"
+        Invoke-ExecSql "INSERT INTO conversation_event (event_id, session_id, app_type, event_type, role, content, created_at) VALUES ('ev-a2', '$sentinelSession', 'unknown ', 'chat_message', 'assistant', 'sentinel answer', '2026-01-02 09:00:04')"
+        Invoke-ExecSql "INSERT INTO session_summary (session_id, app_type, document_id, document_name, created_at, updated_at) VALUES ('$sentinelSession', '', '', 'C:\reports\budget.XLSX', '2026-01-02 09:00:00', '2026-01-02 09:00:04')"
+
+        # (b) the newest trace carries the sentinel while an older trace knows the host: after
+        #     normalization the older real host must win, and the profile must follow the events.
+        $maskedSession = "smoke-masked-" + [Guid]::NewGuid().ToString("N")
+        Invoke-ExecSql "INSERT INTO conversation_event (event_id, session_id, app_type, event_type, role, content, created_at) VALUES ('ev-b1', '$maskedSession', 'Unknown', 'chat_message', 'user', 'masked question', '2026-01-03 09:00:00')"
+        Invoke-ExecSql "INSERT INTO agent_run (run_id, session_id, app_type, status, started_at) VALUES ('run-b-old', '$maskedSession', 'Excel', 'completed', '2026-01-03 09:00:01')"
+        Invoke-ExecSql "INSERT INTO agent_run (run_id, session_id, app_type, status, started_at) VALUES ('run-b-new', '$maskedSession', 'Unknown', 'completed', '2026-01-03 10:00:00')"
+        Invoke-ExecSql "INSERT INTO session_summary (session_id, app_type, document_id, document_name, created_at, updated_at) VALUES ('$maskedSession', '', '', '', '2026-01-03 09:00:00', '2026-01-03 10:00:00')"
+
+        # (c) no trace and no document at all: must fall back to the empty-string exemption
+        #     (generic, visible in every host) instead of being guessed or dropped.
+        $ownerlessSession = "smoke-ownerless-" + [Guid]::NewGuid().ToString("N")
+        Invoke-ExecSql "INSERT INTO conversation_event (event_id, session_id, app_type, event_type, role, content, created_at) VALUES ('ev-c1', '$ownerlessSession', 'Unknown', 'chat_message', 'user', 'ownerless question', '2026-01-04 09:00:00')"
+        Invoke-ExecSql "INSERT INTO conversation_event (event_id, session_id, app_type, event_type, role, content, created_at) VALUES ('ev-c2', '$ownerlessSession', '', 'chat_message', 'assistant', 'ownerless answer', '2026-01-04 09:00:05')"
+
+        # (d) a properly owned session must not be re-decided by the extension or a later document.
+        $wordSession = "smoke-word-" + [Guid]::NewGuid().ToString("N")
+        Invoke-ExecSql "INSERT INTO conversation_event (event_id, session_id, app_type, event_type, role, content, created_at) VALUES ('ev-d1', '$wordSession', 'Word', 'chat_message', 'user', 'word question', '2026-01-05 09:00:00')"
+        Invoke-ExecSql "INSERT INTO session_summary (session_id, app_type, document_id, document_name, created_at, updated_at) VALUES ('$wordSession', 'Word', '', 'C:\notes\draft.xlsx', '2026-01-05 09:00:00', '2026-01-05 09:00:02')"
+
+        # (e) the memory tables read app_type with the same exemption rule, so the same sentinel
+        #     made old memories unreachable in every host. Measured on the installed database:
+        #     123 of 231 atomic_memory rows carried "Unknown". Migration 019 must clear them.
+        Invoke-ExecSql "INSERT INTO atomic_memory (timestamp, content, session_id, app_type, memory_type) VALUES (1767312000, 'sentinel memory', '$sentinelSession', 'Unknown', 'long_term')"
+        Invoke-ExecSql "INSERT INTO atomic_memory (timestamp, content, session_id, app_type, memory_type) VALUES (1767312001, 'case variant memory', '$wordSession', 'word ', 'long_term')"
+        Invoke-ExecSql "INSERT INTO memory_item (memory_id, scope, app_type, content, status) VALUES ('mem-a', 'user', 'Unknown', 'sentinel memory item', 'active')"
+        Invoke-ExecSql "INSERT INTO memory_item (memory_id, scope, app_type, content, status) VALUES ('mem-b', 'user', 'PowerPoint', 'owned memory item', 'active')"
+
         Invoke-ExecSql "UPDATE schema_version SET version = 11"
 
         $runMigrations = [ShareRibbon.OfficeAiDatabase].GetMethod(
@@ -259,8 +300,8 @@ try {
         if ([int](Get-ScalarValue "SELECT COUNT(1) FROM conversation_event WHERE session_id = '$legacySession' AND event_type = 'chat_message'") -ne 2) {
             throw "migration 012 must backfill legacy conversation rows into conversation_event"
         }
-        if ([int](Get-ScalarValue "SELECT version FROM schema_version LIMIT 1") -ne 17) {
-            throw "schema version must be 17 after migrations 012 through 017"
+        if ([int](Get-ScalarValue "SELECT version FROM schema_version LIMIT 1") -ne 19) {
+            throw "schema version must be 19 after migrations 012 through 019"
         }
         $legacyEntry = [ShareRibbon.ConversationRepository]::GetRecentSessions(200) |
             Where-Object { $_.SessionId -eq $legacySession }
@@ -273,6 +314,111 @@ try {
         if ($legacyEntry.DocumentId -ne "") {
             throw "an upgraded legacy session must start unbound instead of inventing a document"
         }
+
+        function Get-SessionOwner([string]$sessionId) {
+            $distinct = [int](Get-ScalarValue "SELECT COUNT(DISTINCT IFNULL(app_type, '')) FROM conversation_event WHERE session_id = '$sessionId'")
+            if ($distinct -ne 1) {
+                throw "session $sessionId must resolve to exactly one owner, found $distinct distinct app_type values"
+            }
+            return [string](Get-ScalarValue "SELECT app_type FROM conversation_event WHERE session_id = '$sessionId' LIMIT 1")
+        }
+
+        function Get-ProfileOwner([string]$sessionId) {
+            return [string](Get-ScalarValue "SELECT app_type FROM session_summary WHERE session_id = '$sessionId'")
+        }
+
+        # ---- E2-04: migration 019 makes ownership decidable again ----
+        foreach ($tableName in @('conversation_event', 'agent_run', 'agent_run_change', 'session_summary', 'atomic_memory', 'memory_item')) {
+            $leftover = [int](Get-ScalarValue "SELECT COUNT(1) FROM $tableName WHERE IFNULL(app_type, '') <> '' AND app_type NOT IN ('Word', 'Excel', 'PowerPoint')")
+            if ($leftover -ne 0) {
+                throw "migration 019 must leave only the three hosts or the empty exemption in $tableName, found $leftover row(s)"
+            }
+        }
+
+        # The memory tables share the same read rule, so the sentinel had to go there too: the row
+        # must be recallable in every host through the real read path, not merely look normalised.
+        $sentinelMemoryApp = [string](Get-ScalarValue "SELECT app_type FROM atomic_memory WHERE content = 'sentinel memory'")
+        if ($sentinelMemoryApp -ne '') {
+            throw "an Unknown atomic_memory row must fall back to the generic exemption, got '$sentinelMemoryApp'"
+        }
+        $caseVariantApp = [string](Get-ScalarValue "SELECT app_type FROM atomic_memory WHERE content = 'case variant memory'")
+        if ($caseVariantApp -ne 'Word') {
+            throw "a case and whitespace variant of a real host must be canonicalised, got '$caseVariantApp'"
+        }
+        if ([string](Get-ScalarValue "SELECT app_type FROM memory_item WHERE memory_id = 'mem-a'") -ne '') {
+            throw "an Unknown memory_item row must fall back to the generic exemption"
+        }
+        $ownedMemoryItem = [string](Get-ScalarValue "SELECT app_type FROM memory_item WHERE memory_id = 'mem-b'")
+        if ($ownedMemoryItem -ne 'PowerPoint') {
+            throw "a properly owned memory_item row must stay owned, got '$ownedMemoryItem'"
+        }
+        foreach ($hostName in @('Word', 'Excel', 'PowerPoint')) {
+            $recalled = [ShareRibbon.MemoryRepository]::ListAtomicMemories(200, 0, $hostName) |
+                Where-Object { $_.Content -eq 'sentinel memory' }
+            if (-not $recalled) {
+                throw "a normalised atomic_memory row must be recallable in $hostName through ListAtomicMemories"
+            }
+        }
+
+        if ((Get-SessionOwner $sentinelSession) -ne 'Excel') {
+            throw "the Unknown-era session must be resolved to Excel from its document extension, got '$(Get-SessionOwner $sentinelSession)'"
+        }
+        if ((Get-ProfileOwner $sentinelSession) -ne 'Excel') {
+            throw "the session profile must carry the resolved owner, otherwise host grouping cannot use it"
+        }
+        if ((Get-SessionOwner $maskedSession) -ne 'Excel') {
+            throw "an older real trace must win over a newer Unknown one after normalization"
+        }
+        if ((Get-ProfileOwner $maskedSession) -ne 'Excel') {
+            throw "the profile row must follow the owner resolved from its events"
+        }
+        if ((Get-SessionOwner $ownerlessSession) -ne '') {
+            throw "a session with no evidence must stay the generic exemption instead of an invented host"
+        }
+        if ((Get-SessionOwner $wordSession) -ne 'Word') {
+            throw "an already owned session must not be re-decided by the document extension"
+        }
+
+        # Visibility is the acceptance criterion: no legacy session may be invisible in every host,
+        # and a resolved owner must not stay visible in the wrong host either.
+        foreach ($hostName in @('Word', 'Excel', 'PowerPoint')) {
+            $ownerlessVisible = [ShareRibbon.ConversationRepository]::GetRecentSessions(200, $hostName) |
+                Where-Object { $_.SessionId -eq $ownerlessSession }
+            if (-not $ownerlessVisible) {
+                throw "an ownerless legacy session must stay visible in $hostName after the upgrade"
+            }
+        }
+        $excelList = [ShareRibbon.ConversationRepository]::GetRecentSessions(200, 'Excel')
+        $wordList = [ShareRibbon.ConversationRepository]::GetRecentSessions(200, 'Word')
+        foreach ($ownedSession in @($sentinelSession, $maskedSession)) {
+            if (-not ($excelList | Where-Object { $_.SessionId -eq $ownedSession })) {
+                throw "$ownedSession resolved to Excel and must appear in the Excel list"
+            }
+            if ($wordList | Where-Object { $_.SessionId -eq $ownedSession }) {
+                throw "$ownedSession resolved to Excel and must not also appear in Word"
+            }
+        }
+        if (-not ($wordList | Where-Object { $_.SessionId -eq $wordSession })) {
+            throw "the Word-owned session must stay in the Word list"
+        }
+
+        # A half-failed upgrade must converge, so 019 has to be safe to re-run. This also proves the
+        # inline fallback in OfficeAiDatabase and the shipped file agree.
+        $migration019 = Join-Path $Bin 'Storage\Migrations\019_session_ownership_normalization.sql'
+        if (-not (Test-Path $migration019)) {
+            throw "migration 019 is not deployed next to the DLL: $migration019"
+        }
+        Invoke-ExecSql ([System.IO.File]::ReadAllText($migration019))
+        foreach ($expected in @(@($sentinelSession, 'Excel'), @($maskedSession, 'Excel'), @($ownerlessSession, ''), @($wordSession, 'Word'))) {
+            if ((Get-SessionOwner $expected[0]) -ne $expected[1]) {
+                throw "migration 019 must be idempotent; re-running it changed the owner of $($expected[0])"
+            }
+        }
+
+        foreach ($fixtureSession in @($sentinelSession, $maskedSession, $ownerlessSession, $wordSession)) {
+            Invoke-ExecSql "DELETE FROM agent_run WHERE session_id = '$fixtureSession'"
+            [void][ShareRibbon.ConversationRepository]::DeleteSessionCascade($fixtureSession)
+        }
         [void][ShareRibbon.ConversationRepository]::DeleteSessionCascade($legacySession)
     }
     finally {
@@ -284,12 +430,14 @@ try {
 
     [pscustomobject]@{
         Database = [ShareRibbon.OfficeAiDatabase]::GetDatabasePath()
-        SchemaVersion = 17
+        SchemaVersion = 19
         RequiredTables = $requiredTables.Count
         HistorySingleSource = $true
         SessionProfileSchema = $true
         CascadeDeleteScoped = $true
         LegacyBackfill = $true
+        SessionOwnershipNormalized = $true
+        MemoryOwnershipNormalized = $true
         EmptyInitialization = $true
     } | Format-List
 }

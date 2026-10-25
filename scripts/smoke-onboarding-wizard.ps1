@@ -6,6 +6,10 @@ param(
 # the example tasks. Provider choice, api key entry and the connectivity probe belong to ConfigApiForm.
 # This smoke pins that boundary: the pushed payload must not carry a provider list, the wizard step must
 # come only from the host, and exercising the whole wizard must not write the config file at all.
+# E3-02 adds the one-click sample: each host list has exactly one runnable row, it is the first row, its
+# request covers both "the user has content" and "the document is still empty", and what the panel receives
+# is the catalog text verbatim - so the wizard never becomes a second table and never runs a demo the
+# entry layer had to guess about.
 # The tail keeps the shared connectivity probe checks, because ConfigApiForm is now its only caller and
 # still has to refuse an unusable target before any socket is opened.
 # Keep this file ASCII only: PowerShell 5.1 reads a BOM-less script as ANSI.
@@ -138,23 +142,84 @@ try {
     $wiz.HandleSetPrivacy((New-Doc @{ accepted = "TRUE" }))
 
     # 5. examples follow the host, because a Word deck tip in Excel is noise
-    $excelExamples = @(Get-PushedState ($script:pushes.Count - 1)).examples
+    $excelSamples = @(Get-PushedState ($script:pushes.Count - 1)).examples
+    $excelExamples = @($excelSamples | ForEach-Object { $_.text })
     if ($excelExamples.Count -lt 2) { throw "the wizard needs example tasks to end on, got $($excelExamples.Count)." }
     $script:appType = "powerpoint"
     $wiz.HandleGetState()
-    $pptExamples = @(Get-PushedState ($script:pushes.Count - 1)).examples
+    $pptSamples = @(Get-PushedState ($script:pushes.Count - 1)).examples
+    $pptExamples = @($pptSamples | ForEach-Object { $_.text })
     if (-not (Compare-Object $excelExamples $pptExamples)) {
         throw "example tasks must differ per host; excel and powerpoint returned the same list."
     }
     $script:appType = "word"
     $wiz.HandleGetState()
-    $wordExamples = @(Get-PushedState ($script:pushes.Count - 1)).examples
+    $wordSamples = @(Get-PushedState ($script:pushes.Count - 1)).examples
+    $wordExamples = @($wordSamples | ForEach-Object { $_.text })
     if (-not (Compare-Object $excelExamples $wordExamples)) {
         throw "the fallback example list must still be word-shaped, not the excel list."
     }
     $script:appType = "excel"
 
-    # 6. finishing only asks the host to re-read the model display - the wizard never touches config itself
+    # 6. E3-02: exactly one runnable sample per host, and the payload is the catalog verbatim.
+    # A second place that owns the wording is how the three per-host tables came back; a sample that
+    # runs but cannot cope with an empty document is how a first-run user gets a failing demo.
+    # Anchors are built from codepoints: this file must stay ASCII for PowerShell 5.1.
+    $oneClickMark = -join ([char]0x4E00, [char]0x952E, [char]0x793A, [char]0x4F8B)
+    $previewMark = -join ([char]0x9884, [char]0x89C8)
+    $emptyMark = -join ([char]0x7A7A)
+    $builtinMark = -join ([char]0x5185, [char]0x7F6E, [char]0x793A, [char]0x4F8B)
+    $requiredMarks = @(
+        [pscustomobject]@{ Name = "preview-before-write"; Pattern = $previewMark },
+        [pscustomobject]@{ Name = "empty-document-branch"; Pattern = $emptyMark },
+        [pscustomobject]@{ Name = "built-in-sample"; Pattern = $builtinMark }
+    )
+    $pushedByHost = @{ word = $wordSamples; excel = $excelSamples; powerpoint = $pptSamples }
+    $demoRequests = @()
+    foreach ($hostName in @("word", "excel", "powerpoint")) {
+        $catalog = @([ShareRibbon.Agent.QuickActionCatalog]::SampleTasks($hostName))
+        $pushed = $pushedByHost[$hostName]
+        if ($pushed.Count -ne $catalog.Count) {
+            throw "${hostName}: the wizard pushed $($pushed.Count) samples but the catalog has $($catalog.Count)."
+        }
+        for ($i = 0; $i -lt $catalog.Count; $i++) {
+            if ($pushed[$i].text -ne $catalog[$i].Text) {
+                throw "$hostName sample #$i is not the catalog wording; the wizard re-owns the list."
+            }
+            $pushedRequest = [string]$pushed[$i].request
+            if ($catalog[$i].Runnable -and $pushedRequest -ne $catalog[$i].RunRequestText) {
+                throw "$hostName sample #$i lost its run request on the way to the panel."
+            }
+            if (-not $catalog[$i].Runnable -and $pushedRequest.Length -gt 0) {
+                throw "$hostName sample #$i has no runnable request in the catalog but the panel got one."
+            }
+        }
+        $runnable = @($catalog | Where-Object { $_.Runnable })
+        if ($runnable.Count -ne 1) { throw "$hostName needs exactly one one-click sample, found $($runnable.Count)." }
+        if (-not $catalog[0].Runnable) {
+            throw "$hostName one-click sample must be the first row so a first-run user cannot miss it."
+        }
+        $request = $runnable[0].RunRequestText
+        if ($runnable[0].Text -notlike "*$oneClickMark*") {
+            throw "$hostName one-click sample must announce itself as a one-click demo in its label."
+        }
+        foreach ($mark in $requiredMarks) {
+            if ($request -notlike "*$($mark.Pattern)*") {
+                throw "$hostName one-click sample request is missing the '$($mark.Name)' clause."
+            }
+        }
+        if ($request.Length -lt 40) {
+            throw "$hostName one-click sample request is too short to cover both the current document and the built-in sample."
+        }
+        $demoRequests += $request
+    }
+    if (($demoRequests | Select-Object -Unique).Count -ne 3) {
+        throw "the three one-click samples must be three different tasks, not one sentence reused."
+    }
+    $unknownSamples = @([ShareRibbon.Agent.QuickActionCatalog]::SampleTasks("outlook"))
+    if ($unknownSamples.Count -lt 2) { throw "an unconnected host must still fall back to a host-shaped sample list." }
+
+    # 7. finishing only asks the host to re-read the model display - the wizard never touches config itself
     $refreshes = $script:configRefreshCalls
     $wiz.HandleFinish()
     if ($script:configRefreshCalls -ne $refreshes + 1) { throw "HandleFinish must refresh the model display exactly once." }
@@ -162,7 +227,7 @@ try {
         throw "exercising the wizard rewrote the config file; provider and key writes belong to ConfigApiForm."
     }
 
-    # 7. the shared connectivity probe still refuses an unusable target before any socket is opened
+    # 8. the shared connectivity probe still refuses an unusable target before any socket is opened
     $tester = New-Object ShareRibbon.ModelConnectivityTester
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     $noUrl = $tester.TestAsync("", "any-key", "some-model", "default", "smoke").GetAwaiter().GetResult()
@@ -180,6 +245,8 @@ try {
         Steps           = "privacy,example"
         ExcelExamples   = $excelExamples.Count
         PptExamples     = $pptExamples.Count
+        OneClickHosts   = $demoRequests.Count
+        DemoRequestLen  = ($demoRequests | ForEach-Object { $_.Length }) -join '/'
         ConfigPushes    = $script:pushes.Count
         OfflineReason   = $noUrl.Reason
     } | Format-List

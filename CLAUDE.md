@@ -90,8 +90,7 @@ msbuild PowerPointAi/PowerPointAi.vbproj
 
 ### Debug
 
-- VSTO 调试问题优先查看 `docs/VisualStudio调试问题诊断.md`。
-- VSTO 迁移/兼容性问题查看 `docs/VS2025-VSTO-Migration-Guide.md`。
+- VSTO 迁移/兼容性问题（含 `OfficeAgent.vdproj` 在 VS 2026 打不开）查看 `docs/VS2026-InstallerProjects.md`。
 - 插件启动、Ribbon、任务窗格、WebView2 相关问题通常需要在 Visual Studio + Office 宿主进程中调试。
 
 ## Architecture Rules
@@ -173,6 +172,18 @@ AI Agent 容易混入 C# 写法。写 VB.NET 时必须主动避免：
 - COM 对象生命周期要谨慎，避免长期持有无效 Office 对象引用。
 - `Option Strict Off` 不代表可以忽略类型清晰度；新增代码应尽量显式、可读、便于编译检查。
 
+### 事件绑定卫生
+
+- `RemoveHandler` 只能摘掉 `AddHandler` 挂上去的那一份，**摘不掉 `Handles` 子句**的绑定。同一个处理器不要既有
+  `Handles X.Event` 又有 `AddHandler X.AnotherEvent`——WebView2 上 `ChatBrowser.NavigationCompleted` 与
+  `CoreWebView2.NavigationCompleted` 是两个事件，混用会让处理器重复执行，而「解绑」看似写了其实无效。
+- 事件注入类初始化要用「文档粒度」闸门（见 `BaseChatControl._pageBootstrapDone`）：在装载新文档前复位、在处理器里
+  **先判再占位、占位必须在第一个 `Await` 之前**，否则排队的第二次导航完成同样通过检查。
+- 重复执行在这里的症状通常是「值被反复洗回」或「看起来没有副作用」，不是异常；不要用肉眼确认，用
+  `scripts/smoke-event-binding.ps1` 的顺序/次数守卫。
+- 读配置开关之前先确保配置文件被加载过（`ChatSettings.EnsureLoaded(...)`）；宿主在面板可见事件里判开关时，
+  进程内可能还没有任何实例读过盘。
+
 ## Frontend Resource Rules
 
 Chat 相关 HTML/JS/CSS 通过 Office Virtual Server 加载，是用户交互入口。新增或修改前端资源时必须检查：
@@ -190,6 +201,10 @@ Chat 相关 HTML/JS/CSS 通过 Office Virtual Server 加载，是用户交互入
 - 不要只改建表逻辑；老用户数据库升级路径必须可用。
 - 新增表/字段应考虑版本号、迁移记录或幂等检查。
 - 涉及配置/记忆/RAG/历史数据时，优先检查现有迁移与初始化逻辑。
+- 用于过滤的枚举列（例如 `app_type`）必须有一份口径持有者，并且只在**写入边界**归一。读侧一般写成
+  「等于当前取值 OR 空值豁免」，因此一个既不属于任何合法取值、又拿不到空值豁免的第三种值，会让那条数据在
+  所有宿主下同时静默消失且不报错。收口顺序：先归一，再按证据强度回填，且**只填空、不覆盖已解析的值**，
+  使整段可重复执行；同时同步 schema 版本断言、快照与门禁夹具。
 
 ## Installer / vdproj Rules
 
@@ -213,6 +228,8 @@ Chat 相关 HTML/JS/CSS 通过 Office Virtual Server 加载，是用户交互入
 - `DiscoverOfficeCapability` 为只读且返回集合受限；`OfficeObjectOperation` 的每个 member 均来自 Catalog 并经过 Safety。
 - 通用 COM Executor 在宿主 UI 线程执行，临时 COM 对象未跨 step/session 保存。
 - 通用写操作有真实 Observation/Verifier，失败不会误报任务完成。
+- 新增事件绑定只有一个绑定源、页面注入有文档粒度闸门，且读开关前配置已被加载过一次（`scripts/smoke-event-binding.ps1`）。
+- 写过滤用枚举列（如 `app_type`）时都经过口径持有者归一，历史数据由「只填空、可重跑」的迁移收口，并且内联兜底与迁移文件逐表一致（`scripts/audit-p0-guardrails.ps1` E2-04 段）。
 
 ## CodeGraph Rules
 

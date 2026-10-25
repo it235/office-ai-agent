@@ -329,6 +329,50 @@ function toggleChatMessageReference(headerElement) {
     }
 }
 
+// ========== 选区自动引用（E4-04） ==========
+//
+// 后端确实把选区带进这一轮提示时才调这里，前端只显示一行摘要：
+// 正文既不重复写进 DOM，也不进聊天历史、日志或会话存储。
+window.appendTurnSelectionReference = function (uuid, summary) {
+    const contentEl = document.getElementById('content-' + uuid);
+    if (!contentEl || !summary) return false;
+    const chatContainer = contentEl.closest('.chat-container');
+    if (!chatContainer) return false;
+
+    // 同一个回合重复同步不会堆第二张引用条（导航重跑、replan 都会重发）
+    const stale = chatContainer.querySelector('.turn-selection-reference');
+    if (stale) stale.remove();
+
+    const wrap = document.createElement('div');
+    wrap.className = 'chat-message-references collapsed turn-selection-reference';
+
+    const header = document.createElement('div');
+    header.className = 'chat-message-reference-header';
+    header.addEventListener('click', function () { wrap.classList.toggle('collapsed'); });
+
+    const arrow = document.createElement('span');
+    arrow.className = 'chat-message-reference-arrow';
+    arrow.textContent = '\u25B8';
+
+    const label = document.createElement('span');
+    label.className = 'chat-message-reference-label';
+    label.textContent = '本轮已引用选区';
+
+    header.appendChild(arrow);
+    header.appendChild(label);
+
+    const body = document.createElement('div');
+    body.className = 'chat-message-reference-content';
+    const line = document.createElement('div');
+    line.textContent = String(summary);
+    body.appendChild(line);
+
+    wrap.appendChild(header);
+    wrap.appendChild(body);
+    chatContainer.insertBefore(wrap, contentEl);
+    return true;
+};
+
 // ========== 模型配置缺失 CTA（E3-03） ==========
 //
 // 阻断发生在 VB 侧共享发送漏斗（ModelConfigGate），这里只负责把"下一步做什么"画出来。
@@ -381,6 +425,15 @@ window.showModelConfigRequired = function (payload) {
     openButton.className = 'model-config-cta-action agent-btn agent-btn-execute';
     openButton.textContent = data.actionLabel || '配置 API';
     openButton.addEventListener('click', function () {
+        if (data.action === 'accept_privacy') {
+            // E3-05：隐私同意卡片复用同一张 CTA，只有这颗按钮做的事不同——把同意写回宿主，
+            // 由宿主回推状态；这一条请求仍然要用户再发一次，不在这里偷偷重放。
+            if (typeof setPrivacyConsent === 'function') {
+                setPrivacyConsent(true);
+            }
+            window.hideModelConfigRequired();
+            return;
+        }
         if (typeof openModelConfig === 'function') {
             openModelConfig();
         } else {

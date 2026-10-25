@@ -24,14 +24,14 @@ Public Class AgentChangeLogRepository
                         "INSERT OR REPLACE INTO agent_run_change " &
                         "(change_id, run_id, session_id, app_type, seq, tool_id, step_index, step_description, summary, target_refs_json, " &
                         " changed, success, rolled_back, partial_apply, undo_available, undo_units, undo_point_id, rollback_error, " &
-                        " doc_hash_before, doc_hash_after, observed_at) " &
+                        " doc_hash_before, doc_hash_after, restore_json, observed_at) " &
                         "VALUES (@change_id, @run_id, @session_id, @app_type, @seq, @tool_id, @step_index, @step_description, @summary, @target_refs_json, " &
                         " @changed, @success, @rolled_back, @partial_apply, @undo_available, @undo_units, @undo_point_id, @rollback_error, " &
-                        " @doc_hash_before, @doc_hash_after, @observed_at)", conn, tx)
+                        " @doc_hash_before, @doc_hash_after, @restore_json, @observed_at)", conn, tx)
                         cmd.Parameters.AddWithValue("@change_id", If(entry.ChangeId, Guid.NewGuid().ToString()))
                         cmd.Parameters.AddWithValue("@run_id", runId)
                         cmd.Parameters.AddWithValue("@session_id", If(sessionId, ""))
-                        cmd.Parameters.AddWithValue("@app_type", If(appType, ""))
+                        cmd.Parameters.AddWithValue("@app_type", AppTypeContract.Normalize(appType))
                         cmd.Parameters.AddWithValue("@seq", entry.Seq)
                         cmd.Parameters.AddWithValue("@tool_id", If(entry.ToolId, ""))
                         cmd.Parameters.AddWithValue("@step_index", entry.StepIndex)
@@ -48,6 +48,7 @@ Public Class AgentChangeLogRepository
                         cmd.Parameters.AddWithValue("@rollback_error", If(entry.RollbackError, ""))
                         cmd.Parameters.AddWithValue("@doc_hash_before", If(entry.DocHashBefore, ""))
                         cmd.Parameters.AddWithValue("@doc_hash_after", If(entry.DocHashAfter, ""))
+                        cmd.Parameters.AddWithValue("@restore_json", If(entry.RestoreJson, ""))
                         cmd.Parameters.AddWithValue("@observed_at", entry.ObservedAt.ToString("yyyy-MM-dd HH:mm:ss"))
                         cmd.ExecuteNonQuery()
                     End Using
@@ -67,7 +68,7 @@ Public Class AgentChangeLogRepository
             Using cmd As New SQLiteCommand(
                 "SELECT change_id, seq, tool_id, step_index, step_description, summary, target_refs_json, " &
                 " changed, success, rolled_back, partial_apply, undo_available, undo_units, undo_point_id, rollback_error, " &
-                " doc_hash_before, doc_hash_after, observed_at " &
+                " doc_hash_before, doc_hash_after, observed_at, restore_json " &
                 "FROM agent_run_change WHERE run_id = @run_id ORDER BY seq", conn)
                 cmd.Parameters.AddWithValue("@run_id", runId)
                 Using rdr = cmd.ExecuteReader()
@@ -90,7 +91,8 @@ Public Class AgentChangeLogRepository
                             .RollbackError = ReadText(rdr, 14),
                             .DocHashBefore = ReadText(rdr, 15),
                             .DocHashAfter = ReadText(rdr, 16),
-                            .ObservedAt = ParseTime(ReadText(rdr, 17))
+                            .ObservedAt = ParseTime(ReadText(rdr, 17)),
+                            .RestoreJson = ReadText(rdr, 18)
                         }
                         result.Add(record)
                     End While
@@ -101,7 +103,8 @@ Public Class AgentChangeLogRepository
     End Function
 
     ''' <summary>
-    ''' 计算某轮的可撤销范围：只统计残留改动，且要求每一步都带宿主撤销单元和文档前后指纹。
+    ''' 计算某轮的可撤销范围：只统计残留改动，要么每一步都带宿主原生撤销单元和文档前后指纹，
+    ''' 要么每一步都带可重放的还原快照。混合状态（一部分能撤、一部分只能手工回退）不算可撤销。
     ''' </summary>
     Public Shared Function GetUndoScopeByRun(runId As String) As Agent.AgentRunUndoScope
         Dim scope As New Agent.AgentRunUndoScope With {.RunId = If(runId, "")}
@@ -129,13 +132,33 @@ Public Class AgentChangeLogRepository
             Where(Function(item) item.DocHashAfter <> "").
             Select(Function(item) item.DocHashAfter).
             LastOrDefault()
-        scope.FullyUndoable = written.All(Function(item) item.UndoAvailable AndAlso item.UndoUnits > 0) AndAlso
-                              Not String.IsNullOrWhiteSpace(scope.BaselineHash) AndAlso
-                              Not String.IsNullOrWhiteSpace(scope.ExpectedHash)
+        scope.NativeUndoable = written.All(Function(item) item.UndoAvailable AndAlso item.UndoUnits > 0) AndAlso
+                               Not String.IsNullOrWhiteSpace(scope.BaselineHash) AndAlso
+                               Not String.IsNullOrWhiteSpace(scope.ExpectedHash)
+        scope.RestoreCount = written.Where(Function(item) item.HasRestore).Count()
+        scope.FullyUndoable = scope.NativeUndoable OrElse scope.RestoreCount = written.Count
         If Not scope.FullyUndoable Then
-            scope.Reason = "本轮包含无法自动撤销的改动（缺少宿主撤销单元或文档指纹）"
+            scope.Reason = "本轮包含无法自动撤销的改动（既没有宿主撤销单元，也没有可重放的还原快照）"
         End If
         Return scope
+    End Function
+
+    ''' <summary>
+    ''' 残留改动的还原快照，按写入顺序返回；宿主按 restore.kind 解释并重放。
+    ''' 顺序由这里唯一决定，免得每个宿主自己排一遍再排错。
+    ''' </summary>
+    Public Shared Function GetRestoreSnapshotsByRun(runId As String) As List(Of JObject)
+        Dim result As New List(Of JObject)()
+        For Each entry In GetByRun(runId)
+            If Not entry.Changed OrElse entry.RolledBack OrElse Not entry.HasRestore Then Continue For
+            Try
+                Dim restore = TryCast(JToken.Parse(entry.RestoreJson), JObject)
+                If restore IsNot Nothing Then result.Add(restore)
+            Catch
+                ' 快照坏了就不能拿来重放；少撤一步比撤错一步好。
+            End Try
+        Next
+        Return result
     End Function
 
     ''' <summary>

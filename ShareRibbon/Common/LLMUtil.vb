@@ -91,6 +91,9 @@ Public Class LLMUtil
 
     Public Shared Async Function SendHttpRequest(apiUrl As String, apiKey As String, requestBody As String) As Task(Of String)
         Try
+            ' E3-05：ExcelDna 自定义函数与批量数据生成从这里出去，载荷是工作表内容。
+            ' 拒绝沿用本函数既有的「返回 错误: …」约定，而不是另造第三种终态。
+            If PrivacyConsentGate.RefuseQuietly("LLMUtil") Then Return "错误: " & PrivacyConsentGate.RefusalReason
             Debug.WriteLine($"开始发送HTTP请求到: {apiUrl}")
             Debug.WriteLine($"请求头Authorization: Bearer {apiKey.Substring(0, Math.Min(10, apiKey.Length))}...")
             Debug.WriteLine($"请求体长度: {requestBody.Length}")

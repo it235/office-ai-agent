@@ -66,7 +66,7 @@ try {
 
     # 6. the payload is JSON, so the panel never has to trust hand-escaped script text
     $showPrefix = "showModelConfigRequired("
-    $script = $gate.BuildShowScript($keyPrompt)
+    $script = [ShareRibbon.ModelConfigGate]::BuildShowScript($keyPrompt)
     if ($script -notmatch "^showModelConfigRequired\(") { throw "show script must call showModelConfigRequired, got '$script'." }
     if ($script -notmatch "\);\s*$") { throw "show script must be a complete statement." }
     $json = $script.Substring($showPrefix.Length, $script.Length - $showPrefix.Length - 2)
@@ -86,7 +86,7 @@ try {
     if ($roundTrip.Message -notmatch "line2") { throw "a newline in the prompt message breaks the injected script." }
     if ($hostile.ToJson() -match "`n") { throw "a raw newline reached the script text, WebView2 would get a broken statement." }
 
-    if ($gate.BuildShowScript($null) -ne "") { throw "no prompt must mean no script." }
+    if ([ShareRibbon.ModelConfigGate]::BuildShowScript($null) -ne "") { throw "no prompt must mean no script." }
     if ([ShareRibbon.ModelConfigGate]::BuildHideScript() -notmatch "^hideModelConfigRequired\(\);\s*$") { throw "the hide script must match the panel renderer." }
 
     Write-Host "OK: model config gate blocks both entries and emits a parseable CTA."

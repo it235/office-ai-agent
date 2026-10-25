@@ -51,27 +51,6 @@ Public Class WebViewBridge
         Debug.WriteLine($"[WebViewBridge.WaitForRendererMapAsync] rendererMap[{uuid}] wait timed out")
     End Function
 
-    Public Async Function LoadHtmlFileAsync(htmlFilePath As String) As Task
-        Try
-            Await _ensureInitialized()
-            If String.IsNullOrWhiteSpace(htmlFilePath) OrElse Not File.Exists(htmlFilePath) Then Return
-
-            Dim htmlContent As String = File.ReadAllText(htmlFilePath, System.Text.Encoding.UTF8)
-            htmlContent = htmlContent.TrimStart(""""c).TrimEnd(""""c)
-
-            Await UiDispatcher.InvokeAsync(_browser,
-                Sub()
-                    If _browser.CoreWebView2 Is Nothing Then
-                        Debug.WriteLine("LoadHtmlFileAsync skipped: CoreWebView2 is not initialized.")
-                        Return
-                    End If
-                    _browser.CoreWebView2.NavigateToString(htmlContent)
-                End Sub)
-        Catch ex As Exception
-            Debug.WriteLine($"[WebViewBridge.LoadHtmlFileAsync] failed: {ex.Message}")
-        End Try
-    End Function
-
     Public Async Function GetFullHtmlContentAsync() As Task(Of String)
         Return Await UiDispatcher.InvokeAsync(Of String)(_browser,
             Async Function()

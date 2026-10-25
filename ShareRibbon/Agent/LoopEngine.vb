@@ -23,10 +23,19 @@ Namespace Agent
         Private Const MaxNoProgress As Integer = 3
         Private Const MaxReplanAttempts As Integer = 2
 
+        ' 步骤状态令牌：UI 需要区分失败、用户拒绝（跳过）、审批放弃（终止）和正在执行，
+        ' 只给布尔会把跳过和终止都画成红叉，用户看不出哪些是自己拒绝的。
+        Public Const StepStatusPending As String = "pending"
+        Public Const StepStatusRunning As String = "running"
+        Public Const StepStatusCompleted As String = "completed"
+        Public Const StepStatusFailed As String = "failed"
+        Public Const StepStatusSkipped As String = "skipped"
+        Public Const StepStatusAborted As String = "aborted"
+
         ' 回调
         Public Property OnStatusChanged As Action(Of String)
         Public Property OnIterationUpdate As Action(Of ReActIteration)
-        Public Property OnStepCompleted As Action(Of Integer, Boolean, String)
+        Public Property OnStepStatusChanged As Action(Of Integer, String, String)
         Public Property OnExecutionExplained As Action(Of ExecutionExplanation)
         Public Property OnRequestApproval As Func(Of ApprovalRequest, Task(Of ApprovalDecision))
         Public Property OnPlanGenerated As Action(Of ExecutionPlan)
@@ -81,7 +90,7 @@ Namespace Agent
                 End If
 
                 ' 通知计划已生成
-                OnPlanGenerated?.Invoke(session.Plan)
+                RaisePlanGenerated(session)
 
                 session.Status = AgentStatus.Executing
                 OnStatusChanged?.Invoke($"规划完成（共 {session.Plan.Steps.Count} 步），进入自治执行...")
@@ -89,14 +98,45 @@ Namespace Agent
 
                 ' Phase 3: ReAct Loop
                 Dim stepIndex As Integer = 0
-                While stepIndex < session.Plan.Steps.Count AndAlso session.CurrentIteration < MaxIterations
+                ' 计划跑完时让循环再进一圈，那一圈只走 run 末合同闸门；每接受一次修复重规划就重新武装它。
+                Dim runEndGated As Boolean = False
+                While (stepIndex < session.Plan.Steps.Count OrElse Not runEndGated) AndAlso
+                      session.CurrentIteration < MaxIterations
                     ' 协作式停止：在步骤边界检查，不打断进行中的宿主操作，但不启动下一步。
                     If cancellationToken.IsCancellationRequested Then
                         Return FinishCancelled(session)
                     End If
 
+                    If stepIndex >= session.Plan.Steps.Count Then
+                        ' --- RUN-END CONTRACT GATE (E6-05b) ---
+                        ' 步骤都落地了才轮到包的成功标准裁决。未达成且包声明 onFail=repair 时，把未达成的
+                        ' 断言当作观察结果交给既有 reflect/replan 路由再带一轮——预算与失败修复共用 replanAttempts，
+                        ' 终态仍只有循环后面那一条出口；拿不到可用新计划就照旧报未达成，不猜也不装成功。
+                        runEndGated = True
+                        Dim repairPlan As ExecutionPlan = Nothing
+                        If session.CurrentIteration > 0 AndAlso IncompletePlanSteps(session).Count = 0 AndAlso
+                           PackageWantsRunEndRepair(session) AndAlso replanAttempts < MaxReplanAttempts Then
+                            Dim unmetReasons = UnmetTaskPackageReasons(session)
+                            If unmetReasons.Count > 0 Then
+                                repairPlan = Await RequestRunEndRepairPlanAsync(session, unmetReasons, systemPrompt)
+                            End If
+                        End If
+                        If repairPlan Is Nothing Then Exit While
+
+                        replanAttempts += 1
+                        session.Plan = repairPlan
+                        session.Writes.BeginNextPlan()
+                        stepIndex = 0
+                        runEndGated = False
+                        RaisePlanGenerated(session)
+                        OnStatusChanged?.Invoke($"成功标准未达成，已按任务包合同重新规划（共 {repairPlan.Steps.Count} 步），已写入 {session.ChangeLog.WrittenCount} 处不会被重复执行...")
+                        Continue While
+                    End If
+
                     Dim planStep = session.Plan.Steps(stepIndex)
                     planStep.Status = StepStatus.Running
+                    ' 不发这条，计划卡里永远没有 .step-running，迭代详情只能靠全局迭代号猜位置
+                    OnStepStatusChanged?.Invoke(stepIndex, StepStatusRunning, Nothing)
 
                     ' --- THINK ---
                     session.Status = AgentStatus.Thinking
@@ -111,7 +151,7 @@ Namespace Agent
                         noProgressCount += 1
                         planStep.Status = StepStatus.Failed
                         planStep.ErrorMessage = "无法解析工具调用"
-                        OnStepCompleted?.Invoke(stepIndex, False, "解析失败")
+                        OnStepStatusChanged?.Invoke(stepIndex, StepStatusFailed, "解析失败")
 
                         If noProgressCount >= MaxNoProgress Then Exit While
                         stepIndex += 1
@@ -123,7 +163,7 @@ Namespace Agent
                         noProgressCount += 1
                         planStep.Status = StepStatus.Failed
                         planStep.ErrorMessage = normalizeMessage
-                        OnStepCompleted?.Invoke(stepIndex, False, normalizeMessage)
+                        OnStepStatusChanged?.Invoke(stepIndex, StepStatusFailed, normalizeMessage)
 
                         If noProgressCount >= MaxNoProgress Then Exit While
                         stepIndex += 1
@@ -133,9 +173,14 @@ Namespace Agent
                         Debug.WriteLine($"[LoopEngine] {normalizeMessage}")
                     End If
 
+                    ' --- IDEMPOTENCE CHECK (E1-06) ---
+                    ' 重新规划出的新计划不知道文档已被改过，会把上一版已写成的步骤重新排进来。
+                    ' 跨计划版本命中写入台账时不再执行，否则同一处内容会被写第二遍。
+                    Dim priorWrite = session.Writes.FindAppliedInPriorPlan(toolCall)
+
                     ' --- RISK NOTICE (autonomous mode) ---
                     Dim tool = _toolRegistry.GetTool(toolCall.ToolId)
-                    If tool IsNot Nothing AndAlso tool.RiskLevel = "risky" Then
+                    If priorWrite Is Nothing AndAlso tool IsNot Nothing AndAlso tool.RiskLevel = "risky" Then
                         Debug.WriteLine($"[LoopEngine] 自治模式执行高风险工具: {toolCall.ToolId}")
                         OnStatusChanged?.Invoke($"步骤 {stepIndex + 1} 使用高风险工具 {toolCall.ToolId}，已记录风险并继续执行")
                     End If
@@ -143,9 +188,9 @@ Namespace Agent
                     ' --- ACT (增强版 - 多轮自修复 + 撤销点) ---
                     session.Status = AgentStatus.Executing
 
-                    ' 创建撤销点（执行前保存状态）
+                    ' 创建撤销点（执行前保存状态）；被判定为重复写入的步骤不碰文档，不必申请撤销点
                     Dim undoPoint As Core.UndoManager.UndoPoint = Nothing
-                    If _undoManager IsNot Nothing Then
+                    If _undoManager IsNot Nothing AndAlso priorWrite Is Nothing Then
                         undoPoint = _undoManager.CreateUndoPoint(
                             If(session.AppType, "Unknown"),
                             $"步骤 {stepIndex + 1}: {toolCall.ToolId}",
@@ -162,6 +207,13 @@ Namespace Agent
 
                     ' 多轮修复循环
                     While fixAttempt < MaxFixAttempts
+                        If priorWrite IsNot Nothing Then
+                            toolResult = BuildAlreadyAppliedResult(toolCall, priorWrite)
+                            AppLogger.Info("LoopEngine",
+                                $"Duplicate write skipped after replan toolId={toolCall.ToolId} appliedByPlan={priorWrite.PlanGeneration}")
+                            Exit While
+                        End If
+
                         Dim normalized As String = ""
                         If Not _toolRegistry.TryNormalizeToolCall(session.AppType, toolCall, executionContext, normalized) Then
                             toolResult = ToolResult.Failed(toolCall.ToolId,
@@ -310,13 +362,15 @@ Namespace Agent
 
                     ' 单轮变更日志：只由宿主观察对象驱动，失败/部分应用同样记录，
                     ' 这样取消或失败后仍能如实告诉用户“已写入哪些地方”。
-                    session.ChangeLog.AddFromStep(
+                    ' 返回的记录同时喂给写入台账，replan 才知道哪些步骤已经完成。
+                    Dim changeRecord = session.ChangeLog.AddFromStep(
                         toolCall.ToolId,
                         stepIndex,
                         planStep.Description,
                         toolResult,
                         If(String.IsNullOrWhiteSpace(toolResult.UndoPointId), explanation.UndoPointName, toolResult.UndoPointId),
                         explanation.CanUndo)
+                    session.Writes.Record(toolCall, changeRecord, planStep.Description)
 
                     ' 记录迭代
                     Dim iteration = New ReActIteration With {
@@ -335,19 +389,19 @@ Namespace Agent
                     If toolResult.Success Then
                         planStep.Status = StepStatus.Completed
                         noProgressCount = 0
-                        OnStepCompleted?.Invoke(stepIndex, True, toolResult.Message)
+                        OnStepStatusChanged?.Invoke(stepIndex, StepStatusCompleted, toolResult.Message)
                     ElseIf IsRejectedApproval(toolResult) Then
                         ' 拒绝只作用于当前步骤：后续步骤继续执行，终态会说明跳过了几处
                         planStep.Status = StepStatus.Skipped
                         planStep.ErrorMessage = "用户拒绝当前步骤"
                         noProgressCount = 0
-                        OnStepCompleted?.Invoke(stepIndex, False, If(toolResult.UserMessage, toolResult.Message))
+                        OnStepStatusChanged?.Invoke(stepIndex, StepStatusSkipped, If(toolResult.UserMessage, toolResult.Message))
                         AppLogger.Info("LoopEngine", $"Step skipped by user approval rejection: {toolResult.ToObserveSummary()}")
                     ElseIf IsAbortedApproval(toolResult) Then
                         ' 超时、取消或新一轮对话取代：审批通道已经关闭，本轮必须整轮停下
                         planStep.Status = StepStatus.Failed
                         planStep.ErrorMessage = "审批已放弃"
-                        OnStepCompleted?.Invoke(stepIndex, False, If(toolResult.UserMessage, toolResult.Message))
+                        OnStepStatusChanged?.Invoke(stepIndex, StepStatusAborted, If(toolResult.UserMessage, toolResult.Message))
                         session.Status = AgentStatus.Failed
                         Dim abortMsg = AppendWriteSummary(session, "审批已放弃，本轮执行已停止")
                         OnStatusChanged?.Invoke(abortMsg)
@@ -357,7 +411,7 @@ Namespace Agent
                         planStep.Status = StepStatus.Failed
                         planStep.ErrorMessage = toolResult.ToObserveSummary()
                         noProgressCount += 1
-                        OnStepCompleted?.Invoke(stepIndex, False, If(toolResult.UserMessage, toolResult.Message))
+                        OnStepStatusChanged?.Invoke(stepIndex, StepStatusFailed, If(toolResult.UserMessage, toolResult.Message))
                         AppLogger.Warn("LoopEngine", $"Step failed: {toolResult.ToObserveSummary()}")
 
                         If Not toolResult.Recoverable Then
@@ -394,19 +448,32 @@ Namespace Agent
                                     planStep.Status = StepStatus.Pending
                                     planStep.ErrorMessage = Nothing
                                     noProgressCount = 0
+                                    OnStepStatusChanged?.Invoke(stepIndex, StepStatusPending, "重新尝试这一步")
                                     Continue While
                                 Case "skip"
                                     ' 跳过当前失败步骤：标记后前进，已完成步骤保持不动
                                     planStep.Status = StepStatus.Skipped
                                     noProgressCount = 0
+                                    OnStepStatusChanged?.Invoke(stepIndex, StepStatusSkipped, "重新规划后跳过这一步")
                                     stepIndex += 1
                                     Continue While
                                 Case "replan"
-                                    ' 仅全新计划才从第 0 步重跑
+                                    ' 新计划要和"上一版已成功的写入"合起来才算覆盖完整，否则会误判漏项
+                                    Dim replanCoverage = ValidateReplannedCoverage(session, reflection.Plan)
+                                    If Not String.IsNullOrWhiteSpace(replanCoverage) Then
+                                        session.Status = AgentStatus.Failed
+                                        OnStatusChanged?.Invoke(replanCoverage)
+                                        AppLogger.Warn("LoopEngine", replanCoverage)
+                                        Return AgentResult.Failed(session.Id, AppendWriteSummary(session, replanCoverage))
+                                    End If
+
+                                    ' 只有全新计划才从第 0 步重跑；台账会挡住已被上一版写成的步骤
                                     session.Plan = reflection.Plan
+                                    session.Writes.BeginNextPlan()
                                     stepIndex = 0
                                     noProgressCount = 0
-                                    OnStatusChanged?.Invoke($"已重新规划（共 {session.Plan.Steps.Count} 步），按新计划从头执行...")
+                                    RaisePlanGenerated(session)
+                                    OnStatusChanged?.Invoke($"已重新规划（共 {session.Plan.Steps.Count} 步），已写入 {session.ChangeLog.WrittenCount} 处不会被重复执行...")
                                     Continue While
                                 Case Else
                                     Dim replanFail = $"重新规划未能给出可执行修复: {toolResult.ToObserveSummary()}"
@@ -427,9 +494,7 @@ Namespace Agent
                     Return AgentResult.Failed(session.Id, AppendWriteSummary(session, failMsg))
                 End If
 
-                Dim incompleteSteps = session.Plan.Steps.
-                    Where(Function(s) s.Status <> StepStatus.Completed AndAlso s.Status <> StepStatus.Skipped).
-                    ToList()
+                Dim incompleteSteps = IncompletePlanSteps(session)
                 If incompleteSteps.Count > 0 Then
                     session.Status = AgentStatus.Failed
                     Dim failMsg = $"任务未完成，失败/未执行步骤 {incompleteSteps.Count} 个: {String.Join("; ", incompleteSteps.Select(Function(s) s.ErrorMessage).Where(Function(m) Not String.IsNullOrWhiteSpace(m)).Take(3))}"

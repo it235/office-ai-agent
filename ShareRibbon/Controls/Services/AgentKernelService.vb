@@ -25,12 +25,20 @@ Public Partial Class AgentKernelService
     Public Property AgentThinkingUuid As String = Nothing
     Public Property AgentThinkingLabel As String = Nothing
     Public Property AgentOriginalUserRequest As String = Nothing
+    ''' <summary>
+    ''' 本轮的入口动作 id（E6-05）：任务包断言唯一的绑定依据。发起方每条路径都必须显式赋值，
+    ''' 自由文本置为空串——残留上一轮的 id 会把某个包的断言套到不相干的任务上，比没有断言更糟。
+    ''' </summary>
+    Public Property AgentEntryActionId As String = Nothing
     Public Property AgentFullUserMessage As String = Nothing
     Public Property CurrentAgentSessionId As String = Nothing
     Public Property CurrentHarnessRunId As String = Nothing
 
     ' 协作式取消：每次运行一个 CTS，AbortAgent 触发 Cancel，Loop 在步骤边界收敛。
     Private _runCts As Threading.CancellationTokenSource
+
+    ' 终态变更摘要最多列出的条目数：再多用户也读不完，超出部分由 changeTruncated 说明。
+    Private Const MaxTerminalChanges As Integer = 8
 
     Public Sub New(
         executeScript As Func(Of String, Task),
@@ -73,7 +81,7 @@ Public Partial Class AgentKernelService
         ' 绑定事件
         AddHandler _agentKernel.OnStatusChanged, AddressOf OnKernelStatusChanged
         AddHandler _agentKernel.OnIterationUpdate, AddressOf OnKernelIterationUpdate
-        AddHandler _agentKernel.OnStepCompleted, AddressOf OnKernelStepCompleted
+        AddHandler _agentKernel.OnStepStatusChanged, AddressOf OnKernelStepStatusChanged
         AddHandler _agentKernel.OnExecutionExplained, AddressOf OnKernelExecutionExplained
         AddHandler _agentKernel.OnRequestApproval, AddressOf OnKernelRequestApproval
         AddHandler _agentKernel.OnPlanGenerated, AddressOf OnKernelPlanGenerated
@@ -94,7 +102,8 @@ Public Partial Class AgentKernelService
                                            historyMessages As List(Of Tuple(Of String, String)),
                                            Optional officeContext As Agent.Context.OfficeContext = Nothing,
                                            Optional taskSpec As Agent.AgentTaskSpec = Nothing,
-                                           Optional selectedSkills As List(Of SkillFileDefinition) = Nothing) As Task(Of Boolean)
+                                           Optional selectedSkills As List(Of SkillFileDefinition) = Nothing,
+                                           Optional entryActionId As String = Nothing) As Task(Of Boolean)
         Try
             EnsureInitialized()
 
@@ -104,6 +113,16 @@ Public Partial Class AgentKernelService
             Dim carriedThinkingUuid = AgentThinkingUuid
             Dim carriedOriginalRequest = AgentOriginalUserRequest
             Dim carriedFullMessage = AgentFullUserMessage
+            Dim carriedEntryActionId = AgentEntryActionId
+
+            ' 入口身份按调用参数登记，不读调用方"记得写进去"的共享值：
+            ' 面板发起与后台真正开跑的之间有线程间隙，靠属性传会导致后一轮抢走前一轮的包。
+            If entryActionId Is Nothing Then
+                ' 没登记身份=本轮没有任何包断言会被核对。漏接一个入口不会报错，只会表现为"验证器没生效"，
+                ' 所以这里必须留痕；自由文本要显式传空串，表示"确实没有包"，不是"忘了传"。
+                AppLogger.Warn("AgentKernelService", "StartAgentAsync called without entry identity; task package assertions are skipped")
+            End If
+            AgentEntryActionId = If(entryActionId, "")
 
             ' 保存原始请求：调用方已登记用户可见原文时不得覆盖，否则重放与历史会带上注入后的膨胀上下文
             If String.IsNullOrWhiteSpace(AgentOriginalUserRequest) Then AgentOriginalUserRequest = userRequest
@@ -134,7 +153,8 @@ Public Partial Class AgentKernelService
                 .HostContextText = currentContent,
                 .OfficeContext = officeContext,
                 .TaskSpec = taskSpec,
-                .SelectedSkills = If(selectedSkills, New List(Of SkillFileDefinition)())
+                .SelectedSkills = If(selectedSkills, New List(Of SkillFileDefinition)()),
+                .EntryActionId = AgentEntryActionId
             }
             ' 本轮可能因上一轮仍在途而被拒绝：先留住旧令牌，被拒绝时原样交还，
             ' 否则上一轮任务就再也无法通过"停止"取消。
@@ -150,7 +170,8 @@ Public Partial Class AgentKernelService
             If result Is Nothing Then
                 AppLogger.Warn("AgentKernelService", "StartAgentAsync returned null result")
                 Return RefuseUnstartedRun(carriedSessionId, carriedThinkingUuid, carriedOriginalRequest,
-                                          carriedFullMessage, carriedCts, runCts, "Agent 启动失败，请重试")
+                                          carriedFullMessage, carriedEntryActionId,
+                                          carriedCts, runCts, "Agent 启动失败，请重试")
             End If
             If result.Status = Agent.Harness.HarnessRunStatus.AwaitingApproval Then
                 ' 只有真正挂起等待裁决的 run 才登记审批句柄；未启动的 run 不能覆盖它。
@@ -167,7 +188,8 @@ Public Partial Class AgentKernelService
                 ' 上一轮仍在途：本轮从未启动，交还它的会话与取消令牌，只提示不接管。
                 AppLogger.Info("AgentKernelService", $"Turn refused, previous run still active: {result.UserMessage}")
                 Return RefuseUnstartedRun(carriedSessionId, carriedThinkingUuid, carriedOriginalRequest,
-                                          carriedFullMessage, carriedCts, runCts, result.UserMessage)
+                                          carriedFullMessage, carriedEntryActionId,
+                                          carriedCts, runCts, result.UserMessage)
             End If
             If result.Status <> Agent.Harness.HarnessRunStatus.Succeeded Then
                 AppLogger.Warn("AgentKernelService", $"StartAgentAsync agent failed: {result.UserMessage}")
@@ -231,6 +253,7 @@ Public Partial Class AgentKernelService
 
             Dim iterationJson = UtilsService.SerializeForScript(JObject.FromObject(New With {
                 .index = iteration.Index,
+                .stepIndex = If(iteration.Explanation?.StepIndex, -1),
                 .thought = If(iteration.Thought, ""),
                 .action = If(iteration.Action?.ToolId, ""),
                 .observation = If(iteration.Observation, ""),
@@ -243,14 +266,15 @@ Public Partial Class AgentKernelService
     End Sub
 
     ''' <summary>
-    ''' 处理步骤完成事件
+    ''' 处理步骤状态事件；状态令牌由 LoopEngine 定义（pending/running/completed/failed/skipped/aborted），
+    ''' 这里原样透传，收成一个布尔会把"用户拒绝"和"执行失败"画成同一个红叉。
     ''' </summary>
-    Private Sub OnKernelStepCompleted(stepIndex As Integer, success As Boolean, message As String)
+    Private Sub OnKernelStepStatusChanged(stepIndex As Integer, status As String, message As String)
         Try
-            Dim stepStatus = If(success, "completed", "failed")
+            Dim stepStatus = If(String.IsNullOrWhiteSpace(status), "failed", status)
             _executeScript($"updateAgentStep({UtilsService.ToJsStringLiteral(CurrentAgentSessionId)}, {stepIndex}, {UtilsService.ToJsStringLiteral(stepStatus)}, {UtilsService.ToJsStringLiteral(message)})")
         Catch ex As Exception
-            Debug.WriteLine($"[AgentKernelService] OnStepCompleted 出错: {ex.Message}")
+            Debug.WriteLine($"[AgentKernelService] OnStepStatusChanged 出错: {ex.Message}")
         End Try
     End Sub
 
@@ -300,9 +324,22 @@ Public Partial Class AgentKernelService
                 })
             Next
 
+            Dim riskyTools As New JArray()
+            If plan.Trust IsNot Nothing Then
+                For Each risky In plan.Trust.RiskyTools
+                    riskyTools.Add(risky)
+                Next
+            End If
+
             Dim planJson = UtilsService.SerializeForScript(New JObject From {
                 {"sessionId", If(CurrentAgentSessionId, "")},
                 {"understanding", If(plan.Understanding, "")},
+                {"planVersion", If(plan.Trust?.PlanVersion, 1)},
+                {"scope", If(plan.Trust?.ScopeText, "")},
+                {"stepCount", plan.Steps.Count},
+                {"toolCount", If(plan.Trust?.ToolCount, 0)},
+                {"riskLevel", If(plan.Trust?.RiskLevel, "safe")},
+                {"riskyTools", riskyTools},
                 {"steps", steps},
                 {"summary", If(plan.Summary, "")},
                 {"replaceThinkingUuid", If(AgentThinkingUuid, "")}
@@ -325,7 +362,6 @@ Public Partial Class AgentKernelService
             Next
             Dim traceJson = UtilsService.SerializeForScript(JObject.FromObject(planTrace))
             _executeScript($"showContextHints({{ trace: {traceJson} }})")
-            _executeScript("var planningCard = document.getElementById('planning-status-card'); if(planningCard) planningCard.remove();")
             AgentThinkingUuid = Nothing
         Catch ex As Exception
             Debug.WriteLine($"[AgentKernelService] OnPlanGenerated 出错: {ex.Message}")
@@ -364,7 +400,7 @@ Public Partial Class AgentKernelService
             Debug.WriteLine($"[AgentKernelService] OnCompleted 出错: {ex.Message}")
         Finally
             PersistChangeLog(result)
-            FinalizeAgentUi(terminalSuccess, terminalMessage, BuildUndoDescriptor(result))
+            FinalizeAgentUi(terminalSuccess, terminalMessage, BuildTerminalDescriptor(result))
         End Try
     End Sub
 
@@ -391,21 +427,70 @@ Public Partial Class AgentKernelService
     End Sub
 
     ''' <summary>
-    ''' 只有 Word 且所有残留改动都能按自定义撤销单元还原时，才向 UI 暴露“撤销本轮”。
-    ''' Excel/PowerPoint 当前没有等价的安全撤销单元，不生成按钮，避免假承诺。
+    ''' 终态卡片要回答两个问题：本轮在文档里实际留下了什么，以及能不能一键撤销、为什么不能。
+    ''' 变更条目只取宿主观察里的短摘要并限长，不带文档原文、参数或截图。
+    ''' 撤销按钮只看残留改动是否全部可还原——Word 走宿主原生撤销单元，Excel/PPT 走可重放的还原快照；
+    ''' 不出按钮时必须给出原因，否则用户会以为这些改动随时能回退。
     ''' </summary>
-    Private Function BuildUndoDescriptor(result As Agent.AgentResult) As JObject
-        If result Is Nothing OrElse result.ChangeLog Is Nothing Then Return Nothing
-        If Not String.Equals(_getOfficeAppType(), "Word", StringComparison.OrdinalIgnoreCase) Then Return Nothing
-        If Not result.ChangeLog.FullyUndoable Then Return Nothing
-        Dim runId = If(CurrentHarnessRunId, "")
-        If String.IsNullOrWhiteSpace(runId) Then Return Nothing
-        Return New JObject From {
-            {"canUndo", True},
-            {"runId", runId},
-            {"units", result.ChangeLog.UndoableUnits},
-            {"writtenCount", result.ChangeLog.WrittenCount}
+    Private Function BuildTerminalDescriptor(result As Agent.AgentResult) As JObject
+        Dim changeLog = result?.ChangeLog
+        If changeLog Is Nothing Then Return Nothing
+
+        Dim changes As New JArray()
+        Dim rolledBackCount As Integer = 0
+        For Each entry In changeLog.Entries
+            If entry.RolledBack Then rolledBackCount += 1
+            If Not entry.Changed OrElse entry.RolledBack Then Continue For
+            If changes.Count < MaxTerminalChanges Then
+                changes.Add(New JObject From {
+                    {"seq", entry.Seq},
+                    {"toolId", entry.ToolId},
+                    {"summary", BoundText(If(entry.Summary, entry.StepDescription), 120)},
+                    {"partialApply", entry.PartialApply}
+                })
+            End If
+        Next
+
+        Dim descriptor As New JObject From {
+            {"canUndo", False},
+            {"runId", ""},
+            {"units", 0},
+            {"restoreCount", 0},
+            {"writtenCount", changeLog.WrittenCount},
+            {"rolledBackCount", rolledBackCount},
+            {"changeTruncated", changeLog.WrittenCount > MaxTerminalChanges},
+            {"changes", changes},
+            {"undoReason", ""}
         }
+
+        If changeLog.WrittenCount = 0 Then
+            descriptor("undoReason") = "本轮没有留在文档里的改动，不需要撤销。"
+            Return descriptor
+        End If
+        If Not changeLog.FullyUndoable Then
+            descriptor("undoReason") = "有改动缺少可靠的撤销依据（既没有宿主撤销单元，也没有可重放的还原快照），一键回退可能只撤掉一半，因此不提供撤销按钮。"
+            Return descriptor
+        End If
+
+        Dim runId = If(CurrentHarnessRunId, "")
+        If String.IsNullOrWhiteSpace(runId) Then
+            descriptor("undoReason") = "本轮没有运行标识，无法定位需要回退的改动记录。"
+            Return descriptor
+        End If
+
+        descriptor("canUndo") = True
+        descriptor("runId") = runId
+        descriptor("units") = changeLog.UndoableUnits
+        descriptor("restoreCount") = changeLog.RestoreCount
+        descriptor("undoReason") = ""
+        Return descriptor
+    End Function
+
+    ''' <summary>摘要来自宿主观察，正常已经很短；这里只是兜底，防止个别宿主把正文塞进 summary。</summary>
+    Private Shared Function BoundText(value As String, maxLength As Integer) As String
+        Dim text = If(value, "").Replace(vbCr, " ").Replace(vbLf, " ").Trim()
+        If text.Length <= maxLength Then Return text
+        Return text.Substring(0, maxLength) & "…"
     End Function
 
     ''' <summary>
@@ -431,19 +516,20 @@ Public Partial Class AgentKernelService
         Return response.Content
     End Function
 
-    Private Sub FinalizeAgentUi(success As Boolean, message As String, Optional undo As JObject = Nothing)
+    Private Sub FinalizeAgentUi(success As Boolean, message As String, Optional terminal As JObject = Nothing)
         Dim sessionId = If(CurrentAgentSessionId, "")
         Dim thinkingUuid = If(AgentThinkingUuid, "")
-        Dim undoJson = If(undo Is Nothing, "null", UtilsService.SerializeForScript(undo))
+        Dim terminalJson = If(terminal Is Nothing, "null", UtilsService.SerializeForScript(terminal))
         Try
-            _executeScript($"completeAgent({UtilsService.ToJsStringLiteral(sessionId)}, {success.ToString().ToLowerInvariant()}, {UtilsService.ToJsStringLiteral(message)}, {UtilsService.ToJsStringLiteral(thinkingUuid)}, {undoJson})")
+            _executeScript($"completeAgent({UtilsService.ToJsStringLiteral(sessionId)}, {success.ToString().ToLowerInvariant()}, {UtilsService.ToJsStringLiteral(message)}, {UtilsService.ToJsStringLiteral(thinkingUuid)}, {terminalJson})")
         Catch ex As Exception
             AppLogger.Warn("AgentKernelService", $"FinalizeAgentUi failed: {AppLogger.Redact(ex.Message)}")
-            ' 即使主终态函数不存在，也直接执行最小按钮/规划卡复位。
-            _executeScript("var p=document.getElementById('planning-status-card');if(p)p.remove();if(typeof restoreAgentRequestUi==='function')restoreAgentRequestUi();else if(typeof changeSendButton==='function')changeSendButton();")
+            ' 即使主终态函数不存在，也直接执行最小输入锁/按钮复位（规划卡由 agent-card.js 自己管）。
+            _executeScript("if(typeof restoreAgentRequestUi==='function')restoreAgentRequestUi();else if(typeof changeSendButton==='function')changeSendButton();")
         Finally
             AgentOriginalUserRequest = Nothing
             AgentFullUserMessage = Nothing
+            AgentEntryActionId = Nothing
             AgentThinkingUuid = Nothing
             CurrentAgentSessionId = Nothing
             CurrentHarnessRunId = Nothing

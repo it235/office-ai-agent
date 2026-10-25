@@ -7,6 +7,11 @@
 function settingsButton() {
     document.getElementById('settings-overlay').style.display = 'block';
     document.getElementById('settings-dialog').style.display = 'block';
+    // E3-05：同意行的勾选状态只由宿主下发。页面刚装载就打开设置时推送可能还没到，
+    // 所以问一次，而不是先显示一个未经证实的默认值。
+    if (!window.onboardingState && typeof sendMessageToServer === 'function') {
+        sendMessageToServer({ type: 'getOnboardingState' });
+    }
 }
 
 // Cancel settings dialog
@@ -27,28 +32,26 @@ function settingsSave() {
     let enableAutocomplete = document.getElementById('settings-autocomplete-enable').checked;
     let autocompleteShortcut = document.getElementById('settings-autocomplete-shortcut').value;
 
+    // E4 原生入口三个开关 + 命令面板快捷键。少带一个键，后端就会把没提交的那一项当成默认值写回文件。
+    let payload = {
+        topicRandomness: topicRandomness,
+        contextLimit: contextLimit,
+        selectedCell: selectedCell,
+        settingsScroll: settingsScroll,
+        executeCodePreview: executeCodePreview,
+        enableAutocomplete: enableAutocomplete,
+        autocompleteShortcut: autocompleteShortcut,
+        enableSelectionToolbar: document.getElementById('settings-enable-selection-toolbar').checked,
+        enableContextMenu: document.getElementById('settings-enable-context-menu').checked,
+        enableHotkey: document.getElementById('settings-enable-hotkey').checked,
+        hotkeyChord: document.getElementById('settings-hotkey-chord').value
+    };
+
     // Save settings to backend
     if (window.chrome && window.chrome.webview) {
-        window.chrome.webview.postMessage({
-            type: 'saveSettings',
-            topicRandomness: topicRandomness,
-            contextLimit: contextLimit,
-            selectedCell: selectedCell,
-            settingsScroll: settingsScroll,
-            executeCodePreview: executeCodePreview,
-            enableAutocomplete: enableAutocomplete,
-            autocompleteShortcut: autocompleteShortcut,
-        });
+        window.chrome.webview.postMessage(Object.assign({ type: 'saveSettings' }, payload));
     } else if (window.vsto) {
-        window.vsto.saveSettings({
-            topicRandomness: topicRandomness,
-            contextLimit: contextLimit,
-            selectedCell: selectedCell,
-            settingsScroll: settingsScroll,
-            executeCodePreview: executeCodePreview,
-            enableAutocomplete: enableAutocomplete,
-            autocompleteShortcut: autocompleteShortcut,
-        });
+        window.vsto.saveSettings(payload);
     } else {
         alert('无法执行代码：未检测到支持的通信接口');
     }

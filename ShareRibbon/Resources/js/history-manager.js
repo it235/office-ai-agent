@@ -57,6 +57,12 @@ window.historyManager = {
                 return;
             }
 
+            const emptyBtn = e.target.closest('[data-empty]');
+            if (emptyBtn) {
+                this.runEmptyAction(emptyBtn.getAttribute('data-empty'));
+                return;
+            }
+
             const item = e.target.closest('.history-item');
             if (!item) return;
             const sessionId = item.getAttribute('data-session-id') || '';
@@ -144,6 +150,25 @@ window.historyManager = {
         this.editingSessionId = null;
     },
 
+    // 空状态的引导动作：历史面板只负责查看，起点永远是输入框，
+    // 这里不另开一条发送路径，免得又长出第二个入口。
+    runEmptyAction: function (action) {
+        if (action === 'onboarding') {
+            this.closeSidebar();
+            if (typeof window.showOnboarding === 'function') window.showOnboarding();
+            return;
+        }
+        if (action === 'start') {
+            this.closeSidebar();
+            this.focusComposer();
+        }
+    },
+
+    focusComposer: function () {
+        const composer = document.getElementById('smart-input') || document.getElementById('chat-input');
+        if (composer) composer.focus();
+    },
+
     // Load history files list
     loadHistoryFiles: function () {
         // Request session list from backend (conversation_event + session_summary)
@@ -170,9 +195,67 @@ window.historyManager = {
             return;
         }
 
-        // 顺序由后端决定：scope=all 时当前文档的会话排在最前，前端再按时间重排会把它冲掉
-        historyList.innerHTML = barHtml + this.items.map(s => this.renderItem(s)).join('');
+        // 顺序由后端决定：scope=all 时当前文档的会话排在最前，前端再按时间重排会把它冲掉。
+        // 分组只是呈现：按「首次出现」切桶，桶内保持后端顺序。
+        const groups = this.buildGroups();
+        historyList.innerHTML = barHtml + groups.map(g => this.renderGroup(g)).join('');
         this.focusRenameInput();
+    },
+
+    // 按文档或时间切桶：scope=all 归到文档/通用会话，scope=document 只剩一篇文档、改按最近活跃分桶
+    buildGroups: function () {
+        const groups = [];
+        const byKey = {};
+        this.items.forEach(s => {
+            const bucket = this.groupOf(s);
+            let group = byKey[bucket.key];
+            if (!group) {
+                group = { key: bucket.key, label: bucket.label, isCurrent: bucket.isCurrent === true, items: [] };
+                byKey[bucket.key] = group;
+                groups.push(group);
+            }
+            group.items.push(s);
+        });
+        return groups;
+    },
+
+    groupOf: function (s) {
+        if (this.scope === 'document') {
+            const label = this.timeBucket(s);
+            return { key: 'time:' + label, label: label };
+        }
+        // 分组键优先用文档哈希：同名不同文件的会话并成一组会把用户带偏
+        const key = s.documentId || s.documentName || '';
+        if (s.isCurrentDocument === true) {
+            return { key: 'current:' + key, label: this.documentName || s.documentName || '本文档', isCurrent: true };
+        }
+        if (key) {
+            return { key: 'doc:' + key, label: s.documentName || '其他文档' };
+        }
+        return { key: 'generic', label: '通用会话' };
+    },
+
+    // 分桶用排序键 lastActiveAt（老 payload 没这列时回落 createdAt），保证桶序与列表序一致
+    timeBucket: function (s) {
+        const matched = String(s.lastActiveAt || s.createdAt || '').match(/(\d{4})-(\d{2})-(\d{2})/);
+        // 只截 YYYY-MM-DD 自己算天数差：带空格的 "2026-10-24 09:12" 不是标准 ISO，各引擎解析结果不一致
+        if (!matched) return '更早';
+        const day = Date.UTC(Number(matched[1]), Number(matched[2]) - 1, Number(matched[3]));
+        const now = new Date();
+        const elapsed = Math.round((Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) - day) / 86400000);
+        if (elapsed <= 0) return '今天';
+        if (elapsed === 1) return '昨天';
+        if (elapsed <= 7) return '最近 7 天';
+        if (elapsed <= 30) return '最近 30 天';
+        return '更早';
+    },
+
+    renderGroup: function (group) {
+        const header = `<div class="history-group-header${group.isCurrent ? ' history-group-current' : ''}">
+            <span class="history-group-label" title="${this.escapeHtml(group.label)}">${this.escapeHtml(group.label)}</span>
+            <span class="history-group-count">${group.items.length}</span>
+        </div>`;
+        return `<div class="history-group">${header}${group.items.map(s => this.renderItem(s)).join('')}</div>`;
     },
 
     renderScopeBar: function () {
@@ -185,15 +268,33 @@ window.historyManager = {
     },
 
     renderEmptyState: function () {
-        if (this.scope === 'document' && this.hasDocument) {
+        if (this.scope === 'document') {
+            const text = this.hasDocument
+                ? `《${this.escapeHtml(this.documentName || '未命名文档')}》还没有会话`
+                : '这篇文档还没保存，会话只能先记成通用会话';
+            const hint = this.hasDocument
+                ? '关闭面板后直接提问，这次会话会自动归到当前文档。'
+                : '保存文档后新会话就能按文档归组，已有会话可以在「全部」里找到。';
             return `<div class="empty-state">
-                <div class="empty-state-text">这篇文档还没有会话</div>
-                <button type="button" class="history-empty-action" data-scope="all">查看全部会话</button>
+                <div class="empty-state-text">${text}</div>
+                <div class="empty-state-hint">${hint}</div>
+                <div class="empty-state-actions">
+                    <button type="button" class="history-empty-action" data-empty="start">直接开始</button>
+                    <button type="button" class="history-empty-action" data-scope="all">查看全部会话</button>
+                </div>
             </div>`;
         }
+        const onboarding = typeof window.showOnboarding === 'function'
+            ? '<button type="button" class="history-empty-action" data-empty="onboarding">新手引导</button>'
+            : '';
         return `<div class="empty-state">
             <div class="empty-state-icon">📄</div>
             <div class="empty-state-text">您还没有任何历史会话</div>
+            <div class="empty-state-hint">在下方输入框说清目标和范围，例如「把销售表按金额排序并高亮前 10 行」。每次任务都会自动记在这里。</div>
+            <div class="empty-state-actions">
+                <button type="button" class="history-empty-action" data-empty="start">开始第一个任务</button>
+                ${onboarding}
+            </div>
         </div>`;
     },
 
@@ -219,12 +320,8 @@ window.historyManager = {
     },
 
     renderItemMeta: function (s) {
-        const parts = [];
-        if (this.scope === 'all') {
-            parts.push(s.documentName ? this.escapeHtml(s.documentName) : '通用会话');
-        }
-        parts.push(this.escapeHtml(this.formatSessionDate(s.createdAt)));
-        return parts.map(p => `<span class="history-meta-part">${p}</span>`).join('');
+        // 文档名交给分组标题承载，条目只留最近活跃时间，免得同一行把组名再抄一遍
+        return `<span class="history-meta-part">${this.escapeHtml(this.formatSessionDate(s.lastActiveAt || s.createdAt))}</span>`;
     },
 
     startRename: function (sessionId) {
@@ -275,7 +372,8 @@ window.historyManager = {
 
     formatSessionDate: function (createdAt) {
         if (!createdAt) return '未知时间';
-        return String(createdAt).replace('T', ' ').substring(0, 19);
+        // 到分钟就够：分组标题已经说明是哪一天，条目再挂秒数只会把行挤满
+        return String(createdAt).replace('T', ' ').substring(0, 16);
     },
 
     loadSession: function (sessionId) {

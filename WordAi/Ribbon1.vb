@@ -24,7 +24,7 @@ Public Class Ribbon1
         'Globals.ThisAddIn.ShowChatTaskPane()
     End Sub
     Protected Overrides Async Sub DataAnalysisButton_Click(sender As Object, e As RibbonControlEventArgs)
-        Await StartAgentFromRibbonAsync("请自动分析当前选中文档内容或整篇 Word 文档，提取结构、关键数据、风险点、摘要结论和可执行改进建议；如包含表格或数字，请优先进行结构化分析。")
+        Await StartAgentFromRibbonAsync(Agent.QuickActionCatalog.WordRibbonAnalyze)
     End Sub
 
     Protected Overrides Function GetApplication() As ApplicationInfo
@@ -69,7 +69,7 @@ Public Class Ribbon1
     Protected Overrides Async Sub ReformatButton_Click(sender As Object, e As RibbonControlEventArgs)
         Try
             ' 打开 Chat 面板并立即进入智能排版分析。
-            Await Globals.ThisAddIn.ShowChatTaskPaneAsync()
+            Globals.ThisAddIn.ShowChatTaskPane()
 
             Dim chatCtrl = ThisAddIn.chatControl
             If chatCtrl Is Nothing Then
@@ -457,7 +457,7 @@ Public Class Ribbon1
         End Try
     End Function
 
-    Private Async Function StartAgentFromRibbonAsync(request As String) As Task
+    Private Async Function StartAgentFromRibbonAsync(action As Agent.QuickAction) As Task
         Try
             Globals.ThisAddIn.ShowChatTaskPane()
             Await Task.Delay(350)
@@ -468,7 +468,7 @@ Public Class Ribbon1
                 Return
             End If
 
-            Await chatCtrl.ExecuteJavaScriptAsyncJS($"sendMessageToServer({{ type: 'startAgent', request: {UtilsService.ToJsStringLiteral(request)} }});")
+            chatCtrl.StartAgentFromHostEntry(action)
         Catch ex As Exception
             GlobalStatusStripAll.ShowWarning($"启动 AI Agent 失败: {ex.Message}")
         End Try

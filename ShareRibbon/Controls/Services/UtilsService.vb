@@ -216,6 +216,10 @@ if (document.readyState !== 'loading') {
     ''' <summary>
     ''' 获取 VSTO 桥接脚本（用于 WebView2 与 VB.NET 通信）
     ''' </summary>
+    ''' <remarks>
+    ''' E5-04：这里的每个方法都是一条真实发送方，写了没人调就等于 posts 一个永远发不出的 type。
+    ''' scripts/check-entry-reachability.js 会把「定义了但没有调用点」的方法判为不可达入口。
+    ''' </remarks>
     Public Shared Function GetVstoBridgeScript() As String
         Return "
         window.vsto = {
@@ -227,13 +231,6 @@ if (document.readyState !== 'loading') {
                     executecodePreview: preview
                 });
                 return true;
-            },
-            checkedChange: function(thisProperty,checked) {
-                return window.chrome.webview.postMessage({
-                    type: 'checkedChange',
-                    isChecked: checked,
-                    property: thisProperty
-                });
             },
             sendMessage: function(payload) {
                 let messageToSend;
@@ -263,6 +260,9 @@ if (document.readyState !== 'loading') {
     ''' </summary>
     Public Shared Async Function SendHttpRequestAsync(apiUrl As String, apiKey As String, requestBody As String) As Threading.Tasks.Task(Of String)
         Try
+            ' E3-05：面板把这条当非流式兜底发送器用，载荷里就是用户内容，所以它和 AiGateway 同口径。
+            ' 拒绝形状沿用本函数既有的失败约定（空串），不额外发明第三种「失败」。
+            If PrivacyConsentGate.RefuseQuietly("UtilsService") Then Return String.Empty
             System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.Tls12
             Using client As New System.Net.Http.HttpClient()
                 client.Timeout = TimeSpan.FromSeconds(120)

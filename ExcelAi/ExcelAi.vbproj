@@ -303,7 +303,9 @@
       <SubType>Component</SubType>
     </Compile>
     <Compile Include="Context\ExcelContextProvider.vb" />
+    <Compile Include="HostEntry\ExcelContextMenu.vb" />
     <Compile Include="Handlers\FormulaHandler.vb" />
+    <Compile Include="Undo\ExcelRunRestore.vb" />
     <Compile Include="Spotlight.vb" />
     <Compile Include="ExcelDirectOperationService.vb" />
     <Compile Include="ExcelJsonCommandSchema.vb" />

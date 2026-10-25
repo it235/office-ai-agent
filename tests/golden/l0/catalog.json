@@ -87,6 +87,161 @@
       "id": "C-excel-observer-compat",
       "kind": "contract",
       "contractType": "excel_observer_compat"
+    },
+    {
+      "id": "L0-word-review-polish-pass",
+      "kind": "task_package_outcome",
+      "packageId": "word.review-polish",
+      "entryActionId": "word.selection.rewrite",
+      "expectedOutcome": "satisfied",
+      "expectedUnmetCount": 0,
+      "expectedUnmetFacts": [],
+      "canUndo": true,
+      "note": "选区润色真的写回了两处，每处都有原生撤销单元和首尾文档指纹，所以包既敢说成功、也敢给「撤销本轮」。",
+      "steps": [
+        {
+          "toolId": "ReplaceText",
+          "observation": {
+            "kind": "write", "changed": true, "summary": "golden: 替换 1 处错别字", "undoUnits": 1,
+            "before": { "documentTextHash": "wp-hash-before" }, "after": { "documentTextHash": "wp-hash-mid" }
+          }
+        },
+        {
+          "toolId": "SetParagraphFormat",
+          "observation": {
+            "kind": "write", "changed": true, "summary": "golden: 修正 1 处标点间距", "undoUnits": 1,
+            "before": { "documentTextHash": "wp-hash-mid" }, "after": { "documentTextHash": "wp-hash-after" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "L0-word-review-polish-fail-no-undo",
+      "kind": "task_package_outcome",
+      "packageId": "word.review-polish",
+      "entryActionId": "word.selection.proofread",
+      "expectedOutcome": "unmet",
+      "expectedUnmetCount": 1,
+      "expectedUnmetFacts": ["nativeUndoable"],
+      "canUndo": true,
+      "note": "改动确实落进文档，但宿主一步都没给原生撤销单元：这时不能承诺一键撤销，包必须说未达成。",
+      "steps": [
+        {
+          "toolId": "ReplaceText",
+          "observation": {
+            "kind": "write", "changed": true, "summary": "golden: 替换 1 处错别字",
+            "before": { "documentTextHash": "wu-hash-before" }, "after": { "documentTextHash": "wu-hash-after" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "L0-word-review-polish-fail-no-write",
+      "kind": "task_package_outcome",
+      "packageId": "word.review-polish",
+      "entryActionId": "word.selection.rewrite",
+      "expectedOutcome": "unmet",
+      "expectedUnmetCount": 2,
+      "expectedUnmetFacts": ["writtenCount", "nativeUndoable"],
+      "canUndo": true,
+      "note": "写步骤跑完但观察到文档没有任何变化（选区本来就没问题）。合同要求写过，所以判未达成——这条同时把 plan §9 第 25 条的代价钉住：文案必须让用户看懂「没改」不是「失败」。",
+      "steps": [
+        {
+          "toolId": "ReplaceText",
+          "observation": {
+            "kind": "write", "changed": false, "summary": "golden: 选区无需改动",
+            "before": { "documentTextHash": "wn-hash-same" }, "after": { "documentTextHash": "wn-hash-same" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "L0-excel-clean-and-fix-pass",
+      "kind": "task_package_outcome",
+      "packageId": "excel.clean-and-fix",
+      "entryActionId": "excel.selection.formula",
+      "expectedOutcome": "satisfied",
+      "expectedUnmetCount": 0,
+      "expectedUnmetFacts": [],
+      "canUndo": true,
+      "note": "补公式 + 修格式各留下一处改动。不断 fullyUndoable：Excel 的还原快照只覆盖值/公式/数字格式，结构变更撤不回，这条口径属于 successCriteria 文案而不是断言。",
+      "steps": [
+        {
+          "toolId": "ApplyFormula",
+          "observation": {
+            "kind": "write", "changed": true, "summary": "golden: 补齐 1 列公式",
+            "before": { "documentTextHash": "ec-hash-before" }, "after": { "documentTextHash": "ec-hash-mid" }
+          }
+        },
+        {
+          "toolId": "FormatRange",
+          "observation": {
+            "kind": "write", "changed": true, "summary": "golden: 统一数字格式",
+            "before": { "documentTextHash": "ec-hash-mid" }, "after": { "documentTextHash": "ec-hash-after" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "L0-excel-clean-and-fix-fail-rolled-back",
+      "kind": "task_package_outcome",
+      "packageId": "excel.clean-and-fix",
+      "entryActionId": "excel.selection.format",
+      "expectedOutcome": "unmet",
+      "expectedUnmetCount": 1,
+      "expectedUnmetFacts": ["writtenCount"],
+      "canUndo": true,
+      "note": "写过但整轮被还原（取消预览的那条路）：changedCount 仍算变化过，留在文档里的却是 0 处，所以未达成的只有 writtenCount。",
+      "steps": [
+        {
+          "toolId": "FormatRange",
+          "observation": {
+            "kind": "write", "changed": true, "summary": "golden: 改完即还原",
+            "rollback": { "succeeded": true },
+            "before": { "documentTextHash": "er-hash-before" }, "after": { "documentTextHash": "er-hash-before" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "L0-excel-insight-pass",
+      "kind": "task_package_outcome",
+      "packageId": "excel.insight",
+      "entryActionId": "excel.selection.explain",
+      "expectedOutcome": "satisfied",
+      "expectedUnmetCount": 0,
+      "expectedUnmetFacts": [],
+      "canUndo": true,
+      "note": "只读包的成功标准是「一个字都没动」。洞察任务的读取观察本来就不该进变更台账，所以台账为空、writtenCount=0、hasChanges=false——这条同时钉住台账的收录口径：只收 kind=write 且带 changed 的结果。",
+      "steps": [
+        {
+          "toolId": "DataAnalysis", "recorded": false,
+          "observation": {
+            "kind": "read", "changed": false, "summary": "golden: 只读分析未写回",
+            "before": { "documentTextHash": "ei-hash-same" }, "after": { "documentTextHash": "ei-hash-same" }
+          }
+        }
+      ]
+    },
+    {
+      "id": "L0-excel-insight-fail-wrote",
+      "kind": "task_package_outcome",
+      "packageId": "excel.insight",
+      "entryActionId": "excel.selection.explain",
+      "expectedOutcome": "unmet",
+      "expectedUnmetCount": 2,
+      "expectedUnmetFacts": ["writtenCount", "hasChanges"],
+      "canUndo": true,
+      "note": "越界：一个声明只读的包往表里写了值。两条断言同时未达成，收尾不许报成功——这是包合同里唯一「不许发生」的那类事。",
+      "steps": [
+        {
+          "toolId": "WriteData",
+          "observation": {
+            "kind": "write", "changed": true, "summary": "golden: 越界写入单元格",
+            "before": { "documentTextHash": "ew-hash-before" }, "after": { "documentTextHash": "ew-hash-after" }
+          }
+        }
+      ]
     }
   ]
 }

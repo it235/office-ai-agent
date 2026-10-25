@@ -15,6 +15,12 @@ Namespace Agent
         Public Property SelectedSkill As SkillFileDefinition
         Public Property Spec As AgentTaskSpec
 
+        ''' <summary>
+        ''' 本轮来自哪个入口动作（QuickActionCatalog 里的 id）；自由文本输入为空串。
+        ''' 这是任务包断言唯一的绑定依据：没有入口身份就不核对，绝不靠关键词猜一个包。
+        ''' </summary>
+        Public Property EntryActionId As String = ""
+
         ' ReAct 循环记录
         Public Property Iterations As New List(Of ReActIteration)
         Public Property Status As AgentStatus = AgentStatus.Idle
@@ -27,6 +33,9 @@ Namespace Agent
 
         ' 本轮写操作变更日志（目标、前后摘要、是否成功）
         Public Property ChangeLog As New AgentRunChangeLog()
+
+        ' 本轮真实落盘写入的台账，供 replan 判定哪些步骤已经做完（E1-06）
+        Public Property Writes As New AgentWriteLedger()
 
         ' 本轮用户明确选择“本会话允许”的工具；只在这一轮 Agent 会话内生效
         Public Property SessionApprovedTools As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
@@ -62,6 +71,21 @@ Namespace Agent
         Public Property Summary As String
         Public Property Complexity As String = "medium"
         Public Property CapabilityGap As String = ""
+        ''' <summary>发给 UI 前由 LoopEngine 补齐的计划事实；模型不参与生成，见 E1-08。</summary>
+        Public Property Trust As PlanTrust
+    End Class
+
+    ''' <summary>
+    ''' 计划卡的信任信息：这一版计划要动多大范围、几步几个工具、其中哪些需要确认。
+    ''' 重规划会产生新版本，卡片按版本号原位重绘，时间线才不会停留在旧计划上。
+    ''' </summary>
+    Public Class PlanTrust
+        Public Property PlanVersion As Integer = 1
+        Public Property ScopeText As String = ""
+        Public Property StepCount As Integer
+        Public Property ToolCount As Integer
+        Public Property RiskLevel As String = "safe"
+        Public Property RiskyTools As New List(Of String)()
     End Class
 
     ''' <summary>

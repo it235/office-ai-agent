@@ -10,6 +10,7 @@
 PowerPointAi/
 ├── ChatControl.vb                    # PowerPoint 命令入口与宿主执行回调
 ├── Context/PowerPointContextProvider.vb
+├── HostEntry/PowerPointContextMenu.vb  # E4-02 右键菜单适配器（只挑菜栏 + 判选区类型）
 ├── Design/
 │   ├── SlideDesignModels.vb          # Deck/Slide/Scene/Verifier 模型
 │   ├── DesignSystemCatalog.vb        # 设计 Token 与主题
@@ -37,6 +38,32 @@ PowerPointAi/
 | 视觉验证 | `Design/PowerPointVisualVerifier.vb` | 几何、层级、结构、像素与 COM 渲染差异 |
 | 动态 PowerPoint API | `Runtime/` | `DiscoverOfficeCapability + OfficeObjectOperation` 的宿主实现 |
 | PowerPoint 上下文 | `Context/PowerPointContextProvider.vb` | 活动文稿、选区和结构快照 |
+| 右键菜单入口 | `HostEntry/PowerPointContextMenu.vb` | 只挑菜栏 + 判 `ActiveWindow.Selection.Type`；挂项/摘项在 `ShareRibbon/Agent/HostContextMenu.vb` |
+
+## HOST ENTRY RULES
+
+- 入口只说话：动作来自 `ShareRibbon/Agent/QuickActionCatalog.ActionsFor(PowerPointAppType)`，点击后一律
+  `chatControl.StartAgentFromHostEntry(action)`（整个动作，含入口 id）`，不得再拼 `sendMessageToServer` JS。
+- 入口层不自建清单、不声明 `CapabilityId`：PowerPoint 还没有宿主 capability 注册表（开放待办 #36）。
+- 新入口文件放 `HostEntry/` + `Namespace HostEntry`。`Namespace Selection` 在本项目是**编译炸弹**：
+  VB 里命名空间压过互操作类型名，`PowerPointContinuationService`/`PowerPointCompletionManager` 里的
+  `sel As Selection` 会直接报 BC30182。
+- 引用的 Office 15 PIA 的 `CommandBar` 没有事件面，所以右键菜单不做"弹出时置灰"，而是点击时探测
+  （`ppSelectionShapes/Text/Slides` 才算可用）并把原因写进状态栏。
+- 命令面板（E4-03）的快捷键轮询与面板状态全在 `ShareRibbon/Controls/Services/`，PowerPoint 侧只贡献一个
+  `ChatControl.EnsureHostTaskPaneVisible` 覆写（`Globals.ThisAddIn.ShowChatTaskPane()`）；不在本项目里建
+  watcher/timer，也不为面板另开第二条发送路径。快捷键只在 PowerPoint 处于前台时生效，多宿主共用一个组合键不互相抢键。
+- 右键菜单受 `ChatSettings.EnableContextMenu`（默认关闭）与面板可见事件保护，不进 `PowerPointAi_Startup`；
+  Shutdown 必须 `Detach()`，只按 `aiq:` Tag 摘自己挂的项。日志只记动作 id，幻灯片文字不进日志。
+- 选区自动引用（E4-04）默认开启，「带不带选区」只在 `ShareRibbon` 的 `BuildMessageWithAutoSelection` 判一次；
+  `ChatControl.AppendCurrentSelectedContent` 里那份重复的 `If Not selectedCellChecked` 已删除。引用卡片那条路
+  （`GetSelectedContent` 的事件芯片）是另一个功能，仍自带闸门，不要混为一谈。
+- PPT 各版本暴露的上下文菜栏零散，`{"Text","Drawing","Object"}` 只是候选试探：取不到就不出这个入口，
+  不报错、不重试。真机需按版本记录实际命中哪条。
+- 事件绑定卫生（E4-05）：`ChatTaskPane_VisibleChanged` 在 `EnsureContextMenu()` 之前先
+  `ChatSettings.EnsureLoaded(New ApplicationInfo("PowerPoint", OfficeApplicationType.PowerPoint))`，否则进程内第一次
+  读到的是代码默认值。`ChatControl.MainForm_Load` 不调 `InitializeSettings()`（页面注入由基类「一份文档一次初始化」闸门负责）；
+  宽度定时器只在 `Is Nothing` 守卫里创建、`ThisAddIn_Shutdown` 统一 `Stop()`+`Dispose()`，不要在可见事件里再挂一份 Tick。
 
 ## PROFESSIONAL DESIGN PIPELINE
 

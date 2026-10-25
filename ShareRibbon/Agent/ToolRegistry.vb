@@ -66,6 +66,12 @@ Namespace Agent
         ''' </summary>
         <JsonIgnore>
         Public Property VisualEvidence As New List(Of AgentVisualEvidence)()
+        ''' <summary>
+        ''' 本步目标区域的还原快照，交给变更日志落库后用于“撤销本轮”。
+        ''' 和视觉证据同类：只走这条旁路，不进 Observation，免得文档内容被塞进提示词、执行轨迹或聊天历史。
+        ''' </summary>
+        <JsonIgnore>
+        Public Property RestoreSnapshot As JObject
         ''' <summary>宿主侧撤销点 ID；H1 先保留字段，具体执行器逐步填充。</summary>
         Public Property UndoPointId As String = ""
         ''' <summary>执行产生的附加产物，例如 chart/slide/range 引用。</summary>

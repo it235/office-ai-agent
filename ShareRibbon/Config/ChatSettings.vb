@@ -17,7 +17,10 @@ Public Class ChatSettings
 
     Public Shared Property topicRandomness As Double = 0.8  ' 默认值改为 Double
     Public Shared Property contextLimit As Integer = 5     ' 默认值改为 Integer
-    Public Shared Property selectedCellChecked As Boolean = False
+    ' E4-04 选区自动引用：默认开启——用户选中了一段内容再提问，最自然的期待就是「问的是这段」。
+    ' 代价必须同时给出来：带出去的是什么要在对话里看得见（BaseChatControl.BuildMessageWithAutoSelection），
+    ' 并且面板设置里有能真的关掉它的开关（缺键时才用这个默认值，显式存过 false 的用户保持关闭）。
+    Public Shared Property selectedCellChecked As Boolean = True
     Public Shared Property executecodePreviewChecked As Boolean = True ' 执行代码前预览的默认选项
     Public Shared Property settingsScrollChecked As Boolean = True
 
@@ -26,32 +29,78 @@ Public Class ChatSettings
     Public Shared Property AutocompleteDelayMs As Integer = 800      ' 防抖延迟（毫秒）
     Public Shared Property AutocompleteShortcut As String = "Ctrl+."  ' 接受补全的快捷键（默认Ctrl+.）
 
+    ' E4-01 选区工具条：选中一段文字后在选区旁给出快捷动作。
+    ' 默认关闭：浮层会自动出现在每一次选区旁边，不能未经用户同意就改变写作界面。
+    ' 面板设置里有 `settings-enable-selection-toolbar` 开关，用户不改代码就能关掉它。
+    Public Shared Property EnableSelectionToolbar As Boolean = False
+
+    ' E4-02 右键菜单入口：把本宿主的 AI 动作挂进上下文菜单（三端共用同一份动作清单）。
+    ' 同样默认关闭：它改的是用户宿主里既有的右键菜单；开关是 `settings-enable-context-menu`。
+    Public Shared Property EnableContextMenu As Boolean = False
+
+    ' E4-03 全局快捷键唤起命令面板：一个组合键在任一宿主里展开面板并打开命令面板。
+    ' 默认关闭 + 必须带 Ctrl/Alt：快捷键是独占资源，抢用户既有按键（Word 的 Ctrl+K 是插入超链接）
+    ' 比浮层更 intrusive，所以既不默认开，也不允许注册无修饰键的单键。
+    Public Shared Property EnableHotkey As Boolean = False
+    Public Const DefaultHotkeyChord As String = "Ctrl+Alt+K"
+    Public Shared Property HotkeyChord As String = DefaultHotkeyChord
+
+    ' E4-05：宿主在「面板变为可见」时就要读开关（挂右键菜单、出选区工具条），而那一刻可能还
+    ' 没有任何 ChatSettings 实例读过文件，于是拿到的是声明的默认值——用户明明开过的开关，
+    ' 进程内第一次就是不生效。EnsureLoaded 把「先加载再判断」固定成一次调用，重复调用不再读盘；
+    ' 面板自身的装载路径照旧每次 New 一份，跨宿主的外部编辑仍然会在下一次装载时被刷进来。
+    Private Shared _loadedInstance As ChatSettings
+
+    Public Shared Function EnsureLoaded(applicationInfo As ApplicationInfo) As ChatSettings
+        If _loadedInstance IsNot Nothing Then Return _loadedInstance
+        ' 构造即 LoadSettings：静态属性就是这份文件投射出来的当前值。
+        _loadedInstance = New ChatSettings(applicationInfo)
+        Return _loadedInstance
+    End Function
+
     ' 修改方法签名，参数类型改为 Double 和 Integer
     Public Sub SaveSettings(topicRandomness As Double, contextLimit As Integer,
                           selectedCell As Boolean, settingsScroll As Boolean, executecodePreview As Boolean,
                           Optional enableAutocomplete As Boolean = False, Optional autocompleteDelayMs As Integer = 800,
-                          Optional autocompleteShortcut As String = "Ctrl+.")
+                          Optional autocompleteShortcut As String = "Ctrl+.",
+                          Optional enableSelectionToolbar As Boolean = False,
+                          Optional enableContextMenu As Boolean = False,
+                          Optional enableHotkey As Boolean = False,
+                          Optional hotkeyChord As String = "Ctrl+Alt+K")
         Try
-            ' 创建设置对象
-            Dim settings As New Dictionary(Of String, Object) From {
-                {"topicRandomness", topicRandomness},
-                {"contextLimit", contextLimit},
-                {"selectedCellChecked", selectedCell},
-                {"settingsScrollChecked", settingsScroll},
-                {"executecodePreviewChecked", executecodePreview},
-                {"enableAutocomplete", enableAutocomplete},
-                {"autocompleteDelayMs", autocompleteDelayMs},
-                {"autocompleteShortcut", autocompleteShortcut}
-            }
-
-            ' 将设置保存到JSON文件
             Dim settingsPath = _applicationInfo.GetChatSettingsFilePath()
 
             ' 确保目录存在
             Directory.CreateDirectory(Path.GetDirectoryName(settingsPath))
 
-            ' 将设置序列化为JSON并保存
-            File.WriteAllText(settingsPath, JsonConvert.SerializeObject(settings, Formatting.Indented))
+            ' 在既有文件上改这几个键：这里曾经是「新建一个字典整份覆盖」，
+            ' 结果一保存设置就把 enableMcpList 之类没在这张表里的键全抹掉。
+            Dim settings As JObject
+            If File.Exists(settingsPath) Then
+                Try
+                    settings = JObject.Parse(File.ReadAllText(settingsPath))
+                Catch ex As Exception
+                    Debug.WriteLine($"设置文件不是合法 JSON，改为重建: {ex.Message}")
+                    settings = New JObject()
+                End Try
+            Else
+                settings = New JObject()
+            End If
+
+            settings("topicRandomness") = topicRandomness
+            settings("contextLimit") = contextLimit
+            settings("selectedCellChecked") = selectedCell
+            settings("settingsScrollChecked") = settingsScroll
+            settings("executecodePreviewChecked") = executecodePreview
+            settings("enableAutocomplete") = enableAutocomplete
+            settings("autocompleteDelayMs") = autocompleteDelayMs
+            settings("autocompleteShortcut") = autocompleteShortcut
+            settings("enableSelectionToolbar") = enableSelectionToolbar
+            settings("enableContextMenu") = enableContextMenu
+            settings("enableHotkey") = enableHotkey
+            settings("hotkeyChord") = hotkeyChord
+
+            File.WriteAllText(settingsPath, settings.ToString(Formatting.Indented))
 
             ' 更新静态属性
             ChatSettings.topicRandomness = topicRandomness
@@ -62,6 +111,10 @@ Public Class ChatSettings
             ChatSettings.EnableAutocomplete = enableAutocomplete
             ChatSettings.AutocompleteDelayMs = autocompleteDelayMs
             ChatSettings.AutocompleteShortcut = autocompleteShortcut
+            ChatSettings.EnableSelectionToolbar = enableSelectionToolbar
+            ChatSettings.EnableContextMenu = enableContextMenu
+            ChatSettings.EnableHotkey = enableHotkey
+            ChatSettings.HotkeyChord = hotkeyChord
 
         Catch ex As Exception
             Debug.WriteLine($"保存设置失败: {ex.Message}")
@@ -102,6 +155,25 @@ Public Class ChatSettings
                 End If
                 If settings.ContainsKey("autocompleteShortcut") Then
                     AutocompleteShortcut = Convert.ToString(settings("autocompleteShortcut"))
+                End If
+                If settings.ContainsKey("enableSelectionToolbar") Then
+                    EnableSelectionToolbar = CBool(settings("enableSelectionToolbar"))
+                End If
+                If settings.ContainsKey("enableContextMenu") Then
+                    EnableContextMenu = CBool(settings("enableContextMenu"))
+                End If
+                If settings.ContainsKey("enableHotkey") Then
+                    EnableHotkey = CBool(settings("enableHotkey"))
+                End If
+                If settings.ContainsKey("hotkeyChord") Then
+                    ' 读回来就归一化一次：文件里写了个抢用户单键的组合，不能让它在任何一个宿主上注册成功。
+                    Dim parsed = HostHotkeyChord.Parse(Convert.ToString(settings("hotkeyChord")))
+                    If parsed IsNot Nothing AndAlso parsed.IsSafe Then
+                        HotkeyChord = parsed.ToString()
+                    Else
+                        HotkeyChord = DefaultHotkeyChord
+                        EnableHotkey = False
+                    End If
                 End If
                 ' 加载MCP列表
 

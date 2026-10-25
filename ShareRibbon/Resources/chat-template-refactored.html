@@ -61,10 +61,10 @@
                 <span id="resource-mode-title">选择排版资源</span>
             </div>
             <div class="template-mode-actions">
-                <!-- <button class="template-action-btn small-btn" onclick="createNewTemplate()" id="btn-new-template" title="新建排版模板">
+                <button class="template-action-btn small-btn" onclick="createNewTemplate()" id="btn-new-template" title="新建排版模板">
                     <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
                     新建
-                </button> -->
+                </button>
                 <button class="template-action-btn small-btn" onclick="saveCurrentDocumentAsTemplate()" id="btn-save-resource" title="保存左侧文档内容为排版模板">
                     <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z" /></svg>
                     保存
@@ -184,6 +184,24 @@
                 <!-- 隐藏的textarea用于兼容现有发送逻辑 -->
                 <textarea id="chat-input" style="display:none;" placeholder="请在此输入您的问题..." rows="2"></textarea>
                 <div id="chat-input-actions">
+
+                    <!-- E4-03 命令面板入口：快捷键没开启时也能用；标题由后端按当前组合键刷新 -->
+                    <button id="command-palette-button" title="命令面板" onclick="showCommandPalette()">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 3a3 3 0 1 0-3 3h6a3 3 0 1 0-3-3v18a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V3a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"></path>
+                        </svg>
+                    </button>
+
+                    <!-- E5-04 模板库入口：编辑器与规范列表三端都实现了，但可见入口一个都没有——
+                         PowerPoint 的「排版」按钮在它自己的 Ribbon 里被隐藏，Excel 同样隐藏，
+                         Word 的「排版」走智能排版分析。放在命令面板旁边，三端一次点击可达。 -->
+                    <button id="template-library-button" title="排版模板库" onclick="openTemplateLibrary()">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="3" y1="9" x2="21" y2="9"></line>
+                            <line x1="9" y1="21" x2="9" y2="9"></line>
+                        </svg>
+                    </button>
 
                     <button id="settings-button" title="设置" onclick="settingsButton()">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -314,10 +332,10 @@
 
         <div class="setting-item checkbox-item">
             <div>
-                <label class="setting-label">引用选中内容</label>
+                <label class="setting-label">自动引用当前选区</label>
                 <input type="checkbox" id="settings-selected-cell">
             </div>
-            <div class="setting-tip">开启后可以选择并引用工作表内容</div>
+            <div class="setting-tip">默认开启：提问时自动带上当前选中的文字/单元格/形状，并在对话里显示「本轮已引用选区」。关掉后不再采集选区，也不会按选区定位写回。</div>
         </div>
 
         <div class="setting-item checkbox-item">
@@ -326,6 +344,50 @@
                 <input type="checkbox" id="settings-executecode-preview">
             </div>
             <div class="setting-tip">开启后，Agent模式下可提前预览变更点，对比差异</div>
+        </div>
+
+        <!-- E3-05 数据边界同意：这一行的值只由宿主下发（renderOnboarding），文案也由宿主下发，
+             所以面板里不会出现第二份「用户被告知了什么」。取消勾选就是撤回，撤回后下一条请求重新确认。 -->
+        <div class="setting-item checkbox-item">
+            <div>
+                <label class="setting-label">数据边界同意</label>
+                <input type="checkbox" id="settings-privacy-consent" disabled>
+            </div>
+            <ul class="onboarding-privacy" id="settings-privacy-boundary"></ul>
+            <div class="setting-tip">取消勾选即为撤回：撤回后下一条消息或任务会重新拦在发送之前，直到再次确认。</div>
+        </div>
+
+        <!-- E4 原生入口：三个开关都放在这一组。它们都会改变用户既有的宿主界面或抢占按键，
+             所以必须能被关掉——否则用户只能重新编译才能退出。 -->
+        <div class="setting-item checkbox-item">
+            <div>
+                <label class="setting-label">选区工具条</label>
+                <input type="checkbox" id="settings-enable-selection-toolbar">
+            </div>
+            <div class="setting-tip">开启后，选中一段文字会在选区旁给出快捷动作</div>
+        </div>
+
+        <div class="setting-item checkbox-item">
+            <div>
+                <label class="setting-label">右键菜单 AI 动作</label>
+                <input type="checkbox" id="settings-enable-context-menu">
+            </div>
+            <div class="setting-tip">开启后，把快捷动作加进当前宿主的右键菜单</div>
+        </div>
+
+        <div class="setting-item checkbox-item">
+            <div>
+                <label class="setting-label">快捷键唤起命令面板</label>
+                <input type="checkbox" id="settings-enable-hotkey">
+            </div>
+            <div class="setting-tip">在文档里按组合键即可展开面板并打开命令面板</div>
+        </div>
+
+        <div class="setting-item">
+            <label class="setting-label">命令面板快捷键</label>
+            <input type="text" id="settings-hotkey-chord" value="Ctrl+Alt+K"
+                   style="padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc; width: 120px;">
+            <div class="setting-tip">必须带 Ctrl 或 Alt，例如 Ctrl+Alt+K；请避开宿主已经占用的组合键</div>
         </div>
 
         <!-- AI智能补全设置已移至Ribbon区"大模型配置"组的"自动补全"按钮 -->
@@ -413,6 +475,7 @@
     <script src="http://officeai.local/js/reformat-chat.js"></script>
     <script src="http://officeai.local/js/proofread-ui.js"></script>
     <script src="http://officeai.local/js/onboarding.js"></script>
+    <script src="http://officeai.local/js/command-palette.js"></script>
 
     <!-- 工具函数 -->
     <script>

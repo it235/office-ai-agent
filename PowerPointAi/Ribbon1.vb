@@ -15,14 +15,14 @@ Public Class Ribbon1
     End Sub
 
     Protected Overrides Async Sub WebCaptureButton_Click(sender As Object, e As RibbonControlEventArgs)
-        Await StartAgentFromRibbonAsync("请根据当前演示文稿上下文自动处理网页内容采集需求；如果用户已提供网址或网页文本，请提取适合制作幻灯片的结构化要点、标题和页面内容。")
+        Await StartAgentFromRibbonAsync(Agent.QuickActionCatalog.PptRibbonWebCapture)
     End Sub
 
     Protected Overrides Sub SpotlightButton_Click(sender As Object, e As RibbonControlEventArgs)
         'Globals.ThisAddIn.ShowChatTaskPane()
     End Sub
     Protected Overrides Async Sub DataAnalysisButton_Click(sender As Object, e As RibbonControlEventArgs)
-        Await StartAgentFromRibbonAsync("请自动分析当前演示文稿或选中幻灯片中的数据、图表和表格，提炼关键结论、异常点和适合放入演示的洞察；如可执行，请直接生成或优化对应页面内容。")
+        Await StartAgentFromRibbonAsync(Agent.QuickActionCatalog.PptRibbonAnalyze)
     End Sub
 
     Protected Overrides Function GetApplication() As ApplicationInfo
@@ -43,7 +43,7 @@ Public Class Ribbon1
     ' MCPButton_Click 已在 BaseOfficeRibbon 中提供共用实现，PowerPoint 不需要差异化逻辑，故不再重写。
 
     Protected Overrides Async Sub ProofreadButton_Click(sender As Object, e As RibbonControlEventArgs)
-        Await StartAgentFromRibbonAsync("请自动校对当前选中幻灯片或整份演示文稿，检查错别字、标点、术语一致性、标题层级、表达简洁度和演示语气，并在适合时直接执行低风险修正。")
+        Await StartAgentFromRibbonAsync(Agent.QuickActionCatalog.PptRibbonProofread)
     End Sub
 
     ' 排版功能 - 进入模板选择模式
@@ -413,7 +413,7 @@ Public Class Ribbon1
         End Try
     End Function
 
-    Private Async Function StartAgentFromRibbonAsync(request As String) As Task
+    Private Async Function StartAgentFromRibbonAsync(action As Agent.QuickAction) As Task
         Try
             Globals.ThisAddIn.ShowChatTaskPane()
             Await Task.Delay(350)
@@ -424,7 +424,7 @@ Public Class Ribbon1
                 Return
             End If
 
-            Await chatCtrl.ExecuteJavaScriptAsyncJS($"sendMessageToServer({{ type: 'startAgent', request: {UtilsService.ToJsStringLiteral(request)} }});")
+            chatCtrl.StartAgentFromHostEntry(action)
         Catch ex As Exception
             GlobalStatusStripAll.ShowWarning($"启动 AI Agent 失败: {ex.Message}")
         End Try

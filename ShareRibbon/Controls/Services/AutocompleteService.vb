@@ -140,6 +140,9 @@ Public Class AutocompleteService
     Private Async Function RequestCompletionsWithFIM(inputText As String, contextSnapshot As JObject,
                                                       model As ConfigManager.ConfigItemModel, apiKey As String) As Task(Of List(Of String))
         Dim completions As New List(Of String)()
+        ' E3-05：ghost text 的载荷是用户正在写的文档内容，没有同意就不出去；
+        ' 后台补全没有面板，拒绝表现为「这一轮没有建议」，与本函数的空结果约定一致。
+        If PrivacyConsentGate.RefuseQuietly("AutocompleteService") Then Return completions
         Try
             Dim fimUrl = model.fimUrl
             Dim requestObj As New JObject()

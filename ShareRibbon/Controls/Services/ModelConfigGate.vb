@@ -15,6 +15,9 @@ Public Class ModelConfigPrompt
     Public Property ActionLabel As String
     Public Property BlockedAction As String
 
+    ''' <summary>面板卡片是共享的，这颗按钮到底做什么由它决定：打开配置窗口，还是记下同意。</summary>
+    Public Property Action As String
+
     Public Function ToJson() As String
         Dim payload As New JObject()
         payload("reason") = If(Reason, "")
@@ -22,6 +25,7 @@ Public Class ModelConfigPrompt
         payload("message") = If(Message, "")
         payload("actionLabel") = If(ActionLabel, "")
         payload("blockedAction") = If(BlockedAction, "")
+        payload("action") = If(Action, "")
         Return payload.ToString(Formatting.None)
     End Function
 End Class
@@ -29,6 +33,9 @@ End Class
 Public Class ModelConfigGate
     Public Const ActionChat As String = "chat"
     Public Const ActionAgent As String = "agent"
+
+    ''' <summary>缺配置时卡片按钮的唯一动作；隐私同意卡片用另一个 action，共用同一张卡片。</summary>
+    Public Const ActionOpenConfig As String = "open_config"
 
     Private Shared Function IsConfigFailure(failure As ChatSendValidationFailure) As Boolean
         Return failure = ChatSendValidationFailure.MissingApiKey OrElse
@@ -69,6 +76,7 @@ Public Class ModelConfigGate
 
         Return New ModelConfigPrompt With {
             .Reason = If(failure = ChatSendValidationFailure.MissingApiKey, "missing_api_key", "missing_api_url"),
+            .Action = ActionOpenConfig,
             .Title = "需要先配置大模型",
             .Message = detail & stopped & "点击下方按钮填写接口地址和 Key，或选择本地模型（Ollama / LM Studio）。",
             .ActionLabel = "配置 API",
@@ -76,7 +84,10 @@ Public Class ModelConfigGate
         }
     End Function
 
-    Public Function BuildShowScript(prompt As ModelConfigPrompt) As String
+    ''' <summary>
+    ''' 阻断卡片只有一张，所以「怎么把它画出来」也只有一个持有者；隐私同意卡片走同一句脚本。
+    ''' </summary>
+    Public Shared Function BuildShowScript(prompt As ModelConfigPrompt) As String
         If prompt Is Nothing Then Return ""
         Return "showModelConfigRequired(" & prompt.ToJson() & ");"
     End Function

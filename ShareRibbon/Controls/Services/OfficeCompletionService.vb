@@ -117,6 +117,8 @@ Public Class OfficeCompletionService
     Private Async Function GetCompletionsWithFIM(inputText As String, model As ConfigManager.ConfigItemModel, 
                                                   apiKey As String, token As CancellationToken) As Task(Of List(Of String))
         Dim completions As New List(Of String)()
+        ' E3-05：补全载荷是用户当前文档内容，未同意不发；空列表就是本函数已有的「没有结果」。
+        If PrivacyConsentGate.RefuseQuietly("OfficeCompletionService") Then Return completions
         
         Try
             token.ThrowIfCancellationRequested()
@@ -165,6 +167,8 @@ Public Class OfficeCompletionService
                                                    cfg As ConfigManager.ConfigItem, model As ConfigManager.ConfigItemModel,
                                                    apiKey As String, token As CancellationToken) As Task(Of List(Of String))
         Dim completions As New List(Of String)()
+        ' E3-05：chat 形态的补同同样把正文发出去，口径必须与 FIM 分支一致，否则「拦一半」形同没拦。
+        If PrivacyConsentGate.RefuseQuietly("OfficeCompletionService") Then Return completions
         
         Try
             token.ThrowIfCancellationRequested()

@@ -88,6 +88,9 @@ docs/*
 /**/*CodeSign*.pfx
 /**/*Release*.pfx
 
+# 门禁/冒烟跑出来的临时渲染产物，可重跑再生，不入库
+artifacts/
+
 # 不提交 IDE/CI 配置目录
 .github/
 .vscode/

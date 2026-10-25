@@ -1,5 +1,6 @@
 Imports System.Collections.Generic
 Imports System.Linq
+Imports System.Reflection
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 
@@ -29,7 +30,22 @@ Namespace Agent
         Public Property RollbackError As String = ""
         Public Property DocHashBefore As String = ""
         Public Property DocHashAfter As String = ""
+        ''' <summary>宿主还原快照（ToolResult.RestoreSnapshot 序列化结果），只落 agent_run_change.restore_json，不进日志、Trace 或 UI。</summary>
+        Public Property RestoreJson As String = ""
         Public Property ObservedAt As DateTime = DateTime.Now
+
+        ''' <summary>宿主给了原生撤销单元（Word 的 UndoRecord 语义）。</summary>
+        Public ReadOnly Property NativeUndoUnit As Boolean
+            Get
+                Return UndoAvailable AndAlso UndoUnits > 0
+            End Get
+        End Property
+
+        Public ReadOnly Property HasRestore As Boolean
+            Get
+                Return Not String.IsNullOrWhiteSpace(RestoreJson)
+            End Get
+        End Property
 
         Public Function ToJson() As JObject
             Return New JObject From {
@@ -50,6 +66,7 @@ Namespace Agent
                 {"rollbackError", RollbackError},
                 {"docHashBefore", DocHashBefore},
                 {"docHashAfter", DocHashAfter},
+                {"hasRestore", HasRestore},
                 {"observedAt", ObservedAt.ToString("yyyy-MM-dd HH:mm:ss")}
             }
         End Function
@@ -61,6 +78,12 @@ Namespace Agent
     ''' 不把聊天、读取或没有观察依据的调用混进“已修改”列表。
     ''' </summary>
     Public Class AgentRunChangeLog
+
+        ''' <summary>
+        ''' 还原快照上限（字符）。快照是文档派生内容，只进 agent_run_change.restore_json：
+        ''' 超过上限就当作没有快照，宁可不给“撤销本轮”按钮，也不把大块正文塞进本地库。
+        ''' </summary>
+        Public Const MaxRestoreChars As Integer = 60000
 
         Private ReadOnly _entries As New List(Of AgentChangeRecord)()
 
@@ -102,15 +125,65 @@ Namespace Agent
             End Get
         End Property
 
+        ''' <summary>残留改动里带还原快照的条数（Excel/PPT 这类没有整栈撤销的宿主走这条路）。</summary>
+        Public ReadOnly Property RestoreCount As Integer
+            Get
+                Return WrittenEntries.Where(Function(item) item.HasRestore).Count()
+            End Get
+        End Property
+
+        ''' <summary>Word 语义：每一步都有原生撤销单元，且能拿到本轮首尾文档指纹。</summary>
+        Public ReadOnly Property NativeUndoable As Boolean
+            Get
+                Dim written = WrittenEntries
+                If written.Count = 0 Then Return False
+                If written.Any(Function(item) Not item.NativeUndoUnit) Then Return False
+                Return FirstBeforeHash.Length > 0 AndAlso LastAfterHash.Length > 0
+            End Get
+        End Property
+
         ''' <summary>
-        ''' 只有所有残留改动都能按宿主单元撤销，且记录到前后文档指纹时，才允许“撤销本轮”。
+        ''' 能不能一键撤销本轮：要么整栈走宿主原生撤销，要么每一步都能按还原快照重放。
+        ''' 两条路都只覆盖“全部残留改动”，半撤半留不算可撤销——否则用户以为回退了，实际还剩一半。
         ''' </summary>
         Public ReadOnly Property FullyUndoable As Boolean
             Get
-                Dim written = _entries.Where(Function(item) item.Changed AndAlso Not item.RolledBack).ToList()
+                Dim written = WrittenEntries
                 If written.Count = 0 Then Return False
-                If written.Any(Function(item) Not item.UndoAvailable OrElse item.UndoUnits <= 0) Then Return False
-                Return FirstBeforeHash.Length > 0 AndAlso LastAfterHash.Length > 0
+                Return NativeUndoable OrElse written.All(Function(item) item.HasRestore)
+            End Get
+        End Property
+
+        ''' <summary>
+        ''' 按任务包断言里的事实名读出本轮台账的真实值（E6-05）。名字与
+        ''' TaskPackageCatalog.VerifiableFacts 同源：两边都只认公开、可读、无索引、Integer/Long/Boolean 的
+        ''' 实例属性，且都用同一个首字母小写写法。改了属性名，词表和读取一起收紧，不留第二份名单。
+        ''' </summary>
+        Public Function TryFactValue(fact As String, ByRef value As Object) As Boolean
+            value = Nothing
+            If String.IsNullOrEmpty(fact) Then Return False
+            Dim [property] = GetType(AgentRunChangeLog).
+                GetProperties(BindingFlags.Public Or BindingFlags.Instance).
+                FirstOrDefault(Function(p) p.CanRead AndAlso
+                                          Not p.GetIndexParameters().Any() AndAlso
+                                          (p.PropertyType Is GetType(Integer) OrElse
+                                           p.PropertyType Is GetType(Long) OrElse
+                                           p.PropertyType Is GetType(Boolean)) AndAlso
+                                          String.Equals(ToFactName(p.Name), fact, StringComparison.Ordinal))
+            If [property] Is Nothing Then Return False
+            value = [property].GetValue(Me)
+            Return True
+        End Function
+
+        ''' <summary>事实名的唯一写法：属性名首字母小写。合同 JSON 里写的就是它。</summary>
+        Public Shared Function ToFactName(propertyName As String) As String
+            If String.IsNullOrEmpty(propertyName) Then Return propertyName
+            Return Char.ToLowerInvariant(propertyName(0)) & propertyName.Substring(1)
+        End Function
+
+        Private ReadOnly Property WrittenEntries As List(Of AgentChangeRecord)
+            Get
+                Return _entries.Where(Function(item) item.Changed AndAlso Not item.RolledBack).ToList()
             End Get
         End Property
 
@@ -131,6 +204,22 @@ Namespace Agent
                     LastOrDefault()
             End Get
         End Property
+
+        ''' <summary>
+        ''' 还原快照的合同装配：kind 决定由哪段宿主代码重放，state 是"把目标区域改回执行前"所需的数据。
+        ''' 宿主采集完必须先过这里：体积超限直接返回 Nothing，让这一步保持"不可撤销"，
+        ''' 而不是把大块文档内容写进本地库，或带着一份注定不完整的快照承诺一键回退。
+        ''' </summary>
+        Public Shared Function BuildRestoreNode(kind As String, state As JObject) As JObject
+            If String.IsNullOrWhiteSpace(kind) OrElse state Is Nothing Then Return Nothing
+            Dim node As New JObject From {
+                {"kind", kind.Trim()},
+                {"reversible", True},
+                {"state", state}
+            }
+            If node.ToString(Formatting.None).Length > MaxRestoreChars Then Return Nothing
+            Return node
+        End Function
 
         ''' <summary>
         ''' 从一步的工具结果生成变更记录；不是写操作或没有观察对象时返回 Nothing。
@@ -213,7 +302,8 @@ Namespace Agent
                 .UndoPointId = If(undoPointName, ""),
                 .RollbackError = rollbackError,
                 .DocHashBefore = beforeHash,
-                .DocHashAfter = afterHash
+                .DocHashAfter = afterHash,
+                .RestoreJson = ReadRestorePayload(toolResult)
             }
             If record.Summary.Length = 0 Then record.Summary = If(toolResult.Message, "")
             If record.TargetRefs Is Nothing Then record.TargetRefs = New JArray()
@@ -274,19 +364,45 @@ Namespace Agent
             If inner Is Nothing Then Return ""
             Return ReadString(inner, "documentTextHash")
         End Function
+
+        ''' <summary>
+        ''' 还原快照来自 ToolResult.RestoreSnapshot 这条旁路，而不是 Observation：
+        ''' 快照是文档内容，跟着 Observation 会被塞进提示词和执行轨迹。
+        ''' 只有宿主明确 reversible=true、带 state 且体积合规才收下；否则这一步算“不可还原”，
+        ''' 让 FullyUndoable 保持 false，而不是收下一份可能只撤掉一半的快照。
+        ''' </summary>
+        Private Shared Function ReadRestorePayload(toolResult As ToolResult) As String
+            Dim restore = If(toolResult Is Nothing, Nothing, TryCast(toolResult.RestoreSnapshot, JObject))
+            If restore Is Nothing OrElse Not ReadBool(restore, "reversible") Then Return ""
+            Dim state = restore("state")
+            If state Is Nothing OrElse state.Type = JTokenType.Null Then Return ""
+            Dim text = restore.ToString(Formatting.None)
+            If text.Length > MaxRestoreChars Then Return ""
+            Return text
+        End Function
     End Class
 
     ''' <summary>
-    ''' 一轮任务的可撤销范围：只有残留改动全部带宿主撤销单元和前后指纹时，才允许自动撤销。
+    ''' 一轮任务的可撤销范围。两条路各自独立：NativeUndoable 表示能整栈走宿主原生撤销，
+    ''' RestoreCount 表示残留改动全部带可重放的还原快照；FullyUndoable 只在覆盖全部残留改动时为真。
     ''' </summary>
     Public Class AgentRunUndoScope
         Public Property RunId As String = ""
         Public Property WrittenCount As Integer
         Public Property UndoUnits As Integer
+        Public Property NativeUndoable As Boolean
+        Public Property RestoreCount As Integer
         Public Property FullyUndoable As Boolean
         Public Property BaselineHash As String = ""
         Public Property ExpectedHash As String = ""
         Public Property Reason As String = ""
+
+        ''' <summary>残留改动是否全部靠还原快照重放，而不是宿主原生撤销栈（Excel/PPT 即此路）。</summary>
+        Public ReadOnly Property RestoreOnly As Boolean
+            Get
+                Return FullyUndoable AndAlso Not NativeUndoable
+            End Get
+        End Property
     End Class
 
     ''' <summary>

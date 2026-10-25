@@ -63,6 +63,18 @@ window.enterReformatTemplateMode = function() {
     };
 
 /**
+ * 面板工具条上的模板库入口。E5-04 之前只有 PowerPoint 的「排版」按钮会让 VB 注入
+ * enterReformatTemplateMode()，而那个按钮在 PowerPoint 自己的 Ribbon 设计器里是
+ * Visible=False（Word 的「排版」走智能排版分析、Excel 的「排版」直接被隐藏），
+ * 也就是说三端都没有一条能走到模板库的可见入口——编辑器与列表代码却一直存在。
+ * 这里复用同一段前端逻辑，并按 PPT 路径补发一次列表请求，三端各一次点击即可到达。
+ */
+window.openTemplateLibrary = function() {
+    window.enterReformatTemplateMode();
+    sendMessageToVB({ type: 'getReformatTemplates' });
+};
+
+/**
  * 退出模板选择模式
  * @param {boolean} force - 是否强制退出（默认false）
  */
@@ -600,15 +612,6 @@ window.useStyleGuideFromPreview = function() {
 };
 
 /**
- * 上传规范文档
- */
-window.uploadStyleGuideDocument = function() {
-    sendMessageToVB({
-        type: 'uploadStyleGuideDocument'
-    });
-    };
-
-/**
  * 删除规范
  * @param {string} guideId - 规范ID
  */
@@ -767,6 +770,12 @@ function createTemplateCard(template) {
         } else {
             manageBtnsHtml = `
                 <div class="template-manage-btns">
+                    <button class="template-manage-btn edit-btn" onclick="editTemplate('${template.Id}')" title="编辑" ${template.IsPreset ? 'disabled' : ''}>
+                        <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                    </button>
+                    <button class="template-manage-btn copy-btn" onclick="duplicateTemplate('${template.Id}')" title="复制">
+                        <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg>
+                    </button>
                     <button class="template-manage-btn delete-btn" onclick="deleteTemplate('${template.Id}')" title="删除" ${template.IsPreset ? 'disabled' : ''}>
                         <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                     </button>
@@ -1063,8 +1072,25 @@ function updateManageModeUI() {
 
 /**
  * 编辑模板
+ * 模板编辑器（Word 走任务窗格，其余宿主走模态窗体）一直在，但 E5-04 之前没有任何按钮发
+ * openTemplateEditor，所以「改一个已有模板」只有开发者知道。预置模板保持只读，先复制再改。
  * @param {string} templateId - 模板ID
  */
+window.editTemplate = function(templateId) {
+    const template = currentTemplates.find(t => t.Id === templateId);
+    if (!template) return;
+
+    if (template.IsPreset) {
+        alert('预置模板不可直接修改，请先复制再编辑');
+        return;
+    }
+
+    sendMessageToVB({
+        type: 'openTemplateEditor',
+        templateId: templateId
+    });
+};
+
 /**
  * 复制模板
  * @param {string} templateId - 模板ID

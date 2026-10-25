@@ -214,7 +214,7 @@ powershell -File .\scripts\build-code-projects.ps1 -Configuration Debug
 .\build-installer-prep.bat
 ```
 
-**不要**用整解决方案 Debug Rebuild 判断代码是否可编：`OfficeAgent.vdproj` 的 SourcePath 指向 `bin\Release`，安装项目失败常被误判为代码编译失败。完整说明见 [docs/build-and-installer.md](docs/build-and-installer.md)。
+**不要**用整解决方案 Debug Rebuild 判断代码是否可编：`OfficeAgent.vdproj` 的 SourcePath 指向 `bin\Release`，安装项目失败常被误判为代码编译失败。完整说明见下文「从源码构建」与 [docs/VS2026-InstallerProjects.md](docs/VS2026-InstallerProjects.md)。
 
 调试 VSTO 插件时，建议用 Visual Studio 启动对应 Office 宿主进程。Debug 构建通常用于开发调试；生产分发建议使用 Release 构建并通过 MSI 安装。
 
@@ -239,7 +239,7 @@ Debug 环境下 `ExcelAi-AddIn64.xll` 可能提示没有可用的数字签名。
   `powershell -File .\scripts\ensure-vsto-temp-keys.ps1`
 - **禁止**将 `*.pfx` / `*.snk` / 正式签名私钥提交到 Git。
 - **发布**：使用 `build/SignArtifacts.ps1` 与环境变量 `OFFICE_AI_SIGN_CERT_THUMBPRINT` 或 `OFFICE_AI_SIGN_PFX`，不要用 TemporaryKey 签对外 MSI。
-- 详见 [docs/signing-and-certificates.md](docs/signing-and-certificates.md)。
+- 发布签名的参数与证书来源见 [build/SignArtifacts.ps1](build/SignArtifacts.ps1)；开发证书生成见 [scripts/ensure-vsto-temp-keys.ps1](scripts/ensure-vsto-temp-keys.ps1)。
 
 ---
 
@@ -319,7 +319,7 @@ msbuild AiHelper.sln -t:Restore
 .\build-code.bat
 ```
 
-构建安装包前：先 `.\build-installer-prep.bat`，再确认 Visual Studio 已安装 `Microsoft Visual Studio Installer Projects` 扩展并 Build `OfficeAgent.vdproj`。详见 [docs/build-and-installer.md](docs/build-and-installer.md)。
+构建安装包前：先 `.\build-installer-prep.bat`，再确认 Visual Studio 已安装 `Microsoft Visual Studio Installer Projects` 扩展并 Build `OfficeAgent.vdproj`。详见 [docs/VS2026-InstallerProjects.md](docs/VS2026-InstallerProjects.md)。
 
 ---
 

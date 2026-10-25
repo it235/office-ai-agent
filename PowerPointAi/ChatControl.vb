@@ -1,4 +1,4 @@
-Imports System.Diagnostics
+﻿Imports System.Diagnostics
 Imports System.Drawing
 Imports System.IO
 Imports System.Linq
@@ -404,6 +404,13 @@ Public Class ChatControl
     End Function
 
     ''' <summary>
+    ''' E4-03：快捷键很可能在任务窗格收起时被按下，先让宿主把窗格展开，命令面板才有落点。
+    ''' </summary>
+    Protected Overrides Sub EnsureHostTaskPaneVisible()
+        Globals.ThisAddIn.ShowChatTaskPane()
+    End Sub
+
+    ''' <summary>
     ''' 会话绑定的文档：只在 UI 线程读取活动演示文稿完整路径，未保存演示文稿按通用会话处理。
     ''' </summary>
     Protected Overrides Function GetSessionDocument() As SessionDocument
@@ -586,11 +593,6 @@ Public Class ChatControl
     End Function
     Protected Overrides Function AppendCurrentSelectedContent(message As String) As String
         Try
-            ' 检查是否启用了选择功能
-            If Not selectedCellChecked Then
-                Return message
-            End If
-
             ' 获取当前 PowerPoint 中的选择
             Dim selection = Globals.ThisAddIn.Application.ActiveWindow.Selection
             If selection Is Nothing Then
@@ -1277,11 +1279,64 @@ Public Class ChatControl
     End Function
 
     ''' <summary>
+    ''' PowerPoint 没有整栈撤销：撤销本轮 = 按写入顺序的逆序，把每一步目标页的文字与备注写回执行前。
+    ''' 任何一步拒绝（演示文稿不对、页被删了、形状数量变了、用户在之后又改过这一页）都如实停下来说明已还原几处，
+    ''' 不假装整轮干净回退，也不把本轮标记成已回滚——用户处理完冲突后还能再点一次。
+    ''' </summary>
+    Protected Overrides Function PerformUndoAgentRun(runId As String) As Agent.AgentRunUndoResult
+        Dim scope = AgentChangeLogRepository.GetUndoScopeByRun(runId)
+        If Not scope.FullyUndoable Then
+            Return Agent.AgentRunUndoResult.Failed(If(String.IsNullOrWhiteSpace(scope.Reason),
+                                                      "本轮没有可安全还原的写入", scope.Reason))
+        End If
+
+        Dim snapshots = AgentChangeLogRepository.GetRestoreSnapshotsByRun(runId)
+        If snapshots.Count <> scope.WrittenCount Then
+            Return Agent.AgentRunUndoResult.Failed("本轮有改动缺少还原快照，一键回退可能只撤掉一半，已拒绝执行。")
+        End If
+
+        Dim app = Globals.ThisAddIn.Application
+        If app Is Nothing Then Return Agent.AgentRunUndoResult.Failed("无法获取 PowerPoint 应用对象。")
+
+        Dim screenUpdated As Boolean = False
+        Try
+            app.ScreenUpdating = False
+            screenUpdated = True
+            Dim restored As Integer = 0
+            For index = snapshots.Count - 1 To 0 Step -1
+                Dim kind = If(snapshots(index)("kind")?.ToString(), "")
+                If Not String.Equals(kind, PowerPointUndo.PowerPointRunRestore.RestoreKind, StringComparison.Ordinal) Then
+                    Return Agent.AgentRunUndoResult.Failed($"还原快照类型「{kind}」不是 PowerPoint 能重放的格式，已停止还原。")
+                End If
+                Dim reason = PowerPointUndo.PowerPointRunRestore.Replay(app, TryCast(snapshots(index)("state"), JObject))
+                If reason.Length > 0 Then
+                    Return Agent.AgentRunUndoResult.Failed(
+                        $"已还原 {restored} 处页面文字，剩余 {snapshots.Count - restored} 处未能还原：{reason}")
+                End If
+                restored += 1
+            Next
+            AgentChangeLogRepository.MarkRunRolledBack(runId)
+            Return Agent.AgentRunUndoResult.Succeeded($"已按快照还原本轮 {restored} 处页面文字", verified:=True)
+        Catch ex As Exception
+            Debug.WriteLine($"PerformUndoAgentRun(PowerPoint) 失败: {ex.Message}")
+            Return Agent.AgentRunUndoResult.Failed($"还原失败: {AppLogger.Redact(ex.Message)}")
+        Finally
+            If screenUpdated Then
+                Try : app.ScreenUpdating = True : Catch : End Try
+            End If
+        End Try
+    End Function
+
+    ''' <summary>
     ''' 为 Agent 原生 PPT 工具返回真实 ToolResult，并以演示文稿/目标页快照生成最小 Observation。
     ''' </summary>
     Protected Overrides Function ExecuteJsonCommandWithToolResult(jsonCode As String, preview As Boolean) As Agent.ToolResult
         Dim envelope As JObject = Nothing
         Dim toolId As String = "PowerPointCommands"
+        Dim beforeSnapshot As JObject = Nothing
+        Dim restoreBefore As JObject = Nothing
+        Dim restoreNode As JObject = Nothing
+        Dim restoreSlideIndex As Integer = 0
         Try
             envelope = ParsePowerPointCommandEnvelope(jsonCode)
             Dim commandArray = TryCast(envelope?("commands"), JArray)
@@ -1314,7 +1369,13 @@ Public Class ChatControl
                 Return OfficeRuntime.PowerPointOperationExecutor.Execute(
                     GetPowerPointEnvelopeParams(envelope))
             End If
-            Dim beforeSnapshot = CapturePowerPointCommandSnapshot(envelope)
+            beforeSnapshot = CapturePowerPointCommandSnapshot(envelope)
+            ' 还原快照必须在写之前抓：PowerPoint 没有"一条命令一个撤销记录"的边界，
+            ' 只能把目标页的文字与备注整页写回执行前。预览不落地，无需采集。
+            restoreSlideIndex = GetPowerPointSnapshotInteger(beforeSnapshot, "slideIndex")
+            If Not preview Then
+                restoreBefore = PowerPointUndo.PowerPointRunRestore.Capture(Globals.ThisAddIn.Application, restoreSlideIndex)
+            End If
             Dim success = ExecuteJsonCommandCore(jsonCode, preview)
             ' 预览被用户拒绝时核心返回 True（UI 语义：取消不是错误），但 ToolResult 不能据此报成功。
             If ConsumePreviewCancelled() Then
@@ -1322,6 +1383,11 @@ Public Class ChatControl
             End If
             Dim afterSnapshot = CapturePowerPointCommandSnapshot(envelope)
             Dim observation = BuildPowerPointCommandObservation(toolId, success, beforeSnapshot, afterSnapshot)
+            If restoreBefore IsNot Nothing Then
+                Dim restoreAfter = PowerPointUndo.PowerPointRunRestore.Capture(Globals.ThisAddIn.Application, restoreSlideIndex)
+                restoreNode = PowerPointUndo.PowerPointRunRestore.BuildNode(restoreBefore, restoreAfter,
+                                                                           IsPowerPointTextOnlyChange(beforeSnapshot, afterSnapshot))
+            End If
             Dim summary = If(observation?("summary")?.ToString(), $"{toolId} 执行完成")
             Dim observationError = If(afterSnapshot?("captureError")?.ToString(),
                                       beforeSnapshot?("captureError")?.ToString())
@@ -1329,55 +1395,109 @@ Public Class ChatControl
             ' 快照采集失败时 changed 恒为 False，成功回执其实没有任何证据支撑；
             ' 更不能让 Loop 把它当成“无变化”去重放，重放会在已改过的文稿上再改一次。
             If success AndAlso Not String.IsNullOrWhiteSpace(observationError) Then
-                observation("rollback") = BuildPowerPointRollbackNote(True)
-                Return Agent.ToolResult.Failed(
+                observation("rollback") = BuildPowerPointRollbackNote(True, restoreNode IsNot Nothing)
+                Return WithRestore(Agent.ToolResult.Failed(
                     toolId,
                     $"PowerPoint 命令可能已执行，但结果观察失败: {observationError}",
                     errorCode:=ExceptionClassifier.CodeObservationFailed,
                     userMessage:="PowerPoint 操作可能已经完成，但插件无法安全验证结果；已停止自动重试",
                     recoverable:=False,
-                    observation:=observation)
+                    observation:=observation), restoreNode)
             End If
 
             If success Then
-                Return Agent.ToolResult.Succeed(toolId,
+                Return WithRestore(Agent.ToolResult.Succeed(toolId,
                                                 summary,
                                                 data:=New With {.targetRefs = observation("targetRefs")},
-                                                observation:=observation)
+                                                observation:=observation), restoreNode)
             End If
 
             ' 通用 PPT 命令没有逐命令事务边界（只有 CreateSlides 链按标记删页）：
             ' 失败时若文稿已经变化，只能如实上报半应用并掐断自动重放。
             Dim partialApply = observation.Value(Of Boolean)("changed")
-            observation("rollback") = BuildPowerPointRollbackNote(partialApply)
+            Dim hasRestore = restoreNode IsNot Nothing
+            observation("rollback") = BuildPowerPointRollbackNote(partialApply, hasRestore)
             Dim failureMessage = If(partialApply, $"{summary}；文稿已被部分修改且未回滚", summary)
-            Return Agent.ToolResult.Failed(toolId,
+            Return WithRestore(Agent.ToolResult.Failed(toolId,
                                            failureMessage,
                                            errorCode:=If(partialApply,
                                                          ExceptionClassifier.CodePartialApply,
                                                          ExceptionClassifier.CodeUnknown),
                                            userMessage:=If(partialApply,
-                                                           "PowerPoint 操作部分完成，插件无法自动撤销，请检查文稿后再继续",
+                                                           If(hasRestore,
+                                                              "PowerPoint 操作部分完成；本轮改动可以按「撤销本轮」还原，请核对后再继续",
+                                                              "PowerPoint 操作部分完成，插件无法自动撤销，请检查文稿后再继续"),
                                                            failureMessage),
                                            recoverable:=Not partialApply,
-                                           observation:=observation)
+                                           observation:=observation), restoreNode)
         Catch ex As Exception
-            Return Agent.ToolResult.FromException(toolId, ex)
+            Dim crashResult = Agent.ToolResult.FromException(toolId, ex)
+            crashResult.RestoreSnapshot = BuildPowerPointCrashRestore(envelope, restoreBefore, beforeSnapshot, restoreSlideIndex)
+            Return crashResult
         End Try
     End Function
 
     ''' <summary>
     ''' 通用 PPT 命令不会自动撤销：attempted=False 表示根本没尝试回滚，
     ''' 避免 Agent 以为文稿已还原而继续规划（CreateSlides 链有自己的真实回滚）。
+    ''' 有还原快照时，本轮结束时由「撤销本轮」按快照写回目标页文字；没有快照就只能人工核对。
     ''' </summary>
-    Private Shared Function BuildPowerPointRollbackNote(partialApply As Boolean) As JObject
+    Private Shared Function BuildPowerPointRollbackNote(partialApply As Boolean, hasRestore As Boolean) As JObject
+        Dim unresolved = If(hasRestore,
+                            "文稿已部分修改且未即时回滚；本轮可用「撤销本轮」按快照还原目标页文字",
+                            "通用 PowerPoint 命令不支持安全地自动撤销本轮改动，请人工检查或手动撤销")
         Return New JObject From {
             {"succeeded", False},
             {"attempted", False},
             {"verified", False},
             {"partialApply", partialApply},
-            {"error", If(partialApply, "通用 PowerPoint 命令不支持安全地自动撤销本轮改动，请人工检查或手动撤销", "本轮未检测到文稿变化，无需回滚")}
+            {"error", If(partialApply, unresolved, "本轮未检测到文稿变化，无需回滚")}
         }
+    End Function
+
+    ''' <summary>还原快照走 ToolResult 旁路字段，不进 Observation——观察结果要给模型看，幻灯片正文不能进提示词。</summary>
+    Private Shared Function WithRestore(result As Agent.ToolResult, restore As JObject) As Agent.ToolResult
+        If result IsNot Nothing AndAlso restore IsNot Nothing Then result.RestoreSnapshot = restore
+        Return result
+    End Function
+
+    ''' <summary>
+    ''' 只有改动确实落在文字/备注这条通道上，还原快照才敢说「能撤干净」：
+    ''' 页数、形状数、动画数、格式签名任一变化都意味着快照覆盖不到的东西，这时宁可不给快照。
+    ''' </summary>
+    Private Shared Function IsPowerPointTextOnlyChange(before As JObject, after As JObject) As Boolean
+        If before Is Nothing OrElse after Is Nothing Then Return False
+        If before("captureError") IsNot Nothing OrElse after("captureError") IsNot Nothing Then Return False
+        For Each key In {"presentation", "slideIndex"}
+            If Not String.Equals(GetPowerPointSnapshotString(before, key), GetPowerPointSnapshotString(after, key), StringComparison.Ordinal) Then
+                Return False
+            End If
+        Next
+        If GetPowerPointSnapshotInteger(before, "slideCount") <> GetPowerPointSnapshotInteger(after, "slideCount") Then Return False
+        If GetPowerPointSnapshotInteger(before, "shapeCount") <> GetPowerPointSnapshotInteger(after, "shapeCount") Then Return False
+        If GetPowerPointSnapshotInteger(before, "animationCount") <> GetPowerPointSnapshotInteger(after, "animationCount") Then Return False
+        If Not String.Equals(GetPowerPointSnapshotString(before, "formatHash"), GetPowerPointSnapshotString(after, "formatHash"), StringComparison.Ordinal) Then
+            Return False
+        End If
+        Return Not String.Equals(GetPowerPointSnapshotString(before, "textHash"), GetPowerPointSnapshotString(after, "textHash"), StringComparison.Ordinal) OrElse
+               Not String.Equals(GetPowerPointSnapshotString(before, "notesHash"), GetPowerPointSnapshotString(after, "notesHash"), StringComparison.Ordinal)
+    End Function
+
+    ''' <summary>
+    ''' 异常路径的还原快照：命令写到一半就抛，这时「撤销本轮」比正常路径更有用。
+    ''' 采集不到或改动超出文字范围就返回 Nothing，宁可不给按钮也不拿对不上号的快照去改文稿。
+    ''' </summary>
+    Private Function BuildPowerPointCrashRestore(envelope As JObject, restoreBefore As JObject, structureBefore As JObject, slideIndex As Integer) As JObject
+        Try
+            If envelope Is Nothing OrElse restoreBefore Is Nothing OrElse structureBefore Is Nothing Then Return Nothing
+            Dim structureAfter = CapturePowerPointCommandSnapshot(envelope)
+            Dim restoreAfter = PowerPointUndo.PowerPointRunRestore.Capture(Globals.ThisAddIn.Application, slideIndex)
+            Return PowerPointUndo.PowerPointRunRestore.BuildNode(restoreBefore, restoreAfter,
+                                                                 IsPowerPointTextOnlyChange(structureBefore, structureAfter))
+        Catch ex As Exception
+            Debug.WriteLine($"[PowerPoint] 异常路径还原快照采集失败: {ex.Message}")
+            Return Nothing
+        End Try
     End Function
 
     Private Shared Function ParsePowerPointCommandEnvelope(jsonCode As String) As JObject

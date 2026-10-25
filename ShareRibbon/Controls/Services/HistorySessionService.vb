@@ -41,6 +41,9 @@ Public Class HistorySessionService
     ''' 获取近期会话列表（由权威历史表 conversation_event 聚合），供历史侧边栏展示。
     ''' scope=document 只看当前文档；默认的 scope=all 也把当前文档排在最前，
     ''' 因为"我正在写的这篇文档之前聊过什么"才是用户打开面板想先看到的东西。
+    ''' 条目顺序就是后端顺序，前端只按「首次出现」切桶做视觉分组，不再重排。
+    ''' documentId 是路径哈希（不含路径），给前端按文档归组用；文件名会撞车，不能当分组键。
+    ''' lastActiveAt 是排序键，前端按时间分组只能用它。
     ''' </summary>
     Public Async Sub HandleGetSessionList(Optional scope As String = ConversationRepository.SessionScopeAll)
         Dim errorScript As String = Nothing
@@ -62,6 +65,8 @@ Public Class HistorySessionService
                     .title = If(String.IsNullOrEmpty(s.Title), "会话", s.Title),
                     .snippet = If(String.IsNullOrEmpty(s.Snippet), "", s.Snippet),
                     .createdAt = s.CreatedAt,
+                    .lastActiveAt = If(String.IsNullOrEmpty(s.LastActiveAt), s.CreatedAt, s.LastActiveAt),
+                    .documentId = If(String.IsNullOrEmpty(s.DocumentId), "", s.DocumentId),
                     .documentName = If(String.IsNullOrEmpty(s.DocumentName), "", s.DocumentName),
                     .isCurrentDocument = Not String.IsNullOrEmpty(documentId) AndAlso s.DocumentId = documentId,
                     .isRenamed = s.IsRenamed

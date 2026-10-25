@@ -89,6 +89,9 @@ Public Class EmbeddingService
     ''' </summary>
     Public Shared Async Function GetEmbeddingAsync(text As String) As Task(Of Single())
         Try
+            ' E3-05：向量化把记忆/会话正文发给 embedding 接口，同样属于云调用；
+            ' Nothing 是本函数既有的「不可用」返回值，六个调用方本来就按无向量降级处理。
+            If PrivacyConsentGate.RefuseQuietly("EmbeddingService") Then Return Nothing
             If Not IsEmbeddingAvailable() Then
                 Debug.WriteLine("[EmbeddingService] Embedding 不可用（配置不支持或 provider 不兼容）")
                 Return Nothing

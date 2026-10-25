@@ -44,7 +44,7 @@ Namespace Agent
         ' 状态通知
         Public Event OnStatusChanged(status As String)
         Public Event OnIterationUpdate(iteration As ReActIteration)
-        Public Event OnStepCompleted(stepIndex As Integer, success As Boolean, message As String)
+        Public Event OnStepStatusChanged(stepIndex As Integer, status As String, message As String)
         Public Event OnExecutionExplained(explanation As ExecutionExplanation)
         Public Event OnRequestApproval(request As ApprovalRequest, callback As Action(Of ApprovalDecision))
         Public Event OnPlanGenerated(plan As ExecutionPlan)
@@ -100,9 +100,9 @@ Namespace Agent
                                                 RaiseEvent OnIterationUpdate(iteration)
                                             End Sub
 
-            _loopEngine.OnStepCompleted = Sub(stepIndex, success, message)
-                                              RaiseEvent OnStepCompleted(stepIndex, success, message)
-                                          End Sub
+            _loopEngine.OnStepStatusChanged = Sub(stepIndex, status, message)
+                                                  RaiseEvent OnStepStatusChanged(stepIndex, status, message)
+                                              End Sub
 
             _loopEngine.OnExecutionExplained = Sub(explanation)
                                                    RaiseEvent OnExecutionExplained(explanation)
@@ -205,6 +205,7 @@ Namespace Agent
                                             Optional contextPack As Context.ContextPack = Nothing,
                                             Optional taskSpec As AgentTaskSpec = Nothing,
                                             Optional selectedSkills As List(Of SkillFileDefinition) = Nothing,
+                                            Optional entryActionId As String = Nothing,
                                             Optional cancellationToken As CancellationToken = Nothing) As Task(Of AgentResult)
             Dim cid = AppLogger.BeginScope()
             AppLogger.Info("AgentKernel", $"ExecuteAsync start appType={appType} cid={cid}")
@@ -213,6 +214,8 @@ Namespace Agent
                 ' 创建会话
                 _session = New AgentSession(userRequest, appType, currentContent)
                 _session.Spec = taskSpec
+                ' 入口身份只从调用方带来，不在这里从话术反推：猜出来的包会把断言套到错误的任务上。
+                _session.EntryActionId = If(entryActionId, "")
                 _memory.ClearWorking()
                 _memory.AddSessionMessage("user", userRequest)
 

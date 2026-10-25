@@ -128,7 +128,7 @@
 |---|---|
 | H0 状态 | 已完成 adapter 版正式入口：`AgentKernelService.StartAgentAsync` 经 `OfficeHarness.RunAsync` 调用现有 `AgentKernel` |
 | 已落地 | `ToolResult` 错误契约、原生 Office ToolResult 回灌、Word fast-path 结构化结果、VSTO shadow-copy 工具定位、0 迭代失败防误报、执行期 `allowed-tools` 硬拒绝、轻量 RunTrace、Word 基础写工具 before/after/diff Observation |
-| 工程门禁 | `scripts/run-code-checks.ps1`、`.github/workflows/code-checks.yml`、`scripts/audit-p0-guardrails.ps1` 已落地 |
+| 工程门禁 | `scripts/run-code-checks.ps1`、`scripts/audit-p0-guardrails.ps1` 已落地。本行原先还写了 `.github/workflows/code-checks.yml`，2026-10-25 复核仓库磁盘与 `git ls-files .github` 都没有这个文件（`.github/` 只有 `copilot-instructions.md`），所以它是当时就没落地的期望；带退出码的入口只有 `build/RunReleaseChecks.ps1` |
 | Ralph | 主 HTML 不再加载 `ralph-loop.js`；后端 `startLoop` 仅保留兼容 shim |
 | 仍未完成 | 完整 ContextHub、审批控制 API、`agent_run_event`/回放 UI、Excel/PPT 最小 Diff、Excel/PPT capability harness |
 

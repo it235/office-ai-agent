@@ -39,9 +39,61 @@ Public Class ThisAddIn
     Private widthTimer As Timer
     Private widthTimer1 As Timer
 
+    ' E4-01 选区工具条控制器（随面板首次打开才创建，不进 Startup 关键路径）
+    Private selectionToolbarController As WordAi.Selection.WordSelectionToolbarController
+
+    ' E4-02 右键菜单入口（同上：面板打开过才挂，关闭加载项时必须按 Tag 摘干净）
+    Private contextMenu As WordAi.HostEntry.WordContextMenu
+
     Private Sub WordAi_Startup() Handles Me.Startup
         ' Phase 0: 仅注册事件处理器 + 状态栏初始化（微秒级，不阻塞启动）
         PhaseStartupManager.Instance.RunCriticalPhase(Me.Application)
+    End Sub
+
+    ''' <summary>
+    ''' 选区工具条只在用户已经打开 AI 面板后才存在：面板没打开时点了动作没有承接方，
+    ''' 同时保证没用过该功能的用户不受浮层影响、启动耗时也不变。
+    ''' </summary>
+    Private Sub EnsureSelectionToolbar()
+        Try
+            If selectionToolbarController Is Nothing Then
+                selectionToolbarController = New WordAi.Selection.WordSelectionToolbarController(Me.Application)
+            End If
+            ' 控制器内部有幂等守卫，重复打开面板不会重复绑定选区事件
+            selectionToolbarController.Initialize()
+        Catch ex As Exception
+            Debug.WriteLine($"Word 选区工具条初始化失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' E4-02：把 Word 的 AI 动作挂到文本右键菜单上。同样只在面板打开过之后挂：
+    ''' 菜单项点下去要有承接方，而且改宿主菜单属于锦上添花，不能让没用过 AI 的用户被改界面。
+    ''' </summary>
+    Private Sub EnsureContextMenu()
+        If Not ChatSettings.EnableContextMenu Then Return
+
+        Try
+            If contextMenu Is Nothing Then
+                contextMenu = New WordAi.HostEntry.WordContextMenu(Me.Application)
+            End If
+            contextMenu.Attach(AddressOf OnContextMenuAction)
+        Catch ex As Exception
+            Debug.WriteLine($"Word 右键菜单入口初始化失败: {ex.Message}")
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' 菜单项只把入口动作交回面板的统一入口：闸门、上下文采集、预览与风险确认、变更摘要、撤销都在主链上。
+    ''' </summary>
+    Private Sub OnContextMenuAction(action As ShareRibbon.Agent.QuickAction)
+        Try
+            If chatControl Is Nothing Then Return
+            If chatTaskPane IsNot Nothing Then chatTaskPane.Visible = True
+            chatControl.StartAgentFromHostEntry(action)
+        Catch ex As Exception
+            Debug.WriteLine($"Word 右键菜单动作执行失败: {ex.Message}")
+        End Try
     End Sub
 
     ''' <summary>
@@ -90,6 +142,26 @@ Public Class ThisAddIn
             widthTimer1.Dispose()
             widthTimer1 = Nothing
         End If
+
+        ' 选区工具条：解除 WindowSelectionChange 订阅并销毁浮层，否则关闭加载项后事件仍挂在 Word 上
+        If selectionToolbarController IsNot Nothing Then
+            Try
+                selectionToolbarController.Dispose()
+            Catch ex As Exception
+                Debug.WriteLine($"Word 选区工具条释放失败: {ex.Message}")
+            End Try
+            selectionToolbarController = Nothing
+        End If
+
+        ' 右键菜单：按 Tag 摘掉本加载项挂上去的菜单项并解绑事件，否则宿主菜单里会留下死项
+        If contextMenu IsNot Nothing Then
+            Try
+                contextMenu.Detach()
+            Catch ex As Exception
+                Debug.WriteLine($"Word 右键菜单入口释放失败: {ex.Message}")
+            End Try
+            contextMenu = Nothing
+        End If
     End Sub
 
 
@@ -135,6 +207,16 @@ Public Class ThisAddIn
                 EnsureWidthTimers()
                 widthTimer.Start()
             End If
+            ' 挂在可见性事件上而不是 ShowChatTaskPane 里：用户也能用任务窗格自己的折叠按钮打开面板，
+            ' 那条路不经过我们的方法；启动阶段面板不可见，所以不会把浮层创建拖进 Startup 关键路径。
+            ' E4-05：这两个入口都读配置文件里的开关，而此刻面板可能还没装载过任何 ChatSettings，
+            ' 读到的就是代码里的默认值——用户开过的开关在进程内第一次不生效。先确保加载过一次。
+            ChatSettings.EnsureLoaded(New ApplicationInfo("Word", OfficeApplicationType.Word))
+            EnsureSelectionToolbar()
+            EnsureContextMenu()
+        ElseIf selectionToolbarController IsNot Nothing Then
+            ' 面板收起后动作条点下去没有承接方，必须一起收掉
+            selectionToolbarController.HideStrip()
         End If
     End Sub
 
@@ -192,23 +274,12 @@ Public Class ThisAddIn
         End If
     End Sub
 
-    Dim loadChatHtml As Boolean = True
-    Dim loadDataCaptureHtml As Boolean = True
-
-    Public Async Sub ShowChatTaskPane()
-        Await ShowChatTaskPaneAsync()
-    End Sub
-
-    Public Async Function ShowChatTaskPaneAsync() As Task
+    Public Sub ShowChatTaskPane()
         EnsureCoreServicesLoaded()
         CreateChatTaskPane()
         If chatTaskPane Is Nothing Then Return
         chatTaskPane.Visible = True
-        If loadChatHtml Then
-            loadChatHtml = False
-            Await chatControl.LoadLocalHtmlFile()
-        End If
-    End Function
+    End Sub
 
     Public Sub ShowDataCaptureTaskPane()
         EnsureDataCapturePaneCreated()

@@ -346,7 +346,8 @@ CREATE TABLE IF NOT EXISTS agent_run_change (
     rollback_error TEXT,
     doc_hash_before TEXT,
     doc_hash_after TEXT,
-    observed_at TEXT
+    observed_at TEXT,
+    restore_json TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_agent_run_change_run ON agent_run_change(run_id, seq);
