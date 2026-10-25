@@ -406,6 +406,7 @@
     <Compile Include="Controls\Services\ChatSendValidator.vb" />
     <Compile Include="Controls\Services\ModelConfigGate.vb" />
     <Compile Include="Controls\Services\PrivacyConsentGate.vb" />
+    <Compile Include="Controls\Services\UsageCostReporter.vb" />
     <Compile Include="Controls\Services\ModelConnectivityTester.vb" />
     <Compile Include="Controls\Services\OnboardingService.vb" />
     <Compile Include="Controls\Services\HostHotkeyWatcher.vb" />
@@ -424,6 +425,7 @@
     <Compile Include="Controls\Services\ExecutionPlanRenderer.vb" />
     <Compile Include="Controls\Models\ExecutionStep.vb" />
     <Compile Include="Services\Ai\AiGateway.vb" />
+    <Compile Include="Services\Ai\TokenUsage.vb" />
     <Compile Include="Services\EmbeddingService.vb" />
     <Compile Include="Services\Memory\AgentMemoryPipelineService.vb" />
     <Compile Include="Services\Memory\LlmMemoryExtractor.vb" />

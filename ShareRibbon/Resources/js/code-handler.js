@@ -230,16 +230,27 @@ document.addEventListener('click', function (event) {
 });
 
 // Process stream complete - handle UI updates after message completion
-function processStreamComplete(uuid, totalTokens) {
+function processStreamComplete(uuid, totalTokens, usageNote) {
     if (window.officeAiActiveResponseUuid === uuid) {
         window.officeAiActiveResponseUuid = null;
         window.officeAiActiveRequestUuid = null;
     }
 
-    // Add token display
+    // 用量脚注：累计 token 之外再带上后端算好的那句（金额 / 未配置单价 / 超额度）。
+    // 文案由 UsageCostReporter 单点持有，这里只用 textContent 落进 DOM。
     const footerDiv = document.getElementById('footer-' + uuid);
     if (footerDiv) {
-        footerDiv.innerHTML = `<span class="token-count">消耗token：${totalTokens}</span>`;
+        footerDiv.innerHTML = '';
+        const tokenSpan = document.createElement('span');
+        tokenSpan.className = 'token-count';
+        tokenSpan.textContent = '消耗token：' + totalTokens;
+        footerDiv.appendChild(tokenSpan);
+        if (usageNote) {
+            const noteSpan = document.createElement('span');
+            noteSpan.className = 'usage-note';
+            noteSpan.textContent = ' · ' + usageNote;
+            footerDiv.appendChild(noteSpan);
+        }
     }
 
     // Switch back to send button

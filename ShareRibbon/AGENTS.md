@@ -30,6 +30,7 @@ ShareRibbon/
 | ToolResult / Tool 注册 | `Agent/ToolRegistry.vb` | 工具合同、临时视觉证据合同、执行适配 |
 | Harness | `Agent/Harness/` | 唯一运行入口、上下文和 RunTrace |
 | AI 请求与 Provider 适配 | `Services/Ai/AiGateway.vb` | OpenAI-compatible / Anthropic 请求转换 |
+| 用量与费用口径 | `Services/Ai/TokenUsage.vb`, `Controls/Services/UsageCostReporter.vb` | provider 键名（`prompt_tokens`/`input_tokens`…）只在这里解析；给用户看的那一句（token 数、金额、额度提醒）只在这里拼。会话账本唯一写入口是 `ChatStateService.RecordUsage`，**未配单价就不出现金额**，额度只提醒不拦截；合同见 `scripts/smoke-usage-cost.ps1` |
 | 数据边界同意与阻断卡片 | `Controls/Services/PrivacyConsentGate.vb`, `Controls/Services/ModelConfigGate.vb` | 同意只此一处读写、三条边界文案只此一份下发；缺配置与缺同意共用同一张 CTA，靠 `action` 区分；「哪个出口由哪把门看着」的唯一清单是 `scripts/smoke-privacy-consent.ps1` 的 `$outboundInventory` |
 | Chat UI 与请求编排 | `Controls/` | `BaseChatControl`、`AgentKernelService`、streaming 服务 |
 | 配置 | `Config/` | API Key、模型、Prompt 与运行时设置 |

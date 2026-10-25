@@ -3915,8 +3915,16 @@ input:checked + .mcp-toggle-slider:before {
 }
 
 .agent-change-more,
-.agent-change-rollback {
+.agent-change-rollback,
+.agent-usage {
     margin-top: 4px;
+    color: #64748b;
+    font-size: 11px;
+}
+
+/* E3-04：流式消息脚注里跟在 token 数后面的一句话（估算费用 / 超额度提示）。
+   和 .agent-usage 同口径：文字由宿主给，这里只管排版。 */
+.usage-note {
     color: #64748b;
     font-size: 11px;
 }

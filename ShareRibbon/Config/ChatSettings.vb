@@ -1,4 +1,5 @@
-﻿Imports System.IO
+﻿Imports System.Globalization
+Imports System.IO
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 
@@ -45,6 +46,13 @@ Public Class ChatSettings
     Public Const DefaultHotkeyChord As String = "Ctrl+Alt+K"
     Public Shared Property HotkeyChord As String = DefaultHotkeyChord
 
+    ' E3-04 用量与费用：单价按“每百万 token”填，-1 表示用户还没表态，此时只显示 token、不显示钱。
+    ' 额度 0 = 不限量。这两个键只决定“提示怎么写”，不参与拦截——拦截的只有隐私同意那一件事。
+    Public Shared Property PricePerMillionIn As Double = -1
+    Public Shared Property PricePerMillionOut As Double = -1
+    Public Shared Property PriceCurrency As String = ""
+    Public Shared Property SessionTokenBudget As Integer = 0
+
     ' E4-05：宿主在「面板变为可见」时就要读开关（挂右键菜单、出选区工具条），而那一刻可能还
     ' 没有任何 ChatSettings 实例读过文件，于是拿到的是声明的默认值——用户明明开过的开关，
     ' 进程内第一次就是不生效。EnsureLoaded 把「先加载再判断」固定成一次调用，重复调用不再读盘；
@@ -66,7 +74,11 @@ Public Class ChatSettings
                           Optional enableSelectionToolbar As Boolean = False,
                           Optional enableContextMenu As Boolean = False,
                           Optional enableHotkey As Boolean = False,
-                          Optional hotkeyChord As String = "Ctrl+Alt+K")
+                          Optional hotkeyChord As String = "Ctrl+Alt+K",
+                          Optional pricePerMillionIn As Double = -1,
+                          Optional pricePerMillionOut As Double = -1,
+                          Optional priceCurrency As String = "",
+                          Optional sessionTokenBudget As Integer = 0)
         Try
             Dim settingsPath = _applicationInfo.GetChatSettingsFilePath()
 
@@ -99,6 +111,10 @@ Public Class ChatSettings
             settings("enableContextMenu") = enableContextMenu
             settings("enableHotkey") = enableHotkey
             settings("hotkeyChord") = hotkeyChord
+            settings("pricePerMillionIn") = pricePerMillionIn
+            settings("pricePerMillionOut") = pricePerMillionOut
+            settings("priceCurrency") = priceCurrency
+            settings("sessionTokenBudget") = sessionTokenBudget
 
             File.WriteAllText(settingsPath, settings.ToString(Formatting.Indented))
 
@@ -115,6 +131,10 @@ Public Class ChatSettings
             ChatSettings.EnableContextMenu = enableContextMenu
             ChatSettings.EnableHotkey = enableHotkey
             ChatSettings.HotkeyChord = hotkeyChord
+            ChatSettings.PricePerMillionIn = pricePerMillionIn
+            ChatSettings.PricePerMillionOut = pricePerMillionOut
+            ChatSettings.PriceCurrency = priceCurrency
+            ChatSettings.SessionTokenBudget = sessionTokenBudget
 
         Catch ex As Exception
             Debug.WriteLine($"保存设置失败: {ex.Message}")
@@ -175,6 +195,13 @@ Public Class ChatSettings
                         EnableHotkey = False
                     End If
                 End If
+                ' E3-04：单价与额度来自面板文本框，坏输入不能让下面 enableMcpList 的读取一起失败，
+                ' 所以这几项各自解析、解析不动就退回「未配置」，而不是让整个 LoadSettings 进 Catch。
+                ' 额度是独立的一档，不因为没配单价就不读。
+                PricePerMillionIn = Math.Max(-1.0, ReadDouble(settings, "pricePerMillionIn", PricePerMillionIn))
+                PricePerMillionOut = Math.Max(-1.0, ReadDouble(settings, "pricePerMillionOut", PricePerMillionOut))
+                PriceCurrency = ReadString(settings, "priceCurrency", "")
+                SessionTokenBudget = Math.Max(0, ReadInteger(settings, "sessionTokenBudget", SessionTokenBudget))
                 ' 加载MCP列表
 
                 ' 加载MCP列表 - 修复了键不存在的问题
@@ -200,6 +227,30 @@ Public Class ChatSettings
             Debug.WriteLine($"加载ChatSettings失败: {ex.Message}")
         End Try
     End Sub
+
+    ''' <summary>文本框写进文件的数字可能根本不是数字；解析失败退回调用方给的口径，不抛出去。</summary>
+    Private Shared Function ReadDouble(settings As Dictionary(Of String, Object), key As String, fallback As Double) As Double
+        Dim parsed As Double
+        If Double.TryParse(RawText(settings, key), NumberStyles.Any, CultureInfo.InvariantCulture, parsed) Then Return parsed
+        Return fallback
+    End Function
+
+    Private Shared Function ReadInteger(settings As Dictionary(Of String, Object), key As String, fallback As Integer) As Integer
+        Dim parsed As Integer
+        If Integer.TryParse(RawText(settings, key), NumberStyles.Any, CultureInfo.InvariantCulture, parsed) Then Return parsed
+        Return fallback
+    End Function
+
+    Private Shared Function ReadString(settings As Dictionary(Of String, Object), key As String, fallback As String) As String
+        Dim text = RawText(settings, key)
+        If String.IsNullOrEmpty(text) Then Return fallback
+        Return text
+    End Function
+
+    Private Shared Function RawText(settings As Dictionary(Of String, Object), key As String) As String
+        If Not settings.ContainsKey(key) OrElse settings(key) Is Nothing Then Return ""
+        Return settings(key).ToString().Trim()
+    End Function
 
     Public Sub SaveEnabledMcpList(enabledList As List(Of String))
         EnabledMcpList = enabledList

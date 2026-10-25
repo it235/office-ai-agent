@@ -806,6 +806,12 @@ Public MustInherit Class BaseChatControl
             setNativeEntrySetting('settings-enable-context-menu', {ChatSettings.EnableContextMenu.ToString().ToLower()});
             setNativeEntrySetting('settings-hotkey-chord', {Newtonsoft.Json.JsonConvert.SerializeObject(ChatSettings.HotkeyChord)});
             setNativeEntrySetting('command-palette-button', null, {Newtonsoft.Json.JsonConvert.SerializeObject(paletteTitle)});
+            ' E3-04：单价/额度这几行的当前值同样由宿主下发。未配置时输入框留空，不显示 -1，
+            ' 因为 -1 是「还没表态」的内部口径，显示出来会被用户当成一个可以改的数字。
+            setNativeEntrySetting('settings-price-in', {Newtonsoft.Json.JsonConvert.SerializeObject(UsageCostReporter.PriceInputText(ChatSettings.PricePerMillionIn))});
+            setNativeEntrySetting('settings-price-out', {Newtonsoft.Json.JsonConvert.SerializeObject(UsageCostReporter.PriceInputText(ChatSettings.PricePerMillionOut))});
+            setNativeEntrySetting('settings-price-currency', {Newtonsoft.Json.JsonConvert.SerializeObject(ChatSettings.PriceCurrency)});
+            setNativeEntrySetting('settings-session-budget', {Newtonsoft.Json.JsonConvert.SerializeObject(UsageCostReporter.BudgetInputText(ChatSettings.SessionTokenBudget))});
         "
             ExecuteJavaScriptAsyncJS(js)
 
@@ -1320,7 +1326,20 @@ Public MustInherit Class BaseChatControl
         Dim enableContextMenu As Boolean = ReadFlagSetting(jsonDoc, "enableContextMenu", ChatSettings.EnableContextMenu)
         Dim enableHotkey As Boolean = ReadFlagSetting(jsonDoc, "enableHotkey", ChatSettings.EnableHotkey)
         Dim hotkeyChord As String = If(jsonDoc("hotkeyChord")?.Value(Of String)(), ChatSettings.HotkeyChord)
-
+        ' E3-04 单价与额度：和上面三个开关同一条规矩——缺键时保持当前值，不能让旧版前端一保存就把
+        ' 用户填过的单价抹成默认；带键但不是数字时按未配置处理，费用退回"只报 token"。
+        Dim priceIn = ReadNumberSetting(jsonDoc, "pricePerMillionIn", ChatSettings.PricePerMillionIn)
+        Dim priceOut = ReadNumberSetting(jsonDoc, "pricePerMillionOut", ChatSettings.PricePerMillionOut)
+        Dim priceCurrency = If(jsonDoc("priceCurrency")?.Value(Of String)(), ChatSettings.PriceCurrency)
+        Dim sessionBudget = CInt(ReadIntegerSetting(jsonDoc, "sessionTokenBudget", ChatSettings.SessionTokenBudget))
+        If priceIn >= 0 AndAlso priceOut < 0 Then
+            GlobalStatusStrip.ShowWarning(UsageCostReporter.IncompletePricingWarning("输入"))
+        ElseIf priceOut >= 0 AndAlso priceIn < 0 Then
+            GlobalStatusStrip.ShowWarning(UsageCostReporter.IncompletePricingWarning("输出"))
+        ElseIf Not String.IsNullOrEmpty(priceCurrency) AndAlso (priceIn < 0 OrElse priceOut < 0) Then
+            ' 只填了货币符号没填单价 = 说不清按什么价算，这时写钱是骗人，直接提醒缺哪一项
+            GlobalStatusStrip.ShowWarning(UsageCostReporter.CurrencyWithoutPricingWarning)
+        End If
         ' 快捷键是独占资源：写法无效还照存，下次启动就是一个按了没反应、又没人知道为什么的开关
         Dim parsedChord = HostHotkeyChord.Parse(hotkeyChord)
         If enableHotkey AndAlso (parsedChord Is Nothing OrElse Not parsedChord.IsSafe) Then
@@ -1335,7 +1354,8 @@ Public MustInherit Class BaseChatControl
                                   settingsScrollChecked, executeCodePreview,
                                   enableAutocomplete, 800, autocompleteShortcut,
                                   enableSelectionToolbar, enableContextMenu,
-                                  enableHotkey, hotkeyChord)
+                                  enableHotkey, hotkeyChord,
+                                  priceIn, priceOut, priceCurrency, sessionBudget)
 
         ' 保存完立刻生效：快捷键不该要求用户重启宿主才能试出它到底注册上了没有
         CommandPaletteSvc.ApplyHotkey()
@@ -1346,6 +1366,29 @@ Public MustInherit Class BaseChatControl
         Dim token = jsonDoc(key)
         If token Is Nothing OrElse token.Type = JTokenType.Null Then Return fallback
         Return token.Value(Of Boolean)()
+    End Function
+
+    ''' <summary>
+    ''' 数字设置项：缺键退回当前值；带键但不是数字时退回「未配置」而不是沿用旧价——
+    ''' 用户清空输入框想表达的是“别再按旧单价算”，沿用会让下一次估算继续用他已经作废的价。
+    ''' </summary>
+    Private Shared Function ReadNumberSetting(jsonDoc As JObject, key As String, fallback As Double) As Double
+        Dim token = jsonDoc(key)
+        If token Is Nothing OrElse token.Type = JTokenType.Null Then Return fallback
+        Dim parsed As Double
+        ' 本文件 Imports System.Web，裸写 Globalization.NumberStyles 会解析到 System.Web.Globalization，只能用全名。
+        If Double.TryParse(token.ToString().Trim(), System.Globalization.NumberStyles.Any,
+                           System.Globalization.CultureInfo.InvariantCulture, parsed) Then Return parsed
+        Return -1
+    End Function
+
+    Private Shared Function ReadIntegerSetting(jsonDoc As JObject, key As String, fallback As Integer) As Integer
+        Dim token = jsonDoc(key)
+        If token Is Nothing OrElse token.Type = JTokenType.Null Then Return fallback
+        Dim parsed As Integer
+        If Integer.TryParse(token.ToString().Trim(), System.Globalization.NumberStyles.Any,
+                             System.Globalization.CultureInfo.InvariantCulture, parsed) Then Return Math.Max(0, parsed)
+        Return 0
     End Function
 
     ' SendMessageReferenceContentItem 已移至 Controls/Models/HistoryMessage.vb
@@ -2302,6 +2345,10 @@ Public MustInherit Class BaseChatControl
                     ' 提取 content
                     Dim json = JObject.Parse(jsonContent)
                     Dim content As String = ""
+
+                    ' E3-04：非流式路径的用量在这里落进会话账本（Agent 一轮的多次请求都记在同一本上）。
+                    ' 读不到 usage 就不记账，Provider 没报用量时卡片会说"没有用量数据"，不会报 0。
+                    _chatStateService.RecordUsage(TokenUsage.FromJson(json))
 
                     ' OpenAI 格式
                     If json("choices") IsNot Nothing Then

@@ -383,13 +383,10 @@ Public Class HttpStreamService
                 End If
             End If
 
-            ' 获取 token 信息
-            If jsonObj("usage") IsNot Nothing AndAlso jsonObj("usage").Type = JTokenType.Object Then
-                _stateService.LastTokenInfo = New TokenInfo With {
-                        .PromptTokens = CInt(jsonObj("usage")("prompt_tokens")),
-                        .CompletionTokens = CInt(jsonObj("usage")("completion_tokens")),
-                        .TotalTokens = CInt(jsonObj("usage")("total_tokens"))
-                    }
+            ' 获取 token 信息：解析口径交给 TokenUsage，服务层不再自己认 usage 里的键名。
+            Dim streamUsage = TokenUsage.FromJson(jsonObj)
+            If streamUsage IsNot Nothing Then
+                _stateService.LastUsage = streamUsage
             End If
 
             ' 输出内容
@@ -772,8 +769,9 @@ Public Class HttpStreamService
     ''' 完成流处理
     ''' </summary>
     Private Sub FinalizeStream(addHistory As Boolean, Optional originQuestion As String = "")
-        If _stateService.LastTokenInfo.HasValue Then
-            _stateService.AddTokens(_stateService.LastTokenInfo.Value.TotalTokens)
+        If _stateService.LastUsage IsNot Nothing Then
+            ' 流式与非流式写同一本账：分项跟着 TokenUsage 一起进账，费用才按两种单价分别算得出来。
+            _stateService.RecordUsage(_stateService.LastUsage)
         End If
 
         CheckAndCompleteProcessing()
@@ -786,7 +784,7 @@ Public Class HttpStreamService
         End If
 
         _stateService.ClearBuffers()
-        _stateService.LastTokenInfo = Nothing
+        _stateService.LastUsage = Nothing
     End Sub
 
     ''' <summary>
@@ -794,7 +792,11 @@ Public Class HttpStreamService
     ''' </summary>
     Private Sub CheckAndCompleteProcessing()
         If _mainStreamCompleted AndAlso _pendingMcpTasks = 0 Then
-            _executeScript($"processStreamComplete('{_finalUuid}',{_stateService.CurrentSessionTotalTokens});")
+            ' 脚注那一行（累计 tokens / 估算费用 / 额度提示）由 UsageCostReporter 持有，
+            ' 这里只负责把它连同累计数一起递过去，JS 不再自己拼文案。
+            Dim usageNote = UsageCostReporter.SummaryText(_stateService.SessionUsage,
+                                                          _stateService.CurrentSessionTotalTokens)
+            _executeScript($"processStreamComplete('{_finalUuid}',{_stateService.CurrentSessionTotalTokens},{UtilsService.ToJsStringLiteral(usageNote)});")
             _onStreamComplete?.Invoke(_finalUuid, _stateService.PlainMarkdownBuffer)
             ' 确保 Agent 响应完成回调被触发（防止 [DONE] 消息未被正确检测的情况）
             _onAgentCompleted?.Invoke()
@@ -830,14 +832,11 @@ Public Class HttpStreamService
 
                 Dim jsonObj As JObject = JObject.Parse(line)
 
-                ' 获取 token 信息
-                Dim usage = jsonObj("usage")
-                If usage IsNot Nothing AndAlso usage.Type = JTokenType.Object Then
-                    _stateService.LastTokenInfo = New TokenInfo With {
-                            .PromptTokens = CInt(usage("prompt_tokens")),
-                            .CompletionTokens = CInt(usage("completion_tokens")),
-                            .TotalTokens = CInt(usage("total_tokens"))
-                        }
+                ' 获取 token 信息：两种 provider 键名都交给 TokenUsage 解析，这里不再自己取字段——
+                ' 之前只认 OpenAI 那一套键名，服务端只回 Anthropic 键名时会直接抛在这行。
+                Dim chunkUsage = TokenUsage.FromJson(jsonObj)
+                If chunkUsage IsNot Nothing Then
+                    _stateService.LastUsage = chunkUsage
                 End If
 
                 ' 处理推理内容

@@ -47,6 +47,7 @@ AiHelper/
 | 共享 Chat UI / WebView2 / 服务 | `ShareRibbon/Controls/` | `BaseChatControl`、HTTP/streaming 服务、共享 UI 组件 |
 | 前端 HTML/JS/CSS 资源 | `ShareRibbon/Resources/` 及相关项目资源项 | Office Virtual Server 加载入口，改动后检查 `.vbproj` 注册和 HTML 引用 |
 | 配置、API Key、Prompt | `ShareRibbon/Config/` | 配置管理和持久化逻辑 |
+| 用量、费用与额度口径 | `ShareRibbon/Services/Ai/TokenUsage.vb`, `ShareRibbon/Controls/Services/UsageCostReporter.vb` | provider 键名只在一处解析、给用户的那句只在一处拼、未配单价时不出现金额；合同门禁 `scripts/smoke-usage-cost.ps1` |
 | MCP 协议集成 | `ShareRibbon/Mcp/` | StreamJsonRpc / MCP client 相关实现 |
 | 本地库与迁移 | `ShareRibbon/Storage/` | 建表、版本化迁移与取值口径；口径规则见 `Storage/README_DATABASE.md` |
 | Excel 功能 | `ExcelAi/` | 单元格、Range、Sheet、图表、ExcelDna、批量数据生成 |
@@ -258,6 +259,7 @@ intent_types: data_analysis, formula, chart
 17. 在 PowerPoint Executor/Verifier 内直接调用视觉模型，绕过现有 Loop 的重试、降级和终态管理。
 18. 往用于过滤的枚举列（如 `app_type`）写入调用方传来的原始字符串。读侧是「等于当前取值 OR 空值豁免」，第三种取值会让那条数据在所有查询里静默消失；写前必须经过口径持有者归一，历史数据用只填空、可重跑的迁移收口。
 19. 新增一个把内容发出去的 HttpClient 出口（`HttpRequestMessage(HttpMethod.Post` / `.PostAsync(`）却不登记进 `scripts/smoke-privacy-consent.ps1` 的 `$outboundInventory`，或更糟——在用户还没确认数据边界之前就读配置直接发。清单要求每个出口交代「被哪把门看着」（自己问 / 面板漏斗 / 固定探针 / 用户自加的 MCP 服务器），交代不出来门禁就红；「我们拦住了云调用」必须是可重跑的计数，不是一句承诺。
+20. 在 JS/HTML 里算钱或另拼一句费用文案，或者给用量再造第二个形状（`prompt_tokens` 之类的 provider 键名只允许出现在 `Services/Ai/TokenUsage.vb`，会话账本只允许 `ChatStateService.RecordUsage` 一个写入口）。没配单价时报一个猜出来的金额比不报更糟——它会被当成账单；五处链接（写入、读回、载荷、宿主读取、DOM/种子）少一处，设置行就只是一个装饰。合同见 `scripts/smoke-usage-cost.ps1`。
 
 ## Commands
 

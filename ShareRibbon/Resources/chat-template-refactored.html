@@ -357,6 +357,27 @@
             <div class="setting-tip">取消勾选即为撤回：撤回后下一条消息或任务会重新拦在发送之前，直到再次确认。</div>
         </div>
 
+        <!-- E3-04 用量与费用：单价按「每百万 token」填，留空就是没配置。
+             没配置时卡片只报 token 数，不显示任何金额——猜出来的价格会被当成账单。
+             当前值一律由宿主下发（setNativeEntrySetting），面板不自带默认数字。 -->
+        <div class="setting-item">
+            <label class="setting-label">每百万 token 单价</label>
+            <input type="text" id="settings-price-in" placeholder="输入"
+                   style="padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc; width: 70px;">
+            <input type="text" id="settings-price-out" placeholder="输出"
+                   style="padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc; width: 70px;">
+            <input type="text" id="settings-price-currency" placeholder="￥"
+                   style="padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc; width: 40px;">
+            <div class="setting-tip">留空即未配置：只显示 token 用量，不显示金额。两个单价要一起填，币种按你服务商的账单口径自己填符号。</div>
+        </div>
+
+        <div class="setting-item">
+            <label class="setting-label">会话 token 额度提醒</label>
+            <input type="text" id="settings-session-budget" placeholder="不限量"
+                   style="padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc; width: 100px;">
+            <div class="setting-tip">超过这个数会在对话里提示一句，不拦截任何请求；留空表示不限量。</div>
+        </div>
+
         <!-- E4 原生入口：三个开关都放在这一组。它们都会改变用户既有的宿主界面或抢占按键，
              所以必须能被关掉——否则用户只能重新编译才能退出。 -->
         <div class="setting-item checkbox-item">

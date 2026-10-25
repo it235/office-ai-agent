@@ -41,6 +41,8 @@ Public Class AiGatewayResponse
     Public Property RawResponse As String
     Public Property ErrorMessage As String
     Public Property StatusCode As Integer
+    ''' <summary>provider 报了 usage 才有；没报就是 Nothing，调用方不得当成 0 用量。</summary>
+    Public Property Usage As TokenUsage
 End Class
 
 Public Class AiGateway
@@ -93,6 +95,7 @@ Public Class AiGateway
                             .Success = True,
                             .Content = ExtractAssistantContent(responseText, isAnthropic),
                             .RawResponse = responseText,
+                            .Usage = TokenUsage.FromResponse(responseText),
                             .StatusCode = CInt(response.StatusCode)
                         }
                     End Using

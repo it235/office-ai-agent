@@ -44,7 +44,13 @@ function settingsSave() {
         enableSelectionToolbar: document.getElementById('settings-enable-selection-toolbar').checked,
         enableContextMenu: document.getElementById('settings-enable-context-menu').checked,
         enableHotkey: document.getElementById('settings-enable-hotkey').checked,
-        hotkeyChord: document.getElementById('settings-hotkey-chord').value
+        hotkeyChord: document.getElementById('settings-hotkey-chord').value,
+        // E3-04：这几项也要真的能存回去。后端读的是载荷而不是静态值，缺键时保持当前值，
+        // 所以这里必须把输入框的原样带上去（空串=未配置，由后端归一成 -1/0 哨兵）。
+        pricePerMillionIn: document.getElementById('settings-price-in').value,
+        pricePerMillionOut: document.getElementById('settings-price-out').value,
+        priceCurrency: document.getElementById('settings-price-currency').value,
+        sessionTokenBudget: document.getElementById('settings-session-budget').value
     };
 
     // Save settings to backend

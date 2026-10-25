@@ -49,6 +49,12 @@ Controls/
   登记进 `scripts/smoke-privacy-consent.ps1` 的 `$outboundInventory` 并写清它被哪把门看着，否则门禁红。
 - 阻断卡片只有一张：缺配置与缺同意共用 `ModelConfigPrompt` + `showModelConfigRequired`，靠 `action`
   （`open_config` / `accept_privacy`）分支按钮动作，**不要**为新拦截再画第二张卡片或新增消息 type。
+- 用量（E3-04）三层各只有一个持有者：**解析**在 `Services/Ai/TokenUsage.vb`（OpenAI 与 Anthropic 两套键名在那里
+  收成一个形状，读不到 usage 返回 `Nothing` 而不是 0，provider 给了更大的 `total_tokens` 时以它为准）；
+  **账本**在 `ChatStateService`，`SessionUsage` 是会话累计、`RunUsage` 是本轮切片，写入口只有 `RecordUsage`
+  一个（`AddTokens` 已删）；**文案**在 `Controls/Services/UsageCostReporter.vb`，token 句、金额句、额度句、
+  输入框哨兵渲染都在那里。终态卡片与流式脚注只是两个投递点，**JS 不得自己算钱或另拼一句费用**；
+  没配单价时只显示 token 并说明原因，额度提醒永远不拦请求（能拦的只有同意）。
 - 面板开关必须能真的关掉：`HandleSaveSettings` 一律从载荷读回每一个开关（缺键时保持当前值），**不得**再用静态字段
   原样写回，否则那个开关是只读的；`ChatSettings.SaveSettings` 读改写同一个 `JObject`，只覆盖自己认识的键，
   不认识的历史键保留。

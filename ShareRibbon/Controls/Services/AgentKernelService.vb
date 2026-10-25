@@ -134,6 +134,10 @@ Public Partial Class AgentKernelService
                 _chatStateService?.AddMessage("user", AgentOriginalUserRequest)
             End If
 
+            ' E3-04：本轮的用量窗口在开跑时复位，终态卡片报的是"这一轮花了多少"，
+            ' 会话累计仍记在同一本账上，不另开第二本。
+            _chatStateService?.BeginRunUsage()
+
             ' 显示思考状态
             ShowThinkingStatus()
 
@@ -460,7 +464,8 @@ Public Partial Class AgentKernelService
             {"rolledBackCount", rolledBackCount},
             {"changeTruncated", changeLog.WrittenCount > MaxTerminalChanges},
             {"changes", changes},
-            {"undoReason", ""}
+            {"undoReason", ""},
+            {"usage", BuildUsageBlock()}
         }
 
         If changeLog.WrittenCount = 0 Then
@@ -484,6 +489,24 @@ Public Partial Class AgentKernelService
         descriptor("restoreCount") = changeLog.RestoreCount
         descriptor("undoReason") = ""
         Return descriptor
+    End Function
+
+    ''' <summary>
+    ''' 本轮用量：卡片报「这一轮花了多少」，费用按设置里的单价估算。
+    ''' 一句话文案由 UsageCostReporter 持有，这里只搬数字，JS 不再自己拼金额。
+    ''' 没有单价时只有 tokens，没有 tokens 时只有「没有用量数据」——三者都不许写成 0 元。
+    ''' </summary>
+    Private Function BuildUsageBlock() As JObject
+        Dim run = If(_chatStateService?.RunUsage, New TokenUsage())
+        Dim sessionTokens = If(_chatStateService Is Nothing, 0, _chatStateService.CurrentSessionTotalTokens)
+        Dim summary = UsageCostReporter.SummaryText(run, sessionTokens)
+        Return New JObject From {
+            {"promptTokens", run.PromptTokens},
+            {"completionTokens", run.CompletionTokens},
+            {"totalTokens", run.TotalTokens},
+            {"sessionTokens", sessionTokens},
+            {"summary", If(String.IsNullOrEmpty(summary), UsageCostReporter.NoUsageText, summary)}
+        }
     End Function
 
     ''' <summary>摘要来自宿主观察，正常已经很短；这里只是兜底，防止个别宿主把正文塞进 summary。</summary>
@@ -513,6 +536,8 @@ Public Partial Class AgentKernelService
         If response Is Nothing OrElse Not response.Success Then
             Throw New InvalidOperationException(If(response?.ErrorMessage, "Multimodal AI request failed"))
         End If
+        ' 视觉 Repair 走的也是这一条请求，用量同样要记进本轮账本，否则卡片上的数字比实际花的少。
+        If response.Usage IsNot Nothing Then _chatStateService?.RecordUsage(response.Usage)
         Return response.Content
     End Function
 

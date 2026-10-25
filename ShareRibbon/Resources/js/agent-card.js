@@ -675,6 +675,16 @@ function renderAgentChangeSummary(uuid, terminal) {
         note.textContent = `已自动回滚 ${rolledBack} 处未完成的改动。`;
         box.appendChild(note);
     }
+
+    // E3-04：本轮用量。整句（token 数 / 金额 / 超额度提示）由 UsageCostReporter 拼好，
+    // 前端只显示——金额在 JS 里再算一遍就会出现两套口径，未配置单价时还会各自编一个数。
+    const usage = terminal.usage;
+    if (usage && usage.summary) {
+        const usageLine = document.createElement('div');
+        usageLine.className = 'agent-usage';
+        usageLine.textContent = '📊 ' + usage.summary;
+        box.appendChild(usageLine);
+    }
 }
 
 /**

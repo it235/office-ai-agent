@@ -59,12 +59,3 @@ Public Class SendMessageReferenceContentItem
     Public Property SheetName As String
     Public Property Address As String
 End Class
-
-''' <summary>
-''' Token使用信息
-''' </summary>
-Public Structure TokenInfo
-    Public PromptTokens As Integer
-    Public CompletionTokens As Integer
-    Public TotalTokens As Integer
-End Structure

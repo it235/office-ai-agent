@@ -1221,3 +1221,112 @@ E6-05 已经能在 run 末尾算出未达成并拦下假成功，缺的是拿着
 - `scripts\run-code-checks.ps1`（含构建）：`discovered 27 gates under scripts\`（26→27）、55 个 `PASS`、0 个 FAIL、`Golden L0 passed: 19 cases`、`All code checks passed.`；四项目 `PASS: WordAi / ExcelAi / PowerPointAi`（`ShareRibbon` 随依赖链重编）+ `Code projects built successfully.`
 - 入口可达性：面板发送 56 个消息 type（**未增加**，与上一轮同数）、router 注册 66 个、DOM id 103→105/105 全部解析到节点（新增设置行两个 id）、注入调用 61/61、导航引用 48/48、Ribbon 可见入口 Word 14/18、Excel 13/18、PowerPoint 11/18；`Oversized baseline files: 22`（未新增超限）
 - 两次当场逮到的真问题：规则 9 第一次运行抓到未登记的 `ModelConnectivityTester.vb`；`BuildShowScript` 改 `Shared` 抓到旧门禁的实例调用
+
+---
+
+## 20. E3-04 费用/额度提示：用量从「一个裸计数」变成一条可核对的口径
+
+验收标准（计划行 E3-04）：**发送前显示预估或发送后显示实际 Token/费用；超预算有提示**。前置 E3-01 已在上一轮完成。落点：`ShareRibbon/Services/Ai/TokenUsage.vb`（新，76 行）、`ShareRibbon/Controls/Services/UsageCostReporter.vb`（新，80 行）、`ShareRibbon/Controls/Services/ChatStateService.vb`、`ShareRibbon/Controls/Services/HttpStreamService.vb`、`ShareRibbon/Controls/Services/AgentKernelService.vb`、`ShareRibbon/Controls/BaseChatControl.vb`、`ShareRibbon/Services/Ai/AiGateway.vb`、`ShareRibbon/Config/ChatSettings.vb`、`ShareRibbon/Controls/Models/HistoryMessage.vb`、`Resources/chat-template-refactored.html`、`Resources/js/settings-manager.js`、`Resources/js/code-handler.js`、`Resources/js/agent-card.js`、`Resources/css/styles.css`、`ShareRibbon.vbproj`；新门禁 `scripts/smoke-usage-cost.ps1`（553 行，`scripts\*.ps1` 自动发现，27→28 gates）。
+
+### 20.1 先量 HEAD：这不是「界面少了一块」，是链路根本没有账
+
+动手前逐个 `git show HEAD:` 读回，五条事实决定了做法（前四条都是量出来的，第五条是我原本的记忆）：
+
+1. `ChatStateService.AddTokens(tokens As Integer)` 在 HEAD 只有 **1 个调用方**（`HttpStreamService.vb:776`），且它拿的是 `LastTokenInfo.Value.TotalTokens`——**输入/输出分项在进账那一刻就被丢掉了**，后面任何人想按两种单价算钱都没有数据可算。
+2. 因此非流式聊天与 Agent 一轮**从来没记过用量**：`git show HEAD:ShareRibbon/Controls/BaseChatControl.vb` 里 `usage` 出现 **0 次**，`AiGateway.vb` 里 `Usage` 出现 **0 次**（`AiGatewayResponse` 根本没有这个字段），终态卡片 `BuildTerminalDescriptor` 也没有 usage 块。
+3. 面板只有 `processStreamComplete(uuid, totalTokens)` **两个参数**，前端把它写成 `消耗token：N`——这一句是当时唯一的用量出口，且只在流式路径存在。
+4. `ChatSettings` 里 `pricePerMillion*` / `sessionTokenBudget` 在 HEAD 全仓（`.vb` + `.js`）出现 **0 次**：既没有单价字段，也没有额度字段，「费用」与「预算」在产品里不存在。
+5. HEAD 已经在两处**各自**解析 provider 键名（`HttpStreamService.vb:387-391` 用 `CInt(jsonObj("usage")("prompt_tokens"))`，`:834` 另有一份 Anthropic 读法）——我起初打算「新增一个解析器」，量完才发现真正的问题是**已有两份解析，且第一份在服务端只回 Anthropic 键名时会当场抛**（`CInt` 对不存在的令牌返回 Nothing 再转 Integer）。
+
+第 5 条把这一行的重心从「加提示」改成「先有唯一口径，再谈提示」：如果继续在原处补提示，费用数字的来源仍是两份会各自漂移的解析 + 一个只装得下整数的计数器。
+
+### 20.2 一个解析器：`TokenUsage` 是 provider 键名的唯一持有者
+
+`ShareRibbon/Services/Ai/TokenUsage.vb` 把 OpenAI 兼容（`prompt_tokens`/`completion_tokens`/`total_tokens`）与 Anthropic（`input_tokens`/`output_tokens`）两套键名收成同一个形状，规则三条，每条都对应一次真实风险：
+
+- **读不到就是 `Nothing`，不是 0。** `FromJson` 在没有 `usage` 对象、三个计数全缺时返回 `Nothing`；调用方（卡片、脚注、`RecordUsage`）必须区分「这次没回用量」和「这次没花钱」。0 会被读成免费。
+- **provider 的 `total_tokens` 优先于自己相加。** 推理类模型把 reasoning token 计入 total，`in + out` 会低估，所以 `total > 0` 时直接采用（`:56-61`），只有它缺失才回退到相加。
+- **负数按 0 收，但不丢弃整条用量。** `ReadInt` 只接受非负整数，一侧脏值收进 0、另一侧仍记账（`:50`、`:53-54`），避免一个坏字段让整轮用量消失。
+
+`AiGateway` 因此只多两行：`AiGatewayResponse.Usage As TokenUsage` + 成功返回时 `TokenUsage.FromResponse(responseText)`（`:44-45`、`:97`）。流式服务两处手写解析全部换成 `FromJson`，顺带把上面那个「只回 Anthropic 键名就抛」的旧缺陷填掉。门禁把这句话钉成规则而不是注释：**语料里任何文件（除 `TokenUsage.vb`）出现 `"<键名>")` 这种「引号 + 索引 + 右括号」的解析形状即红**。
+
+### 20.3 一本账：`RecordUsage` 是唯一的写入口
+
+`ChatStateService` 从「一个整数累加器」改成两个字段、一个写入口：
+
+- `_sessionUsage As TokenUsage`（会话累计）与 `_runUsage As TokenUsage`（本轮切片，`BeginRunUsage()` 开一轮时复位）。`CurrentSessionTotalTokens` 现在只是 `_sessionUsage.TotalTokens` 的只读投影——**读数与记账不再是两件事**，这条有专门的规则和探针（把 `Return _sessionUsage.TotalTokens` 改成 `Return 0` 门禁即红）。
+- `RecordUsage(usage)` 是唯一写入口：`Nothing` 与 `TotalTokens <= 0` 都不落账；开了运行窗口才同时写 `_runUsage`。`AddTokens` 已删除，语料里再出现这个名字即红。
+- 三个调用点，门禁按出现次数钉死：流式结算 `HttpStreamService.vb:774`、非流式发送器 `BaseChatControl.vb:2351`、视觉 Repair `AgentKernelService.vb:540`。运行窗口起点是 `AgentKernelService.vb:139`（用户消息落库之后）。
+
+顺手合并掉的是本轮最该被质疑的一处「第二套」：`Controls/Models/HistoryMessage.vb` 里那个 `Public Structure TokenInfo`（三个 Integer 字段）与新的 `TokenUsage` 形状完全同义，`LastTokenInfo As Nullable(Of TokenInfo)` 于是变成「解析出 TokenUsage → 拷进 TokenInfo → 结算时再拷回 TokenUsage」的往返搬运。按「先清点已有能力，能复用就不做第二套」，直接把 `ChatStateService.LastTokenInfo` 换成 `LastUsage As TokenUsage`（`:35`、`:120-131`、`:360`），`HttpStreamService` 两处赋值改为直接交解析结果（`:389`、`:847`），并把 `TokenInfo` 结构体删除（全仓 grep 归零）。为此门禁多加一条规则 + 一条探针：**语料里出现 `TokenInfo` 即红**，防止下一次重构又把那个三整数形状请回来。
+
+### 20.4 一句话：文案的持有者是 `UsageCostReporter`
+
+四类句子各有唯一出处（`ShareRibbon/Controls/Services/UsageCostReporter.vb`）：金额句 `CostText`、未配置句 `UnpricedText`（`未配置单价，只统计 token 用量`）、无用量句 `NoUsageText`（`这次没有回传用量数据`）、额度句 `BudgetText`，加上两条缺价提醒 `IncompletePricingWarning` / `CurrencyWithoutPricingWarning` 和输入框哨兵渲染 `PriceInputText` / `BudgetInputText`。`SummaryText` 把「N tokens · 金额或原因 · 额度提醒」拼成整句，投递点只有两个——Agent 终态卡片（`BuildUsageBlock`，`AgentKernelService.vb:499`，块挂在 `:468` 即**第一个 `Return descriptor` 之前**，所以只读的一轮也照计费）和流式脚注（`HttpStreamService.vb:806-808`，沿用既有 `processStreamComplete` 通道**多带一个参数**，而不是新增消息 type）。前端两处都只做 `textContent` 落 DOM（`agent-card.js:684`、`code-handler.js` 的 `noteSpan`），**没有任何一句金额是 JS 拼的**。
+
+规则 4/5 是数据驱动的：门禁**从 `UsageCostReporter.vb` 正则读出那几条 const 句子**再全仓计数，要求每条恰好出现 1 次——所以改文案不必改门禁，抄一份承诺才会红。金额短语（`估算费用`）另外扫全部 `.js` **和** `.html`。这条扩到 HTML 之后当场抓到三处副本，其中一处是用户可见的设置提示文案（`chat-template-refactored.html:371` 原文「不估算费用」），另两处是 `agent-card.js`/`code-handler.js` 的注释；三处措辞都改为「金额/不显示金额」，规则才立得住。**面板里出现第二句关于钱的话，就不是「同一个 bug 的两种说法」而是两套口径**。
+
+### 20.5 钱只在用户配过单价时出现
+
+四个新设置键（每百万输入价、每百万输出价、币种符号、会话 token 额度）落 `ChatSettings`，默认值都是「没表过态」：`-1`/`-1`/`""`/`0`。三条硬口径：
+
+- **半个价不算价。** `IsPriced()` 要求两侧同时 ≥ 0；只填输入不填输出时 `EstimateCost` 仍返回 `-1`、`CostText` 返回空串，卡片只显示 token 并说明原因。用 0 补另一半等于凭空造一个免费的一侧。
+- **哨兵值不显示成数字。** 面板四行由宿主 `setNativeEntrySetting` 种子化（`BaseChatControl.vb:810-813`），`-1`/`0` 经 `PriceInputText`/`BudgetInputText` 渲染成空输入框——把内部哨兵显示出来，用户会当成一个可以改的价格。
+- **清空一行 = 停止估算，不是沿用旧价。** `ReadNumberSetting` 在「带键但不是数字」时返回 `-1`（`:1375-1383`），`HandleSaveSettings` 一律从载荷读回（与 E4-03 那条「开关必须真的能关掉」同规矩）。`LoadSettings` 这四个键各自 `TryParse`、失败退回哨兵，**不进外层 Catch**，否则一个手抖填错的单价会把 `enableMcpList` 之后每一项的读取一起带走。
+
+代价与不作为同样如实：本轮只做「发送后实际」，**没有做发送前预估**——验收标准写的是「预估或实际」，而 completion tokens 在请求发出前无法知道，预估出来的金额正是本节一直否决的那类数字（会被当成账单）。额度是提醒不是闸：门禁把 `UsageCostReporter` 里出现 `Throw`/`RefuseQuietly`/`IsBlockedByPrivacy` 判为红，并把 `BaseChatControl` 的 `IsBlockedByPrivacy(ModelConfigGate.` 计数钉成 3——**能拦请求的只有同意（E3-05），不是价格**。
+
+### 20.6 门禁 `scripts/smoke-usage-cost.ps1`：10 组静态规则 + 18 条探针 + 真实配置往返
+
+静态半跑在四模块 336 个 `.vb/.js/.html/.vbproj` 语料上（本轮把 `.vbproj` 也纳入语料，因为规则 1 要读编译项；上一版没纳入，探针里 `$s[$vbprojPath]` 直接拿到 `null`）。规则分组：两个新文件必须真的被编译；provider 键名解析形状唯一；账本单写入口（`AddTokens` 禁止、`.RecordUsage(` 出现次数恰好 3、定义存在、读数绑到 `_sessionUsage.TotalTokens`、`TokenInfo` 禁止）；每条 const 句子全仓恰好 1 次；面板不得写金额也不得 `÷ 1000000`；四个键各查五处链接（写盘/读回/载荷/宿主读取/DOM id/宿主种子，共 24 条断言）；usage 块必须挂在第一个早退之前；脚注必须按行携带 `usageNote` 且走 `ToJsStringLiteral`；额度只提醒；卡片必须 `textContent`。
+
+运行时半用 `Add-Type` 反射真实 DLL：解析器（OpenAI/Anthropic/无 usage/畸形 JSON/只有非计数字段的 usage/负值/累加/`Copy` 不泄漏活账本）、账本（`Nothing` 不落账、零用量不注水、运行窗口互不污染、会话跨度、复位清两处）、格式化（未配置无金额、半个价不算价、1M/1M 在 2/6 单价下必须正好是那句「`估算费用 $8`」、`500000/250000` 必须保留小数、额度 0/未超/刚好/已超四种取值、卡片在「有价 + 超额度」时两句都要在）、以及**对用户真配置文件的完整往返**：`%USERPROFILE%\Documents\OfficeAiAppData\office_ai_chat_settings.json` 先按字节备份，写入两个单价 + 币种 + 额度，清空静态后重新 `LoadSettings` 断言真的从盘上读回，再断言 SaveSettings 保住了它不认识的外来键，再断言清空行回到哨兵，最后把 `pricePerMillionIn` 改成 `"two dollars"`、同时把 `sessionTokenBudget` 改成 777，要求坏键落哨兵而 777 真的读得回来（证明加载没有在半路被打断），`Finally` 按字节还原并在还原后**再比一次 MD5**。
+
+### 20.7 反空转：门禁自己先红了六次，每次都是规则错
+
+这一节的每一条都是「测试先错」，写下来是因为它们和实现缺陷一样值钱：
+
+1. **`$state[$path = $_]`** —— 手滑写成赋值，PowerShell 直接解析错误。低价值但真实。
+2. **语料没有 `.vbproj`** —— 规则 1 读 `$state[$vbprojPath]` 得到 `null`，第一条探针当场 `InvokeMethodOnNull`。修的是语料范围，不是断言。
+3. **规则 2 用裸键名匹配** —— 第一次基线就抓到 `HttpStreamService.vb:844-845` 的**解释性注释**里写着这两个键名。这说明规则钉错了对象：要防的是「再写一份解析」这个形状，不是词汇。已收紧为 `"<键名>")` 的引号+索引形状，并把那两行注释改为不再逐字重述键名（顺带把「这里以前只认 OpenAI 键名会抛」这个教训留住）。
+4. **规则 4/5 只扫 `.js`** —— 扩到 `.html` 才发现用户可见的那句「不估算费用」在设置提示里（见 §20.4）。只扫 JS 的话，这条漂移永远不会红。
+5. **规则 8 要求 reporter 与 `processStreamComplete(` 同一行** —— 真实实现是两行（先算 `usageNote` 再拼载荷）。已改为按行定位：找到那一行、要求它携带 `usageNote`。同时保留 `ToJsStringLiteral` 独立断言，两个探针各拦各的。
+6. **规则 9 用 `IsBlockedByPrivacy(` 计数** —— 得 4，因为把 `Protected Function IsBlockedByPrivacy(...)` 定义也算成了拦截点。改为只数 `IsBlockedByPrivacy(ModelConfigGate.`，实测恰好 3（`:1855` agent、`:2296` 非流式、`:2967` chat）。
+
+另有两条**旧断言本身就是空跑**，写第一版时就地废掉：
+
+- 「保存新键不能抹掉既有设置」原本 grep `"selectedCellChecked"`——这个键是 `SaveSettings` 自己写的，永远存在，等于没测。改为先往盘上注入一个 `SaveSettings` 不认识的外来键 `smokeForeignSetting`，再要求保存后它仍在，这条才真的能抓住「重建整份字典」那个老毛病（E4-03 那轮修过一次）。
+- 「坏值退回最后一次好值」原本用静态属性当基线断言——`LoadSettings` 就算整个崩进 Catch，静态属性也还是那个值，**断言必绿**。改为写盘前先把四个静态清空，并在同一份文件里同时改坏一个键、改好另一个键，坏键必须落哨兵、后面那个键必须真的读回来。这条改动才让「垃圾单价打断整份加载」这件事变得可测。
+
+### 20.8 明确不作为与代价
+
+- **没有真实账单**：单价由用户手填、默认未配置、不做抓取或换算，也不按模型分档（全局一张价）。填了币种没填单价只在状态栏提醒一次，不猜。
+- **没有发送前预估**（见 §20.5），也没有做「余额/充值」这类服务商侧概念。
+- **没有落库每轮用量**：本轮用量只在内存账本 + 卡片，`agent_run` 没有新增 usage 列，因此跨重启的累计花费、按日消耗曲线都不存在。理由是不为一行提示发明迁移与新真相源；如果要做，应作为独立一行连同口径一起定。
+- **后台链路不进账**：补全、embedding、翻译、意图识别仍各自持有 HttpClient（#41 / E3-05b 收口时一并接），它们的用量当前不计。
+- `BaseChatControl.vb` 3443 行的超限是历史欠账，本轮只加读回与种子（+51 行）；`Oversized baseline files` 仍 22，未新增超限文件。
+- 哨兵 `-1`/`0` 是内部口径，**如果哪天有人把它显示出来或当成 0 价参与计算，规则 6 的四键五处链接会红**，这是本轮留下的唯一防线。
+
+### 20.9 真机验收清单（按用户指示暂缓，需重启宿主刷新 `www` 面板副本）
+
+1. 全新配置（四个键都不存在）打开面板设置：单价两行为空、额度行为空且 placeholder 显示「不限量」，**不出现 `-1`**。
+2. 什么都不填直接聊天一轮（流式）：脚注应显示 `消耗token：N` + 「N tokens · 未配置单价，只统计 token 用量」，**屏幕上任何位置都不该出现金额或币种符号**。
+3. 只填输入单价、输出留空并保存：状态栏出现「只填了输入单价，还缺另一侧」，卡片仍只有 token 句；补上输出后同一问再跑，卡片应出现「估算费用 <符号><金额>」。
+4. 按填入的单价手算一次（例如 2 / 6 每百万）确认金额位数与 `0.####` 收敛口径一致，特别是小用量时应显示 `0.0003` 这一类而不是 `0`。
+5. 设置里把两行单价清空并保存：卡片必须回到「只报 token」——这条验证「清空 = 停止估算」，而不是沿用刚才那个价。
+6. 跑一次 Agent 任务（Word/Excel/PPT 任一端）：终态卡片应出现 `📊 …` 那一行；**只读任务**（如「提炼本页要点」）同样要有这一行，因为它挂在一个早退之前。
+7. 额度设为一个会被单轮超过的值（如 100）：卡片应同时显示 token/金额与「超过你设定的额度 100 tokens」，请求**照常完成**（不得被拦），且没有弹窗。
+8. 三端各做一次非流式（关闭流式或走 Agent 多模态修复路径）后查面板累计：`消耗token` 与会话累计应同源增长，切「新会话」后归零。
+9. 面板输入框发一句普通聊天（无单价）后，用任务管理器看 `office_ai_chat_settings.json`：四个键中只应有实际填过的那几个，`enableMcpList` 等历史键仍在。
+10. 未同意数据边界（E3-05）时发消息：卡片仍是同意 CTA，**不得**因为本轮改了用量通道而变成「费用提示」或漏出 token 数。
+
+### 20.10 本轮实测数字（全部为本次重新运行所得）
+
+- 规模：新文件 `TokenUsage.vb` 76 行、`UsageCostReporter.vb` 80 行、门禁 `smoke-usage-cost.ps1` 553 行；改动 16 个跟踪文件 `+270/−60`，其中 `ChatStateService.vb` 366 行、`ChatSettings.vb` 273 行、`HistoryMessage.vb` 61 行（删掉 `TokenInfo` 结构体）、`AgentKernelService.vb` 592 行、`BaseChatControl.vb` 3443 行（+51）
+- `scripts\smoke-usage-cost.ps1`：`ProbesRed : 18`、静态规则 10 组、语料 336 个 `.vb/.js/.html/.vbproj`、设置键 4 行 × 5 处链接；`OK: usage has one parser, one ledger and one wording owner; money appears only when a price was set, and the budget warns without blocking.`；四段运行时断言全部打印（parser / ledger / formatter / settings round trip），真配置文件按字节还原后再核对通过
+- 关键取值（真实 DLL）：`OpenAiTotal=150`、`AnthropicTotal=100`、`PricedCost=估算费用 $8`（1M/1M、单价 2 与 6）、`UnpricedCard=100 tokens · 未配置单价，只统计 token 用量`
+- 账本边界（真实 DLL）：`.RecordUsage(` 调用点 **3**、`AddTokens` 语料 **0**、`TokenInfo` 语料 **0**、`IsBlockedByPrivacy(ModelConfigGate.` **3**
+- `scripts\run-code-checks.ps1 -SkipBuild`：`discovered 28 gates under scripts\`（27→28，新门禁靠目录自动发现、未登记进 `$notGates`）、54 个 `PASS`、0 个 FAIL、`Golden L0 passed: 19 cases`、`All code checks passed.`
+- 四项目：`PASS: ShareRibbon / WordAi / ExcelAi / PowerPointAi` + `Code projects built successfully.`（`TokenInfo` 删除后复跑一次仍全绿）
+- 入口可达性：面板发送 56 个消息 type（**未增加**，脚注复用既有 `processStreamComplete`）、router 注册 66 个、DOM id 105→109/109 全部解析到节点（新增四条设置行）、注入 id 20/20、注入调用 126 段载荷 / 61 个调用名全部解析、导航引用 48→55/55、内联事件 70 处、Ribbon 可见入口 Word 14/18、Excel 13/18、PowerPoint 11/18（未动行集）；`Oversized baseline files: 22`（未新增超限）
+- 文档：根 `AGENTS.md` 反跑偏清单第 20 条 + 导航表新增「用量、费用与额度口径」一行；`ShareRibbon/AGENTS.md` 表新增同口径一行；`ShareRibbon/Controls/AGENTS.md` 新增「用量三层各只有一个持有者」一段
